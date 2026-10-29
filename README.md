@@ -94,7 +94,20 @@ MicroscopeCounter/
   Tests/        Unit tests
 ```
 
-`.github/workflows/swift-ci.yml` builds the app and runs the unit tests on an iOS
-Simulator for every pull request into `main`.
+## Contributing
+
+`main` is the trunk and is never pushed to directly. Branch off it with a `feat/`,
+`fix/` or `chore/` prefix, open a pull request, and squash merge once the checks pass.
+[CONTRIBUTING.md](CONTRIBUTING.md) has the branch strategy, the merge rules and what
+must not be committed.
+
+Every pull request into `main` runs:
+
+| Check | Does |
+|---|---|
+| `Build and test` | Builds the app and runs the unit tests on an iOS Simulator |
+| `Format check` | `swift-format lint`, settings in `.swift-format` |
+| `Repo checks` | Every Swift file is in the Xcode project; no video or file over 5 MB |
+| `Conflict check` | Labels the pull request `has-conflicts` when it stops merging cleanly |
 
 Engineering rules, thresholds and known limitations are in [CLAUDE.md](CLAUDE.md).
