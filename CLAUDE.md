@@ -1,55 +1,98 @@
 # CLAUDE.md
 
-Guidance for Claude Code when working in this repository.
+Guidance for Claude Code when working in this repository. The product itself is
+described in [README.md](README.md); this file is the engineering contract.
 
 ## What this app is
 
-An iOS app for counting organisms (nematodes first, amoeba-like protozoa later) in soil samples viewed through a phone microscope (~100x). Field helpers record short video clips of fixed microscope fields; the app will later find, track and count organisms in those clips.
+Aura Farm is an AI-driven microscopy iOS app. A field helper attaches an iPhone to a
+microscope (~100x), prepares a rice paddy soil sample with an in-app guide, records
+the sample, and the app detects the microbes that indicate soil health, shows a
+result, and recommends actions the farmer can take.
 
-**Current scope: the quality check and raw recording.** There is no counting model yet. Do not add ML, counting, or scoring code until a labelled dataset and a pilot exist.
+The product goal is to cut the time from sampling to action from weeks to the same
+visit. The primary user is a field helper, not a scientist.
+
+**Current scope: the capture quality check and raw recording.** There is no computer
+vision, no result and no recommendation code. Do not add ML, counting, scoring or
+recommendation code until a labelled dataset and a pilot exist
+([AF-15](https://linear.app/aurafarmers/issue/AF-15/collect-initial-labeled-soil-microscope-image-dataset),
+[AF-19](https://linear.app/aurafarmers/issue/AF-19/spike-computer-vision-feasibility-for-our-first-soil-indicator)).
+
+## Product rules that constrain the code
+
+These come from the PRD and apply to anything built later. They are not optional:
+
+- **Every result ships with recommended actions.** A results screen without actions
+  is not finished.
+- **Always return something.** A partial result with its confidence stated beats no
+  result. Say plainly when a retest or a lab test is needed.
+- **Recommendations must be doable** by a farmer with no technical knowledge.
+- **State the limits.** The app says what it cannot detect, compared with a lab test.
+- One test is one record: input, result and recommendation together, so History and
+  PDF export have something whole to show.
 
 ## Where this fits in the pipeline
 
 ```
 1 Capture → 2 CHECK → 3 Save raw (both built) → 4 Stabilize → 5 Fix lighting
-→ 6 Grayscale → 7 Find movers → 8 Find shapes → 9 Merge → 10 Track → 11 Pick + crop → model
+→ 6 Grayscale → 7 Find movers → 8 Find shapes → 9 Merge → 10 Track → 11 Pick + crop
+→ model → result → recommendation
 ```
 
-Step 2 warns the user before recording if the live image is too dark, blurry or shaky. Step 3 saves the clip and its metadata to `Documents/RawClips`; the Record button is only enabled once the check passes. Steps 4 onwards are not started.
+Step 2 warns the user before recording if the live image is too dark, blurry or
+shaky. Step 3 saves the clip and its metadata to `Documents/RawClips`; the Record
+button is only enabled once the check passes. Steps 4 onwards are not started.
+
+In PRD terms, the repository covers the capture and quality-check part of Flow 2.
+Onboarding (Flow 1), analysis, results, recommendations, History and PDF export
+(Flow 3) do not exist yet.
 
 ## Tech stack
 
 - Swift 5 language mode, SwiftUI, iOS 17+, iPhone only, portrait only
 - AVFoundation (camera), Vision (shake estimate), CoreVideo (pixel access)
-- Plain Xcode project (`MicroscopeCounter.xcodeproj`), committed to git. Info.plist values are build settings (`INFOPLIST_KEY_*`), so there is no Info.plist file.
+- Plain Xcode project (`MicroscopeCounter/MicroscopeCounter.xcodeproj`), committed to
+  git. Info.plist values are build settings (`INFOPLIST_KEY_*`), so there is no
+  Info.plist file.
 - XCTest for unit tests
 - No third-party dependencies. Ask before adding one.
 
 ## Commands
 
 ```
-open MicroscopeCounter.xcodeproj
+open MicroscopeCounter/MicroscopeCounter.xcodeproj
 ```
 
-Before running on a device, set your Team under Signing & Capabilities for both targets and change the placeholder bundle ID `com.example.microscopecounter`.
+Before running on a device, set your Team under Signing & Capabilities for both
+targets and change the placeholder bundle ID `com.example.microscopecounter`.
 
 Run tests: `xcodebuild test -scheme MicroscopeCounter -destination 'platform=iOS Simulator,name=iPhone 17'`
 
-The simulator name has to match a runtime installed on the machine; `xcrun simctl list devices available` shows them.
+The simulator name has to match a runtime installed on the machine;
+`xcrun simctl list devices available` shows them.
 
-The camera does not work in the Simulator. Test the check screen on a real iPhone, with the phone on the microscope.
+The camera does not work in the Simulator. Test the check screen on a real iPhone,
+with the phone on the microscope.
 
-New Swift files must be added to the Xcode project: create them from Xcode (File > New > File) inside the matching group, with the right target ticked. Keep the folders on disk matching the Xcode groups. Do not hand-edit `project.pbxproj` unless there is no other way.
+New Swift files must be added to the Xcode project: create them from Xcode
+(File > New > File) inside the matching group, with the right target ticked. Keep the
+folders on disk matching the Xcode groups. Do not hand-edit `project.pbxproj` unless
+there is no other way.
+
+`.github/workflows/swift-ci.yml` runs the same build and tests on `macos-15` for
+every pull request into `main`, picking whichever iPhone simulator the runner has.
 
 ## Structure
 
 ```
-Sources/
-  App/        App entry point
-  Capture/    Camera session, frame analysis, quality monitor
-  Views/      SwiftUI screens
-Tests/        Unit tests
-MicroscopeCounter.xcodeproj
+MicroscopeCounter/
+  Sources/
+    App/        App entry point
+    Capture/    Camera session, frame analysis, quality monitor
+    Views/      SwiftUI screens
+  Tests/        Unit tests
+  MicroscopeCounter.xcodeproj
 ```
 
 Key files:
@@ -77,9 +120,16 @@ Key files:
 - Only one issue is shown at a time, in the order dark, blurry, shaky. Blur is not evaluated while the image is too dark, because a dark image always reads as blurry.
 - Record stays disabled until the check has settled and no issue is active.
 
+This is the PRD's "alerts for unclear images, naming the human step to take". Keep
+the copy telling the helper what to do, not what was measured.
+
 ### Thresholds are placeholders
 
-The numbers in `CaptureQualityThresholds` (brightness 60, sharpness 100, shake 3 px) are starting guesses. They have not been calibrated on a real microscope setup. Calibrate them in the pilot with real footage: record good and bad examples, read the live numbers from the debug readout, and set thresholds between them. Do not present them as validated.
+The numbers in `CaptureQualityThresholds` (brightness 60, sharpness 100, shake 3 px)
+are starting guesses. They have not been calibrated on a real microscope setup.
+Calibrate them in the pilot with real footage: record good and bad examples, read the
+live numbers from the debug readout, and set thresholds between them. Do not present
+them as validated.
 
 ### Known limitations
 
@@ -96,11 +146,19 @@ The numbers in `CaptureQualityThresholds` (brightness 60, sharpness 100, shake 3
 3. When a clip is saved the screen goes back to the sample details, with the field number already counted up, ready for the next field.
 4. **Recorded clips** (`RecordedClipsView`): reached from the first screen. Newest first, with sample details, size and playback. Read only, like everything that touches raw footage.
 
-Playback starts in grayscale, because that is what the counting pipeline works on. The grayscale is applied while playing, with a `CIPhotoEffectMono` video composition on the player item; the file on disk stays in colour. The toolbar toggle switches back to colour to check the clip as recorded.
+Playback starts in grayscale, because that is what the counting pipeline works on.
+The grayscale is applied while playing, with a `CIPhotoEffectMono` video composition
+on the player item; the file on disk stays in colour. The toolbar toggle switches back
+to colour to check the clip as recorded.
+
+This flow is a developer-facing stand-in for the PRD's Scan flow. The sample
+preparation guide, the mounting check and the "move the sample" prompt are not built.
 
 ## How recording works
 
-The Record button is enabled once the check has settled with no issue, and stays enabled while recording so the clip can always be stopped. Recording does not stop on its own if the image goes bad; the banner says what is wrong and the helper decides.
+The Record button is enabled once the check has settled with no issue, and stays
+enabled while recording so the clip can always be stopped. Recording does not stop on
+its own if the image goes bad; the banner says what is wrong and the helper decides.
 
 - Clips go to `Documents/RawClips`, named `<sample>_f<field>_<yyyyMMdd-HHmmss>.mov`, with the time in UTC so clips from different phones sort together.
 - If that name is taken, `-2`, `-3` and so on are appended. An existing clip is never overwritten.
@@ -113,9 +171,13 @@ The Record button is enabled once the check has settled with no issue, and stays
 
 ## Camera options
 
-The focus slider sits above the Record button. Focus is always locked (`setFocusModeLocked(lensPosition:)`), never automatic; the slider moves the lens from 0 (closest) to 1 (furthest) and it stays where it is put.
+The focus slider sits above the Record button. Focus is always locked
+(`setFocusModeLocked(lensPosition:)`), never automatic; the slider moves the lens from
+0 (closest) to 1 (furthest) and it stays where it is put.
 
-`CameraQualityModel.defaultLensPosition` is where the lens starts. It is a PLACEHOLDER of 1.0, not calibrated for any microscope and lens: find the value that focuses your setup with the slider, then set it there.
+`CameraQualityModel.defaultLensPosition` is where the lens starts. It is a PLACEHOLDER
+of 1.0, not calibrated for any microscope and lens: find the value that focuses your
+setup with the slider, then set it there.
 
 The menu in the top right of the check screen:
 
@@ -130,26 +192,26 @@ The menu in the top right of the check screen:
 3. **Do not hold on to camera buffers.** Keep at most one previous frame for shake estimation.
 4. **Keep detection logic out of views.** Views read state from the model; thresholds and rules live in `Capture/`.
 5. **Thresholds are data, not magic numbers.** Put new ones in `CaptureQualityThresholds` with a comment saying whether they are calibrated.
-6. **Do not claim accuracy.** No accuracy numbers in code, UI or docs until measured against expert counts, with train and test split by video or sample (never by frame).
+6. **Do not claim accuracy.** The PRD's 80% agreement with expert or lab identification is a target to confirm, not a finding. No accuracy numbers in code, UI or docs until measured against expert counts, with train and test split by video or sample (never by frame).
 7. **Calibration matters.** Counts need real sizes. When the counting stage is built, pixel-to-µm calibration (stage micrometer clip) is required per phone and lens setup.
+8. **No soil verdict without the actions behind it.** Do not ship a rating, score or band on its own; the PRD requires recommendations with every result.
 
 ## UI copy
 
-The users are field helpers, not scientists. Use short, plain sentences that say what to do ("Add more light under the slide"), not what the algorithm measured. Do not say "healthy" or "no life in soil" anywhere; this app does not judge soil, and an empty slide usually means a sampling problem.
-
-## Code conventions
-
-- Small files, one main type per file, names that say what the thing does
-- `final class` or `struct` by default
-- Doc comment on anything with a non-obvious threshold or unit
-- Write a unit test for any new decision logic that does not need the camera
-- No force unwraps outside previews and tests
+The users are field helpers, not scientists. Use short, plain sentences that say what
+to do ("Add more light under the slide"), not what the algorithm measured. Do not say
+"healthy" or "no life in soil" anywhere; this app does not judge soil, and an empty
+slide usually means a sampling problem. A result the helper has to explain to a farmer
+has to be sayable out loud.
 
 ## Roadmap (not started)
 
-1. Calibration clip and pixels-to-µm scale
-2. Stabilize, lighting fix, motion and shape candidate finding, tracking, crop
-3. Manual tally mode (also generates labelled training data)
-4. Model integration after a dataset exists and a pilot sets the thresholds
+1. Onboarding, sample preparation guide and mounting check (PRD Flow 1)
+2. Calibration clip and pixels-to-µm scale
+3. Stabilize, lighting fix, motion and shape candidate finding, tracking, crop
+4. Manual tally mode (also generates labelled training data)
+5. Model integration after a dataset exists and a pilot sets the thresholds
+6. Result, recommendations, History and PDF export (PRD Flow 3)
 
-Done: recording raw clips with a metadata sidecar behind the gated button. The thresholds it gates on are still uncalibrated.
+Done: the capture quality check, and recording raw clips with a metadata sidecar
+behind the gated button. The thresholds it gates on are still uncalibrated.
