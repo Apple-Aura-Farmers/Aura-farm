@@ -80,29 +80,39 @@ struct CaptureCheckView: View {
                 tint: .red
             )
         } else if let error = model.cameraError {
-            StatusBanner(systemImage: "exclamationmark.triangle", title: "Camera problem", message: error, tint: .red)
+            StatusBanner(
+                systemImage: "exclamationmark.triangle", title: "Camera problem", message: error, tint: .red)
         } else if model.recorder.isRecording {
-            StatusBanner(systemImage: "record.circle", title: "Recording", message: "Keep still until you press Stop.", tint: .red)
+            StatusBanner(
+                systemImage: "record.circle", title: "Recording", message: "Keep still until you press Stop.",
+                tint: .red)
         } else if let error = model.recorder.errorMessage {
-            StatusBanner(systemImage: "exclamationmark.triangle", title: "Saving problem", message: error, tint: .red)
+            StatusBanner(
+                systemImage: "exclamationmark.triangle", title: "Saving problem", message: error, tint: .red)
         } else if let issue = model.topIssue {
-            StatusBanner(systemImage: issue.systemImage, title: issue.title, message: issue.advice, tint: .orange)
+            StatusBanner(
+                systemImage: issue.systemImage, title: issue.title, message: issue.advice, tint: .orange)
         } else if model.isReady {
-            StatusBanner(systemImage: "checkmark.circle.fill", title: "Ready to record", message: "The image looks good.", tint: .green)
+            StatusBanner(
+                systemImage: "checkmark.circle.fill", title: "Ready to record",
+                message: "The image looks good.", tint: .green)
         } else {
-            StatusBanner(systemImage: "hourglass", title: "Checking the image", message: "Hold still for a moment.", tint: .gray)
+            StatusBanner(
+                systemImage: "hourglass", title: "Checking the image", message: "Hold still for a moment.",
+                tint: .gray)
         }
     }
 
     private var numbersReadout: some View {
         Group {
             if let r = model.latestReading {
-                Text(String(
-                    format: "Brightness %.0f   Sharpness %.0f   Shake %@",
-                    r.brightness,
-                    r.sharpness,
-                    r.shakePixels.map { String(format: "%.1f px", $0) } ?? "–"
-                ))
+                Text(
+                    String(
+                        format: "Brightness %.0f   Sharpness %.0f   Shake %@",
+                        r.brightness,
+                        r.sharpness,
+                        r.shakePixels.map { String(format: "%.1f px", $0) } ?? "–"
+                    ))
             } else {
                 Text("No readings yet")
             }
@@ -150,7 +160,8 @@ struct CaptureCheckView: View {
         HStack(spacing: 12) {
             Image(systemName: "camera.metering.spot")
             Slider(
-                value: Binding(get: { Double(model.lensPosition) }, set: { model.setLensPosition(Float($0)) }),
+                value: Binding(
+                    get: { Double(model.lensPosition) }, set: { model.setLensPosition(Float($0)) }),
                 in: 0...1
             )
             .accessibilityLabel("Focus")
@@ -185,7 +196,8 @@ struct CaptureCheckView: View {
         .buttonStyle(.borderedProminent)
         .tint(.red)
         .disabled(!model.isReady && !model.recorder.isRecording)
-        .accessibilityHint(model.isReady || model.recorder.isRecording ? "" : "Disabled until the image looks good")
+        .accessibilityHint(
+            model.isReady || model.recorder.isRecording ? "" : "Disabled until the image looks good")
     }
 }
 
@@ -214,14 +226,15 @@ private struct StatusBanner: View {
 }
 
 #Preview {
-    CaptureCheckView(details: .constant(
-        RecordingMetadata(
-            sampleID: "A12",
-            field: 1,
-            moisture: .drained,
-            gramsOfSoil: 10,
-            millilitresScanned: 0.5,
-            recordedAt: .now
-        )
-    ))
+    CaptureCheckView(
+        details: .constant(
+            RecordingMetadata(
+                sampleID: "A12",
+                field: 1,
+                moisture: .drained,
+                gramsOfSoil: 10,
+                millilitresScanned: 0.5,
+                recordedAt: .now
+            )
+        ))
 }

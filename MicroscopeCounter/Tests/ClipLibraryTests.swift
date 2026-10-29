@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import MicroscopeCounter
 
 final class ClipLibraryTests: XCTestCase {

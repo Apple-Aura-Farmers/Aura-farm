@@ -7,6 +7,8 @@ on:
     branches: [main]
   push:
     branches: [main]
+  # So the same gate runs inside a merge queue, if one is turned on later.
+  merge_group:
 
 concurrency:
   group: swift-ci-${{ github.head_ref || github.ref }}
@@ -51,3 +53,16 @@ jobs:
         with:
           name: TestResults
           path: TestResults.xcresult
+
+  lint:
+    name: Format check
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      # swift-format ships with Xcode, so this adds no dependency. Settings are
+      # in .swift-format at the repository root.
+      - name: swift-format lint
+        run: |
+          xcrun swift-format lint --recursive --strict \
+            MicroscopeCounter/Sources MicroscopeCounter/Tests

@@ -87,7 +87,8 @@ private struct ClipPlayer: View {
             item.videoComposition = AVMutableVideoComposition(
                 asset: item.asset,
                 applyingCIFiltersWithHandler: { request in
-                    request.finish(with: request.sourceImage.applyingFilter("CIPhotoEffectMono"), context: nil)
+                    request.finish(
+                        with: request.sourceImage.applyingFilter("CIPhotoEffectMono"), context: nil)
                 }
             )
         }

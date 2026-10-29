@@ -1,0 +1,57 @@
+# Cheap checks that do not need a Mac, so they run on Linux and finish in seconds.
+name: Repo checks
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  project-files:
+    name: Swift files are in the Xcode project
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # A .swift file on disk but missing from project.pbxproj never compiles.
+      # Tests still pass, so nothing else catches it.
+      - name: Check every Swift file is referenced
+        run: |
+          pbx=MicroscopeCounter/MicroscopeCounter.xcodeproj/project.pbxproj
+          missing=0
+          while IFS= read -r f; do
+            if ! grep -qF "$(basename "$f")" "$pbx"; then
+              echo "::error file=$f::not referenced in project.pbxproj, so it is never compiled"
+              missing=1
+            fi
+          done < <(find MicroscopeCounter/Sources MicroscopeCounter/Tests -name '*.swift')
+          exit $missing
+
+  no-raw-footage:
+    name: No raw footage or large files
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Raw clips are training data and live off the repo. Once committed they are
+      # in the history for good, so block them at the pull request.
+      - name: Check for committed video and oversized files
+        run: |
+          limit=$((5 * 1024 * 1024))
+          fail=0
+          while IFS= read -r f; do
+            case "$f" in
+              *.mov|*.mp4|*.m4v|*.avi|*.mkv|*.xcresult/*)
+                echo "::error file=$f::raw footage and test bundles must not be committed"
+                fail=1
+                continue
+                ;;
+            esac
+            size=$(stat -c%s "$f")
+            if [ "$size" -gt "$limit" ]; then
+              echo "::error file=$f::$size bytes is over the 5 MB limit"
+              fail=1
+            fi
+          done < <(git ls-files)
+          exit $fail

@@ -70,7 +70,8 @@ final class CameraQualityModel: NSObject {
         let clamped = min(max(position, 0), 1)
         sessionQueue.async { [weak self] in
             guard let self, let device = self.device, device.isFocusModeSupported(.locked),
-                  (try? device.lockForConfiguration()) != nil else { return }
+                (try? device.lockForConfiguration()) != nil
+            else { return }
             device.setFocusModeLocked(lensPosition: clamped, completionHandler: nil)
             device.unlockForConfiguration()
             DispatchQueue.main.async { self.lensPosition = clamped }
@@ -99,8 +100,9 @@ final class CameraQualityModel: NSObject {
         session.sessionPreset = .hd1280x720
 
         guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back),
-              let input = try? AVCaptureDeviceInput(device: device),
-              session.canAddInput(input) else {
+            let input = try? AVCaptureDeviceInput(device: device),
+            session.canAddInput(input)
+        else {
             publishError("The camera could not be opened.")
             return
         }
@@ -133,7 +135,8 @@ final class CameraQualityModel: NSObject {
         session.addOutput(recorder.output)
         // The app is portrait only; 90 degrees writes clips the way the user sees them.
         if let connection = recorder.output.connection(with: .video),
-           connection.isVideoRotationAngleSupported(90) {
+            connection.isVideoRotationAngleSupported(90)
+        {
             connection.videoRotationAngle = 90
         }
 
@@ -155,8 +158,9 @@ extension CameraQualityModel: AVCaptureVideoDataOutputSampleBufferDelegate {
     ) {
         frameCount += 1
         guard frameCount % analyzeEveryNthFrame == 0,
-              let buffer = CMSampleBufferGetImageBuffer(sampleBuffer),
-              let stats = FrameAnalyzer.brightnessAndSharpness(of: buffer) else { return }
+            let buffer = CMSampleBufferGetImageBuffer(sampleBuffer),
+            let stats = FrameAnalyzer.brightnessAndSharpness(of: buffer)
+        else { return }
 
         let reading = CaptureQualityReading(
             brightness: stats.brightness,

@@ -15,7 +15,8 @@ enum FrameAnalyzer {
         defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, .readOnly) }
 
         guard CVPixelBufferGetPlaneCount(pixelBuffer) > 0,
-              let base = CVPixelBufferGetBaseAddressOfPlane(pixelBuffer, 0) else { return nil }
+            let base = CVPixelBufferGetBaseAddressOfPlane(pixelBuffer, 0)
+        else { return nil }
 
         let width = CVPixelBufferGetWidthOfPlane(pixelBuffer, 0)
         let height = CVPixelBufferGetHeightOfPlane(pixelBuffer, 0)

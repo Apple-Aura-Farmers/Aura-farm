@@ -21,7 +21,8 @@ final class ClipRecorder: NSObject {
     func start(metadata: RecordingMetadata) {
         guard !output.isRecording else { return }
         do {
-            try FileManager.default.createDirectory(at: Self.clipsDirectory, withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(
+                at: Self.clipsDirectory, withIntermediateDirectories: true)
         } catch {
             errorMessage = "The clip folder could not be created."
             return
@@ -73,7 +74,8 @@ extension ClipRecorder: AVCaptureFileOutputRecordingDelegate {
         self.metadata = nil
 
         // Some stops report an error and still leave a usable file.
-        let finishedCleanly = (error as NSError?)?
+        let finishedCleanly =
+            (error as NSError?)?
             .userInfo[AVErrorRecordingSuccessfullyFinishedKey] as? Bool ?? (error == nil)
 
         var failure: String?

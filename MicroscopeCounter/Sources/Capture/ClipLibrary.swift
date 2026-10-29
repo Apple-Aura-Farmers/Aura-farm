@@ -16,15 +16,17 @@ struct SavedClip: Identifiable, Equatable {
 enum ClipLibrary {
     static func clips(in directory: URL = ClipRecorder.clipsDirectory) -> [SavedClip] {
         let keys: [URLResourceKey] = [.contentModificationDateKey, .fileSizeKey]
-        let urls = (try? FileManager.default.contentsOfDirectory(
-            at: directory,
-            includingPropertiesForKeys: keys
-        )) ?? []
+        let urls =
+            (try? FileManager.default.contentsOfDirectory(
+                at: directory,
+                includingPropertiesForKeys: keys
+            )) ?? []
 
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
 
-        return urls
+        return
+            urls
             .filter { $0.pathExtension.lowercased() == "mov" }
             .map { url in
                 let sidecar = url.deletingPathExtension().appendingPathExtension("json")

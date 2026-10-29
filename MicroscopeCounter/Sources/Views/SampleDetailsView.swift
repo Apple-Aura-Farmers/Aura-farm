@@ -51,14 +51,15 @@ private struct NumberRow: View {
 }
 
 #Preview {
-    SampleDetailsView(details: .constant(
-        RecordingMetadata(
-            sampleID: "A12",
-            field: 1,
-            moisture: .drained,
-            gramsOfSoil: 10,
-            millilitresScanned: 0.5,
-            recordedAt: .now
-        )
-    ))
+    SampleDetailsView(
+        details: .constant(
+            RecordingMetadata(
+                sampleID: "A12",
+                field: 1,
+                moisture: .drained,
+                gramsOfSoil: 10,
+                millilitresScanned: 0.5,
+                recordedAt: .now
+            )
+        ))
 }

@@ -1,0 +1,30 @@
+# Label a pull request "automerge" and GitHub merges it by itself once the
+# required checks pass. Needs "Allow auto-merge" on in the repository settings
+# and a ruleset that requires a status check, or GitHub refuses to arm it.
+name: Auto merge
+
+on:
+  pull_request:
+    types: [labeled, unlabeled, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    name: Arm auto-merge
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    steps:
+      - name: Turn auto-merge on or off
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          if ${{ contains(github.event.pull_request.labels.*.name, 'automerge') }}; then
+            gh pr merge "$PR" --repo "$REPO" --auto --squash
+          else
+            gh pr merge "$PR" --repo "$REPO" --disable-auto 2>/dev/null || true
+          fi
