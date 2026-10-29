@@ -56,9 +56,22 @@ Frames are analysed at roughly 10 fps on a background queue. A warning appears a
 several bad readings in a row and clears after several good ones, so the banner does
 not flicker, and only one problem shows at a time.
 
-The thresholds are uncalibrated starting guesses. Calibrate them against a real
-microscope before trusting them: record good and bad examples, read the live numbers
-from the debug readout, and set the thresholds between them.
+The thresholds (brightness 60, sharpness 100, shake 3 px) are uncalibrated starting
+guesses. Calibrate them against a real microscope before trusting them: record good
+and bad examples, read the live numbers from the debug readout, and set the thresholds
+between them.
+
+Known limitations:
+
+- A field with little in it has little texture, so the sharpness score can read low
+  even when focus is right. Expect false "out of focus" warnings on empty fields.
+- There is no autofocus, because it hunts on a microscope where the image only changes
+  when the stage moves. Focus is locked and set by hand.
+- Shake is measured on the whole frame. A large moving organism barely affects it, but
+  a drifting slide or debris flow could.
+- Brightness does not detect over-exposure.
+- Nothing checks free space before recording. A full phone fails part-way through a
+  clip, and that part-clip is kept.
 
 ## Getting started
 
@@ -110,4 +123,4 @@ Every pull request into `main` runs:
 | `Repo checks` | Every Swift file is in the Xcode project; no video or file over 5 MB |
 | `Conflict check` | Labels the pull request `has-conflicts` when it stops merging cleanly |
 
-Engineering rules, thresholds and known limitations are in [CLAUDE.md](CLAUDE.md).
+Engineering rules and code conventions are in [CONTRIBUTING.md](CONTRIBUTING.md).

@@ -61,12 +61,46 @@ Label a pull request `automerge` and it merges itself as soon as those checks pa
   they are in the history for good. CI fails on any `.mov`, `.mp4`, `.m4v`, `.avi` or
   `.mkv`, and on any file over 5 MB.
 - `xcuserdata/`, `*.xcuserstate`, `DerivedData/` — already ignored.
-- Accuracy numbers, soil ratings or scores that have not been measured. See rule 6 in
-  [CLAUDE.md](CLAUDE.md).
+- Accuracy numbers, soil ratings or scores that have not been measured. See rule 6
+  below.
 
 ## Engineering rules
 
-[CLAUDE.md](CLAUDE.md) holds the rules that govern the code: raw footage is never
-edited, analysis stays off the main thread, thresholds live in one place and say
-whether they are calibrated, and no result ships without the recommended actions
-behind it. Read it before a first change.
+Read these before a first change. They are not style preferences; each one exists
+because breaking it costs data or credibility.
+
+1. **Never overwrite or edit raw video.** Raw footage is the source for training data.
+   Processing steps work on copies.
+2. **Keep analysis off the main thread.** Frames arrive on a background queue; only
+   publish UI state on the main queue.
+3. **Do not hold on to camera buffers.** Keep at most one previous frame for shake
+   estimation.
+4. **Keep detection logic out of views.** Views read state from the model; thresholds
+   and rules live in `Sources/Capture/`.
+5. **Thresholds are data, not magic numbers.** Put new ones in
+   `CaptureQualityThresholds`, with a comment saying whether they are calibrated.
+6. **Do not claim accuracy.** No accuracy number in code, UI or docs until it is
+   measured against expert counts, with train and test split by video or sample, never
+   by frame. A target agreed in planning is a target, not a finding.
+7. **Calibration matters.** Counts need real sizes. When the counting stage is built,
+   pixel-to-µm calibration with a stage micrometer clip is required per phone and lens
+   setup.
+8. **No soil verdict without the actions behind it.** Do not ship a rating, score or
+   band on its own. Every result carries recommended actions, states its confidence,
+   and says when a retest or a lab test is needed.
+
+## UI copy
+
+The users are field helpers, not scientists. Short, plain sentences that say what to
+do ("Add more light under the slide"), not what the algorithm measured. Never say
+"healthy" or "no life in soil": this app does not judge soil, and an empty slide
+usually means a sampling problem. A result the helper has to explain to a farmer has
+to be sayable out loud.
+
+## Code conventions
+
+- Small files, one main type per file, names that say what the thing does
+- `final class` or `struct` by default
+- A doc comment on anything with a non-obvious threshold or unit
+- A unit test for any new decision logic that does not need the camera
+- No force unwraps outside previews and tests
