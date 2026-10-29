@@ -12,7 +12,9 @@ on:
 
 concurrency:
   group: swift-ci-${{ github.head_ref || github.ref }}
-  cancel-in-progress: true
+  # Supersede a branch's older run, but let a run on main finish: its result is
+  # the record of whether the trunk is green.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   test:
