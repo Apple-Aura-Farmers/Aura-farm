@@ -1,0 +1,450 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		2B0000000000000000000001 /* MicroscopeCounterApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000001 /* MicroscopeCounterApp.swift */; };
+		2B0000000000000000000002 /* CameraPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000002 /* CameraPreview.swift */; };
+		2B0000000000000000000003 /* CameraQualityModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000003 /* CameraQualityModel.swift */; };
+		2B0000000000000000000004 /* CaptureIssue.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000004 /* CaptureIssue.swift */; };
+		2B0000000000000000000005 /* CaptureQualityMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000005 /* CaptureQualityMonitor.swift */; };
+		2B0000000000000000000006 /* FrameAnalyzer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000006 /* FrameAnalyzer.swift */; };
+		2B0000000000000000000007 /* CaptureCheckView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000007 /* CaptureCheckView.swift */; };
+		2B0000000000000000000008 /* CaptureQualityMonitorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000008 /* CaptureQualityMonitorTests.swift */; };
+		2B00000000000000000010 /* RecordingMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A00000000000000000010 /* RecordingMetadata.swift */; };
+		2B00000000000000000011 /* ClipRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A00000000000000000011 /* ClipRecorder.swift */; };
+		2B00000000000000000012 /* SampleDetailsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A00000000000000000012 /* SampleDetailsView.swift */; };
+		2B00000000000000000013 /* ClipRecorderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A00000000000000000013 /* ClipRecorderTests.swift */; };
+		2B00000000000000000014 /* SampleSetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A00000000000000000014 /* SampleSetupView.swift */; };
+		2B00000000000000000015 /* ClipLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A00000000000000000015 /* ClipLibrary.swift */; };
+		2B00000000000000000016 /* RecordedClipsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A00000000000000000016 /* RecordedClipsView.swift */; };
+		2B00000000000000000017 /* ClipLibraryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A00000000000000000017 /* ClipLibraryTests.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		9D0000000000000000000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 9C0000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 5E0000000000000000000001;
+			remoteInfo = MicroscopeCounter;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		1A0000000000000000000001 /* MicroscopeCounterApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MicroscopeCounterApp.swift; sourceTree = "<group>"; };
+		1A0000000000000000000002 /* CameraPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraPreview.swift; sourceTree = "<group>"; };
+		1A0000000000000000000003 /* CameraQualityModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraQualityModel.swift; sourceTree = "<group>"; };
+		1A0000000000000000000004 /* CaptureIssue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureIssue.swift; sourceTree = "<group>"; };
+		1A0000000000000000000005 /* CaptureQualityMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureQualityMonitor.swift; sourceTree = "<group>"; };
+		1A0000000000000000000006 /* FrameAnalyzer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrameAnalyzer.swift; sourceTree = "<group>"; };
+		1A0000000000000000000007 /* CaptureCheckView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureCheckView.swift; sourceTree = "<group>"; };
+		1A0000000000000000000008 /* CaptureQualityMonitorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureQualityMonitorTests.swift; sourceTree = "<group>"; };
+		1A00000000000000000010 /* RecordingMetadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingMetadata.swift; sourceTree = "<group>"; };
+		1A00000000000000000011 /* ClipRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipRecorder.swift; sourceTree = "<group>"; };
+		1A00000000000000000012 /* SampleDetailsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleDetailsView.swift; sourceTree = "<group>"; };
+		1A00000000000000000013 /* ClipRecorderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipRecorderTests.swift; sourceTree = "<group>"; };
+		3C0000000000000000000001 /* MicroscopeCounter.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MicroscopeCounter.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		3C0000000000000000000002 /* MicroscopeCounterTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MicroscopeCounterTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		1A00000000000000000014 /* SampleSetupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleSetupView.swift; sourceTree = "<group>"; };
+		1A00000000000000000015 /* ClipLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipLibrary.swift; sourceTree = "<group>"; };
+		1A00000000000000000016 /* RecordedClipsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordedClipsView.swift; sourceTree = "<group>"; };
+		1A00000000000000000017 /* ClipLibraryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipLibraryTests.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		6F0000000000000000000002 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		6F0000000000000000000005 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		4D0000000000000000000001 = {
+			isa = PBXGroup;
+			children = (
+				4D0000000000000000000002 /* Sources */,
+				4D0000000000000000000006 /* Tests */,
+				4D0000000000000000000007 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		4D0000000000000000000002 /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				4D0000000000000000000003 /* App */,
+				4D0000000000000000000004 /* Capture */,
+				4D0000000000000000000005 /* Views */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
+		4D0000000000000000000003 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				1A0000000000000000000001 /* MicroscopeCounterApp.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		4D0000000000000000000004 /* Capture */ = {
+			isa = PBXGroup;
+			children = (
+				1A0000000000000000000002 /* CameraPreview.swift */,
+				1A0000000000000000000003 /* CameraQualityModel.swift */,
+				1A0000000000000000000004 /* CaptureIssue.swift */,
+				1A0000000000000000000005 /* CaptureQualityMonitor.swift */,
+				1A0000000000000000000006 /* FrameAnalyzer.swift */,
+				1A00000000000000000011 /* ClipRecorder.swift */,
+				1A00000000000000000015 /* ClipLibrary.swift */,
+				1A00000000000000000010 /* RecordingMetadata.swift */,
+			);
+			path = Capture;
+			sourceTree = "<group>";
+		};
+		4D0000000000000000000005 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				1A0000000000000000000007 /* CaptureCheckView.swift */,
+				1A00000000000000000012 /* SampleDetailsView.swift */,
+				1A00000000000000000016 /* RecordedClipsView.swift */,
+				1A00000000000000000014 /* SampleSetupView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		4D0000000000000000000006 /* Tests */ = {
+			isa = PBXGroup;
+			children = (
+				1A0000000000000000000008 /* CaptureQualityMonitorTests.swift */,
+				1A00000000000000000013 /* ClipRecorderTests.swift */,
+				1A00000000000000000017 /* ClipLibraryTests.swift */,
+			);
+			path = Tests;
+			sourceTree = "<group>";
+		};
+		4D0000000000000000000007 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				3C0000000000000000000001 /* MicroscopeCounter.app */,
+				3C0000000000000000000002 /* MicroscopeCounterTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		5E0000000000000000000001 /* MicroscopeCounter */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 7A0000000000000000000002 /* Build configuration list for PBXNativeTarget "MicroscopeCounter" */;
+			buildPhases = (
+				6F0000000000000000000001 /* Sources */,
+				6F0000000000000000000002 /* Frameworks */,
+				6F0000000000000000000003 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = MicroscopeCounter;
+			productName = MicroscopeCounter;
+			productReference = 3C0000000000000000000001 /* MicroscopeCounter.app */;
+			productType = "com.apple.product-type.application";
+		};
+		5E0000000000000000000002 /* MicroscopeCounterTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 7A0000000000000000000003 /* Build configuration list for PBXNativeTarget "MicroscopeCounterTests" */;
+			buildPhases = (
+				6F0000000000000000000004 /* Sources */,
+				6F0000000000000000000005 /* Frameworks */,
+				6F0000000000000000000006 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				9E0000000000000000000001 /* PBXTargetDependency */,
+			);
+			name = MicroscopeCounterTests;
+			productName = MicroscopeCounterTests;
+			productReference = 3C0000000000000000000002 /* MicroscopeCounterTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		9C0000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1500;
+				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+					5E0000000000000000000001 = {
+						CreatedOnToolsVersion = 15.0;
+					};
+					5E0000000000000000000002 = {
+						CreatedOnToolsVersion = 15.0;
+						TestTargetID = 5E0000000000000000000001;
+					};
+				};
+			};
+			buildConfigurationList = 7A0000000000000000000001 /* Build configuration list for PBXProject "MicroscopeCounter" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 4D0000000000000000000001;
+			productRefGroup = 4D0000000000000000000007 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				5E0000000000000000000001 /* MicroscopeCounter */,
+				5E0000000000000000000002 /* MicroscopeCounterTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		6F0000000000000000000003 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		6F0000000000000000000006 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		6F0000000000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2B0000000000000000000001 /* MicroscopeCounterApp.swift in Sources */,
+				2B0000000000000000000002 /* CameraPreview.swift in Sources */,
+				2B0000000000000000000003 /* CameraQualityModel.swift in Sources */,
+				2B0000000000000000000004 /* CaptureIssue.swift in Sources */,
+				2B0000000000000000000005 /* CaptureQualityMonitor.swift in Sources */,
+				2B0000000000000000000006 /* FrameAnalyzer.swift in Sources */,
+				2B0000000000000000000007 /* CaptureCheckView.swift in Sources */,
+				2B00000000000000000012 /* SampleDetailsView.swift in Sources */,
+				2B00000000000000000016 /* RecordedClipsView.swift in Sources */,
+				2B00000000000000000014 /* SampleSetupView.swift in Sources */,
+				2B00000000000000000011 /* ClipRecorder.swift in Sources */,
+				2B00000000000000000015 /* ClipLibrary.swift in Sources */,
+				2B00000000000000000010 /* RecordingMetadata.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		6F0000000000000000000004 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2B0000000000000000000008 /* CaptureQualityMonitorTests.swift in Sources */,
+				2B00000000000000000013 /* ClipRecorderTests.swift in Sources */,
+				2B00000000000000000017 /* ClipLibraryTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		9E0000000000000000000001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 5E0000000000000000000001 /* MicroscopeCounter */;
+			targetProxy = 9D0000000000000000000001 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		8B0000000000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		8B0000000000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_VERSION = 5.0;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		8B0000000000000000000003 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = Q7PFUBX7QB;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Microscope Counter";
+				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
+				INFOPLIST_KEY_NSCameraUsageDescription = "The camera looks through the microscope to check image quality and record soil samples.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UIFileSharingEnabled = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.microscopecounter;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		8B0000000000000000000004 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = Q7PFUBX7QB;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Microscope Counter";
+				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
+				INFOPLIST_KEY_NSCameraUsageDescription = "The camera looks through the microscope to check image quality and record soil samples.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UIFileSharingEnabled = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.microscopecounter;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		8B0000000000000000000005 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.microscopecounter.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/MicroscopeCounter.app/MicroscopeCounter";
+			};
+			name = Debug;
+		};
+		8B0000000000000000000006 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.microscopecounter.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/MicroscopeCounter.app/MicroscopeCounter";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		7A0000000000000000000001 /* Build configuration list for PBXProject "MicroscopeCounter" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8B0000000000000000000001 /* Debug */,
+				8B0000000000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		7A0000000000000000000002 /* Build configuration list for PBXNativeTarget "MicroscopeCounter" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8B0000000000000000000003 /* Debug */,
+				8B0000000000000000000004 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		7A0000000000000000000003 /* Build configuration list for PBXNativeTarget "MicroscopeCounterTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8B0000000000000000000005 /* Debug */,
+				8B0000000000000000000006 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 9C0000000000000000000001 /* Project object */;
+}
