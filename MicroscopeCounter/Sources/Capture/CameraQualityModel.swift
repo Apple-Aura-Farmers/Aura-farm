@@ -13,11 +13,13 @@ final class CameraQualityModel: NSObject {
     private(set) var latestReading: CaptureQualityReading?
     private(set) var cameraError: String?
     private(set) var lensPosition = CameraQualityModel.defaultLensPosition
+    /// What the helper should be doing in the sweep: hold still, move the slide left, or done.
+    private(set) var sweepPrompt: SweepPrompt = .holdStill(kept: 0, of: SweepThresholds().framesPerSweep)
 
     // MARK: Camera
 
     @ObservationIgnored let session = AVCaptureSession()
-    @ObservationIgnored let recorder = ClipRecorder()
+    @ObservationIgnored let recorder = FrameSetRecorder()
     @ObservationIgnored private let sessionQueue = DispatchQueue(label: "camera.session")
     @ObservationIgnored private let analysisQueue = DispatchQueue(label: "camera.analysis")
     @ObservationIgnored private var isConfigured = false
@@ -30,6 +32,9 @@ final class CameraQualityModel: NSObject {
     @ObservationIgnored private var frameCount = 0
     /// Analyze every Nth frame: about 10 fps at 30 fps capture.
     @ObservationIgnored private let analyzeEveryNthFrame = 3
+    @ObservationIgnored private let sweep = FrameSweep()
+    /// Analysis queue only: whether frames are being kept right now.
+    @ObservationIgnored private var sweepActive = false
 
     // MARK: Lifecycle
 
@@ -52,10 +57,31 @@ final class CameraQualityModel: NSObject {
     }
 
     func stop() {
-        recorder.stop()
+        endSweep()
         sessionQueue.async { [weak self] in
             guard let self, self.session.isRunning else { return }
             self.session.stopRunning()
+        }
+    }
+
+    /// Starts keeping frames. Each frame is kept once the image is good and still; between
+    /// frames the helper is asked to move the slide to the left.
+    func startSweep(details: RecordingMetadata) {
+        analysisQueue.async { [weak self] in
+            guard let self, !self.sweepActive else { return }
+            self.sweep.reset()
+            guard self.recorder.begin(details: details) else { return }
+            self.sweepActive = true
+            self.publishPrompt(self.sweep.prompt)
+        }
+    }
+
+    /// Ends the sweep early. The frames already written are kept and their manifest is saved.
+    func endSweep() {
+        analysisQueue.async { [weak self] in
+            guard let self, self.sweepActive else { return }
+            self.sweepActive = false
+            self.recorder.finish(stoppedEarly: !self.sweep.isFinished)
         }
     }
 
@@ -128,23 +154,15 @@ final class CameraQualityModel: NSObject {
         }
         session.addOutput(output)
 
-        guard session.canAddOutput(recorder.output) else {
-            publishError("Recording could not be set up.")
-            return
-        }
-        session.addOutput(recorder.output)
-        // The app is portrait only; 90 degrees writes clips the way the user sees them.
-        if let connection = recorder.output.connection(with: .video),
-            connection.isVideoRotationAngleSupported(90)
-        {
-            connection.videoRotationAngle = 90
-        }
-
         isConfigured = true
     }
 
     private func publishError(_ message: String) {
         DispatchQueue.main.async { [weak self] in self?.cameraError = message }
+    }
+
+    private func publishPrompt(_ prompt: SweepPrompt) {
+        DispatchQueue.main.async { [weak self] in self?.sweepPrompt = prompt }
     }
 }
 
@@ -175,6 +193,18 @@ extension CameraQualityModel: AVCaptureVideoDataOutputSampleBufferDelegate {
             self?.latestReading = reading
             self?.topIssue = top
             self?.isReady = ready
+        }
+
+        guard sweepActive else { return }
+        if sweep.update(isImageGood: ready, shakePixels: reading.shakePixels) == .keepFrame,
+            let bytes = recorder.write(buffer)
+        {
+            sweep.addWrittenBytes(bytes)
+        }
+        publishPrompt(sweep.prompt)
+        if sweep.isFinished {
+            sweepActive = false
+            recorder.finish(stoppedEarly: sweep.bytesWritten >= sweep.thresholds.maxBytes)
         }
     }
 }

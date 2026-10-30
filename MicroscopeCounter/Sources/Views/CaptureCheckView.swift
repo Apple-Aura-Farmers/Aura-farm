@@ -1,12 +1,13 @@
 import AVFoundation
 import SwiftUI
 
-/// Camera preview with a live quality check. Recording is only allowed when the image is good.
+/// Camera preview with a live quality check, and the sweep that keeps still frames.
+/// Frames are only kept when the image is good.
 struct CaptureCheckView: View {
     @State private var model = CameraQualityModel()
     /// Tap the banner to show the live numbers. Used to calibrate thresholds.
     @State private var showNumbers = false
-    /// Preview only: clips are always recorded in colour, grayscale comes later in the pipeline.
+    /// Preview only: frames are always saved in colour, grayscale comes later in the pipeline.
     @State private var showGrayscale = false
     @State private var showDetails = false
     @Environment(\.dismiss) private var dismiss
@@ -29,6 +30,7 @@ struct CaptureCheckView: View {
                 if showNumbers { numbersReadout }
                 sampleLine
                 Spacer()
+                if model.recorder.isSweeping { sweepPrompt }
                 focusSlider
                 recordButton
             }
@@ -55,8 +57,8 @@ struct CaptureCheckView: View {
             model.stop()
             UIApplication.shared.isIdleTimerDisabled = false
         }
-        // A saved clip means this field is done: count up and go back to the menu,
-        // where the clip can be played back.
+        // A saved sweep means this field is done: count up and go back to the menu,
+        // where the frames can be looked through.
         .onChange(of: model.recorder.lastSavedName) { _, saved in
             guard saved != nil else { return }
             details.field += 1
@@ -82,10 +84,13 @@ struct CaptureCheckView: View {
         } else if let error = model.cameraError {
             StatusBanner(
                 systemImage: "exclamationmark.triangle", title: "Camera problem", message: error, tint: .red)
-        } else if model.recorder.isRecording {
+        } else if model.recorder.isSweeping {
             StatusBanner(
-                systemImage: "record.circle", title: "Recording", message: "Keep still until you press Stop.",
-                tint: .red)
+                systemImage: "square.stack.3d.up",
+                title: "Keeping frames",
+                message: "\(model.recorder.keptCount) saved. Follow the instruction below.",
+                tint: .red
+            )
         } else if let error = model.recorder.errorMessage {
             StatusBanner(
                 systemImage: "exclamationmark.triangle", title: "Saving problem", message: error, tint: .red)
@@ -94,7 +99,7 @@ struct CaptureCheckView: View {
                 systemImage: issue.systemImage, title: issue.title, message: issue.advice, tint: .orange)
         } else if model.isReady {
             StatusBanner(
-                systemImage: "checkmark.circle.fill", title: "Ready to record",
+                systemImage: "checkmark.circle.fill", title: "Ready to start",
                 message: "The image looks good.", tint: .green)
         } else {
             StatusBanner(
@@ -121,6 +126,26 @@ struct CaptureCheckView: View {
         .padding(8)
         .background(.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 8))
         .foregroundStyle(.white)
+    }
+
+    /// The one thing to do right now, large enough to read at arm's length on a microscope.
+    private var sweepPrompt: some View {
+        let prompt = model.sweepPrompt
+        return HStack(spacing: 14) {
+            Image(systemName: prompt.systemImage)
+                .font(.system(size: 40))
+                .symbolRenderingMode(.hierarchical)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(prompt.title).font(.title2.bold())
+                Text(prompt.advice).font(.subheadline)
+            }
+            Spacer(minLength: 0)
+        }
+        .foregroundStyle(.white)
+        .padding()
+        .frame(maxWidth: .infinity)
+        .background(.black.opacity(0.75), in: RoundedRectangle(cornerRadius: 16))
+        .accessibilityElement(children: .combine)
     }
 
     @ViewBuilder
@@ -172,22 +197,22 @@ struct CaptureCheckView: View {
         .foregroundStyle(.white)
     }
 
-    // MARK: Record button
+    // MARK: Start button
 
     private var recordButton: some View {
         Button {
-            if model.recorder.isRecording {
-                model.recorder.stop()
+            if model.recorder.isSweeping {
+                model.endSweep()
             } else if details.isComplete {
                 details.recordedAt = .now
-                model.recorder.start(metadata: details)
+                model.startSweep(details: details)
             } else {
                 showDetails = true
             }
         } label: {
             Label(
-                model.recorder.isRecording ? "Stop" : "Record",
-                systemImage: model.recorder.isRecording ? "stop.circle" : "record.circle"
+                model.recorder.isSweeping ? "Stop" : "Start sweep",
+                systemImage: model.recorder.isSweeping ? "stop.circle" : "square.stack.3d.up"
             )
             .font(.title2.bold())
             .frame(maxWidth: .infinity)
@@ -195,9 +220,9 @@ struct CaptureCheckView: View {
         }
         .buttonStyle(.borderedProminent)
         .tint(.red)
-        .disabled(!model.isReady && !model.recorder.isRecording)
+        .disabled(!model.isReady && !model.recorder.isSweeping)
         .accessibilityHint(
-            model.isReady || model.recorder.isRecording ? "" : "Disabled until the image looks good")
+            model.isReady || model.recorder.isSweeping ? "" : "Disabled until the image looks good")
     }
 }
 

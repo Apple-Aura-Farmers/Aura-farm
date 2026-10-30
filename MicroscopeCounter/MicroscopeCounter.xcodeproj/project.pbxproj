@@ -7,6 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		2B0000000000000000020 /* FrameSweepTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000020 /* FrameSweepTests.swift */; };
+		2B0000000000000000019 /* FrameSetManifest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000019 /* FrameSetManifest.swift */; };
+		2B0000000000000000018 /* FrameSweep.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000018 /* FrameSweep.swift */; };
 		2B0000000000000000000001 /* MicroscopeCounterApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000001 /* MicroscopeCounterApp.swift */; };
 		2B0000000000000000000002 /* CameraPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000002 /* CameraPreview.swift */; };
 		2B0000000000000000000003 /* CameraQualityModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000003 /* CameraQualityModel.swift */; };
@@ -16,13 +19,13 @@
 		2B0000000000000000000007 /* CaptureCheckView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000007 /* CaptureCheckView.swift */; };
 		2B0000000000000000000008 /* CaptureQualityMonitorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000008 /* CaptureQualityMonitorTests.swift */; };
 		2B00000000000000000010 /* RecordingMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A00000000000000000010 /* RecordingMetadata.swift */; };
-		2B00000000000000000011 /* ClipRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A00000000000000000011 /* ClipRecorder.swift */; };
+		2B00000000000000000011 /* FrameSetRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A00000000000000000011 /* FrameSetRecorder.swift */; };
 		2B00000000000000000012 /* SampleDetailsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A00000000000000000012 /* SampleDetailsView.swift */; };
-		2B00000000000000000013 /* ClipRecorderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A00000000000000000013 /* ClipRecorderTests.swift */; };
+		2B00000000000000000013 /* FrameSetRecorderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A00000000000000000013 /* FrameSetRecorderTests.swift */; };
 		2B00000000000000000014 /* SampleSetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A00000000000000000014 /* SampleSetupView.swift */; };
-		2B00000000000000000015 /* ClipLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A00000000000000000015 /* ClipLibrary.swift */; };
-		2B00000000000000000016 /* RecordedClipsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A00000000000000000016 /* RecordedClipsView.swift */; };
-		2B00000000000000000017 /* ClipLibraryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A00000000000000000017 /* ClipLibraryTests.swift */; };
+		2B00000000000000000015 /* FrameSetLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A00000000000000000015 /* FrameSetLibrary.swift */; };
+		2B00000000000000000016 /* FrameSetsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A00000000000000000016 /* FrameSetsView.swift */; };
+		2B00000000000000000017 /* FrameSetLibraryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A00000000000000000017 /* FrameSetLibraryTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -36,6 +39,9 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		1A0000000000000000020 /* FrameSweepTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrameSweepTests.swift; sourceTree = "<group>"; };
+		1A0000000000000000019 /* FrameSetManifest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrameSetManifest.swift; sourceTree = "<group>"; };
+		1A0000000000000000018 /* FrameSweep.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrameSweep.swift; sourceTree = "<group>"; };
 		1A0000000000000000000001 /* MicroscopeCounterApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MicroscopeCounterApp.swift; sourceTree = "<group>"; };
 		1A0000000000000000000002 /* CameraPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraPreview.swift; sourceTree = "<group>"; };
 		1A0000000000000000000003 /* CameraQualityModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraQualityModel.swift; sourceTree = "<group>"; };
@@ -45,15 +51,15 @@
 		1A0000000000000000000007 /* CaptureCheckView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureCheckView.swift; sourceTree = "<group>"; };
 		1A0000000000000000000008 /* CaptureQualityMonitorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureQualityMonitorTests.swift; sourceTree = "<group>"; };
 		1A00000000000000000010 /* RecordingMetadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingMetadata.swift; sourceTree = "<group>"; };
-		1A00000000000000000011 /* ClipRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipRecorder.swift; sourceTree = "<group>"; };
+		1A00000000000000000011 /* FrameSetRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrameSetRecorder.swift; sourceTree = "<group>"; };
 		1A00000000000000000012 /* SampleDetailsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleDetailsView.swift; sourceTree = "<group>"; };
-		1A00000000000000000013 /* ClipRecorderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipRecorderTests.swift; sourceTree = "<group>"; };
+		1A00000000000000000013 /* FrameSetRecorderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrameSetRecorderTests.swift; sourceTree = "<group>"; };
 		3C0000000000000000000001 /* MicroscopeCounter.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MicroscopeCounter.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		3C0000000000000000000002 /* MicroscopeCounterTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MicroscopeCounterTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		1A00000000000000000014 /* SampleSetupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleSetupView.swift; sourceTree = "<group>"; };
-		1A00000000000000000015 /* ClipLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipLibrary.swift; sourceTree = "<group>"; };
-		1A00000000000000000016 /* RecordedClipsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordedClipsView.swift; sourceTree = "<group>"; };
-		1A00000000000000000017 /* ClipLibraryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipLibraryTests.swift; sourceTree = "<group>"; };
+		1A00000000000000000015 /* FrameSetLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrameSetLibrary.swift; sourceTree = "<group>"; };
+		1A00000000000000000016 /* FrameSetsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrameSetsView.swift; sourceTree = "<group>"; };
+		1A00000000000000000017 /* FrameSetLibraryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrameSetLibraryTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -108,9 +114,11 @@
 				1A0000000000000000000003 /* CameraQualityModel.swift */,
 				1A0000000000000000000004 /* CaptureIssue.swift */,
 				1A0000000000000000000005 /* CaptureQualityMonitor.swift */,
+				1A0000000000000000019 /* FrameSetManifest.swift */,
+				1A0000000000000000018 /* FrameSweep.swift */,
 				1A0000000000000000000006 /* FrameAnalyzer.swift */,
-				1A00000000000000000011 /* ClipRecorder.swift */,
-				1A00000000000000000015 /* ClipLibrary.swift */,
+				1A00000000000000000011 /* FrameSetRecorder.swift */,
+				1A00000000000000000015 /* FrameSetLibrary.swift */,
 				1A00000000000000000010 /* RecordingMetadata.swift */,
 			);
 			path = Capture;
@@ -121,7 +129,7 @@
 			children = (
 				1A0000000000000000000007 /* CaptureCheckView.swift */,
 				1A00000000000000000012 /* SampleDetailsView.swift */,
-				1A00000000000000000016 /* RecordedClipsView.swift */,
+				1A00000000000000000016 /* FrameSetsView.swift */,
 				1A00000000000000000014 /* SampleSetupView.swift */,
 			);
 			path = Views;
@@ -131,8 +139,9 @@
 			isa = PBXGroup;
 			children = (
 				1A0000000000000000000008 /* CaptureQualityMonitorTests.swift */,
-				1A00000000000000000013 /* ClipRecorderTests.swift */,
-				1A00000000000000000017 /* ClipLibraryTests.swift */,
+				1A0000000000000000020 /* FrameSweepTests.swift */,
+				1A00000000000000000013 /* FrameSetRecorderTests.swift */,
+				1A00000000000000000017 /* FrameSetLibraryTests.swift */,
 			);
 			path = Tests;
 			sourceTree = "<group>";
@@ -249,13 +258,15 @@
 				2B0000000000000000000003 /* CameraQualityModel.swift in Sources */,
 				2B0000000000000000000004 /* CaptureIssue.swift in Sources */,
 				2B0000000000000000000005 /* CaptureQualityMonitor.swift in Sources */,
+				2B0000000000000000019 /* FrameSetManifest.swift in Sources */,
+				2B0000000000000000018 /* FrameSweep.swift in Sources */,
 				2B0000000000000000000006 /* FrameAnalyzer.swift in Sources */,
 				2B0000000000000000000007 /* CaptureCheckView.swift in Sources */,
 				2B00000000000000000012 /* SampleDetailsView.swift in Sources */,
-				2B00000000000000000016 /* RecordedClipsView.swift in Sources */,
+				2B00000000000000000016 /* FrameSetsView.swift in Sources */,
 				2B00000000000000000014 /* SampleSetupView.swift in Sources */,
-				2B00000000000000000011 /* ClipRecorder.swift in Sources */,
-				2B00000000000000000015 /* ClipLibrary.swift in Sources */,
+				2B00000000000000000011 /* FrameSetRecorder.swift in Sources */,
+				2B00000000000000000015 /* FrameSetLibrary.swift in Sources */,
 				2B00000000000000000010 /* RecordingMetadata.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -265,8 +276,9 @@
 			buildActionMask = 2147483647;
 			files = (
 				2B0000000000000000000008 /* CaptureQualityMonitorTests.swift in Sources */,
-				2B00000000000000000013 /* ClipRecorderTests.swift in Sources */,
-				2B00000000000000000017 /* ClipLibraryTests.swift in Sources */,
+				2B0000000000000000020 /* FrameSweepTests.swift in Sources */,
+				2B00000000000000000013 /* FrameSetRecorderTests.swift in Sources */,
+				2B00000000000000000017 /* FrameSetLibraryTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

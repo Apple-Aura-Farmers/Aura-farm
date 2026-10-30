@@ -25,17 +25,29 @@ helper visiting farms, not a lab technician.
   blurry or shaky, in plain language that says what to fix. Record stays disabled
   until the image is usable.
 - **Manual focus** — a focus slider instead of autofocus, which hunts on a microscope.
-- **Raw clip recording** — saves silent portrait `.mov` clips to `Documents/RawClips`,
-  with a JSON sidecar holding the sample ID, field number, moisture, grams of soil and
-  millilitres scanned. Clips are never overwritten or edited.
-- **Clip library** — saved clips newest first, with their sample details and playback.
-  Playback is grayscale, applied live, so the file on disk keeps its colour.
-- **Export** — clips can be copied off the phone with the Files app.
+- **Guided sweep** — asks the helper to hold still, keeps a frame once the image is
+  good and steady, then asks them to move the sample to the left before the next one.
+  Twelve frames cover several fields of view across the slide.
+- **Frame extraction instead of video** — a sweep is saved as a folder of JPEG frames
+  in `Documents/FrameSets`, with a `manifest.json` holding the sample ID, field number,
+  moisture, grams of soil, millilitres scanned and the frame count. Frames are never
+  overwritten or edited.
+- **Size ceiling** — a sweep stops at its own limit, and the saved-sweeps screen shows
+  how much of the 50 MB store is used.
+- **Sweep library** — saved sweeps newest first, swipe through the frames. They are
+  drawn in grayscale, so the files on disk keep their colour.
+- **Export** — frames can be copied off the phone with the Files app.
+
+### Why frames, not video
+
+The store holds 50 MB in total. A sweep of a dozen stills covers several fields of view
+for a few MB, where a clip of the same sweep would not fit. The counting work needs
+separate fields of view rather than continuous footage, so the frames are the raw data
+now and the same rule applies to them: nothing in the app edits or deletes one.
 
 **Planned**
 
 - Sample preparation and microscope mounting guides
-- Guided recording with a prompt to move the sample across the slide
 - Microbe detection with computer vision
 - A soil health result the helper can read out, with its confidence
 - Recommended actions with every result
@@ -70,8 +82,11 @@ Known limitations:
 - Shake is measured on the whole frame. A large moving organism barely affects it, but
   a drifting slide or debris flow could.
 - Brightness does not detect over-exposure.
-- Nothing checks free space before recording. A full phone fails part-way through a
-  clip, and that part-clip is kept.
+- Nothing checks free space before a sweep. A full phone fails part-way through, and
+  the frames written so far are kept.
+- The app knows the slide moved, not which way it moved. It asks for a move to the left
+  and waits for the view to shift and settle, so moving the wrong way still lets the
+  sweep go on and can cover the same part of the sample twice.
 
 ## Getting started
 
