@@ -34,8 +34,9 @@ helper visiting farms, not a lab technician.
   overwritten or edited.
 - **Size ceiling** — a sweep stops at its own limit, and the saved-sweeps screen shows
   how much of the 50 MB store is used.
-- **Sweep library** — saved sweeps newest first, swipe through the frames. They are
-  drawn in grayscale, so the files on disk keep their colour.
+- **Sweep library** — saved sweeps newest first. Open one and it plays back like a
+  clip, a second a frame, or step through frame by frame. The frames are drawn in
+  grayscale, so the files on disk keep their colour.
 - **Export** — frames can be copied off the phone with the Files app.
 
 ### Why frames, not video

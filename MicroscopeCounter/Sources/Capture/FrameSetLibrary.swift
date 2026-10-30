@@ -64,7 +64,9 @@ enum FrameSetLibrary {
     }
 
     /// What the store holds in total. Frames replace video to stay inside it.
-    static let storeByteLimit: Int64 = 50 * 1024 * 1024
+    /// Counted in millions, not multiples of 1024, so the screen reads "50 MB" like the
+    /// limit it stands for rather than "52.4 MB".
+    static let storeByteLimit: Int64 = 50 * 1_000 * 1_000
 
     /// Bytes used by every saved sweep. The store holds 50 MB, so the app shows how close
     /// it is to full.
