@@ -25,9 +25,11 @@ helper visiting farms, not a lab technician.
   blurry or shaky, in plain language that says what to fix. Record stays disabled
   until the image is usable.
 - **Manual focus** — a focus slider instead of autofocus, which hunts on a microscope.
-- **Guided sweep** — asks the helper to hold still, keeps a frame once the image is
-  good and steady, then asks them to move the sample to the left before the next one.
-  Twelve frames cover several fields of view across the slide.
+- **Automatic sweep** — the helper moves the sample to the left and the app keeps
+  frames on its own as the view travels, twelve of them across the slide. Nobody is
+  asked to stop or hold still. Saving pauses only while the image is too dark or out of
+  focus, and starts again by itself once that is fixed. Shake does not pause it: a sweep
+  is the slide moving, and a slide moved too fast reads as blurred anyway.
 - **Frame extraction instead of video** — a sweep is saved as a folder of JPEG frames
   in `Documents/FrameSets`, with a `manifest.json` holding the sample ID, field number,
   moisture, grams of soil, millilitres scanned and the frame count. Frames are never
@@ -86,7 +88,7 @@ Known limitations:
 - Nothing checks free space before a sweep. A full phone fails part-way through, and
   the frames written so far are kept.
 - The app knows the slide moved, not which way it moved. It asks for a move to the left
-  and waits for the view to shift and settle, so moving the wrong way still lets the
+  and counts how far the view has travelled, so moving the wrong way still lets the
   sweep go on and can cover the same part of the sample twice.
 
 ## Getting started

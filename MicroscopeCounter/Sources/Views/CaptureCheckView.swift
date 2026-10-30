@@ -84,11 +84,17 @@ struct CaptureCheckView: View {
         } else if let error = model.cameraError {
             StatusBanner(
                 systemImage: "exclamationmark.triangle", title: "Camera problem", message: error, tint: .red)
+        } else if let issue = model.topIssue, FrameSweep.blocksCapture(issue),
+            model.recorder.isSweeping
+        {
+            // While a sweep is paused the helper needs to see what to fix, not a count.
+            StatusBanner(
+                systemImage: issue.systemImage, title: issue.title, message: issue.advice, tint: .orange)
         } else if model.recorder.isSweeping {
             StatusBanner(
                 systemImage: "square.stack.3d.up",
                 title: "Keeping frames",
-                message: "\(model.recorder.keptCount) saved. Follow the instruction below.",
+                message: "\(model.recorder.keptCount) saved. Frames save on their own.",
                 tint: .red
             )
         } else if let error = model.recorder.errorMessage {

@@ -14,7 +14,7 @@ final class CameraQualityModel: NSObject {
     private(set) var cameraError: String?
     private(set) var lensPosition = CameraQualityModel.defaultLensPosition
     /// What the helper should be doing in the sweep: hold still, move the slide left, or done.
-    private(set) var sweepPrompt: SweepPrompt = .holdStill(kept: 0, of: SweepThresholds().framesPerSweep)
+    private(set) var sweepPrompt: SweepPrompt = .moveLeft(kept: 0, of: SweepThresholds().framesPerSweep)
 
     // MARK: Camera
 
@@ -189,6 +189,7 @@ extension CameraQualityModel: AVCaptureVideoDataOutputSampleBufferDelegate {
 
         let top = monitor.topIssue
         let ready = monitor.isReady
+        let settled = monitor.hasSettled
         DispatchQueue.main.async { [weak self] in
             self?.latestReading = reading
             self?.topIssue = top
@@ -196,9 +197,10 @@ extension CameraQualityModel: AVCaptureVideoDataOutputSampleBufferDelegate {
         }
 
         guard sweepActive else { return }
-        if sweep.update(isImageGood: ready, shakePixels: reading.shakePixels) == .keepFrame,
-            let bytes = recorder.write(buffer)
-        {
+        // Shake is not passed as a blocker: a sweep is the slide moving, so the sweep
+        // decides for itself which issues stop a frame being kept.
+        let step = sweep.update(isSettled: settled, issue: top, shakePixels: reading.shakePixels)
+        if step == .keepFrame, let bytes = recorder.write(buffer) {
             sweep.addWrittenBytes(bytes)
         }
         publishPrompt(sweep.prompt)

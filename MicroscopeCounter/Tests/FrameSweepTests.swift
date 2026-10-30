@@ -5,92 +5,122 @@ import XCTest
 final class FrameSweepTests: XCTestCase {
     private let thresholds = SweepThresholds(
         framesPerSweep: 3,
-        movingShakePixels: 8,
-        stillReadingsBeforeCapture: 2,
+        shiftBetweenFrames: 100,
+        ignoreShiftBelow: 3,
         maxBytes: 1_000
     )
 
-    func testFirstFrameIsKeptOnlyAfterTheImageHoldsStill() {
+    func testTheFirstFrameIsKeptAsSoonAsTheImageIsGood() {
         let sweep = FrameSweep(thresholds: thresholds)
 
-        XCTAssertEqual(sweep.update(isImageGood: true, shakePixels: 1), .wait)
-        XCTAssertEqual(sweep.keptCount, 0)
-        XCTAssertEqual(sweep.update(isImageGood: true, shakePixels: 1), .keepFrame)
+        XCTAssertEqual(sweep.update(isSettled: true, issue: nil, shakePixels: nil), .keepFrame)
         XCTAssertEqual(sweep.keptCount, 1)
     }
 
-    func testNothingIsKeptWhileTheImageIsBad() {
+    func testNothingIsKeptUntilTheCheckHasSettled() {
+        let sweep = FrameSweep(thresholds: thresholds)
+
+        XCTAssertEqual(sweep.update(isSettled: false, issue: nil, shakePixels: nil), .wait)
+        XCTAssertEqual(sweep.keptCount, 0)
+        XCTAssertEqual(sweep.prompt, .fixTheImage)
+    }
+
+    func testBlurAndDarknessPauseSavingButShakeDoesNot() {
+        XCTAssertTrue(FrameSweep.blocksCapture(.blurry))
+        XCTAssertTrue(FrameSweep.blocksCapture(.tooDark))
+        // A sweep is the slide moving, so shake is expected throughout.
+        XCTAssertFalse(FrameSweep.blocksCapture(.shaky))
+        XCTAssertFalse(FrameSweep.blocksCapture(nil))
+    }
+
+    func testAFrameIsNotKeptWhileTheImageIsBlurred() {
         let sweep = FrameSweep(thresholds: thresholds)
 
         for _ in 0..<10 {
-            XCTAssertEqual(sweep.update(isImageGood: false, shakePixels: 0), .wait)
+            XCTAssertEqual(sweep.update(isSettled: true, issue: .blurry, shakePixels: 50), .wait)
         }
         XCTAssertEqual(sweep.keptCount, 0)
         XCTAssertEqual(sweep.prompt, .fixTheImage)
     }
 
-    func testAStillStreakIsBrokenByShake() {
+    func testSavingResumesByItselfOnceTheBlurClears() {
         let sweep = FrameSweep(thresholds: thresholds)
+        XCTAssertEqual(sweep.update(isSettled: true, issue: .blurry, shakePixels: 50), .wait)
 
-        XCTAssertEqual(sweep.update(isImageGood: true, shakePixels: 1), .wait)
-        // Over the moving threshold, so the streak restarts.
-        XCTAssertEqual(sweep.update(isImageGood: true, shakePixels: 20), .wait)
-        XCTAssertEqual(sweep.update(isImageGood: true, shakePixels: 1), .wait)
-        XCTAssertEqual(sweep.keptCount, 0)
-        XCTAssertEqual(sweep.update(isImageGood: true, shakePixels: 1), .keepFrame)
+        XCTAssertEqual(sweep.update(isSettled: true, issue: nil, shakePixels: 10), .keepFrame)
+        XCTAssertEqual(sweep.keptCount, 1)
     }
 
-    func testAfterAFrameItAsksToMoveLeftAndWaitsForTheMove() {
+    func testAFrameIsKeptWhileTheSlideKeepsMovingWithNoPromptToStop() {
         let sweep = FrameSweep(thresholds: thresholds)
-        keepOneFrame(with: sweep)
+        XCTAssertEqual(sweep.update(isSettled: true, issue: nil, shakePixels: nil), .keepFrame)
 
-        XCTAssertEqual(sweep.prompt, .moveLeft(kept: 1, of: 3))
-        // Still frames while it waits for the move must not be kept, however many arrive.
-        for _ in 0..<10 {
-            XCTAssertEqual(sweep.update(isImageGood: true, shakePixels: 0), .wait)
+        // Shake all the way through: the slide is travelling, which is what a sweep is.
+        XCTAssertEqual(sweep.update(isSettled: true, issue: .shaky, shakePixels: 60), .wait)
+        XCTAssertEqual(sweep.update(isSettled: true, issue: .shaky, shakePixels: 60), .keepFrame)
+        XCTAssertEqual(sweep.keptCount, 2)
+        XCTAssertEqual(sweep.prompt, .moveLeft(kept: 2, of: 3))
+    }
+
+    func testTheSameFieldOfViewIsNotKeptTwice() {
+        let sweep = FrameSweep(thresholds: thresholds)
+        XCTAssertEqual(sweep.update(isSettled: true, issue: nil, shakePixels: nil), .keepFrame)
+
+        // A still slide never travels the required distance, however many frames arrive.
+        for _ in 0..<50 {
+            XCTAssertEqual(sweep.update(isSettled: true, issue: nil, shakePixels: 0), .wait)
         }
         XCTAssertEqual(sweep.keptCount, 1)
     }
 
-    func testTheNextFrameIsKeptAfterAMoveThenStillness() {
+    func testWobbleBelowTheFloorDoesNotCountAsTravel() {
         let sweep = FrameSweep(thresholds: thresholds)
-        keepOneFrame(with: sweep)
+        XCTAssertEqual(sweep.update(isSettled: true, issue: nil, shakePixels: nil), .keepFrame)
 
-        XCTAssertEqual(sweep.update(isImageGood: true, shakePixels: 30), .wait)
-        XCTAssertEqual(sweep.prompt, .holdStill(kept: 1, of: 3))
-        XCTAssertEqual(sweep.update(isImageGood: true, shakePixels: 1), .wait)
-        XCTAssertEqual(sweep.update(isImageGood: true, shakePixels: 1), .keepFrame)
+        // 50 readings of 2 px would pass the 100 px mark if wobble were counted.
+        for _ in 0..<50 {
+            XCTAssertEqual(sweep.update(isSettled: true, issue: nil, shakePixels: 2), .wait)
+        }
+        XCTAssertEqual(sweep.keptCount, 1)
+    }
+
+    func testTravelWhilePausedStillCounts() {
+        let sweep = FrameSweep(thresholds: thresholds)
+        XCTAssertEqual(sweep.update(isSettled: true, issue: nil, shakePixels: nil), .keepFrame)
+
+        // Moved past a blurred patch: that ground should not have to be covered again.
+        XCTAssertEqual(sweep.update(isSettled: true, issue: .blurry, shakePixels: 120), .wait)
+        XCTAssertEqual(sweep.update(isSettled: true, issue: nil, shakePixels: 0), .keepFrame)
         XCTAssertEqual(sweep.keptCount, 2)
     }
 
     func testTheSweepEndsAfterTheFrameCount() {
         let sweep = FrameSweep(thresholds: thresholds)
 
-        keepOneFrame(with: sweep)
-        moveAndKeepOneFrame(with: sweep)
-        moveAndKeepOneFrame(with: sweep)
+        sweep.update(isSettled: true, issue: nil, shakePixels: nil)
+        sweep.update(isSettled: true, issue: nil, shakePixels: 120)
+        sweep.update(isSettled: true, issue: nil, shakePixels: 120)
 
         XCTAssertEqual(sweep.keptCount, 3)
         XCTAssertTrue(sweep.isFinished)
         XCTAssertEqual(sweep.prompt, .done(kept: 3, stoppedEarly: false))
-        // A finished sweep keeps nothing more.
-        XCTAssertEqual(sweep.update(isImageGood: true, shakePixels: 0), .wait)
+        XCTAssertEqual(sweep.update(isSettled: true, issue: nil, shakePixels: 500), .wait)
     }
 
     func testTheSizeCeilingEndsTheSweepEarly() {
         let sweep = FrameSweep(thresholds: thresholds)
-        keepOneFrame(with: sweep)
+        sweep.update(isSettled: true, issue: nil, shakePixels: nil)
 
         sweep.addWrittenBytes(1_200)
 
         XCTAssertTrue(sweep.isFinished)
         XCTAssertEqual(sweep.prompt, .done(kept: 1, stoppedEarly: true))
-        XCTAssertEqual(sweep.update(isImageGood: true, shakePixels: 0), .wait)
+        XCTAssertEqual(sweep.update(isSettled: true, issue: nil, shakePixels: 500), .wait)
     }
 
     func testResetStartsOver() {
         let sweep = FrameSweep(thresholds: thresholds)
-        keepOneFrame(with: sweep)
+        sweep.update(isSettled: true, issue: nil, shakePixels: nil)
         sweep.addWrittenBytes(5_000)
 
         sweep.reset()
@@ -98,19 +128,6 @@ final class FrameSweepTests: XCTestCase {
         XCTAssertFalse(sweep.isFinished)
         XCTAssertEqual(sweep.keptCount, 0)
         XCTAssertEqual(sweep.bytesWritten, 0)
-        XCTAssertEqual(sweep.prompt, .holdStill(kept: 0, of: 3))
-    }
-
-    // MARK: Helpers
-
-    private func keepOneFrame(with sweep: FrameSweep) {
-        for _ in 0..<thresholds.stillReadingsBeforeCapture {
-            sweep.update(isImageGood: true, shakePixels: 1)
-        }
-    }
-
-    private func moveAndKeepOneFrame(with sweep: FrameSweep) {
-        sweep.update(isImageGood: true, shakePixels: thresholds.movingShakePixels + 10)
-        keepOneFrame(with: sweep)
+        XCTAssertEqual(sweep.prompt, .moveLeft(kept: 0, of: 3))
     }
 }
