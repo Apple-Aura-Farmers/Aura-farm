@@ -34,10 +34,17 @@ helper visiting farms, not a lab technician.
   in `Documents/FrameSets`, with a `manifest.json` holding the sample ID, field number,
   moisture, grams of soil, millilitres scanned and the frame count. Frames are never
   overwritten or edited.
+- **One joined image** — when the sweep ends, the frames are lined up into a single
+  wide picture of the slide, the way a panorama works. The slide travels on a flat
+  stage, so frame to frame there is a shift and nothing else, which makes translational
+  registration the whole job. The panorama is a derived file saved as `panorama.jpg`
+  beside the frames; the frames themselves are never edited to make it, and a sweep
+  whose frames cannot be lined up keeps every one of them.
 - **Size ceiling** — a sweep stops at its own limit, and the saved-sweeps screen shows
   how much of the 50 MB store is used.
-- **Sweep library** — saved sweeps newest first. Open one and it plays back like a
-  clip, a second a frame, or step through frame by frame. The frames are drawn in
+- **Sweep library** — saved sweeps newest first. Open one and it shows the joined
+  image, scrolled along the slide, or switch to the frames, which play back like a
+  clip, a second a frame, or step through one at a time. The frames are drawn in
   grayscale, so the files on disk keep their colour.
 - **Export** — frames can be copied off the phone with the Files app.
 
@@ -85,6 +92,11 @@ Known limitations:
 - Shake is measured on the whole frame. A large moving organism barely affects it, but
   a drifting slide or debris flow could.
 - Brightness does not detect over-exposure.
+- Joining the frames needs something to lock onto. On a field with little in it, the
+  registration can return a confident but badly wrong match, and a frame pasted far out
+  of place makes the whole picture misleading. A shift of more than half a frame is
+  therefore treated as a failure to line up: the sweep keeps its frames and says they
+  were not joined, rather than showing a panorama that cannot be trusted.
 - Nothing checks free space before a sweep. A full phone fails part-way through, and
   the frames written so far are kept.
 - The app knows the slide moved, not which way it moved. It asks for a move to the left

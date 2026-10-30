@@ -48,6 +48,7 @@ struct FrameSetsView: View {
         var parts = ["\(set.frameCount) frames"]
         parts.append(set.byteCount.formatted(.byteCount(style: .file)))
         parts.append(set.recordedAt.formatted(date: .abbreviated, time: .shortened))
+        if set.panoramaURL == nil, set.frameCount > 1 { parts.append("frames not joined") }
         if set.manifest?.stoppedEarly == true { parts.append("stopped at the size limit") }
         if set.manifest == nil { parts.append("sample details missing") }
         return parts.joined(separator: " · ")
@@ -71,8 +72,15 @@ private struct FrameSetViewer: View {
     /// playback is a slideshow: fast enough to watch, slow enough to see what is in a frame.
     private static let secondsPerFrame = 1.0
 
-    /// Grayscale is what the counting work uses, so that is what a frame is checked in.
+    private enum Mode: String, CaseIterable, Identifiable {
+        case panorama = "Panorama"
+        case frames = "Frames"
+        var id: String { rawValue }
+    }
+
+    /// Grayscale is what the counting work uses, so that is what a sweep is checked in.
     @State private var showGrayscale = true
+    @State private var mode = Mode.panorama
     @State private var index = 0
     @State private var isPlaying = false
     /// Decoded once, so playback does not stall on reading each frame off disk.
@@ -90,8 +98,21 @@ private struct FrameSetViewer: View {
                 ProgressView("Loading frames")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                player
-                controls
+                if frameSet.panoramaURL != nil {
+                    Picker("View", selection: $mode) {
+                        ForEach(Mode.allCases) { Text($0.rawValue).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    .padding(.horizontal)
+                    .padding(.top, 8)
+                }
+
+                if mode == .panorama, let url = frameSet.panoramaURL {
+                    panorama(at: url)
+                } else {
+                    player
+                    controls
+                }
             }
         }
         .navigationTitle(frameSet.name)
@@ -103,6 +124,45 @@ private struct FrameSetViewer: View {
         }
         .task { await loadFrames() }
         .task(id: isPlaying) { await playIfNeeded() }
+        .onChange(of: mode) { _, new in
+            if new == .panorama { isPlaying = false }
+        }
+    }
+
+    /// The frames joined into one picture of the slide. It is far wider than the screen, so
+    /// it scrolls both ways rather than being squeezed down to nothing.
+    private func panorama(at url: URL) -> some View {
+        VStack(spacing: 0) {
+            GeometryReader { proxy in
+                ScrollView(.horizontal) {
+                    AsyncImage(url: url) { image in
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(height: proxy.size.height)
+                            .grayscale(showGrayscale ? 1 : 0)
+                    } placeholder: {
+                        ProgressView().frame(width: proxy.size.width, height: proxy.size.height)
+                    }
+                }
+                // The left edge is where the sweep started, so that is where it opens.
+                .defaultScrollAnchor(.leading)
+            }
+            .background(Color.black)
+
+            VStack(spacing: 4) {
+                Text("\(frameSet.frameCount) frames joined. Scroll to see along the slide.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if let manifest = frameSet.manifest {
+                    Text(summary(of: manifest))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+            }
+            .padding(.vertical, 10)
+        }
     }
 
     /// Swipe to step through, or let playback advance it.

@@ -16,6 +16,8 @@ import UIKit
 @Observable
 final class FrameSetRecorder {
     private(set) var isSweeping = false
+    /// The frames are being joined into one image. The sweep itself is already over.
+    private(set) var isJoiningFrames = false
     private(set) var keptCount = 0
     private(set) var lastSavedName: String?
     private(set) var errorMessage: String?
@@ -90,39 +92,68 @@ final class FrameSetRecorder {
         return data.count
     }
 
-    /// Writes the manifest and ends the sweep. A sweep with no frames leaves its empty folder
-    /// rather than deleting anything.
+    /// Writes the manifest, joins the frames into one image, and ends the sweep. A sweep with
+    /// no frames leaves its empty folder rather than deleting anything.
     func finish(stoppedEarly: Bool) {
         guard let folder, let details else { return }
         self.folder = nil
         self.details = nil
+        let frameCount = written
+        let frameBytes = bytes
 
         var failure: String?
-        if written == 0 {
+        if frameCount == 0 {
             failure = "No frames were kept. Check the image and try again."
+        } else if stoppedEarly {
+            failure = "The sweep stopped at its size limit. The frames kept so far were saved."
         }
-        let manifest = FrameSetManifest(
+        publish {
+            $0.isSweeping = false
+            $0.isJoiningFrames = frameCount > 1
+        }
+
+        let joined = Self.joinFrames(in: folder)
+        var manifest = FrameSetManifest(
             details: details,
-            frameCount: written,
-            byteCount: bytes,
-            stoppedEarly: stoppedEarly
+            frameCount: frameCount,
+            byteCount: frameBytes,
+            stoppedEarly: stoppedEarly,
+            panoramaFile: joined.file,
+            panoramaProblem: joined.problem
         )
+        if frameCount == 1 { manifest.panoramaProblem = nil }
+
         do {
             try Self.writeManifest(manifest, inFrameSetAt: folder)
         } catch {
             failure = "The frames were saved but their sample details were not."
         }
-        if stoppedEarly, failure == nil {
-            failure = "The sweep stopped at its size limit. The frames kept so far were saved."
-        }
 
         let name = folder.lastPathComponent
         publish {
+            $0.isJoiningFrames = false
             $0.isSweeping = false
             $0.lastSavedName = name
             $0.errorMessage = failure
         }
     }
+
+    /// Joins a sweep's frames into one image beside them. The frames are the raw data, so a
+    /// failure here leaves them exactly as they are and is only reported.
+    static func joinFrames(in folder: URL) -> (file: String?, problem: String?) {
+        let frames = FrameSetLibrary.frameURLs(in: folder)
+        guard frames.count > 1 else { return (nil, "A panorama needs more than one frame.") }
+        do {
+            let panorama = try PanoramaStitcher.stitch(frameURLs: frames)
+            let url = folder.appending(path: panoramaFileName)
+            try PanoramaStitcher.write(panorama, to: url)
+            return (panoramaFileName, nil)
+        } catch {
+            return (nil, "The frames could not be joined into one image. They were all kept.")
+        }
+    }
+
+    static let panoramaFileName = "panorama.jpg"
 
     /// A directory URL nothing uses yet, so an existing sweep is never written into.
     static func freeURL(base: String, in directory: URL) -> URL {

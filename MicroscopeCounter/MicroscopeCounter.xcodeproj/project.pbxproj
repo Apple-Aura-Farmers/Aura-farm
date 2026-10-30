@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		2B0000000000000000022 /* PanoramaStitcherTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000022 /* PanoramaStitcherTests.swift */; };
+		2B0000000000000000021 /* PanoramaStitcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000021 /* PanoramaStitcher.swift */; };
 		2B0000000000000000020 /* FrameSweepTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000020 /* FrameSweepTests.swift */; };
 		2B0000000000000000019 /* FrameSetManifest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000019 /* FrameSetManifest.swift */; };
 		2B0000000000000000018 /* FrameSweep.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000018 /* FrameSweep.swift */; };
@@ -39,6 +41,8 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		1A0000000000000000022 /* PanoramaStitcherTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PanoramaStitcherTests.swift; sourceTree = "<group>"; };
+		1A0000000000000000021 /* PanoramaStitcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PanoramaStitcher.swift; sourceTree = "<group>"; };
 		1A0000000000000000020 /* FrameSweepTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrameSweepTests.swift; sourceTree = "<group>"; };
 		1A0000000000000000019 /* FrameSetManifest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrameSetManifest.swift; sourceTree = "<group>"; };
 		1A0000000000000000018 /* FrameSweep.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrameSweep.swift; sourceTree = "<group>"; };
@@ -114,6 +118,7 @@
 				1A0000000000000000000003 /* CameraQualityModel.swift */,
 				1A0000000000000000000004 /* CaptureIssue.swift */,
 				1A0000000000000000000005 /* CaptureQualityMonitor.swift */,
+				1A0000000000000000021 /* PanoramaStitcher.swift */,
 				1A0000000000000000019 /* FrameSetManifest.swift */,
 				1A0000000000000000018 /* FrameSweep.swift */,
 				1A0000000000000000000006 /* FrameAnalyzer.swift */,
@@ -139,6 +144,7 @@
 			isa = PBXGroup;
 			children = (
 				1A0000000000000000000008 /* CaptureQualityMonitorTests.swift */,
+				1A0000000000000000022 /* PanoramaStitcherTests.swift */,
 				1A0000000000000000020 /* FrameSweepTests.swift */,
 				1A00000000000000000013 /* FrameSetRecorderTests.swift */,
 				1A00000000000000000017 /* FrameSetLibraryTests.swift */,
@@ -258,6 +264,7 @@
 				2B0000000000000000000003 /* CameraQualityModel.swift in Sources */,
 				2B0000000000000000000004 /* CaptureIssue.swift in Sources */,
 				2B0000000000000000000005 /* CaptureQualityMonitor.swift in Sources */,
+				2B0000000000000000021 /* PanoramaStitcher.swift in Sources */,
 				2B0000000000000000019 /* FrameSetManifest.swift in Sources */,
 				2B0000000000000000018 /* FrameSweep.swift in Sources */,
 				2B0000000000000000000006 /* FrameAnalyzer.swift in Sources */,
@@ -276,6 +283,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				2B0000000000000000000008 /* CaptureQualityMonitorTests.swift in Sources */,
+				2B0000000000000000022 /* PanoramaStitcherTests.swift in Sources */,
 				2B0000000000000000020 /* FrameSweepTests.swift in Sources */,
 				2B00000000000000000013 /* FrameSetRecorderTests.swift in Sources */,
 				2B00000000000000000017 /* FrameSetLibraryTests.swift in Sources */,

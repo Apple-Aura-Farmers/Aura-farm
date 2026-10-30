@@ -10,4 +10,10 @@ struct FrameSetManifest: Codable, Equatable {
     var byteCount: Int
     /// True when the sweep stopped on its size ceiling instead of finishing.
     var stoppedEarly: Bool
+    /// The file name of the joined-up image, or nil when the frames could not be lined up.
+    /// nil also for a sweep saved before panoramas existed.
+    var panoramaFile: String?
+    /// Why the frames could not be joined, when they could not be. The frames are kept
+    /// either way: the panorama is derived, they are the raw data.
+    var panoramaProblem: String?
 }

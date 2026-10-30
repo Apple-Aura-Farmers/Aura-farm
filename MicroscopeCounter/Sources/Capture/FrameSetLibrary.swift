@@ -11,6 +11,8 @@ struct SavedFrameSet: Identifiable, Equatable {
     var byteCount: Int64
     /// The frames, in the order they were taken.
     var frameURLs: [URL]
+    /// The frames joined into one image, when they could be joined.
+    var panoramaURL: URL?
 
     var id: URL { url }
     var name: String { url.lastPathComponent }
@@ -37,16 +39,12 @@ enum FrameSetLibrary {
                 let manifest = (try? Data(contentsOf: folder.appending(path: "manifest.json")))
                     .flatMap { try? decoder.decode(FrameSetManifest.self, from: $0) }
 
-                let contents =
-                    (try? FileManager.default.contentsOfDirectory(
-                        at: folder,
-                        includingPropertiesForKeys: [.fileSizeKey]
-                    )) ?? []
-                let frames =
-                    contents
-                    .filter { $0.pathExtension.lowercased() == "jpg" }
-                    .sorted { $0.lastPathComponent < $1.lastPathComponent }
-                let bytes = frames.reduce(into: Int64(0)) { total, url in
+                let frames = frameURLs(in: folder)
+                let panorama = folder.appending(path: FrameSetRecorder.panoramaFileName)
+                let hasPanorama = FileManager.default.fileExists(atPath: panorama.path)
+                // Everything in the folder counts towards the store, the joined image included.
+                let bytes = (frames + (hasPanorama ? [panorama] : [])).reduce(into: Int64(0)) {
+                    total, url in
                     total += Int64((try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0)
                 }
 
@@ -57,10 +55,26 @@ enum FrameSetLibrary {
                     manifest: manifest,
                     recordedAt: manifest?.details.recordedAt ?? modified ?? .distantPast,
                     byteCount: bytes,
-                    frameURLs: frames
+                    frameURLs: frames,
+                    panoramaURL: hasPanorama ? panorama : nil
                 )
             }
             .sorted { $0.recordedAt > $1.recordedAt }
+    }
+
+    /// A sweep's frames, in the order they were taken. The joined-up image is not one of
+    /// them: it is derived from them.
+    static func frameURLs(in folder: URL) -> [URL] {
+        let contents =
+            (try? FileManager.default.contentsOfDirectory(
+                at: folder,
+                includingPropertiesForKeys: [.fileSizeKey]
+            )) ?? []
+        return
+            contents
+            .filter { $0.lastPathComponent.hasPrefix("frame_") }
+            .filter { $0.pathExtension.lowercased() == "jpg" }
+            .sorted { $0.lastPathComponent < $1.lastPathComponent }
     }
 
     /// What the store holds in total. Frames replace video to stay inside it.
