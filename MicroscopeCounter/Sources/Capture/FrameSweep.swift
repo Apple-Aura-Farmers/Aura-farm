@@ -8,6 +8,8 @@ import Foundation
 struct SweepThresholds {
     /// Frames kept per sweep. Twelve 720p JPEGs come to roughly 4 MB.
     var framesPerSweep: Int = 12
+    /// Frames along one row before the sweep turns down and comes back the other way.
+    var framesPerRow: Int = 4
     /// Shift (pixels) that has to build up since the last frame before another is kept, so
     /// two frames are not taken of the same field of view.
     var shiftBetweenFrames: Double = 120
@@ -18,12 +20,20 @@ struct SweepThresholds {
     var maxBytes: Int = 6 * 1024 * 1024
 }
 
+/// The way to move the slide next. The sweep walks it in rows: across, down one step, back
+/// the other way, so the frames cover a block of the slide instead of a single line.
+enum SweepDirection: String, Equatable {
+    case right
+    case down
+    case left
+}
+
 /// What the helper should know right now. The view turns this into one short line.
 enum SweepPrompt: Equatable {
     /// Something is wrong with the image, so nothing is being kept until it is fixed.
     case fixTheImage
-    /// Keep moving the slide; frames are saving by themselves.
-    case moveLeft(kept: Int, of: Int)
+    /// Move the slide this way; frames are saving by themselves.
+    case move(SweepDirection, kept: Int, of: Int)
     /// The sweep is over.
     case done(kept: Int, stoppedEarly: Bool)
 }
@@ -33,7 +43,9 @@ extension SweepPrompt {
     var title: String {
         switch self {
         case .fixTheImage: return "Paused"
-        case .moveLeft: return "Move the sample left"
+        case .move(.right, _, _): return "Move the sample right"
+        case .move(.down, _, _): return "Move the sample down"
+        case .move(.left, _, _): return "Move the sample left"
         case .done: return "Sweep finished"
         }
     }
@@ -42,8 +54,12 @@ extension SweepPrompt {
         switch self {
         case .fixTheImage:
             return "The warning above says what to fix. Saving starts again by itself."
-        case .moveLeft(let kept, let total):
-            return "Keep moving slowly. Frames save on their own. \(kept) of \(total) saved."
+        case .move(.right, let kept, let total):
+            return "Slide it slowly to the right. Frames save on their own. \(kept) of \(total) saved."
+        case .move(.down, let kept, let total):
+            return "Nudge it down one step, then carry on the other way. \(kept) of \(total) saved."
+        case .move(.left, let kept, let total):
+            return "Slide it slowly to the left. Frames save on their own. \(kept) of \(total) saved."
         case .done(let kept, let stoppedEarly):
             return stoppedEarly
                 ? "The size limit was reached. \(kept) frames were saved."
@@ -54,7 +70,9 @@ extension SweepPrompt {
     var systemImage: String {
         switch self {
         case .fixTheImage: return "exclamationmark.triangle.fill"
-        case .moveLeft: return "arrow.left.circle.fill"
+        case .move(.right, _, _): return "arrow.right.circle.fill"
+        case .move(.down, _, _): return "arrow.down.circle.fill"
+        case .move(.left, _, _): return "arrow.left.circle.fill"
         case .done: return "checkmark.circle.fill"
         }
     }
@@ -63,6 +81,15 @@ extension SweepPrompt {
 /// Decides when to keep a frame during a sweep. The helper is never asked to stop or hold
 /// still: frames are kept on their own as the slide travels, and saving only pauses while
 /// the image is too dark or out of focus.
+///
+/// The helper is walked across the slide in rows: a few frames to the right, one step down,
+/// then back to the left, and so on. That covers a block of the slide rather than a single
+/// line, and the picture the frames are joined into takes its shape from the path.
+///
+/// Nothing here checks that the slide actually went the way it was asked to. The travel that
+/// spaces frames apart is a distance, not a direction. What the panorama shows is where the
+/// frames really landed, worked out from the frames themselves, so a wrong turn shows up in
+/// the picture rather than being hidden by it.
 ///
 /// Frames replace video because the store holds 50 MB in total: a sweep of stills covers
 /// several fields of view for a few MB, where a clip of the same sweep would not fit.
@@ -92,7 +119,24 @@ final class FrameSweep {
 
     init(thresholds: SweepThresholds = SweepThresholds()) {
         self.thresholds = thresholds
-        prompt = .moveLeft(kept: 0, of: thresholds.framesPerSweep)
+        prompt = .move(.right, kept: 0, of: thresholds.framesPerSweep)
+    }
+
+    /// Where to send the slide next, given how many frames are already kept. Rows run right,
+    /// then left, then right again; between rows the slide goes down one step, and the frame
+    /// after that step starts the new row.
+    static func direction(afterKeeping kept: Int, framesPerRow: Int) -> SweepDirection {
+        guard framesPerRow > 0 else { return .right }
+        if kept > 0, kept % framesPerRow == 0 { return .down }
+        return (kept / framesPerRow) % 2 == 0 ? .right : .left
+    }
+
+    private var movePrompt: SweepPrompt {
+        .move(
+            Self.direction(afterKeeping: keptCount, framesPerRow: thresholds.framesPerRow),
+            kept: keptCount,
+            of: thresholds.framesPerSweep
+        )
     }
 
     /// An issue that stops frames being kept. Shake is not one of them.
@@ -127,7 +171,7 @@ final class FrameSweep {
         // have travelled, so the same field of view is not kept twice.
         let hasTravelled = keptCount == 0 || shiftSinceLastFrame >= thresholds.shiftBetweenFrames
         guard hasTravelled else {
-            prompt = .moveLeft(kept: keptCount, of: thresholds.framesPerSweep)
+            prompt = movePrompt
             return .wait
         }
 
@@ -137,7 +181,7 @@ final class FrameSweep {
             isFinished = true
             prompt = .done(kept: keptCount, stoppedEarly: false)
         } else {
-            prompt = .moveLeft(kept: keptCount, of: thresholds.framesPerSweep)
+            prompt = movePrompt
         }
         return .keepFrame
     }
@@ -156,6 +200,6 @@ final class FrameSweep {
         bytesWritten = 0
         shiftSinceLastFrame = 0
         isFinished = false
-        prompt = .moveLeft(kept: 0, of: thresholds.framesPerSweep)
+        prompt = .move(.right, kept: 0, of: thresholds.framesPerSweep)
     }
 }

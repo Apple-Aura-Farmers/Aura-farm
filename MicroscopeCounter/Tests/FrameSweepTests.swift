@@ -5,6 +5,7 @@ import XCTest
 final class FrameSweepTests: XCTestCase {
     private let thresholds = SweepThresholds(
         framesPerSweep: 3,
+        framesPerRow: 2,
         shiftBetweenFrames: 100,
         ignoreShiftBelow: 3,
         maxBytes: 1_000
@@ -59,7 +60,8 @@ final class FrameSweepTests: XCTestCase {
         XCTAssertEqual(sweep.update(isSettled: true, issue: .shaky, shakePixels: 60), .wait)
         XCTAssertEqual(sweep.update(isSettled: true, issue: .shaky, shakePixels: 60), .keepFrame)
         XCTAssertEqual(sweep.keptCount, 2)
-        XCTAssertEqual(sweep.prompt, .moveLeft(kept: 2, of: 3))
+        // Two frames fill the row, so the slide is sent down before the next one.
+        XCTAssertEqual(sweep.prompt, .move(.down, kept: 2, of: 3))
     }
 
     func testTheSameFieldOfViewIsNotKeptTwice() {
@@ -92,6 +94,34 @@ final class FrameSweepTests: XCTestCase {
         XCTAssertEqual(sweep.update(isSettled: true, issue: .blurry, shakePixels: 120), .wait)
         XCTAssertEqual(sweep.update(isSettled: true, issue: nil, shakePixels: 0), .keepFrame)
         XCTAssertEqual(sweep.keptCount, 2)
+    }
+
+    func testTheSlideIsWalkedAcrossInRows() {
+        // Four frames to a row: right along the first, down a step, left along the second,
+        // down again, then right along the third.
+        let expected: [SweepDirection] = [
+            .right, .right, .right, .right,
+            .down, .left, .left, .left,
+            .down, .right, .right, .right,
+        ]
+        for (kept, direction) in expected.enumerated() {
+            XCTAssertEqual(
+                FrameSweep.direction(afterKeeping: kept, framesPerRow: 4),
+                direction,
+                "after \(kept) frames"
+            )
+        }
+    }
+
+    func testThePromptFollowsThePath() {
+        let sweep = FrameSweep(thresholds: thresholds)
+        XCTAssertEqual(sweep.prompt, .move(.right, kept: 0, of: 3))
+
+        XCTAssertEqual(sweep.update(isSettled: true, issue: nil, shakePixels: nil), .keepFrame)
+        XCTAssertEqual(sweep.prompt, .move(.right, kept: 1, of: 3))
+
+        XCTAssertEqual(sweep.update(isSettled: true, issue: nil, shakePixels: 120), .keepFrame)
+        XCTAssertEqual(sweep.prompt, .move(.down, kept: 2, of: 3))
     }
 
     func testTheSweepEndsAfterTheFrameCount() {
@@ -128,6 +158,6 @@ final class FrameSweepTests: XCTestCase {
         XCTAssertFalse(sweep.isFinished)
         XCTAssertEqual(sweep.keptCount, 0)
         XCTAssertEqual(sweep.bytesWritten, 0)
-        XCTAssertEqual(sweep.prompt, .moveLeft(kept: 0, of: 3))
+        XCTAssertEqual(sweep.prompt, .move(.right, kept: 0, of: 3))
     }
 }

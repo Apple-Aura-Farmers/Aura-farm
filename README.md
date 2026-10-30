@@ -25,8 +25,9 @@ helper visiting farms, not a lab technician.
   blurry or shaky, in plain language that says what to fix. Record stays disabled
   until the image is usable.
 - **Manual focus** — a focus slider instead of autofocus, which hunts on a microscope.
-- **Automatic sweep** — the helper moves the sample to the left and the app keeps
-  frames on its own as the view travels, twelve of them across the slide. Nobody is
+- **Automatic sweep along a set path** — the app walks the helper across the slide in
+  rows: four frames to the right, one step down, four back to the left, down again, and
+  so on, twelve frames in all. Frames save on their own as the view travels; nobody is
   asked to stop or hold still. Saving pauses only while the image is too dark or out of
   focus, and starts again by itself once that is fixed. Shake does not pause it: a sweep
   is the slide moving, and a slide moved too fast reads as blurred anyway.
@@ -35,16 +36,19 @@ helper visiting farms, not a lab technician.
   moisture, grams of soil, millilitres scanned and the frame count. Frames are never
   overwritten or edited.
 - **One joined image** — when the sweep ends, the frames are lined up into a single
-  wide picture of the slide, the way a panorama works. The slide travels on a flat
-  stage, so frame to frame there is a shift and nothing else, which makes translational
-  registration the whole job. The panorama is a derived file saved as `panorama.jpg`
-  beside the frames; the frames themselves are never edited to make it, and a sweep
-  whose frames cannot be lined up keeps every one of them.
+  picture of the slide, the way a panorama works. The slide travels on a flat stage, so
+  frame to frame there is a shift and nothing else, which makes translational
+  registration the whole job. The picture takes its shape from wherever the sample
+  actually went, worked out from the frames themselves rather than from the path the app
+  asked for, so it is rarely a neat rectangle: slide the sweep never covered is left
+  black. Pinch to zoom in on it, or double-tap. The panorama is a derived file saved as
+  `panorama.jpg` beside the frames; the frames themselves are never edited to make it,
+  and a sweep whose frames cannot be lined up keeps every one of them.
 - **Size ceiling** — a sweep stops at its own limit, and the saved-sweeps screen shows
   how much of the 50 MB store is used.
 - **Sweep library** — saved sweeps newest first. Open one and it shows the joined
-  image, scrolled along the slide, or switch to the frames, which play back like a
-  clip, a second a frame, or step through one at a time. The frames are drawn in
+  image, scrolled and zoomed around the slide, or switch to the frames, which play back
+  like a clip, a second a frame, or step through one at a time. The frames are drawn in
   grayscale, so the files on disk keep their colour.
 - **Export** — frames can be copied off the phone with the Files app.
 
@@ -99,9 +103,13 @@ Known limitations:
   were not joined, rather than showing a panorama that cannot be trusted.
 - Nothing checks free space before a sweep. A full phone fails part-way through, and
   the frames written so far are kept.
-- The app knows the slide moved, not which way it moved. It asks for a move to the left
-  and counts how far the view has travelled, so moving the wrong way still lets the
-  sweep go on and can cover the same part of the sample twice.
+- The app asks for a direction but cannot tell which way the slide actually went: the
+  travel that spaces frames apart is a distance, not a direction. Going the wrong way
+  still lets the sweep run and can cover the same ground twice. It does show up in the
+  joined picture, which is built from where the frames really landed.
+- Frames are lined up against the one before them, so error builds along the path. Two
+  rows that sit next to each other are never checked against each other, and a long
+  sweep can drift.
 
 ## Getting started
 

@@ -83,6 +83,9 @@ private struct FrameSetViewer: View {
     @State private var mode = Mode.panorama
     @State private var index = 0
     @State private var isPlaying = false
+    /// How far the joined picture is zoomed in, as a multiple of fitting the screen.
+    @State private var zoom = 1.0
+    @GestureState private var pinch = 1.0
     /// Decoded once, so playback does not stall on reading each frame off disk.
     @State private var frames: [UIImage] = []
 
@@ -129,31 +132,43 @@ private struct FrameSetViewer: View {
         }
     }
 
-    /// The frames joined into one picture of the slide. It is far wider than the screen, so
-    /// it scrolls both ways rather than being squeezed down to nothing.
+    /// The frames joined into one picture of the slide. It takes its shape from wherever the
+    /// sample was moved, so it is rarely a neat rectangle and scrolls both ways.
     private func panorama(at url: URL) -> some View {
         VStack(spacing: 0) {
             GeometryReader { proxy in
-                ScrollView(.horizontal) {
+                ScrollView([.horizontal, .vertical]) {
                     AsyncImage(url: url) { image in
                         image
                             .resizable()
                             .aspectRatio(contentMode: .fit)
-                            .frame(height: proxy.size.height)
+                            .frame(height: proxy.size.height * zoomedBy)
                             .grayscale(showGrayscale ? 1 : 0)
                     } placeholder: {
                         ProgressView().frame(width: proxy.size.width, height: proxy.size.height)
                     }
                 }
-                // The left edge is where the sweep started, so that is where it opens.
-                .defaultScrollAnchor(.leading)
+                // Where the sweep started is where it opens.
+                .defaultScrollAnchor(.topLeading)
+                .gesture(
+                    MagnifyGesture()
+                        .updating($pinch) { value, state, _ in state = value.magnification }
+                        .onEnded { value in zoom = clamped(zoom * value.magnification) }
+                )
+                .onTapGesture(count: 2) {
+                    withAnimation { zoom = zoom > 1 ? 1 : 3 }
+                }
             }
             .background(Color.black)
 
             VStack(spacing: 4) {
-                Text("\(frameSet.frameCount) frames joined. Scroll to see along the slide.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Text(
+                    "\(frameSet.frameCount) frames joined. Pinch to zoom, drag to move around. "
+                        + "Black is slide the sweep never covered."
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
                 if let manifest = frameSet.manifest {
                     Text(summary(of: manifest))
                         .font(.caption2)
@@ -223,6 +238,11 @@ private struct FrameSetViewer: View {
         }
         .padding(.vertical, 10)
     }
+
+    private var zoomedBy: Double { clamped(zoom * pinch) }
+
+    /// Never smaller than fitting the screen, and only so far in before the frames turn to mush.
+    private func clamped(_ value: Double) -> Double { min(max(value, 1), 8) }
 
     private func summary(of manifest: FrameSetManifest) -> String {
         var line =

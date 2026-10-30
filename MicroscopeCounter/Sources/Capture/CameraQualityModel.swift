@@ -14,7 +14,7 @@ final class CameraQualityModel: NSObject {
     private(set) var cameraError: String?
     private(set) var lensPosition = CameraQualityModel.defaultLensPosition
     /// What the helper should be doing in the sweep: hold still, move the slide left, or done.
-    private(set) var sweepPrompt: SweepPrompt = .moveLeft(kept: 0, of: SweepThresholds().framesPerSweep)
+    private(set) var sweepPrompt: SweepPrompt = .move(.right, kept: 0, of: SweepThresholds().framesPerSweep)
 
     // MARK: Camera
 
