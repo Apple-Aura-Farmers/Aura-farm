@@ -113,7 +113,7 @@ final class VideoSweepRunner {
         reader.cancelReading()
 
         let kept = sweep.keptCount
-        let savedName = recorder.finish(stoppedEarly: !sweep.isFinished)
+        let finished = recorder.finish(stoppedEarly: !sweep.isFinished)
 
         var message = "Read \(analyzed) frames, kept \(kept)."
         if kept == 0 {
@@ -123,7 +123,11 @@ final class VideoSweepRunner {
         } else if kept < sweep.thresholds.framesPerSweep {
             message += " The footage ran out before the sweep was full."
         }
-        return (message, savedName, sweep.progress)
+        // Whether the frames joined is the point of running this, so it is said outright.
+        if kept > 0 {
+            message += " " + (finished?.panoramaProblem ?? "They joined into one picture.")
+        }
+        return (message, finished?.name, sweep.progress)
     }
 
     /// AVFoundation's track loading is async; this run is already off the main thread.

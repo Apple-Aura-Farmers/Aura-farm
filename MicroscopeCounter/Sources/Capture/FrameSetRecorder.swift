@@ -95,10 +95,16 @@ final class FrameSetRecorder {
 
     /// Writes the manifest, joins the frames into one image, and ends the sweep. A sweep with
     /// no frames leaves its empty folder rather than deleting anything.
-    /// Returns the sweep's folder name. The published `lastSavedName` only reaches the main
-    /// queue later, so a caller that needs it at once takes it from here.
+    /// What a finished sweep came to. The published properties only reach the main queue
+    /// later, so a caller that needs this at once takes it from here.
+    struct Finished: Equatable {
+        var name: String
+        /// Why the frames could not be joined, when they could not be.
+        var panoramaProblem: String?
+    }
+
     @discardableResult
-    func finish(stoppedEarly: Bool) -> String? {
+    func finish(stoppedEarly: Bool) -> Finished? {
         guard let folder, let details else { return nil }
         self.folder = nil
         self.details = nil
@@ -140,7 +146,7 @@ final class FrameSetRecorder {
             $0.lastSavedName = name
             $0.errorMessage = failure
         }
-        return name
+        return Finished(name: name, panoramaProblem: manifest.panoramaProblem)
     }
 
     /// Joins a sweep's frames into one image beside them. The frames are the raw data, so a
