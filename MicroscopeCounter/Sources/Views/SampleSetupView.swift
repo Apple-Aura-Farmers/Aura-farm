@@ -20,11 +20,21 @@ struct SampleSetupView: View {
                 .toolbar {
                     ToolbarItem(placement: .topBarTrailing) {
                         NavigationLink {
-                            RecordedClipsView()
+                            FrameSetsView()
                         } label: {
-                            Label("Recorded clips", systemImage: "film.stack")
+                            Label("Saved sweeps", systemImage: "square.stack.3d.up")
                         }
                     }
+                    #if DEBUG
+                        // A workbench for trying stitching without a microscope.
+                        ToolbarItem(placement: .topBarLeading) {
+                            NavigationLink {
+                                DebugStitchView()
+                            } label: {
+                                Label("Stitch from video", systemImage: "hammer")
+                            }
+                        }
+                    #endif
                 }
                 .safeAreaInset(edge: .bottom) {
                     Button {

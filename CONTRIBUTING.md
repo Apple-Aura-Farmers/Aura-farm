@@ -57,9 +57,10 @@ Label a pull request `automerge` and it merges itself as soon as those checks pa
 
 ## What not to commit
 
-- **Raw video.** Clips are training data and live off the repository. Once committed
-  they are in the history for good. CI fails on any `.mov`, `.mp4`, `.m4v`, `.avi` or
-  `.mkv`, and on any file over 5 MB.
+- **Raw captures.** Sweeps of frames, and any video, are training data and live off the
+  repository. Once committed they are in the history for good. CI fails on any `.mov`,
+  `.mp4`, `.m4v`, `.avi` or `.mkv`, and on any file over 5 MB. Frames are small enough
+  to slip under that, so keep `Documents/FrameSets` off the repository yourself.
 - `xcuserdata/`, `*.xcuserstate`, `DerivedData/` — already ignored.
 - Accuracy numbers, soil ratings or scores that have not been measured. See rule 6
   below.

@@ -62,7 +62,15 @@ enum FrameAnalyzer {
 
 /// Estimates camera shake as the average frame-to-frame shift over the last few analyzed frames.
 /// Keeps one previous frame at most.
+///
+/// It also reports the last shift with its direction. Shake only needs a distance, but working
+/// out how far the slide has actually travelled needs the direction too: a slide pushed back
+/// and forth covers a lot of distance and no new ground.
 final class ShakeEstimator {
+    /// The last frame-to-frame shift, with direction, in pixels. nil until two frames have
+    /// been compared.
+    private(set) var lastShift: CGPoint?
+
     private let handler = VNSequenceRequestHandler()
     private var previous: CVPixelBuffer?
     private var recent: [Double] = []
@@ -75,6 +83,7 @@ final class ShakeEstimator {
     /// Returns the average shift in pixels, or nil until two frames have been compared.
     func update(with buffer: CVPixelBuffer) -> Double? {
         defer { previous = buffer }
+        lastShift = nil
         guard let previous else { return nil }
 
         let request = VNTranslationalImageRegistrationRequest(targetedCVPixelBuffer: previous)
@@ -83,11 +92,16 @@ final class ShakeEstimator {
         } catch {
             return nil
         }
-        guard let observation = (request.results as? [VNImageTranslationAlignmentObservation])?.first else {
+        guard let observation = request.results?.first else {
             return nil
         }
 
-        let shift = hypot(observation.alignmentTransform.tx, observation.alignmentTransform.ty)
+        let transform = observation.alignmentTransform
+        // Vision works bottom-up and the rest of this app works top-down, so the vertical
+        // shift flips, matching PanoramaStitcher.
+        lastShift = CGPoint(x: transform.tx, y: -transform.ty)
+
+        let shift = hypot(transform.tx, transform.ty)
         recent.append(Double(shift))
         if recent.count > windowSize { recent.removeFirst() }
         return recent.reduce(0, +) / Double(recent.count)
@@ -96,5 +110,6 @@ final class ShakeEstimator {
     func reset() {
         previous = nil
         recent = []
+        lastShift = nil
     }
 }
