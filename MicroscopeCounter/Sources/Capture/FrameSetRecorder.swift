@@ -1,7 +1,8 @@
 import CoreImage
 import CoreVideo
+import Foundation
+import ImageIO
 import Observation
-import UIKit
 
 /// Writes a sweep as a folder of JPEG frames with a manifest beside it.
 ///
@@ -94,8 +95,11 @@ final class FrameSetRecorder {
 
     /// Writes the manifest, joins the frames into one image, and ends the sweep. A sweep with
     /// no frames leaves its empty folder rather than deleting anything.
-    func finish(stoppedEarly: Bool) {
-        guard let folder, let details else { return }
+    /// Returns the sweep's folder name. The published `lastSavedName` only reaches the main
+    /// queue later, so a caller that needs it at once takes it from here.
+    @discardableResult
+    func finish(stoppedEarly: Bool) -> String? {
+        guard let folder, let details else { return nil }
         self.folder = nil
         self.details = nil
         let frameCount = written
@@ -136,6 +140,7 @@ final class FrameSetRecorder {
             $0.lastSavedName = name
             $0.errorMessage = failure
         }
+        return name
     }
 
     /// Joins a sweep's frames into one image beside them. The frames are the raw data, so a

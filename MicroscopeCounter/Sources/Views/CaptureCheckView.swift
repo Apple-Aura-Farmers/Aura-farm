@@ -141,9 +141,10 @@ struct CaptureCheckView: View {
             Image(systemName: prompt.systemImage)
                 .font(.system(size: 40))
                 .symbolRenderingMode(.hierarchical)
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 6) {
                 Text(prompt.title).font(.title2.bold())
                 Text(prompt.advice).font(.subheadline)
+                sweepProgress
             }
             Spacer(minLength: 0)
         }
@@ -152,6 +153,29 @@ struct CaptureCheckView: View {
         .frame(maxWidth: .infinity)
         .background(.black.opacity(0.75), in: RoundedRectangle(cornerRadius: 16))
         .accessibilityElement(children: .combine)
+    }
+
+    /// A dot for each frame in the row being walked, and a bar for the whole sweep, so the
+    /// helper can see how much further to go without counting anything.
+    private var sweepProgress: some View {
+        let progress = model.sweepProgress
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                ForEach(0..<progress.framesPerRow, id: \.self) { position in
+                    Circle()
+                        .fill(position < progress.keptInRow ? Color.white : Color.white.opacity(0.3))
+                        .frame(width: 8, height: 8)
+                }
+                Text("row \(progress.row) of \(progress.rowCount)")
+                    .font(.caption2)
+                    .foregroundStyle(.white.opacity(0.8))
+            }
+            ProgressView(value: progress.fraction)
+                .tint(.white)
+        }
+        .accessibilityLabel(
+            "\(progress.kept) of \(progress.total) frames saved, row \(progress.row) of \(progress.rowCount)"
+        )
     }
 
     @ViewBuilder

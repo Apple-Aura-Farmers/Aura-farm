@@ -15,6 +15,8 @@ final class CameraQualityModel: NSObject {
     private(set) var lensPosition = CameraQualityModel.defaultLensPosition
     /// What the helper should be doing in the sweep: hold still, move the slide left, or done.
     private(set) var sweepPrompt: SweepPrompt = .move(.right, kept: 0, of: SweepThresholds().framesPerSweep)
+    /// How far along the sweep is, for the progress the helper watches.
+    private(set) var sweepProgress = FrameSweep().progress
 
     // MARK: Camera
 
@@ -72,7 +74,7 @@ final class CameraQualityModel: NSObject {
             self.sweep.reset()
             guard self.recorder.begin(details: details) else { return }
             self.sweepActive = true
-            self.publishPrompt(self.sweep.prompt)
+            self.publishPrompt(self.sweep.prompt, self.sweep.progress)
         }
     }
 
@@ -161,8 +163,11 @@ final class CameraQualityModel: NSObject {
         DispatchQueue.main.async { [weak self] in self?.cameraError = message }
     }
 
-    private func publishPrompt(_ prompt: SweepPrompt) {
-        DispatchQueue.main.async { [weak self] in self?.sweepPrompt = prompt }
+    private func publishPrompt(_ prompt: SweepPrompt, _ progress: SweepProgress) {
+        DispatchQueue.main.async { [weak self] in
+            self?.sweepPrompt = prompt
+            self?.sweepProgress = progress
+        }
     }
 }
 
@@ -199,11 +204,11 @@ extension CameraQualityModel: AVCaptureVideoDataOutputSampleBufferDelegate {
         guard sweepActive else { return }
         // Shake is not passed as a blocker: a sweep is the slide moving, so the sweep
         // decides for itself which issues stop a frame being kept.
-        let step = sweep.update(isSettled: settled, issue: top, shakePixels: reading.shakePixels)
+        let step = sweep.update(isSettled: settled, issue: top, shift: shakeEstimator.lastShift)
         if step == .keepFrame, let bytes = recorder.write(buffer) {
             sweep.addWrittenBytes(bytes)
         }
-        publishPrompt(sweep.prompt)
+        publishPrompt(sweep.prompt, sweep.progress)
         if sweep.isFinished {
             sweepActive = false
             recorder.finish(stoppedEarly: sweep.bytesWritten >= sweep.thresholds.maxBytes)

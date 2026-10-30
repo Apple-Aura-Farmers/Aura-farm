@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 /// How a sweep across one sample is paced: how many frames to keep, how far the view has to
@@ -10,12 +11,18 @@ struct SweepThresholds {
     var framesPerSweep: Int = 12
     /// Frames along one row before the sweep turns down and comes back the other way.
     var framesPerRow: Int = 4
-    /// Shift (pixels) that has to build up since the last frame before another is kept, so
-    /// two frames are not taken of the same field of view.
+    /// How far the view has to have actually moved from the last frame before another is
+    /// kept, in pixels, so two frames are not taken of the same field of view. This is a
+    /// distance from where the last frame was, not a total of wandering about: a slide pushed
+    /// back and forth returns to where it started and has covered no new ground.
     var shiftBetweenFrames: Double = 120
     /// A single reading below this is treated as the mount wobbling rather than the slide
-    /// moving, and does not count towards the shift above.
+    /// moving, and is ignored.
     var ignoreShiftBelow: Double = 3
+    /// A single reading above this means the slide was moved faster than frames can be placed
+    /// against each other. Such a frame is not kept, because the next one could not be lined
+    /// up with it; the sweep waits for the slide to be moved at a workable speed.
+    var maxStepPixels: Double = 150
     /// Hard ceiling for one sweep, so a single test cannot fill the store.
     var maxBytes: Int = 6 * 1024 * 1024
 }
@@ -26,6 +33,21 @@ enum SweepDirection: String, Equatable {
     case right
     case down
     case left
+}
+
+/// How far along the sweep is, for the progress the helper watches while moving the slide.
+struct SweepProgress: Equatable {
+    var kept: Int
+    var total: Int
+    /// The row being walked, counted from 1.
+    var row: Int
+    var rowCount: Int
+    /// Frames kept so far in this row, and how many it holds.
+    var keptInRow: Int
+    var framesPerRow: Int
+
+    /// 0 to 1 across the whole sweep.
+    var fraction: Double { total > 0 ? Double(kept) / Double(total) : 0 }
 }
 
 /// What the helper should know right now. The view turns this into one short line.
@@ -114,8 +136,9 @@ final class FrameSweep {
     private(set) var isFinished = false
     private(set) var prompt: SweepPrompt
 
-    /// How far the view has travelled since the last frame was kept.
-    private var shiftSinceLastFrame = 0.0
+    /// Where the view has got to since the last frame was kept, as a distance and direction
+    /// from it.
+    private var offsetSinceLastFrame = CGPoint.zero
 
     init(thresholds: SweepThresholds = SweepThresholds()) {
         self.thresholds = thresholds
@@ -129,6 +152,20 @@ final class FrameSweep {
         guard framesPerRow > 0 else { return .right }
         if kept > 0, kept % framesPerRow == 0 { return .down }
         return (kept / framesPerRow) % 2 == 0 ? .right : .left
+    }
+
+    /// Where the sweep has got to, for the progress bar.
+    var progress: SweepProgress {
+        let perRow = max(thresholds.framesPerRow, 1)
+        let total = max(thresholds.framesPerSweep, 1)
+        return SweepProgress(
+            kept: keptCount,
+            total: total,
+            row: min(keptCount / perRow + 1, (total + perRow - 1) / perRow),
+            rowCount: (total + perRow - 1) / perRow,
+            keptInRow: keptCount % perRow,
+            framesPerRow: perRow
+        )
     }
 
     private var movePrompt: SweepPrompt {
@@ -151,15 +188,18 @@ final class FrameSweep {
     /// - Parameters:
     ///   - isSettled: the quality check has seen enough readings to be trusted.
     ///   - issue: the issue the check is showing, if any.
-    ///   - shakePixels: shift between analyzed frames, or nil before the first comparison.
+    ///   - shift: how far and which way the view moved since the frame before, or nil before
+    ///     the first comparison.
     @discardableResult
-    func update(isSettled: Bool, issue: CaptureIssue?, shakePixels: Double?) -> Step {
+    func update(isSettled: Bool, issue: CaptureIssue?, shift: CGPoint?) -> Step {
         guard !isFinished else { return .wait }
 
-        // Count the travel even while saving is paused: the slide may well be moved past a
-        // dark or blurred patch, and that ground should not be covered twice.
-        if let shake = shakePixels, shake >= thresholds.ignoreShiftBelow {
-            shiftSinceLastFrame += shake
+        let step = shift.map { hypot($0.x, $0.y) } ?? 0
+        // Follow the view even while saving is paused: the slide may well be moved past a dark
+        // or blurred patch, and that ground should not have to be covered again.
+        if let shift, step >= thresholds.ignoreShiftBelow {
+            offsetSinceLastFrame.x += shift.x
+            offsetSinceLastFrame.y += shift.y
         }
 
         guard isSettled, !Self.blocksCapture(issue) else {
@@ -167,16 +207,23 @@ final class FrameSweep {
             return .wait
         }
 
+        // Mid-lurch: the next frame could not be lined up against this one, so it is no use
+        // keeping it. The travel still counts, so nothing is lost by waiting.
+        guard step <= thresholds.maxStepPixels else {
+            prompt = movePrompt
+            return .wait
+        }
+
         // The first frame is kept as soon as the image is good; after that the view has to
-        // have travelled, so the same field of view is not kept twice.
-        let hasTravelled = keptCount == 0 || shiftSinceLastFrame >= thresholds.shiftBetweenFrames
-        guard hasTravelled else {
+        // have moved away from where the last one was taken.
+        let travelled = hypot(offsetSinceLastFrame.x, offsetSinceLastFrame.y)
+        guard keptCount == 0 || travelled >= thresholds.shiftBetweenFrames else {
             prompt = movePrompt
             return .wait
         }
 
         keptCount += 1
-        shiftSinceLastFrame = 0
+        offsetSinceLastFrame = .zero
         if keptCount >= thresholds.framesPerSweep {
             isFinished = true
             prompt = .done(kept: keptCount, stoppedEarly: false)
@@ -198,7 +245,7 @@ final class FrameSweep {
     func reset() {
         keptCount = 0
         bytesWritten = 0
-        shiftSinceLastFrame = 0
+        offsetSinceLastFrame = .zero
         isFinished = false
         prompt = .move(.right, kept: 0, of: thresholds.framesPerSweep)
     }

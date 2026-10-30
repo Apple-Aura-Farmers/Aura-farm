@@ -27,8 +27,9 @@ helper visiting farms, not a lab technician.
 - **Manual focus** — a focus slider instead of autofocus, which hunts on a microscope.
 - **Automatic sweep along a set path** — the app walks the helper across the slide in
   rows: four frames to the right, one step down, four back to the left, down again, and
-  so on, twelve frames in all. Frames save on their own as the view travels; nobody is
-  asked to stop or hold still. Saving pauses only while the image is too dark or out of
+  so on, twelve frames in all, with a dot for each frame in the row and a bar for the
+  sweep so there is nothing to count. Frames save on their own as the view travels;
+  nobody is asked to stop or hold still. Saving pauses only while the image is too dark or out of
   focus, and starts again by itself once that is fixed. Shake does not pause it: a sweep
   is the slide moving, and a slide moved too fast reads as blurred anyway.
 - **Frame extraction instead of video** — a sweep is saved as a folder of JPEG frames
@@ -101,6 +102,10 @@ Known limitations:
   of place makes the whole picture misleading. A shift of more than half a frame is
   therefore treated as a failure to line up: the sweep keeps its frames and says they
   were not joined, rather than showing a panorama that cannot be trusted.
+- A frame is kept once the view has moved far enough from where the last one was taken,
+  and only while the slide is moving slowly enough for the next frame to be lined up
+  against it. Moving it in a hurry does not lose ground — the travel still counts — but
+  no frame is kept until it slows down.
 - Nothing checks free space before a sweep. A full phone fails part-way through, and
   the frames written so far are kept.
 - The app asks for a direction but cannot tell which way the slide actually went: the
@@ -110,6 +115,24 @@ Known limitations:
 - Frames are lined up against the one before them, so error builds along the path. Two
   rows that sit next to each other are never checked against each other, and a long
   sweep can drift.
+
+## Trying stitching without a microscope
+
+Debug builds have a **Stitch from video** screen on the first screen, behind the
+hammer. It reads a recording frame by frame through the same analyzer, quality check,
+sweep rules and writer the camera uses, and saves an ordinary sweep, so the result
+opens in Saved sweeps like any other. Put `.mov` or `.mp4` files in the app's
+`Documents/DebugVideos` folder — on a simulator:
+
+```bash
+xcrun simctl get_app_container booted com.example.microscopecounter data
+```
+
+then copy them into `Documents/DebugVideos` inside what it prints. On a phone the app's
+folder is already visible in the Files app.
+
+Pick a start time by hand: most of a recording is not a steady pass across a slide, and
+a part that is not will come back as frames that could not be joined.
 
 ## Getting started
 
