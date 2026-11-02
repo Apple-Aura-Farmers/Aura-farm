@@ -3,9 +3,13 @@ import SwiftUI
 
 /// Camera preview with a live quality check, and the sweep that keeps still frames.
 /// Frames are only kept when the image is good.
+///
+/// The preview is a circle because that is what the phone sees down a microscope eyepiece:
+/// a round field with black around it. The ring of ticks around it fills up as frames are
+/// kept, so the helper can see how far along the sweep is without reading anything.
 struct CaptureCheckView: View {
     @State private var model = CameraQualityModel()
-    /// Tap the banner to show the live numbers. Used to calibrate thresholds.
+    /// Live numbers, from the options menu. Used to calibrate thresholds.
     @State private var showNumbers = false
     /// Preview only: frames are always saved in colour, grayscale comes later in the pipeline.
     @State private var showGrayscale = false
@@ -17,24 +21,24 @@ struct CaptureCheckView: View {
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
-            CameraPreview(session: model.session)
-                .grayscale(showGrayscale ? 1 : 0)
-                .ignoresSafeArea()
 
-            VStack(spacing: 12) {
-                HStack(alignment: .top, spacing: 8) {
-                    banner
-                        .onTapGesture { showNumbers.toggle() }
-                    optionsMenu
-                }
+            VStack(spacing: 16) {
+                Spacer(minLength: 0)
+                viewfinder
+                caption
                 if showNumbers { numbersReadout }
-                sampleLine
-                Spacer()
-                if model.recorder.isSweeping { sweepPrompt }
+                Spacer(minLength: 0)
                 focusSlider
-                recordButton
+                captureButton
             }
-            .padding()
+            .padding(.horizontal, 20)
+            .padding(.bottom, 12)
+        }
+        .preferredColorScheme(.dark)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .principal) { title }
+            ToolbarItem(placement: .topBarTrailing) { optionsMenu }
         }
         .sheet(isPresented: $showDetails) {
             NavigationStack {
@@ -70,47 +74,105 @@ struct CaptureCheckView: View {
         }
     }
 
-    // MARK: Banner
+    private var title: some View {
+        VStack(spacing: 1) {
+            Text(details.sampleID.isEmpty ? "Untitled" : details.sampleID)
+                .font(.headline)
+            Text(
+                "Field \(details.field) · \(details.recordedAt.formatted(date: .abbreviated, time: .omitted))"
+            )
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+        .accessibilityElement(children: .combine)
+    }
 
-    @ViewBuilder
-    private var banner: some View {
+    // MARK: Viewfinder
+
+    private var viewfinder: some View {
+        ZStack {
+            CameraPreview(session: model.session)
+                .grayscale(showGrayscale ? 1 : 0)
+                .clipShape(Circle())
+                // Dimmed while there is something to say, so the words carry over the image.
+                .overlay { Circle().fill(.black.opacity(hint == nil ? 0 : 0.45)) }
+                .padding(16)
+            SweepRing(fraction: ringFraction)
+            if let hint { hintOverlay(hint) }
+        }
+        .aspectRatio(1, contentMode: .fit)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(ringLabel)
+    }
+
+    /// How much of the ring is filled in: the share of the sweep's frames already kept.
+    private var ringFraction: Double {
+        model.recorder.isSweeping ? model.sweepProgress.fraction : 0
+    }
+
+    private var ringLabel: String {
+        guard model.recorder.isSweeping else { return hint?.text ?? "Ready" }
+        let progress = model.sweepProgress
+        return "\(progress.kept) of \(progress.total) frames saved. \(hint?.text ?? "")"
+    }
+
+    private func hintOverlay(_ hint: Hint) -> some View {
+        VStack(spacing: 10) {
+            Image(systemName: hint.systemImage)
+                .font(.system(size: 44))
+                .symbolRenderingMode(.hierarchical)
+            Text(hint.text)
+                .font(.headline)
+                .multilineTextAlignment(.center)
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 44)
+    }
+
+    /// The one thing to do right now, in a field helper's words.
+    private struct Hint {
+        var systemImage: String
+        var text: String
+    }
+
+    private var hint: Hint? {
         if model.authorization == .denied || model.authorization == .restricted {
-            StatusBanner(
+            return Hint(
                 systemImage: "camera.fill",
-                title: "Camera is off",
-                message: "Allow camera access in Settings to use this app.",
-                tint: .red
-            )
-        } else if let error = model.cameraError {
-            StatusBanner(
-                systemImage: "exclamationmark.triangle", title: "Camera problem", message: error, tint: .red)
-        } else if let issue = model.topIssue, FrameSweep.blocksCapture(issue),
-            model.recorder.isSweeping
-        {
-            // While a sweep is paused the helper needs to see what to fix, not a count.
-            StatusBanner(
-                systemImage: issue.systemImage, title: issue.title, message: issue.advice, tint: .orange)
+                text: "Camera is off. Allow camera access in Settings.")
+        }
+        if let error = model.cameraError {
+            return Hint(systemImage: "exclamationmark.triangle.fill", text: error)
+        }
+        // While a sweep is paused the helper needs to see what to fix, not which way to move.
+        if let issue = model.topIssue, FrameSweep.blocksCapture(issue) || !model.recorder.isSweeping {
+            return Hint(systemImage: issue.systemImage, text: "\(issue.title). \(issue.advice)")
+        }
+        if model.recorder.isSweeping {
+            return Hint(
+                systemImage: model.sweepPrompt.systemImage, text: model.sweepPrompt.title)
+        }
+        if !model.isReady {
+            return Hint(systemImage: "hourglass", text: "Checking the image. Hold still.")
+        }
+        return nil
+    }
+
+    /// The running count, and anything that went wrong while saving.
+    @ViewBuilder
+    private var caption: some View {
+        if let error = model.recorder.errorMessage {
+            Text(error)
+                .font(.footnote)
+                .foregroundStyle(.orange)
+                .multilineTextAlignment(.center)
         } else if model.recorder.isSweeping {
-            StatusBanner(
-                systemImage: "square.stack.3d.up",
-                title: "Keeping frames",
-                message: "\(model.recorder.keptCount) saved. Frames save on their own.",
-                tint: .red
+            let progress = model.sweepProgress
+            Text(
+                "\(progress.kept) of \(progress.total) frames saved · row \(progress.row) of \(progress.rowCount)"
             )
-        } else if let error = model.recorder.errorMessage {
-            StatusBanner(
-                systemImage: "exclamationmark.triangle", title: "Saving problem", message: error, tint: .red)
-        } else if let issue = model.topIssue {
-            StatusBanner(
-                systemImage: issue.systemImage, title: issue.title, message: issue.advice, tint: .orange)
-        } else if model.isReady {
-            StatusBanner(
-                systemImage: "checkmark.circle.fill", title: "Ready to start",
-                message: "The image looks good.", tint: .green)
-        } else {
-            StatusBanner(
-                systemImage: "hourglass", title: "Checking the image", message: "Hold still for a moment.",
-                tint: .gray)
+            .font(.footnote)
+            .foregroundStyle(.secondary)
         }
     }
 
@@ -129,71 +191,10 @@ struct CaptureCheckView: View {
             }
         }
         .font(.caption.monospacedDigit())
-        .padding(8)
-        .background(.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 8))
-        .foregroundStyle(.white)
+        .foregroundStyle(.secondary)
     }
 
-    /// The one thing to do right now, large enough to read at arm's length on a microscope.
-    private var sweepPrompt: some View {
-        let prompt = model.sweepPrompt
-        return HStack(spacing: 14) {
-            Image(systemName: prompt.systemImage)
-                .font(.system(size: 40))
-                .symbolRenderingMode(.hierarchical)
-            VStack(alignment: .leading, spacing: 6) {
-                Text(prompt.title).font(.title2.bold())
-                Text(prompt.advice).font(.subheadline)
-                sweepProgress
-            }
-            Spacer(minLength: 0)
-        }
-        .foregroundStyle(.white)
-        .padding()
-        .frame(maxWidth: .infinity)
-        .background(.black.opacity(0.75), in: RoundedRectangle(cornerRadius: 16))
-        .accessibilityElement(children: .combine)
-    }
-
-    /// A dot for each frame in the row being walked, and a bar for the whole sweep, so the
-    /// helper can see how much further to go without counting anything.
-    private var sweepProgress: some View {
-        let progress = model.sweepProgress
-        return VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 6) {
-                ForEach(0..<progress.framesPerRow, id: \.self) { position in
-                    Circle()
-                        .fill(position < progress.keptInRow ? Color.white : Color.white.opacity(0.3))
-                        .frame(width: 8, height: 8)
-                }
-                Text("row \(progress.row) of \(progress.rowCount)")
-                    .font(.caption2)
-                    .foregroundStyle(.white.opacity(0.8))
-            }
-            ProgressView(value: progress.fraction)
-                .tint(.white)
-        }
-        .accessibilityLabel(
-            "\(progress.kept) of \(progress.total) frames saved, row \(progress.row) of \(progress.rowCount)"
-        )
-    }
-
-    @ViewBuilder
-    private var sampleLine: some View {
-        if details.isComplete {
-            Button {
-                showDetails = true
-            } label: {
-                Text("\(details.sampleID) · field \(details.field) · \(details.moisture.label)")
-                    .font(.caption)
-                    .padding(8)
-                    .background(.black.opacity(0.6), in: Capsule())
-                    .foregroundStyle(.white)
-            }
-        }
-    }
-
-    // MARK: Options
+    // MARK: Controls
 
     private var optionsMenu: some View {
         Menu {
@@ -201,11 +202,7 @@ struct CaptureCheckView: View {
             Toggle("Show numbers", isOn: $showNumbers)
             Button("Sample details") { showDetails = true }
         } label: {
-            Image(systemName: "ellipsis.circle.fill")
-                .font(.title)
-                .symbolRenderingMode(.hierarchical)
-                .foregroundStyle(.white)
-                .padding(6)
+            Image(systemName: "ellipsis")
         }
         .accessibilityLabel("Options")
     }
@@ -221,15 +218,12 @@ struct CaptureCheckView: View {
             )
             .accessibilityLabel("Focus")
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(.black.opacity(0.6), in: Capsule())
-        .foregroundStyle(.white)
+        .foregroundStyle(.secondary)
     }
 
-    // MARK: Start button
-
-    private var recordButton: some View {
+    /// The shutter: a red circle to start the sweep, a square to stop it, the way a camera
+    /// does it. It stays live while sweeping so the sweep can always be stopped.
+    private var captureButton: some View {
         Button {
             if model.recorder.isSweeping {
                 model.endSweep()
@@ -240,56 +234,71 @@ struct CaptureCheckView: View {
                 showDetails = true
             }
         } label: {
-            Label(
-                model.recorder.isSweeping ? "Stop" : "Start sweep",
-                systemImage: model.recorder.isSweeping ? "stop.circle" : "square.stack.3d.up"
-            )
-            .font(.title2.bold())
-            .frame(maxWidth: .infinity)
-            .padding()
+            ZStack {
+                Circle()
+                    .strokeBorder(.white, lineWidth: 4)
+                    .frame(width: 84, height: 84)
+                if model.recorder.isSweeping {
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(.white)
+                        .frame(width: 32, height: 32)
+                } else {
+                    Circle()
+                        .fill(.red)
+                        .frame(width: 68, height: 68)
+                }
+            }
         }
-        .buttonStyle(.borderedProminent)
-        .tint(.red)
+        .buttonStyle(.plain)
         .disabled(!model.isReady && !model.recorder.isSweeping)
+        .opacity(model.isReady || model.recorder.isSweeping ? 1 : 0.35)
+        .accessibilityLabel(model.recorder.isSweeping ? "Stop sweep" : "Start sweep")
         .accessibilityHint(
             model.isReady || model.recorder.isSweeping ? "" : "Disabled until the image looks good")
     }
 }
 
-private struct StatusBanner: View {
-    let systemImage: String
-    let title: String
-    let message: String
-    let tint: Color
+/// The ring of ticks around the viewfinder. Ticks turn green as the sweep fills up, so how
+/// far along it is can be read at a glance from across a bench.
+private struct SweepRing: View {
+    var fraction: Double
+    var tickCount = 48
 
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: systemImage)
-                .font(.title2)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.headline)
-                Text(message).font(.subheadline)
+        GeometryReader { geometry in
+            let side = min(geometry.size.width, geometry.size.height)
+            ZStack {
+                ForEach(0..<tickCount, id: \.self) { index in
+                    Capsule()
+                        .fill(isFilled(index) ? Color.green : Color.white)
+                        .frame(width: 3, height: 12)
+                        .offset(y: -(side / 2 - 6))
+                        .rotationEffect(.degrees(Double(index) / Double(tickCount) * 360))
+                }
             }
-            Spacer(minLength: 0)
+            .frame(width: geometry.size.width, height: geometry.size.height)
         }
-        .foregroundStyle(.white)
-        .padding()
-        .frame(maxWidth: .infinity)
-        .background(tint.opacity(0.9), in: RoundedRectangle(cornerRadius: 12))
-        .accessibilityElement(children: .combine)
+        .animation(.easeOut(duration: 0.2), value: fraction)
+        .accessibilityHidden(true)
+    }
+
+    private func isFilled(_ index: Int) -> Bool {
+        Double(index) < (fraction * Double(tickCount)).rounded()
     }
 }
 
 #Preview {
-    CaptureCheckView(
-        details: .constant(
-            RecordingMetadata(
-                sampleID: "A12",
-                field: 1,
-                moisture: .drained,
-                gramsOfSoil: 10,
-                millilitresScanned: 0.5,
-                recordedAt: .now
-            )
-        ))
+    NavigationStack {
+        CaptureCheckView(
+            details: .constant(
+                RecordingMetadata(
+                    sampleID: "A12",
+                    field: 1,
+                    moisture: .drained,
+                    gramsOfSoil: 10,
+                    millilitresScanned: 0.5,
+                    recordedAt: .now
+                )
+            ))
+    }
 }

@@ -15,6 +15,18 @@ struct SweepThresholds {
     /// kept, in pixels, so two frames are not taken of the same field of view. This is a
     /// distance from where the last frame was, not a total of wandering about: a slide pushed
     /// back and forth returns to where it started and has covered no new ground.
+    ///
+    /// Raising this to cover more ground was tried against 11 recorded clips at 120, 180, 240
+    /// and 300. It covered less, not more: at 300 the number of frames that could not be lined
+    /// up against the one before went from 13 to 23, and the joined picture came out smaller on
+    /// three of the four clips measured. The reason is that the shift readings under-measure
+    /// fast movement, so the slide has really travelled much further than this by the time the
+    /// frame is kept. Leave it here until the pilot can measure it on a stage, where the slide
+    /// moves slowly and the readings can be trusted.
+    ///
+    /// There is a ceiling either way. Frames are lined up by registration, which needs them to
+    /// overlap, and `PanoramaStitcher.maxShiftFraction` refuses a pair that has moved more than
+    /// half a frame, so on a 1080 px wide frame this cannot go far above 400.
     var shiftBetweenFrames: Double = 120
     /// A single reading below this is treated as the mount wobbling rather than the slide
     /// moving, and is ignored.
