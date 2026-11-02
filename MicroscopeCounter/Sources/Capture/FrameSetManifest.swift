@@ -13,7 +13,8 @@ struct FrameSetManifest: Codable, Equatable {
     /// The file name of the joined-up image, or nil when the frames could not be lined up.
     /// nil also for a sweep saved before panoramas existed.
     var panoramaFile: String?
-    /// Why the frames could not be joined, when they could not be. The frames are kept
-    /// either way: the panorama is derived, they are the raw data.
+    /// What to know about the panorama: why it could not be made, or which frames were left
+    /// out of it. The frames are kept either way: the panorama is derived, they are the raw
+    /// data.
     var panoramaProblem: String?
 }

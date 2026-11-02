@@ -19,12 +19,15 @@ final class PanoramaStitcherTests: XCTestCase {
         let panorama = try PanoramaStitcher.stitch(frameURLs: urls)
 
         // Three windows a step apart cover the first frame plus two steps of new ground.
-        assertEqual(panorama.width, frameWidth + 2 * step, accuracy: 2)
-        assertEqual(panorama.height, frameHeight, accuracy: 2)
+        assertEqual(panorama.image.width, frameWidth + 2 * step, accuracy: 2)
+        assertEqual(panorama.image.height, frameHeight, accuracy: 2)
+        XCTAssertEqual(panorama.framesLeftOut, 0)
 
         let expected = try XCTUnwrap(
-            source.cropping(to: CGRect(x: 0, y: 0, width: panorama.width, height: panorama.height)))
-        assertLooksTheSame(panorama, expected)
+            source.cropping(
+                to: CGRect(
+                    x: 0, y: 0, width: panorama.image.width, height: panorama.image.height)))
+        assertLooksTheSame(panorama.image, expected)
     }
 
     func testOffsetsStepAlongByTheDistanceTheWindowMoved() throws {
@@ -34,12 +37,12 @@ final class PanoramaStitcherTests: XCTestCase {
         let offsets = try PanoramaStitcher.offsets(for: urls)
 
         XCTAssertEqual(offsets.count, 3)
-        XCTAssertEqual(offsets[0], .zero)
-        XCTAssertEqual(offsets[1].x, Double(step), accuracy: 2)
-        XCTAssertEqual(offsets[2].x, Double(2 * step), accuracy: 2)
+        XCTAssertEqual(try XCTUnwrap(offsets[0]), .zero)
+        XCTAssertEqual(try XCTUnwrap(offsets[1]).x, Double(step), accuracy: 2)
+        XCTAssertEqual(try XCTUnwrap(offsets[2]).x, Double(2 * step), accuracy: 2)
         // The window only moved sideways, so nothing should have drifted up or down.
-        XCTAssertEqual(offsets[1].y, 0, accuracy: 2)
-        XCTAssertEqual(offsets[2].y, 0, accuracy: 2)
+        XCTAssertEqual(try XCTUnwrap(offsets[1]).y, 0, accuracy: 2)
+        XCTAssertEqual(try XCTUnwrap(offsets[2]).y, 0, accuracy: 2)
     }
 
     func testFramesThatShareTooLittleAreNotForcedTogether() throws {
@@ -48,8 +51,25 @@ final class PanoramaStitcherTests: XCTestCase {
         let urls = try write(windows: [0, 600], of: source)
 
         XCTAssertThrowsError(try PanoramaStitcher.stitch(frameURLs: urls)) { error in
-            XCTAssertEqual(error as? PanoramaStitcher.Failure, .couldNotLineUp(frame: 1))
+            XCTAssertEqual(error as? PanoramaStitcher.Failure, .nothingLinedUp)
         }
+    }
+
+    func testAFrameFromSomewhereElseIsLeftOutInsteadOfSpoilingThePicture() throws {
+        // What real footage does: the first frame is from before the sweep started, and the
+        // rest are a steady pan. The odd one out should not cost the other three.
+        let source = makeTexturedImage(width: 800, height: frameHeight)
+        let urls = try write(windows: [600, 0, step, 2 * step], of: source)
+
+        let panorama = try PanoramaStitcher.stitch(frameURLs: urls)
+
+        XCTAssertEqual(panorama.framesLeftOut, 1)
+        assertEqual(panorama.image.width, frameWidth + 2 * step, accuracy: 2)
+
+        let offsets = try PanoramaStitcher.offsets(for: urls)
+        XCTAssertNil(offsets[0])
+        XCTAssertEqual(try XCTUnwrap(offsets[1]), .zero)
+        XCTAssertEqual(try XCTUnwrap(offsets[3]).x, Double(2 * step), accuracy: 2)
     }
 
     func testOneFrameIsNotAPanorama() throws {

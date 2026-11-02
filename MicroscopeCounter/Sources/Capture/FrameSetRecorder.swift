@@ -99,7 +99,7 @@ final class FrameSetRecorder {
     /// later, so a caller that needs this at once takes it from here.
     struct Finished: Equatable {
         var name: String
-        /// Why the frames could not be joined, when they could not be.
+        /// Why the frames could not be joined, or which were left out of the picture.
         var panoramaProblem: String?
     }
 
@@ -149,16 +149,23 @@ final class FrameSetRecorder {
         return Finished(name: name, panoramaProblem: manifest.panoramaProblem)
     }
 
-    /// Joins a sweep's frames into one image beside them. The frames are the raw data, so a
-    /// failure here leaves them exactly as they are and is only reported.
+    /// Joins a sweep's frames into one image beside them. The frames are the raw data, so
+    /// neither a failure nor a frame left out of the picture changes them.
     static func joinFrames(in folder: URL) -> (file: String?, problem: String?) {
         let frames = FrameSetLibrary.frameURLs(in: folder)
         guard frames.count > 1 else { return (nil, "A panorama needs more than one frame.") }
         do {
             let panorama = try PanoramaStitcher.stitch(frameURLs: frames)
             let url = folder.appending(path: panoramaFileName)
-            try PanoramaStitcher.write(panorama, to: url)
-            return (panoramaFileName, nil)
+            try PanoramaStitcher.write(panorama.image, to: url)
+            guard panorama.framesLeftOut > 0 else { return (panoramaFileName, nil) }
+            return (
+                panoramaFileName,
+                """
+                \(panorama.framesLeftOut) of \(frames.count) frames did not line up with the \
+                rest and were left out of the picture. All of them were kept.
+                """
+            )
         } catch {
             return (nil, "The frames could not be joined into one image. They were all kept.")
         }

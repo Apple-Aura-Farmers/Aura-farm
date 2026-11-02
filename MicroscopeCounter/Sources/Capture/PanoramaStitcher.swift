@@ -15,8 +15,8 @@ enum PanoramaStitcher {
     enum Failure: Error, Equatable {
         case notEnoughFrames
         case couldNotRead(URL)
-        /// Registration failed between this frame and the one before it.
-        case couldNotLineUp(frame: Int)
+        /// No two frames in a row lined up, so there is nothing to join.
+        case nothingLinedUp
         /// The frames drifted so far apart that the canvas would be unreasonable.
         case tooLarge(pixels: Int)
         case couldNotDraw
@@ -33,41 +33,71 @@ enum PanoramaStitcher {
     /// treated as a failure to line up rather than clamped or guessed at.
     static let maxShiftFraction = 0.5
 
-    /// Where each frame sits on the canvas, in pixels from its top-left corner.
-    /// The first frame is the origin, so offsets can be negative.
-    static func offsets(for urls: [URL]) throws -> [CGPoint] {
+    /// Where each frame sits on the canvas, in pixels from its top-left corner, or nil for a
+    /// frame that was left out. The first frame laid down is the origin, so offsets can be
+    /// negative.
+    ///
+    /// Each frame is registered against the one before it, so a pair that does not match breaks
+    /// the chain. The longest unbroken run is laid down and the rest are left out: one frame
+    /// pasted far out of place spoils the whole picture. Nothing is deleted, the frames are all
+    /// still on disk.
+    static func offsets(for urls: [URL]) throws -> [CGPoint?] {
         guard urls.count >= 2 else { throw Failure.notEnoughFrames }
 
-        var offsets: [CGPoint] = [.zero]
+        var runs: [(start: Int, offsets: [CGPoint])] = [(start: 0, offsets: [.zero])]
         var previous = try load(urls[0])
 
         for index in 1..<urls.count {
             let current = try load(urls[index])
-            let shift = try contentShift(from: previous, to: current, frame: index)
-            // The content moved by `shift` between the two frames, so this frame has to be
-            // laid down that much further back for the content to line up again.
-            let last = offsets[index - 1]
-            offsets.append(CGPoint(x: last.x - shift.x, y: last.y - shift.y))
+            if let shift = contentShift(from: previous, to: current),
+                let last = runs[runs.count - 1].offsets.last
+            {
+                // The content moved by `shift` between the two frames, so this frame has to be
+                // laid down that much further back for the content to line up again.
+                runs[runs.count - 1].offsets.append(
+                    CGPoint(x: last.x - shift.x, y: last.y - shift.y))
+            } else {
+                runs.append((start: index, offsets: [.zero]))
+            }
             previous = current
         }
-        return offsets
+
+        guard let longest = runs.max(by: { $0.offsets.count < $1.offsets.count }),
+            longest.offsets.count >= 2
+        else { throw Failure.nothingLinedUp }
+
+        var placed = [CGPoint?](repeating: nil, count: urls.count)
+        for (position, offset) in longest.offsets.enumerated() {
+            placed[longest.start + position] = offset
+        }
+        return placed
+    }
+
+    /// A joined picture, and how many of the frames it was asked for did not make it in.
+    struct Panorama {
+        var image: CGImage
+        var framesLeftOut: Int
     }
 
     /// Draws the frames onto one canvas. Later frames are drawn over earlier ones, so the
     /// newest look at a patch of slide wins where they overlap.
     static func stitch(frameURLs: [URL], maxCanvasPixels: Int = defaultMaxCanvasPixels) throws
-        -> CGImage
+        -> Panorama
     {
         let offsets = try offsets(for: frameURLs)
-        var sizes: [CGSize] = []
-        for url in frameURLs {
+        var placed: [(url: URL, offset: CGPoint, size: CGSize)] = []
+        for (index, url) in frameURLs.enumerated() {
+            guard let offset = offsets[index] else { continue }
             let image = try load(url)
-            sizes.append(CGSize(width: image.width, height: image.height))
+            placed.append(
+                (url: url, offset: offset, size: CGSize(width: image.width, height: image.height)))
         }
 
-        var frame = CGRect(origin: offsets[0], size: sizes[0])
-        for index in 1..<offsets.count {
-            frame = frame.union(CGRect(origin: offsets[index], size: sizes[index]))
+        guard var frame = placed.first.map({ CGRect(origin: $0.offset, size: $0.size) }) else {
+            throw Failure.nothingLinedUp
+        }
+        for item in placed.dropFirst() {
+            frame = frame.union(CGRect(origin: item.offset, size: item.size))
         }
 
         let width = Int(frame.width.rounded(.up))
@@ -91,20 +121,20 @@ enum PanoramaStitcher {
         context.setFillColor(CGColor(gray: 0, alpha: 1))
         context.fill(CGRect(x: 0, y: 0, width: width, height: height))
 
-        for (index, url) in frameURLs.enumerated() {
-            let image = try load(url)
+        for item in placed {
+            let image = try load(item.url)
             // Offsets are measured from the top-left; CGContext draws from the bottom-left.
-            let left = offsets[index].x - frame.minX
-            let top = offsets[index].y - frame.minY
-            let bottom = frame.height - top - sizes[index].height
+            let left = item.offset.x - frame.minX
+            let top = item.offset.y - frame.minY
+            let bottom = frame.height - top - item.size.height
             context.draw(
                 image,
-                in: CGRect(x: left, y: bottom, width: sizes[index].width, height: sizes[index].height)
+                in: CGRect(x: left, y: bottom, width: item.size.width, height: item.size.height)
             )
         }
 
         guard let result = context.makeImage() else { throw Failure.couldNotDraw }
-        return result
+        return Panorama(image: result, framesLeftOut: frameURLs.count - placed.count)
     }
 
     /// Writes the panorama as a JPEG. Returns its size in bytes.
@@ -123,20 +153,14 @@ enum PanoramaStitcher {
 
     // MARK: Private
 
-    /// How far the picture moved between two frames, in pixels.
-    private static func contentShift(from previous: CGImage, to current: CGImage, frame: Int) throws
-        -> CGPoint
-    {
+    /// How far the picture moved between two frames, in pixels, or nil when the two do not
+    /// have enough in common for the match to be trusted.
+    private static func contentShift(from previous: CGImage, to current: CGImage) -> CGPoint? {
         let request = VNTranslationalImageRegistrationRequest(targetedCGImage: previous)
         let handler = VNImageRequestHandler(cgImage: current)
-        do {
-            try handler.perform([request])
-        } catch {
-            throw Failure.couldNotLineUp(frame: frame)
-        }
-        guard let observation = request.results?.first else {
-            throw Failure.couldNotLineUp(frame: frame)
-        }
+        guard (try? handler.perform([request])) != nil,
+            let observation = request.results?.first
+        else { return nil }
 
         let transform = observation.alignmentTransform
         // Vision works bottom-up, these offsets are top-down, so the vertical shift flips.
@@ -144,7 +168,7 @@ enum PanoramaStitcher {
 
         guard abs(shift.x) <= Double(current.width) * maxShiftFraction,
             abs(shift.y) <= Double(current.height) * maxShiftFraction
-        else { throw Failure.couldNotLineUp(frame: frame) }
+        else { return nil }
         return shift
     }
 
