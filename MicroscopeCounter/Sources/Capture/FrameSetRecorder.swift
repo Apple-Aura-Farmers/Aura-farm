@@ -23,6 +23,11 @@ final class FrameSetRecorder {
     private(set) var lastSavedName: String?
     private(set) var errorMessage: String?
 
+    /// Whether a finished sweep is joined into one picture. Off for capture: it takes seconds
+    /// at the end of every sweep and nothing downstream reads the panorama yet, now that the
+    /// detector runs on single frames. The stitching workbench turns it back on.
+    @ObservationIgnored var joinsFrames = false
+
     @ObservationIgnored private var folder: URL?
     @ObservationIgnored private var details: RecordingMetadata?
     @ObservationIgnored private var written = 0
@@ -119,10 +124,11 @@ final class FrameSetRecorder {
         }
         publish {
             $0.isSweeping = false
-            $0.isJoiningFrames = frameCount > 1
+            $0.isJoiningFrames = self.joinsFrames && frameCount > 1
         }
 
-        let joined = Self.joinFrames(in: folder)
+        let joined: (file: String?, problem: String?) =
+            joinsFrames ? Self.joinFrames(in: folder) : (nil, nil)
         var manifest = FrameSetManifest(
             details: details,
             frameCount: frameCount,

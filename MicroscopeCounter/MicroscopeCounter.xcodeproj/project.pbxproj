@@ -10,6 +10,9 @@
 		2B0000000000000000024 /* DebugStitchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000024 /* DebugStitchView.swift */; };
 		2B0000000000000000025 /* SoilDetector.mlpackage in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000025 /* SoilDetector.mlpackage */; };
 		2B0000000000000000026 /* Detector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000026 /* Detector.swift */; };
+		2B0000000000000000028 /* DetectorBench.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000028 /* DetectorBench.swift */; };
+		2B0000000000000000030 /* OrganismTallyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000030 /* OrganismTallyTests.swift */; };
+		2B0000000000000000029 /* OrganismTally.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000029 /* OrganismTally.swift */; };
 		2B0000000000000000027 /* DetectorBenchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000027 /* DetectorBenchView.swift */; };
 		2B0000000000000000023 /* VideoSweepRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000023 /* VideoSweepRunner.swift */; };
 		2B0000000000000000022 /* PanoramaStitcherTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000022 /* PanoramaStitcherTests.swift */; };
@@ -49,6 +52,9 @@
 		1A0000000000000000024 /* DebugStitchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugStitchView.swift; sourceTree = "<group>"; };
 		1A0000000000000000025 /* SoilDetector.mlpackage */ = {isa = PBXFileReference; lastKnownFileType = folder.mlpackage; path = SoilDetector.mlpackage; sourceTree = "<group>"; };
 		1A0000000000000000026 /* Detector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Detector.swift; sourceTree = "<group>"; };
+		1A0000000000000000028 /* DetectorBench.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DetectorBench.swift; sourceTree = "<group>"; };
+		1A0000000000000000030 /* OrganismTallyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrganismTallyTests.swift; sourceTree = "<group>"; };
+		1A0000000000000000029 /* OrganismTally.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrganismTally.swift; sourceTree = "<group>"; };
 		1A0000000000000000027 /* DetectorBenchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DetectorBenchView.swift; sourceTree = "<group>"; };
 		1A0000000000000000023 /* VideoSweepRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoSweepRunner.swift; sourceTree = "<group>"; };
 		1A0000000000000000022 /* PanoramaStitcherTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PanoramaStitcherTests.swift; sourceTree = "<group>"; };
@@ -145,6 +151,8 @@
 			isa = PBXGroup;
 			children = (
 				1A0000000000000000026 /* Detector.swift */,
+				1A0000000000000000028 /* DetectorBench.swift */,
+				1A0000000000000000029 /* OrganismTally.swift */,
 				1A0000000000000000025 /* SoilDetector.mlpackage */,
 			);
 			path = Detection;
@@ -171,6 +179,7 @@
 				1A0000000000000000020 /* FrameSweepTests.swift */,
 				1A00000000000000000013 /* FrameSetRecorderTests.swift */,
 				1A00000000000000000017 /* FrameSetLibraryTests.swift */,
+				1A0000000000000000030 /* OrganismTallyTests.swift */,
 			);
 			path = Tests;
 			sourceTree = "<group>";
@@ -298,6 +307,8 @@
 				2B0000000000000000024 /* DebugStitchView.swift in Sources */,
 				2B0000000000000000025 /* SoilDetector.mlpackage in Sources */,
 				2B0000000000000000026 /* Detector.swift in Sources */,
+				2B0000000000000000028 /* DetectorBench.swift in Sources */,
+				2B0000000000000000029 /* OrganismTally.swift in Sources */,
 				2B0000000000000000027 /* DetectorBenchView.swift in Sources */,
 				2B00000000000000000014 /* SampleSetupView.swift in Sources */,
 				2B00000000000000000011 /* FrameSetRecorder.swift in Sources */,
@@ -315,6 +326,7 @@
 				2B0000000000000000020 /* FrameSweepTests.swift in Sources */,
 				2B00000000000000000013 /* FrameSetRecorderTests.swift in Sources */,
 				2B00000000000000000017 /* FrameSetLibraryTests.swift in Sources */,
+				2B0000000000000000030 /* OrganismTallyTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

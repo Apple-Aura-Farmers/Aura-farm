@@ -52,6 +52,8 @@ final class VideoSweepRunner {
         let monitor = CaptureQualityMonitor()
         let shake = ShakeEstimator()
         let recorder = FrameSetRecorder()
+        // This is the stitching workbench, so joining the frames is the point of the run.
+        recorder.joinsFrames = true
 
         let asset = AVURLAsset(url: videoURL)
         guard let track = try? awaitFirstVideoTrack(of: asset),

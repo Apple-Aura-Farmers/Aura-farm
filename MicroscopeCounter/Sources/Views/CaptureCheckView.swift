@@ -23,7 +23,7 @@ struct CaptureCheckView: View {
         ZStack {
             Color.black.ignoresSafeArea()
 
-            CameraPreview(session: model.session)
+            CameraPreview(session: model.session, boxes: model.countedBoxes)
                 .grayscale(showGrayscale ? 1 : 0)
                 .ignoresSafeArea()
 
@@ -182,22 +182,52 @@ struct CaptureCheckView: View {
         return nil
     }
 
-    /// The running count, and anything that went wrong while saving.
+    /// The running count, what has been found so far, and anything that went wrong.
     @ViewBuilder
     private var caption: some View {
-        if let error = model.recorder.errorMessage {
-            Text(error)
+        VStack(spacing: 4) {
+            if let error = model.recorder.errorMessage {
+                Text(error)
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+                    .multilineTextAlignment(.center)
+            } else if model.recorder.isSweeping {
+                let progress = model.sweepProgress
+                Text(
+                    "\(progress.kept) of \(progress.total) frames saved · row \(progress.row) of \(progress.rowCount)"
+                )
                 .font(.footnote)
-                .foregroundStyle(.orange)
-                .multilineTextAlignment(.center)
-        } else if model.recorder.isSweeping {
-            let progress = model.sweepProgress
-            Text(
-                "\(progress.kept) of \(progress.total) frames saved · row \(progress.row) of \(progress.rowCount)"
-            )
-            .font(.footnote)
-            .foregroundStyle(.secondary)
+                .foregroundStyle(.secondary)
+            }
+            if let problem = model.countingProblem {
+                Text(problem)
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            } else if model.countedTotal > 0 || model.recorder.isSweeping {
+                countReadout
+            }
         }
+    }
+
+    /// Each organism is counted the first time it is seen and then followed as the slide
+    /// moves, so passing over the same one again does not count it twice.
+    private var countReadout: some View {
+        VStack(spacing: 2) {
+            Text("\(model.countedTotal) counted")
+                .font(.title3.monospacedDigit().bold())
+            if !model.countByLabel.isEmpty {
+                Text(
+                    model.countByLabel.sorted { $0.key < $1.key }
+                        .map { "\($0.key) \($0.value)" }
+                        .joined(separator: " · ")
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+            }
+        }
+        .foregroundStyle(.white)
+        .accessibilityElement(children: .combine)
     }
 
     private var numbersReadout: some View {

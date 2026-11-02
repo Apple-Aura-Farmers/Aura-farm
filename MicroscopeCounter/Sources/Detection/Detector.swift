@@ -44,11 +44,20 @@ struct Detector {
     }
 
     func detections(in image: CGImage) throws -> [Detection] {
+        try detections(from: VNImageRequestHandler(cgImage: image))
+    }
+
+    /// The live path: a camera frame, with no copy out of it.
+    func detections(in buffer: CVPixelBuffer) throws -> [Detection] {
+        try detections(from: VNImageRequestHandler(cvPixelBuffer: buffer))
+    }
+
+    private func detections(from handler: VNImageRequestHandler) throws -> [Detection] {
         let request = VNCoreMLRequest(model: visionModel)
         // Training squashed whole frames into a square, so feed the model the same way rather
         // than cropping the middle out.
         request.imageCropAndScaleOption = .scaleFill
-        try VNImageRequestHandler(cgImage: image).perform([request])
+        try handler.perform([request])
         let observations = request.results as? [VNRecognizedObjectObservation] ?? []
         return observations.map { observation in
             Detection(
