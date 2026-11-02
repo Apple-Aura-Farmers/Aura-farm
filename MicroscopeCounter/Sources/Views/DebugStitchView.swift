@@ -1,48 +1,15 @@
 import SwiftUI
-import UniformTypeIdentifiers
 
 /// Runs a recorded video through the capture pipeline so stitching can be tried without a
 /// microscope. Debug builds only: it is a workbench, not something a field helper would use.
-///
-/// Choose a video pulls one in from anywhere on the phone and copies it into the app's
-/// `Documents/DebugVideos` folder, so it stays there for the next run. Files already in that
-/// folder, put there with the Files app or `xcrun simctl get_app_container`, are listed too.
 struct DebugStitchView: View {
     @State private var runner = VideoSweepRunner()
-    @State private var videos: [URL] = []
     @State private var startMinutes = 5.0
     @State private var selected: URL?
-    @State private var isChoosing = false
-    @State private var problem: String?
-
-    /// Where this screen looks for videos to read.
-    static var videosDirectory: URL {
-        URL.documentsDirectory.appending(path: "DebugVideos", directoryHint: .isDirectory)
-    }
 
     var body: some View {
         Form {
-            Section("Video") {
-                Button("Choose a video…") { isChoosing = true }
-                if videos.isEmpty {
-                    Text("No videos yet.")
-                        .foregroundStyle(.secondary)
-                } else {
-                    Picker("File", selection: $selected) {
-                        ForEach(videos, id: \.self) { url in
-                            Text(url.deletingPathExtension().lastPathComponent)
-                                .lineLimit(1)
-                                .tag(URL?.some(url))
-                        }
-                    }
-                    .pickerStyle(.navigationLink)
-                }
-                if let problem {
-                    Text(problem)
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                }
-            }
+            DebugVideoPicker(selected: $selected)
 
             Section("Start at") {
                 // Most of a recording is not a steady pan across a slide, so the part worth
@@ -90,46 +57,6 @@ struct DebugStitchView: View {
         }
         .navigationTitle("Stitch from video")
         .navigationBarTitleDisplayMode(.inline)
-        .onAppear(perform: findVideos)
-        .onChange(of: runner.isRunning) { _, running in
-            if !running { findVideos() }
-        }
-        .fileImporter(isPresented: $isChoosing, allowedContentTypes: [.movie]) { result in
-            copyIn(result)
-        }
-    }
-
-    /// Copies the chosen file into `DebugVideos`. A copy rather than a reference, because the
-    /// pipeline reads the file for minutes and the permission to read it where it sits does not
-    /// last that long.
-    private func copyIn(_ result: Result<URL, Error>) {
-        problem = nil
-        do {
-            let picked = try result.get()
-            let scoped = picked.startAccessingSecurityScopedResource()
-            defer { if scoped { picked.stopAccessingSecurityScopedResource() } }
-            try FileManager.default.createDirectory(
-                at: Self.videosDirectory, withIntermediateDirectories: true)
-            let destination = Self.videosDirectory.appending(path: picked.lastPathComponent)
-            if !FileManager.default.fileExists(atPath: destination.path) {
-                try FileManager.default.copyItem(at: picked, to: destination)
-            }
-            findVideos()
-            selected = destination
-        } catch {
-            problem = error.localizedDescription
-        }
-    }
-
-    private func findVideos() {
-        let contents =
-            (try? FileManager.default.contentsOfDirectory(
-                at: Self.videosDirectory, includingPropertiesForKeys: nil)) ?? []
-        videos =
-            contents
-            .filter { ["mov", "mp4", "m4v"].contains($0.pathExtension.lowercased()) }
-            .sorted { $0.lastPathComponent < $1.lastPathComponent }
-        if selected == nil { selected = videos.first }
     }
 
     /// Marked as debug in the sample ID, so a sweep from a video is never mistaken for one

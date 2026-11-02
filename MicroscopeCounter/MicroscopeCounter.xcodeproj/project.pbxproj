@@ -13,6 +13,9 @@
 		2B0000000000000000028 /* DetectorBench.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000028 /* DetectorBench.swift */; };
 		2B0000000000000000030 /* OrganismTallyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000030 /* OrganismTallyTests.swift */; };
 		2B0000000000000000029 /* OrganismTally.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000029 /* OrganismTally.swift */; };
+		2B0000000000000000033 /* DetectVideoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000033 /* DetectVideoView.swift */; };
+		2B0000000000000000032 /* DebugVideoPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000032 /* DebugVideoPicker.swift */; };
+		2B0000000000000000031 /* VideoDetectionRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000031 /* VideoDetectionRunner.swift */; };
 		2B0000000000000000027 /* DetectorBenchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000027 /* DetectorBenchView.swift */; };
 		2B0000000000000000023 /* VideoSweepRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000023 /* VideoSweepRunner.swift */; };
 		2B0000000000000000022 /* PanoramaStitcherTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000022 /* PanoramaStitcherTests.swift */; };
@@ -55,6 +58,9 @@
 		1A0000000000000000028 /* DetectorBench.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DetectorBench.swift; sourceTree = "<group>"; };
 		1A0000000000000000030 /* OrganismTallyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrganismTallyTests.swift; sourceTree = "<group>"; };
 		1A0000000000000000029 /* OrganismTally.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrganismTally.swift; sourceTree = "<group>"; };
+		1A0000000000000000033 /* DetectVideoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DetectVideoView.swift; sourceTree = "<group>"; };
+		1A0000000000000000032 /* DebugVideoPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugVideoPicker.swift; sourceTree = "<group>"; };
+		1A0000000000000000031 /* VideoDetectionRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoDetectionRunner.swift; sourceTree = "<group>"; };
 		1A0000000000000000027 /* DetectorBenchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DetectorBenchView.swift; sourceTree = "<group>"; };
 		1A0000000000000000023 /* VideoSweepRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoSweepRunner.swift; sourceTree = "<group>"; };
 		1A0000000000000000022 /* PanoramaStitcherTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PanoramaStitcherTests.swift; sourceTree = "<group>"; };
@@ -153,6 +159,7 @@
 				1A0000000000000000026 /* Detector.swift */,
 				1A0000000000000000028 /* DetectorBench.swift */,
 				1A0000000000000000029 /* OrganismTally.swift */,
+				1A0000000000000000031 /* VideoDetectionRunner.swift */,
 				1A0000000000000000025 /* SoilDetector.mlpackage */,
 			);
 			path = Detection;
@@ -165,6 +172,8 @@
 				1A00000000000000000012 /* SampleDetailsView.swift */,
 				1A00000000000000000016 /* FrameSetsView.swift */,
 				1A0000000000000000024 /* DebugStitchView.swift */,
+				1A0000000000000000033 /* DetectVideoView.swift */,
+				1A0000000000000000032 /* DebugVideoPicker.swift */,
 				1A0000000000000000027 /* DetectorBenchView.swift */,
 				1A00000000000000000014 /* SampleSetupView.swift */,
 			);
@@ -309,6 +318,9 @@
 				2B0000000000000000026 /* Detector.swift in Sources */,
 				2B0000000000000000028 /* DetectorBench.swift in Sources */,
 				2B0000000000000000029 /* OrganismTally.swift in Sources */,
+				2B0000000000000000033 /* DetectVideoView.swift in Sources */,
+				2B0000000000000000032 /* DebugVideoPicker.swift in Sources */,
+				2B0000000000000000031 /* VideoDetectionRunner.swift in Sources */,
 				2B0000000000000000027 /* DetectorBenchView.swift in Sources */,
 				2B00000000000000000014 /* SampleSetupView.swift in Sources */,
 				2B00000000000000000011 /* FrameSetRecorder.swift in Sources */,

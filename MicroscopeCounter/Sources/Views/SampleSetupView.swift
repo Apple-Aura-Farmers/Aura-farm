@@ -35,6 +35,11 @@ struct SampleSetupView: View {
                                     Label("Stitch from video", systemImage: "film")
                                 }
                                 NavigationLink {
+                                    DetectVideoView()
+                                } label: {
+                                    Label("Detect from video", systemImage: "viewfinder")
+                                }
+                                NavigationLink {
                                     DetectorBenchView()
                                 } label: {
                                     Label("Detector speed", systemImage: "speedometer")

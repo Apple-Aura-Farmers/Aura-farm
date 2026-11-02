@@ -202,6 +202,17 @@ final class CameraQualityModel: NSObject {
         }
     }
 
+    /// Turns what the registration reports into what the tally wants.
+    ///
+    /// `ShakeEstimator` reports the move that puts this frame back on top of the one before,
+    /// so a thing that stayed put on the slide has gone the other way. Measured as well as
+    /// reasoned: on a 23 second clip, this way round counted 125 where the other way counted
+    /// 225 and ignoring the shift counted 160.
+    static func pictureMoved(registered shift: CGPoint?) -> CGPoint {
+        guard let shift else { return .zero }
+        return CGPoint(x: -shift.x, y: -shift.y)
+    }
+
     /// Runs the detector on one frame and folds what it finds into the tally.
     ///
     /// Vision gives boxes as a share of the frame with the origin at the bottom left. The
@@ -226,7 +237,7 @@ final class CameraQualityModel: NSObject {
                     confidence: detection.confidence
                 )
             },
-            pictureMoved: shakeEstimator.lastShift ?? .zero
+            pictureMoved: Self.pictureMoved(registered: shakeEstimator.lastShift)
         )
         publishCount(frameWidth: width, frameHeight: height)
     }
