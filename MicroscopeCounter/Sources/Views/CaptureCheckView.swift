@@ -4,9 +4,10 @@ import SwiftUI
 /// Camera preview with a live quality check, and the sweep that keeps still frames.
 /// Frames are only kept when the image is good.
 ///
-/// The preview is a circle because that is what the phone sees down a microscope eyepiece:
-/// a round field with black around it. The ring of ticks around it fills up as frames are
-/// kept, so the helper can see how far along the sweep is without reading anything.
+/// The preview fills the screen, with everything outside a circle in the middle greyed down,
+/// because that is what the phone sees down a microscope eyepiece: a round field with the dark
+/// barrel around it. The ring of ticks around the field fills up as frames are kept, so the
+/// helper can see how far along the sweep is without reading anything.
 struct CaptureCheckView: View {
     @State private var model = CameraQualityModel()
     /// Live numbers, from the options menu. Used to calibrate thresholds.
@@ -22,12 +23,16 @@ struct CaptureCheckView: View {
         ZStack {
             Color.black.ignoresSafeArea()
 
+            CameraPreview(session: model.session)
+                .grayscale(showGrayscale ? 1 : 0)
+                .ignoresSafeArea()
+
+            fieldOverlay
+
             VStack(spacing: 16) {
                 Spacer(minLength: 0)
-                viewfinder
                 caption
                 if showNumbers { numbersReadout }
-                Spacer(minLength: 0)
                 focusSlider
                 captureButton
             }
@@ -89,18 +94,37 @@ struct CaptureCheckView: View {
 
     // MARK: Viewfinder
 
-    private var viewfinder: some View {
-        ZStack {
-            CameraPreview(session: model.session)
-                .grayscale(showGrayscale ? 1 : 0)
-                .clipShape(Circle())
-                // Dimmed while there is something to say, so the words carry over the image.
-                .overlay { Circle().fill(.black.opacity(hint == nil ? 0 : 0.45)) }
-                .padding(16)
-            SweepRing(fraction: ringFraction)
-            if let hint { hintOverlay(hint) }
+    /// The round field, laid over the full-screen preview. Everything outside the circle is
+    /// greyed down, the way the view down an eyepiece looks, and the ring and the instruction
+    /// sit on top of it.
+    private var fieldOverlay: some View {
+        GeometryReader { geometry in
+            let diameter = min(geometry.size.width, geometry.size.height) - 104
+            ZStack {
+                Color.black.opacity(0.8)
+                    // The circle punches a hole in the grey, so the preview shows through it.
+                    .mask {
+                        Rectangle()
+                            .overlay {
+                                Circle()
+                                    .frame(width: diameter, height: diameter)
+                                    .blendMode(.destinationOut)
+                            }
+                            .compositingGroup()
+                    }
+                // The field itself is dimmed while there is something to say, so the words
+                // carry over the image.
+                if hint != nil {
+                    Circle()
+                        .fill(.black.opacity(0.45))
+                        .frame(width: diameter, height: diameter)
+                }
+                SweepRing(fraction: ringFraction, diameter: diameter + 56)
+                if let hint { hintOverlay(hint) }
+            }
+            .frame(width: geometry.size.width, height: geometry.size.height)
         }
-        .aspectRatio(1, contentMode: .fit)
+        .ignoresSafeArea()
         .accessibilityElement(children: .combine)
         .accessibilityLabel(ringLabel)
     }
@@ -262,21 +286,19 @@ struct CaptureCheckView: View {
 /// far along it is can be read at a glance from across a bench.
 private struct SweepRing: View {
     var fraction: Double
+    /// Distance across the ring, measured through the middle of the ticks.
+    var diameter: Double
     var tickCount = 48
 
     var body: some View {
-        GeometryReader { geometry in
-            let side = min(geometry.size.width, geometry.size.height)
-            ZStack {
-                ForEach(0..<tickCount, id: \.self) { index in
-                    Capsule()
-                        .fill(isFilled(index) ? Color.green : Color.white)
-                        .frame(width: 3, height: 12)
-                        .offset(y: -(side / 2 - 6))
-                        .rotationEffect(.degrees(Double(index) / Double(tickCount) * 360))
-                }
+        ZStack {
+            ForEach(0..<tickCount, id: \.self) { index in
+                Capsule()
+                    .fill(isFilled(index) ? Color.green : Color.white)
+                    .frame(width: 3, height: 12)
+                    .offset(y: -diameter / 2)
+                    .rotationEffect(.degrees(Double(index) / Double(tickCount) * 360))
             }
-            .frame(width: geometry.size.width, height: geometry.size.height)
         }
         .animation(.easeOut(duration: 0.2), value: fraction)
         .accessibilityHidden(true)
