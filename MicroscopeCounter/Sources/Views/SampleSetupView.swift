@@ -20,11 +20,30 @@ struct SampleSetupView: View {
                 .toolbar {
                     ToolbarItem(placement: .topBarTrailing) {
                         NavigationLink {
-                            RecordedClipsView()
+                            FrameSetsView()
                         } label: {
-                            Label("Recorded clips", systemImage: "film.stack")
+                            Label("Saved sweeps", systemImage: "square.stack.3d.up")
                         }
                     }
+                    #if DEBUG
+                        // A workbench for trying the pipeline without a microscope.
+                        ToolbarItem(placement: .topBarLeading) {
+                            Menu {
+                                NavigationLink {
+                                    DebugStitchView()
+                                } label: {
+                                    Label("Stitch from video", systemImage: "film")
+                                }
+                                NavigationLink {
+                                    DetectorBenchView()
+                                } label: {
+                                    Label("Detector speed", systemImage: "speedometer")
+                                }
+                            } label: {
+                                Label("Workbench", systemImage: "hammer")
+                            }
+                        }
+                    #endif
                 }
                 .safeAreaInset(edge: .bottom) {
                     Button {

@@ -47,3 +47,7 @@ Package.resolved
 
 # Claude Code local settings
 .claude/
+
+# Trained PyTorch weights. They are the source for the Core ML model, not something the
+# app builds with, and each one is over the 5 MB limit the repo checks enforce.
+*.pt

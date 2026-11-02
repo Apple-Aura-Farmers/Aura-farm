@@ -25,17 +25,44 @@ helper visiting farms, not a lab technician.
   blurry or shaky, in plain language that says what to fix. Record stays disabled
   until the image is usable.
 - **Manual focus** — a focus slider instead of autofocus, which hunts on a microscope.
-- **Raw clip recording** — saves silent portrait `.mov` clips to `Documents/RawClips`,
-  with a JSON sidecar holding the sample ID, field number, moisture, grams of soil and
-  millilitres scanned. Clips are never overwritten or edited.
-- **Clip library** — saved clips newest first, with their sample details and playback.
-  Playback is grayscale, applied live, so the file on disk keeps its colour.
-- **Export** — clips can be copied off the phone with the Files app.
+- **Automatic sweep along a set path** — the app walks the helper across the slide in
+  rows: four frames to the right, one step down, four back to the left, down again, and
+  so on, twelve frames in all, with a dot for each frame in the row and a bar for the
+  sweep so there is nothing to count. Frames save on their own as the view travels;
+  nobody is asked to stop or hold still. Saving pauses only while the image is too dark or out of
+  focus, and starts again by itself once that is fixed. Shake does not pause it: a sweep
+  is the slide moving, and a slide moved too fast reads as blurred anyway.
+- **Frame extraction instead of video** — a sweep is saved as a folder of JPEG frames
+  in `Documents/FrameSets`, with a `manifest.json` holding the sample ID, field number,
+  moisture, grams of soil, millilitres scanned and the frame count. Frames are never
+  overwritten or edited.
+- **One joined image** — when the sweep ends, the frames are lined up into a single
+  picture of the slide, the way a panorama works. The slide travels on a flat stage, so
+  frame to frame there is a shift and nothing else, which makes translational
+  registration the whole job. The picture takes its shape from wherever the sample
+  actually went, worked out from the frames themselves rather than from the path the app
+  asked for, so it is rarely a neat rectangle: slide the sweep never covered is left
+  black. Pinch to zoom in on it, or double-tap. The panorama is a derived file saved as
+  `panorama.jpg` beside the frames; the frames themselves are never edited to make it,
+  and a sweep whose frames cannot be lined up keeps every one of them.
+- **Size ceiling** — a sweep stops at its own limit, and the saved-sweeps screen shows
+  how much of the 50 MB store is used.
+- **Sweep library** — saved sweeps newest first. Open one and it shows the joined
+  image, scrolled and zoomed around the slide, or switch to the frames, which play back
+  like a clip, a second a frame, or step through one at a time. The frames are drawn in
+  grayscale, so the files on disk keep their colour.
+- **Export** — frames can be copied off the phone with the Files app.
+
+### Why frames, not video
+
+The store holds 50 MB in total. A sweep of a dozen stills covers several fields of view
+for a few MB, where a clip of the same sweep would not fit. The counting work needs
+separate fields of view rather than continuous footage, so the frames are the raw data
+now and the same rule applies to them: nothing in the app edits or deletes one.
 
 **Planned**
 
 - Sample preparation and microscope mounting guides
-- Guided recording with a prompt to move the sample across the slide
 - Microbe detection with computer vision
 - A soil health result the helper can read out, with its confidence
 - Recommended actions with every result
@@ -70,8 +97,42 @@ Known limitations:
 - Shake is measured on the whole frame. A large moving organism barely affects it, but
   a drifting slide or debris flow could.
 - Brightness does not detect over-exposure.
-- Nothing checks free space before recording. A full phone fails part-way through a
-  clip, and that part-clip is kept.
+- Joining the frames needs something to lock onto. On a field with little in it, the
+  registration can return a confident but badly wrong match, and a frame pasted far out
+  of place makes the whole picture misleading. A shift of more than half a frame is
+  therefore treated as a failure to line up: the sweep keeps its frames and says they
+  were not joined, rather than showing a panorama that cannot be trusted.
+- A frame is kept once the view has moved far enough from where the last one was taken,
+  and only while the slide is moving slowly enough for the next frame to be lined up
+  against it. Moving it in a hurry does not lose ground — the travel still counts — but
+  no frame is kept until it slows down.
+- Nothing checks free space before a sweep. A full phone fails part-way through, and
+  the frames written so far are kept.
+- The app asks for a direction but cannot tell which way the slide actually went: the
+  travel that spaces frames apart is a distance, not a direction. Going the wrong way
+  still lets the sweep run and can cover the same ground twice. It does show up in the
+  joined picture, which is built from where the frames really landed.
+- Frames are lined up against the one before them, so error builds along the path. Two
+  rows that sit next to each other are never checked against each other, and a long
+  sweep can drift.
+
+## Trying stitching without a microscope
+
+Debug builds have a **Stitch from video** screen on the first screen, behind the
+hammer. It reads a recording frame by frame through the same analyzer, quality check,
+sweep rules and writer the camera uses, and saves an ordinary sweep, so the result
+opens in Saved sweeps like any other. Put `.mov` or `.mp4` files in the app's
+`Documents/DebugVideos` folder — on a simulator:
+
+```bash
+xcrun simctl get_app_container booted com.example.microscopecounter data
+```
+
+then copy them into `Documents/DebugVideos` inside what it prints. On a phone the app's
+folder is already visible in the Files app.
+
+Pick a start time by hand: most of a recording is not a steady pass across a slide, and
+a part that is not will come back as frames that could not be joined.
 
 ## Getting started
 
