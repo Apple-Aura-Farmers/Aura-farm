@@ -1,0 +1,61 @@
+import CoreGraphics
+import CoreML
+import Vision
+
+/// The trained detector: a YOLO26n model exported to Core ML with non-maximum suppression
+/// built into the model, so Vision hands back finished boxes rather than raw tensors.
+///
+/// The model was trained on soil microscopy frames and knows five classes: Arcellinida,
+/// Digononta, Monogononta, Nematoda and Hypotrichida.
+///
+/// `computeUnits` is open so the benchmark can hold the Neural Engine, the GPU and the CPU
+/// against each other. Anywhere else, leave it at `.all` and let Core ML choose.
+struct Detector {
+    /// One thing the model found.
+    struct Detection: Identifiable {
+        let id = UUID()
+        var label: String
+        var confidence: Float
+        /// Vision's coordinates: a share of the image, with the origin at the bottom left.
+        var box: CGRect
+    }
+
+    enum Failure: LocalizedError {
+        case notInTheBundle
+
+        var errorDescription: String? {
+            switch self {
+            case .notInTheBundle: "The detector model is not in the app."
+            }
+        }
+    }
+
+    /// Xcode compiles `SoilDetector.mlpackage` into `SoilDetector.mlmodelc` in the bundle.
+    static let modelName = "SoilDetector"
+
+    private let visionModel: VNCoreMLModel
+
+    init(computeUnits: MLComputeUnits = .all) throws {
+        guard let url = Bundle.main.url(forResource: Self.modelName, withExtension: "mlmodelc")
+        else { throw Failure.notInTheBundle }
+        let configuration = MLModelConfiguration()
+        configuration.computeUnits = computeUnits
+        visionModel = try VNCoreMLModel(for: MLModel(contentsOf: url, configuration: configuration))
+    }
+
+    func detections(in image: CGImage) throws -> [Detection] {
+        let request = VNCoreMLRequest(model: visionModel)
+        // Training squashed whole frames into a square, so feed the model the same way rather
+        // than cropping the middle out.
+        request.imageCropAndScaleOption = .scaleFill
+        try VNImageRequestHandler(cgImage: image).perform([request])
+        let observations = request.results as? [VNRecognizedObjectObservation] ?? []
+        return observations.map { observation in
+            Detection(
+                label: observation.labels.first?.identifier ?? "?",
+                confidence: observation.labels.first?.confidence ?? 0,
+                box: observation.boundingBox
+            )
+        }
+    }
+}

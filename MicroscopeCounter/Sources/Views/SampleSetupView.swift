@@ -26,12 +26,21 @@ struct SampleSetupView: View {
                         }
                     }
                     #if DEBUG
-                        // A workbench for trying stitching without a microscope.
+                        // A workbench for trying the pipeline without a microscope.
                         ToolbarItem(placement: .topBarLeading) {
-                            NavigationLink {
-                                DebugStitchView()
+                            Menu {
+                                NavigationLink {
+                                    DebugStitchView()
+                                } label: {
+                                    Label("Stitch from video", systemImage: "film")
+                                }
+                                NavigationLink {
+                                    DetectorBenchView()
+                                } label: {
+                                    Label("Detector speed", systemImage: "speedometer")
+                                }
                             } label: {
-                                Label("Stitch from video", systemImage: "hammer")
+                                Label("Workbench", systemImage: "hammer")
                             }
                         }
                     #endif
