@@ -16,10 +16,10 @@ final class OrganismTallyTests: XCTestCase {
 
     func testOneOrganismSeenAgainKeepsItsIDAndIsCountedOnce() {
         var tally = OrganismTally()
-        tally.update(found: [found("Nematoda", x: 100, y: 100)], pictureMoved: .zero)
+        tally.update(found: [found("Nematode", x: 100, y: 100)], pictureMoved: .zero)
         // The picture moved 60 px to the right, so the same organism lands 60 px further on.
-        tally.update(found: [found("Nematoda", x: 160, y: 100)], pictureMoved: CGPoint(x: 60, y: 0))
-        tally.update(found: [found("Nematoda", x: 220, y: 100)], pictureMoved: CGPoint(x: 60, y: 0))
+        tally.update(found: [found("Nematode", x: 160, y: 100)], pictureMoved: CGPoint(x: 60, y: 0))
+        tally.update(found: [found("Nematode", x: 220, y: 100)], pictureMoved: CGPoint(x: 60, y: 0))
 
         XCTAssertEqual(tally.total, 1)
         XCTAssertEqual(tally.tracks.map(\.id), [1])
@@ -29,7 +29,7 @@ final class OrganismTallyTests: XCTestCase {
         var tally = OrganismTally()
         // The model puts a box up for one frame and never again. That is flicker, not an
         // organism, and it is what swamped the count before.
-        tally.update(found: [found("Arcellinida", x: 100, y: 100)], pictureMoved: .zero)
+        tally.update(found: [found("Amoeba", x: 100, y: 100)], pictureMoved: .zero)
 
         XCTAssertEqual(tally.total, 0)
         XCTAssertTrue(tally.visible.isEmpty)
@@ -37,32 +37,32 @@ final class OrganismTallyTests: XCTestCase {
 
     func testSomethingElseInTheFrameGetsItsOwnID() {
         var tally = OrganismTally()
-        let one = found("Nematoda", x: 100, y: 100)
-        let other = found("Nematoda", x: 400, y: 300)
+        let one = found("Nematode", x: 100, y: 100)
+        let other = found("Nematode", x: 400, y: 300)
         tally.update(found: [one], pictureMoved: .zero)
         tally.update(found: [one, other], pictureMoved: .zero)
         tally.update(found: [one, other], pictureMoved: .zero)
 
         XCTAssertEqual(tally.total, 2)
         XCTAssertEqual(tally.tracks.map(\.id).sorted(), [1, 2])
-        XCTAssertEqual(tally.countByLabel["Nematoda"], 2)
+        XCTAssertEqual(tally.countByLabel["Nematode"], 2)
     }
 
     func testTwoSpeciesInTheSamePlaceAreNotTheSameThing() {
         var tally = OrganismTally()
-        let worm = found("Nematoda", x: 100, y: 100)
-        let shell = found("Arcellinida", x: 100, y: 100)
+        let worm = found("Nematode", x: 100, y: 100)
+        let shell = found("Amoeba", x: 100, y: 100)
         tally.update(found: [worm, shell], pictureMoved: .zero)
         tally.update(found: [worm, shell], pictureMoved: .zero)
 
         XCTAssertEqual(tally.total, 2)
-        XCTAssertEqual(tally.countByLabel["Nematoda"], 1)
-        XCTAssertEqual(tally.countByLabel["Arcellinida"], 1)
+        XCTAssertEqual(tally.countByLabel["Nematode"], 1)
+        XCTAssertEqual(tally.countByLabel["Amoeba"], 1)
     }
 
     func testAMissedFrameOrTwoDoesNotCountTheSameOrganismTwice() {
         var tally = OrganismTally()
-        let rotifer = found("Digononta", x: 100, y: 100)
+        let rotifer = found("Paramecium", x: 100, y: 100)
         tally.update(found: [rotifer], pictureMoved: .zero)
         tally.update(found: [rotifer], pictureMoved: .zero)
         tally.update(found: [], pictureMoved: .zero)
@@ -75,7 +75,7 @@ final class OrganismTallyTests: XCTestCase {
     func testATrackIsDroppedOnceItHasBeenGoneTooLong() {
         var tally = OrganismTally()
         tally.patience = 2
-        let rotifer = found("Monogononta", x: 100, y: 100)
+        let rotifer = found("Coleps", x: 100, y: 100)
         tally.update(found: [rotifer], pictureMoved: .zero)
         tally.update(found: [rotifer], pictureMoved: .zero)
         for _ in 0..<3 { tally.update(found: [], pictureMoved: .zero) }
@@ -92,11 +92,11 @@ final class OrganismTallyTests: XCTestCase {
 
     func testAnOrganismThatStaysPutWhileTheSlideMovesIsNotCountedAgain() {
         var tally = OrganismTally()
-        tally.update(found: [found("Hypotrichida", x: 300, y: 200)], pictureMoved: .zero)
+        tally.update(found: [found("Volvox", x: 300, y: 200)], pictureMoved: .zero)
         // Walking a row: the picture moves left as the slide is pushed right.
         for step in 1...4 {
             tally.update(
-                found: [found("Hypotrichida", x: 300 - Double(step) * 50, y: 200)],
+                found: [found("Volvox", x: 300 - Double(step) * 50, y: 200)],
                 pictureMoved: CGPoint(x: -50, y: 0)
             )
         }
@@ -107,16 +107,16 @@ final class OrganismTallyTests: XCTestCase {
 
     func testJitterBetweenFramesIsTheSameOrganism() {
         var tally = OrganismTally()
-        tally.update(found: [found("Nematoda", x: 100, y: 100)], pictureMoved: .zero)
+        tally.update(found: [found("Nematode", x: 100, y: 100)], pictureMoved: .zero)
         // Within a body width is the same organism; the box also breathes a little.
-        tally.update(found: [found("Nematoda", x: 112, y: 108, side: 44)], pictureMoved: .zero)
+        tally.update(found: [found("Nematode", x: 112, y: 108, side: 44)], pictureMoved: .zero)
 
         XCTAssertEqual(tally.total, 1)
     }
 
     func testTheCountedTracksAreReturnedWhenTheyAreCounted() {
         var tally = OrganismTally()
-        let worm = found("Nematoda", x: 100, y: 100)
+        let worm = found("Nematode", x: 100, y: 100)
         XCTAssertTrue(tally.update(found: [worm], pictureMoved: .zero).isEmpty)
         XCTAssertEqual(tally.update(found: [worm], pictureMoved: .zero).map(\.id), [1])
         XCTAssertTrue(tally.update(found: [worm], pictureMoved: .zero).isEmpty)
@@ -124,7 +124,7 @@ final class OrganismTallyTests: XCTestCase {
 
     func testResetForgetsEverything() {
         var tally = OrganismTally()
-        let worm = found("Nematoda", x: 100, y: 100)
+        let worm = found("Nematode", x: 100, y: 100)
         tally.update(found: [worm], pictureMoved: .zero)
         tally.update(found: [worm], pictureMoved: .zero)
         tally.reset()

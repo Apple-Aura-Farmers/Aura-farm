@@ -5,8 +5,10 @@ import Vision
 /// The trained detector: a YOLO26n model exported to Core ML with non-maximum suppression
 /// built into the model, so Vision hands back finished boxes rather than raw tensors.
 ///
-/// The model was trained on soil microscopy frames and knows five classes: Arcellinida,
-/// Digononta, Monogononta, Nematoda and Hypotrichida.
+/// The model was trained on soil microscopy frames and knows nineteen classes: Amoeba,
+/// Nematode, Ceratium, Coleps, Collodictyon, Colsterium, Cylindrocystis, Didinium,
+/// Dinobryon, Frontonia, Lepocinclis, Micrasterias, Paramecium, Peridinium, Phacus,
+/// Pinnularia, Pleurotaenium, Pyrocystis and Volvox.
 ///
 /// `computeUnits` is open so the benchmark can hold the Neural Engine, the GPU and the CPU
 /// against each other. Anywhere else, leave it at `.all` and let Core ML choose.
