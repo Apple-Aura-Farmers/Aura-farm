@@ -1,15 +1,17 @@
+import PhotosUI
 import SwiftUI
 import UniformTypeIdentifiers
 
 /// Picks the video a workbench runs on: the ones already pulled into the app, and a button
-/// to pull in another from anywhere on the phone.
+/// to pull in another from the phone's photo library.
 ///
 /// Debug builds only. It is a form section, so it goes inside a `Form`.
 struct DebugVideoPicker: View {
     @Binding var selected: URL?
 
     @State private var videos: [URL] = []
-    @State private var isChoosing = false
+    @State private var chosen: PhotosPickerItem?
+    @State private var isCopying = false
     @State private var problem: String?
 
     /// Where the workbenches look for videos. Files put here with the Files app or
@@ -20,7 +22,17 @@ struct DebugVideoPicker: View {
 
     var body: some View {
         Section("Video") {
-            Button("Choose a video…") { isChoosing = true }
+            PhotosPicker(selection: $chosen, matching: .videos, photoLibrary: .shared()) {
+                if isCopying {
+                    HStack {
+                        ProgressView()
+                        Text("Copying it in…")
+                    }
+                } else {
+                    Text("Choose a video…")
+                }
+            }
+            .disabled(isCopying)
             if videos.isEmpty {
                 Text("No videos yet.")
                     .foregroundStyle(.secondary)
@@ -41,28 +53,26 @@ struct DebugVideoPicker: View {
             }
         }
         .onAppear(perform: findVideos)
-        .fileImporter(isPresented: $isChoosing, allowedContentTypes: [.movie]) { result in
-            copyIn(result)
+        .onChange(of: chosen) { _, item in
+            guard let item else { return }
+            Task { await copyIn(item) }
         }
     }
 
-    /// Copies the chosen file into `DebugVideos`. A copy rather than a reference, because a
-    /// run reads the file for minutes and the permission to read it where it sits does not
-    /// last that long.
-    private func copyIn(_ result: Result<URL, Error>) {
+    /// Copies the chosen video into `DebugVideos`. A copy rather than a reference, because a
+    /// run reads the file for minutes and what the picker hands over does not outlive the
+    /// load, and because a video in the library is not a file the app may open directly.
+    private func copyIn(_ item: PhotosPickerItem) async {
         problem = nil
+        isCopying = true
+        defer { isCopying = false }
         do {
-            let picked = try result.get()
-            let scoped = picked.startAccessingSecurityScopedResource()
-            defer { if scoped { picked.stopAccessingSecurityScopedResource() } }
-            try FileManager.default.createDirectory(
-                at: Self.videosDirectory, withIntermediateDirectories: true)
-            let destination = Self.videosDirectory.appending(path: picked.lastPathComponent)
-            if !FileManager.default.fileExists(atPath: destination.path) {
-                try FileManager.default.copyItem(at: picked, to: destination)
+            guard let movie = try await item.loadTransferable(type: PickedMovie.self) else {
+                problem = "That video could not be read."
+                return
             }
             findVideos()
-            selected = destination
+            selected = movie.url
         } catch {
             problem = error.localizedDescription
         }
@@ -77,5 +87,28 @@ struct DebugVideoPicker: View {
             .filter { ["mov", "mp4", "m4v"].contains($0.pathExtension.lowercased()) }
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
         if selected == nil { selected = videos.first }
+    }
+}
+
+/// A video on its way out of the photo library. The file the system hands over is deleted
+/// as soon as the import returns, so it is copied into `DebugVideos` on the way through.
+private struct PickedMovie: Transferable {
+    var url: URL
+
+    static var transferRepresentation: some TransferRepresentation {
+        FileRepresentation(contentType: .movie) { movie in
+            SentTransferredFile(movie.url)
+        } importing: { received in
+            let directory = DebugVideoPicker.videosDirectory
+            try FileManager.default.createDirectory(
+                at: directory, withIntermediateDirectories: true)
+            let destination = directory.appending(path: received.file.lastPathComponent)
+            // The same video picked twice should land on the copy already there.
+            if FileManager.default.fileExists(atPath: destination.path) {
+                try FileManager.default.removeItem(at: destination)
+            }
+            try FileManager.default.copyItem(at: received.file, to: destination)
+            return Self(url: destination)
+        }
     }
 }
