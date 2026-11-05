@@ -12,6 +12,7 @@
 		2B0000000000000000026 /* Detector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000026 /* Detector.swift */; };
 		2B0000000000000000028 /* DetectorBench.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000028 /* DetectorBench.swift */; };
 		2B0000000000000000030 /* OrganismTallyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000030 /* OrganismTallyTests.swift */; };
+		2B0000000000000000034 /* DetectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000034 /* DetectorTests.swift */; };
 		2B0000000000000000029 /* OrganismTally.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000029 /* OrganismTally.swift */; };
 		2B0000000000000000033 /* DetectVideoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000033 /* DetectVideoView.swift */; };
 		2B0000000000000000032 /* DebugVideoPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000032 /* DebugVideoPicker.swift */; };
@@ -57,6 +58,7 @@
 		1A0000000000000000026 /* Detector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Detector.swift; sourceTree = "<group>"; };
 		1A0000000000000000028 /* DetectorBench.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DetectorBench.swift; sourceTree = "<group>"; };
 		1A0000000000000000030 /* OrganismTallyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrganismTallyTests.swift; sourceTree = "<group>"; };
+		1A0000000000000000034 /* DetectorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DetectorTests.swift; sourceTree = "<group>"; };
 		1A0000000000000000029 /* OrganismTally.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrganismTally.swift; sourceTree = "<group>"; };
 		1A0000000000000000033 /* DetectVideoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DetectVideoView.swift; sourceTree = "<group>"; };
 		1A0000000000000000032 /* DebugVideoPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugVideoPicker.swift; sourceTree = "<group>"; };
@@ -189,6 +191,7 @@
 				1A00000000000000000013 /* FrameSetRecorderTests.swift */,
 				1A00000000000000000017 /* FrameSetLibraryTests.swift */,
 				1A0000000000000000030 /* OrganismTallyTests.swift */,
+				1A0000000000000000034 /* DetectorTests.swift */,
 			);
 			path = Tests;
 			sourceTree = "<group>";
@@ -339,6 +342,7 @@
 				2B00000000000000000013 /* FrameSetRecorderTests.swift in Sources */,
 				2B00000000000000000017 /* FrameSetLibraryTests.swift in Sources */,
 				2B0000000000000000030 /* OrganismTallyTests.swift in Sources */,
+				2B0000000000000000034 /* DetectorTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
