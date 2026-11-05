@@ -23,3 +23,19 @@ final class DetectorTests: XCTestCase {
         XCTAssertFalse(Detector.coversWholeFrame(CGRect(x: 0, y: 0.45, width: 1, height: 0.1)))
     }
 }
+
+final class DetectVideoViewTests: XCTestCase {
+    func testAPictureIsFittedToTheShapeOfTheSheet() {
+        // A 1920x1080 frame in a tall sheet fills the width and leaves the height short, so
+        // zooming in walks across the picture rather than into empty space beside it.
+        let fitted = DetectVideoView.sizeFitting(
+            CGSize(width: 1920, height: 1080), in: CGSize(width: 400, height: 800))
+        XCTAssertEqual(fitted.width, 400, accuracy: 0.01)
+        XCTAssertEqual(fitted.height, 225, accuracy: 0.01)
+    }
+
+    func testAPictureWithNoSizeFallsBackToTheSheet() {
+        let bounds = CGSize(width: 400, height: 800)
+        XCTAssertEqual(DetectVideoView.sizeFitting(.zero, in: bounds), bounds)
+    }
+}

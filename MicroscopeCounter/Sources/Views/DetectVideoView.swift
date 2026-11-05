@@ -11,6 +11,9 @@ struct DetectVideoView: View {
     @State private var startMinutes = 0.0
     @State private var selected: URL?
     @State private var showing: Picture?
+    /// How far the open picture is zoomed in, as a multiple of fitting the screen.
+    @State private var zoom = 1.0
+    @GestureState private var pinch = 1.0
 
     /// A picture the sheet is showing. A wrapper because a URL is not identifiable.
     private struct Picture: Identifiable {
@@ -93,10 +96,7 @@ struct DetectVideoView: View {
         .navigationBarTitleDisplayMode(.inline)
         .sheet(item: $showing) { picture in
             NavigationStack {
-                // A scroll view proposes no size, so the picture came up at its full pixel
-                // size and had to be scrolled across. Let it fit the sheet instead.
-                self.picture(picture.url)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                zoomablePicture(picture.url)
                     .navigationTitle(picture.url.lastPathComponent)
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar {
@@ -105,7 +105,56 @@ struct DetectVideoView: View {
                         }
                     }
             }
+            // Every picture opens fitting the screen, however the one before was left.
+            .onAppear { zoom = 1 }
         }
+    }
+
+    /// The picture fitted to the sheet, which it is opened at, and zoomable from there: the
+    /// boxes are small enough on a 1920 wide frame that a fitted picture cannot settle
+    /// whether the model found an organism or a speck of grit.
+    @ViewBuilder
+    private func zoomablePicture(_ url: URL) -> some View {
+        if let image = UIImage(contentsOfFile: url.path) {
+            GeometryReader { proxy in
+                // Sized from the picture's own shape rather than the sheet's, or zooming in
+                // would scroll into the empty bands above and below a letterboxed frame.
+                let fitted = Self.sizeFitting(image.size, in: proxy.size)
+                ScrollView([.horizontal, .vertical]) {
+                    Image(uiImage: image)
+                        .resizable()
+                        .frame(width: fitted.width * zoomedBy, height: fitted.height * zoomedBy)
+                        // Centred while it is smaller than the sheet.
+                        .frame(
+                            maxWidth: max(proxy.size.width, fitted.width * zoomedBy),
+                            maxHeight: max(proxy.size.height, fitted.height * zoomedBy)
+                        )
+                }
+                .gesture(
+                    MagnifyGesture()
+                        .updating($pinch) { value, state, _ in state = value.magnification }
+                        .onEnded { value in zoom = clamped(zoom * value.magnification) }
+                )
+                .onTapGesture(count: 2) {
+                    withAnimation { zoom = zoom > 1 ? 1 : 3 }
+                }
+            }
+            .background(Color.black)
+        } else {
+            Color.secondary.opacity(0.2)
+        }
+    }
+
+    private var zoomedBy: Double { clamped(zoom * pinch) }
+
+    /// Fitting the screen at the bottom; past eight times a 1920 wide frame is pixels.
+    private func clamped(_ value: Double) -> Double { min(max(value, 1), 8) }
+
+    /// The largest size with `size`'s shape that fits inside `bounds`.
+    static func sizeFitting(_ size: CGSize, in bounds: CGSize) -> CGSize {
+        guard size.width > 0, size.height > 0 else { return bounds }
+        let scale = min(bounds.width / size.width, bounds.height / size.height)
+        return CGSize(width: size.width * scale, height: size.height * scale)
     }
 
     @ViewBuilder

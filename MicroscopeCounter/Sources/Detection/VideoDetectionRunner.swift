@@ -1,5 +1,6 @@
 import AVFoundation
 import CoreImage
+import CoreText
 import CoreVideo
 import Foundation
 import ImageIO
@@ -202,16 +203,29 @@ final class VideoDetectionRunner {
         canvas.draw(base, in: CGRect(x: 0, y: 0, width: width, height: height))
         // The canvas counts from the bottom left and the boxes from the top left, so flip
         // them as they are drawn.
-        canvas.setStrokeColor(red: 0.2, green: 0.9, blue: 0.3, alpha: 1)
+        let green = CGColor(red: 0.2, green: 0.9, blue: 0.3, alpha: 1)
+        canvas.setStrokeColor(green)
         canvas.setLineWidth(max(Double(width) / 300, 2))
+        // Big enough to read when the picture is shrunk to fit a phone screen.
+        let font = CTFontCreateWithName("Helvetica-Bold" as CFString, Double(width) / 40, nil)
         for track in tracks {
-            canvas.stroke(
-                CGRect(
-                    x: track.box.minX,
-                    y: Double(height) - track.box.maxY,
-                    width: track.box.width,
-                    height: track.box.height
-                ))
+            let box = CGRect(
+                x: track.box.minX,
+                y: Double(height) - track.box.maxY,
+                width: track.box.width,
+                height: track.box.height
+            )
+            canvas.stroke(box)
+            // The same caption as the live preview: which organism this is, and what of.
+            let caption = CTLineCreateWithAttributedString(
+                NSAttributedString(
+                    string: "\(track.id) \(track.label)",
+                    attributes: [
+                        NSAttributedString.Key(kCTFontAttributeName as String): font,
+                        NSAttributedString.Key(kCTForegroundColorAttributeName as String): green,
+                    ]))
+            canvas.textPosition = CGPoint(x: box.minX, y: box.maxY + Double(width) / 200)
+            CTLineDraw(caption, canvas)
         }
         guard let drawn = canvas.makeImage() else { return nil }
 
