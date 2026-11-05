@@ -93,7 +93,10 @@ struct DetectVideoView: View {
         .navigationBarTitleDisplayMode(.inline)
         .sheet(item: $showing) { picture in
             NavigationStack {
-                ScrollView([.horizontal, .vertical]) { self.picture(picture.url) }
+                // A scroll view proposes no size, so the picture came up at its full pixel
+                // size and had to be scrolled across. Let it fit the sheet instead.
+                self.picture(picture.url)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .navigationTitle(picture.url.lastPathComponent)
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar {
