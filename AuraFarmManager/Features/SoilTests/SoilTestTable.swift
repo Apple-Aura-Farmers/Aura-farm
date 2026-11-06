@@ -4,7 +4,7 @@ import SwiftUI
 /// Soil tests as a table: when, which sample, where it is filed, and what was counted.
 struct SoilTestTable: View {
     let tests: [SoilTest]
-    @Binding var selection: SoilTest.ID?
+    @Binding var selection: PersistentIdentifier?
 
     @Environment(\.modelContext) private var modelContext
 
@@ -33,7 +33,7 @@ struct SoilTestTable: View {
             }
             .width(min: 50, ideal: 60)
         }
-        .contextMenu(forSelectionType: SoilTest.ID.self) { ids in
+        .contextMenu(forSelectionType: PersistentIdentifier.self) { ids in
             Button("Delete", role: .destructive) {
                 delete(ids)
             }
@@ -41,11 +41,11 @@ struct SoilTestTable: View {
         }
     }
 
-    private func delete(_ ids: Set<SoilTest.ID>) {
+    private func delete(_ ids: Set<PersistentIdentifier>) {
         if let selection, ids.contains(selection) {
             self.selection = nil
         }
-        for test in tests where ids.contains(test.id) {
+        for test in tests where ids.contains(test.persistentModelID) {
             modelContext.delete(test)
         }
         try? modelContext.save()

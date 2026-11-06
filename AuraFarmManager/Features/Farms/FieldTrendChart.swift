@@ -47,7 +47,12 @@ struct FieldTrendChart: View {
         fields
             .flatMap { field in
                 field.soilTests.map { test in
-                    Point(id: test.id, field: field.name, recordedAt: test.recordedAt, total: test.totalCount)
+                    Point(
+                        id: test.persistentModelID,
+                        field: field.name,
+                        recordedAt: test.recordedAt,
+                        total: test.totalCount
+                    )
                 }
             }
             .sorted { $0.recordedAt < $1.recordedAt }

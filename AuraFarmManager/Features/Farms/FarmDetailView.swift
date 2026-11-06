@@ -5,7 +5,7 @@ import SwiftUI
 /// under them.
 struct FarmDetailView: View {
     @Bindable var farm: Farm
-    @Binding var selection: SoilTest.ID?
+    @Binding var selection: PersistentIdentifier?
 
     @Environment(\.modelContext) private var modelContext
     @State private var isEditingFarm = false

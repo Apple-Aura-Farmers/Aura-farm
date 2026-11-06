@@ -10,7 +10,7 @@ struct SoilTestListView: View {
     }
 
     let scope: Scope
-    @Binding var selection: SoilTest.ID?
+    @Binding var selection: PersistentIdentifier?
 
     @Query(sort: \SoilTest.recordedAt, order: .reverse) private var allTests: [SoilTest]
 

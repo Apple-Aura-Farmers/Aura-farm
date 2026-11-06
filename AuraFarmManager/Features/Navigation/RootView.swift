@@ -10,7 +10,7 @@ struct RootView: View {
     @Environment(SoilReportImportCoordinator.self) private var importCoordinator
 
     @State private var sidebarSelection: SidebarItem? = .inbox
-    @State private var selectedTestID: SoilTest.ID?
+    @State private var selectedTestID: PersistentIdentifier?
     @State private var isImporting = false
 
     var body: some View {
