@@ -72,6 +72,60 @@ final class PanoramaStitcherTests: XCTestCase {
         XCTAssertEqual(try XCTUnwrap(offsets[3]).x, Double(2 * step), accuracy: 2)
     }
 
+    func testASingleBadFrameIsSteppedOverRatherThanEndingTheSweep() throws {
+        // A steady pan with one frame from elsewhere dropped into the middle of it. Giving
+        // up at the break would cost every frame after it; the run should carry on.
+        // The windows start at 180 because the generated texture is too sparse for
+        // registration around x = 120, which would fail the pan for its own reasons.
+        let first = 180
+        let source = makeTexturedImage(width: 900, height: frameHeight)
+        let urls = try write(
+            windows: [first, first + step, 700, first + 2 * step, first + 3 * step], of: source)
+
+        let offsets = try PanoramaStitcher.offsets(for: urls)
+
+        XCTAssertNil(offsets[2], "the odd frame should be the one left out")
+        XCTAssertEqual(try XCTUnwrap(offsets[0]), .zero)
+        XCTAssertEqual(try XCTUnwrap(offsets[1]).x, Double(step), accuracy: 2)
+        XCTAssertEqual(try XCTUnwrap(offsets[3]).x, Double(2 * step), accuracy: 2)
+        XCTAssertEqual(try XCTUnwrap(offsets[4]).x, Double(3 * step), accuracy: 2)
+    }
+
+    func testTheSeamBetweenTwoFramesIsFadedRatherThanCut() throws {
+        // Two windows overlapping by most of their width. Pasting leaves a step in
+        // brightness down the line where the second frame starts; feathering should not.
+        let source = makeTexturedImage(width: 400, height: frameHeight)
+        let urls = try write(windows: [0, step], of: source)
+
+        let panorama = try PanoramaStitcher.stitch(frameURLs: urls)
+        let expected = try XCTUnwrap(
+            source.cropping(
+                to: CGRect(
+                    x: 0, y: 0, width: panorama.image.width, height: panorama.image.height)))
+        // Feathering averages two views of the same slide, so it has to stay faithful to it.
+        assertLooksTheSame(panorama.image, expected)
+
+        // Walk the columns and find the biggest jump from one to the next. A hard seam shows
+        // up as one column stepping away from its neighbour far more than the texture does.
+        let columns = columnMeans(of: panorama.image)
+        let biggestStep = zip(columns, columns.dropFirst()).map { abs($0 - $1) }.max() ?? 0
+        XCTAssertLessThan(biggestStep, 12, "a seam this sharp means the frames were pasted")
+    }
+
+    func testAnEnormousCanvasIsPastedRatherThanFeathered() throws {
+        // Feathering holds four floats a pixel, so past the cap it has to fall back. The
+        // picture still has to come out right.
+        let source = makeTexturedImage(width: 400, height: frameHeight)
+        let urls = try write(windows: [0, step, 2 * step], of: source)
+
+        let feathered = try PanoramaStitcher.stitch(frameURLs: urls)
+        let pasted = try PanoramaStitcher.stitch(frameURLs: urls, maxBlendPixels: 0)
+
+        XCTAssertEqual(feathered.image.width, pasted.image.width)
+        XCTAssertEqual(feathered.image.height, pasted.image.height)
+        assertLooksTheSame(pasted.image, feathered.image)
+    }
+
     func testOneFrameIsNotAPanorama() throws {
         let source = makeTexturedImage(width: 400, height: frameHeight)
         let urls = try write(windows: [0], of: source)
@@ -156,6 +210,16 @@ final class PanoramaStitcherTests: XCTestCase {
         // JPEG is out of the way, so anything beyond a few levels means the frames were laid
         // down in the wrong place.
         XCTAssertLessThan(difference, 6, "average pixel difference", file: file, line: line)
+    }
+
+    /// The mean grey of each column, for spotting a seam running down the picture.
+    private func columnMeans(of image: CGImage) -> [Double] {
+        let pixels = grayPixels(of: image)
+        return (0..<image.width).map { x in
+            var total = 0.0
+            for y in 0..<image.height { total += Double(pixels[y * image.width + x]) }
+            return total / Double(image.height)
+        }
     }
 
     private func grayPixels(of image: CGImage) -> [UInt8] {

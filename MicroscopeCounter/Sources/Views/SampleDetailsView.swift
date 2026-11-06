@@ -7,6 +7,14 @@ struct SampleDetailsView: View {
 
     var body: some View {
         Form {
+            Section {
+                NavigationLink {
+                    SamplePrepView()
+                } label: {
+                    Label("How to prepare the sample", systemImage: "testtube.2")
+                }
+            }
+
             Section("Sample") {
                 TextField("Sample ID", text: $details.sampleID)
                     .textInputAutocapitalization(.characters)
@@ -51,15 +59,17 @@ private struct NumberRow: View {
 }
 
 #Preview {
-    SampleDetailsView(
-        details: .constant(
-            RecordingMetadata(
-                sampleID: "A12",
-                field: 1,
-                moisture: .drained,
-                gramsOfSoil: 10,
-                millilitresScanned: 0.5,
-                recordedAt: .now
-            )
-        ))
+    NavigationStack {
+        SampleDetailsView(
+            details: .constant(
+                RecordingMetadata(
+                    sampleID: "A12",
+                    field: 1,
+                    moisture: .drained,
+                    gramsOfSoil: 10,
+                    millilitresScanned: 0.5,
+                    recordedAt: .now
+                )
+            ))
+    }
 }
