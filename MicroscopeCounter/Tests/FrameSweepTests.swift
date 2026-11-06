@@ -211,4 +211,18 @@ final class FrameSweepTests: XCTestCase {
         XCTAssertEqual(pattern.position(of: 11).column, 3)
     }
 
+    func testTheRowsOfASweepRunInAlternatingDirections() {
+        let layout = SweepLayout(frameCount: 12)
+        XCTAssertEqual(layout.indices(inRow: 0, frameCount: 12), [0, 1, 2, 3])
+        XCTAssertEqual(layout.indices(inRow: 1, frameCount: 12), [7, 6, 5, 4])
+        XCTAssertEqual(layout.indices(inRow: 2, frameCount: 12), [8, 9, 10, 11])
+    }
+
+    func testASweepThatStoppedEarlyStillGetsItsLastPartRow() {
+        // Nine frames is two full rows and one on its own, not two rows with a frame lost.
+        let layout = SweepLayout(frameCount: 9)
+        XCTAssertEqual(layout.rows, 3)
+        XCTAssertEqual(layout.indices(inRow: 2, frameCount: 9), [8])
+    }
+
 }
