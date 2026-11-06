@@ -194,4 +194,21 @@ final class FrameSweepTests: XCTestCase {
         XCTAssertEqual(sweep.bytesWritten, 0)
         XCTAssertEqual(sweep.prompt, .move(.right, kept: 0, of: 3))
     }
+
+    func testTheSweepPatternNumbersTheFieldsTheWayTheSlideIsWalked() {
+        let pattern = SweepPatternView()
+
+        // First row runs left to right, the next comes back the other way, and so on, so
+        // the slide is only ever nudged on from where it already is.
+        XCTAssertEqual(pattern.position(of: 0).row, 0)
+        XCTAssertEqual(pattern.position(of: 0).column, 0)
+        XCTAssertEqual(pattern.position(of: 3).column, 3)
+        XCTAssertEqual(pattern.position(of: 4).row, 1)
+        XCTAssertEqual(pattern.position(of: 4).column, 3, "row two starts under the end of row one")
+        XCTAssertEqual(pattern.position(of: 7).column, 0)
+        XCTAssertEqual(pattern.position(of: 8).row, 2)
+        XCTAssertEqual(pattern.position(of: 8).column, 0)
+        XCTAssertEqual(pattern.position(of: 11).column, 3)
+    }
+
 }

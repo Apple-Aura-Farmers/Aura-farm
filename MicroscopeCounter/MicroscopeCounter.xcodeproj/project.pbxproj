@@ -36,6 +36,7 @@
 		2B00000000000000000011 /* FrameSetRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A00000000000000000011 /* FrameSetRecorder.swift */; };
 		2B00000000000000000012 /* SampleDetailsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A00000000000000000012 /* SampleDetailsView.swift */; };
 		2B00000000000000000036 /* SamplePrepView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A00000000000000000036 /* SamplePrepView.swift */; };
+		2B00000000000000000037 /* SweepPatternView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A00000000000000000037 /* SweepPatternView.swift */; };
 		2B00000000000000000013 /* FrameSetRecorderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A00000000000000000013 /* FrameSetRecorderTests.swift */; };
 		2B00000000000000000014 /* SampleSetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A00000000000000000014 /* SampleSetupView.swift */; };
 		2B00000000000000000015 /* FrameSetLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A00000000000000000015 /* FrameSetLibrary.swift */; };
@@ -83,6 +84,7 @@
 		1A00000000000000000011 /* FrameSetRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrameSetRecorder.swift; sourceTree = "<group>"; };
 		1A00000000000000000012 /* SampleDetailsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleDetailsView.swift; sourceTree = "<group>"; };
 		1A00000000000000000036 /* SamplePrepView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SamplePrepView.swift; sourceTree = "<group>"; };
+		1A00000000000000000037 /* SweepPatternView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SweepPatternView.swift; sourceTree = "<group>"; };
 		1A00000000000000000013 /* FrameSetRecorderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrameSetRecorderTests.swift; sourceTree = "<group>"; };
 		3C0000000000000000000001 /* MicroscopeCounter.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MicroscopeCounter.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		3C0000000000000000000002 /* MicroscopeCounterTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MicroscopeCounterTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -175,6 +177,7 @@
 				1A0000000000000000000007 /* CaptureCheckView.swift */,
 				1A00000000000000000012 /* SampleDetailsView.swift */,
 				1A00000000000000000036 /* SamplePrepView.swift */,
+				1A00000000000000000037 /* SweepPatternView.swift */,
 				1A00000000000000000016 /* FrameSetsView.swift */,
 				1A0000000000000000024 /* DebugStitchView.swift */,
 				1A0000000000000000033 /* DetectVideoView.swift */,
@@ -319,6 +322,7 @@
 				2B0000000000000000000007 /* CaptureCheckView.swift in Sources */,
 				2B00000000000000000012 /* SampleDetailsView.swift in Sources */,
 				2B00000000000000000036 /* SamplePrepView.swift in Sources */,
+				2B00000000000000000037 /* SweepPatternView.swift in Sources */,
 				2B00000000000000000016 /* FrameSetsView.swift in Sources */,
 				2B0000000000000000024 /* DebugStitchView.swift in Sources */,
 				2B0000000000000000025 /* SoilDetector.mlpackage in Sources */,
