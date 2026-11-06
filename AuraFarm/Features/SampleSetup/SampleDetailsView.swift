@@ -13,9 +13,13 @@ struct SampleDetailsView: View {
                 } label: {
                     Label("How to prepare the sample", systemImage: "testtube.2")
                 }
+            } header: {
+                Text("Step 1")
+            } footer: {
+                Text("Mix the sample, make the slide and mount the phone before you start.")
             }
 
-            Section("Sample") {
+            Section("Step 2 · Sample") {
                 TextField("Sample ID", text: $details.sampleID)
                     .textInputAutocapitalization(.characters)
                     .autocorrectionDisabled()

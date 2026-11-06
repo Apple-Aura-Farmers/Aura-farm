@@ -47,6 +47,9 @@ enum SoilReportExporter {
                 moisture: details.moisture.rawValue,
                 gramsOfSoil: details.gramsOfSoil,
                 millilitresScanned: details.millilitresScanned,
+                // Every slide is made to the one recipe, so that is what this one followed.
+                millilitresOfWater: SamplePreparation.millilitresOfWater,
+                preparation: SamplePreparation.summary,
                 recordedAt: details.recordedAt
             ),
             capture: SoilReport.Capture(

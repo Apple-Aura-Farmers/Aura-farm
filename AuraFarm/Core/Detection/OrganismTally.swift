@@ -172,3 +172,20 @@ struct OrganismTally {
         (box.width + box.height) / 2
     }
 }
+
+extension OrganismTally.Found {
+    /// A detection in the tally's terms. Vision gives the box as a share of the frame from
+    /// the bottom left; the tally works in frame pixels from the top left.
+    init(_ detection: OrganismDetector.Detection, frameWidth: Double, frameHeight: Double) {
+        self.init(
+            label: detection.label,
+            box: CGRect(
+                x: detection.box.minX * frameWidth,
+                y: (1 - detection.box.maxY) * frameHeight,
+                width: detection.box.width * frameWidth,
+                height: detection.box.height * frameHeight
+            ),
+            confidence: detection.confidence
+        )
+    }
+}

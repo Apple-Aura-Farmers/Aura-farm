@@ -83,8 +83,10 @@ final class SoilReportCodecTests: XCTestCase {
                 sampleID: "A12",
                 microscopeField: 1,
                 moisture: "flooded",
-                gramsOfSoil: 10,
-                millilitresScanned: 0.5,
+                gramsOfSoil: 1,
+                millilitresScanned: nil,
+                millilitresOfWater: 10,
+                preparation: "1 g soil in 10 mL water, settled 1 min, one droplet",
                 recordedAt: recordedAt
             ),
             capture: SoilReport.Capture(

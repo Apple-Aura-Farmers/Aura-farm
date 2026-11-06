@@ -18,6 +18,8 @@ struct CaptureView: View {
     @Environment(\.dismiss) private var dismiss
     /// Owned by the setup screen, so the field number it counts up survives leaving the camera.
     @Binding var details: SampleDetails
+    /// Told the saved sweep's folder name when a sweep finishes, so its result can be shown.
+    var onSweepSaved: (String) -> Void = { _ in }
 
     var body: some View {
         ZStack {
@@ -69,8 +71,9 @@ struct CaptureView: View {
         // A saved sweep means this field is done: count up and go back to the menu,
         // where the frames can be looked through.
         .onChange(of: model.recorder.lastSavedName) { _, saved in
-            guard saved != nil else { return }
+            guard let saved else { return }
             details.field += 1
+            onSweepSaved(saved)
             dismiss()
         }
         // Buzz when a new problem appears.

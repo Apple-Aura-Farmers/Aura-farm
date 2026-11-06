@@ -188,9 +188,24 @@ The simulator name has to match a runtime installed on your machine;
 The camera does not work in the Simulator. Test the capture screen on a real iPhone,
 mounted on the microscope.
 
-To try the hand-off end to end: on the iPhone, open a sweep in Saved sweeps, tap Send to
-Mac and AirDrop it to your Mac, then open the file there. Run the farm manager once first
-so the Mac knows it opens `.aurafarm` files.
+### Try the whole flow, iPhone to Mac
+
+No microscope needed: a recorded microscope video goes through exactly the pipeline the
+camera does.
+
+1. **Mac:** run the `AuraFarmManager` scheme on My Mac once, so the Mac knows it opens
+   `.aurafarm` files. Leave it open.
+2. **iPhone:** run the `AuraFarm` scheme on your iPhone. Put a microscope recording in
+   Photos first.
+3. **Prepare:** on the first screen, Step 1 opens the preparation guide: the mix, making
+   the slide, mounting the phone, and the path to walk the slide along.
+4. **Sample:** type a sample ID, then tap **Use a recorded video**. Choose the video, set
+   where the slide starts moving steadily, and tap **Run sample**. With a microscope, tap
+   **Start** instead and follow the arrows.
+5. **Result:** when the sweep finishes, the result shows what was counted per organism
+   group. Tap **Send to Mac** and AirDrop it to your Mac.
+6. **Mac:** the report opens in Aura Farm Manager's Inbox. Add a farm and a field in the
+   sidebar, then file the test under the field.
 
 ## Repository layout
 

@@ -8,9 +8,20 @@ import SwiftUI
 struct SamplePrepView: View {
     /// The recipe, kept here as data so the amounts are in one place rather than spread
     /// through the sentences.
-    static let gramsOfSoil = 1.0
-    static let millilitresOfWater = 10.0
-    static let settlingMinutes = 1
+    static let gramsOfSoil = SamplePreparation.gramsOfSoil
+    static let millilitresOfWater = SamplePreparation.millilitresOfWater
+    static let settlingMinutes = SamplePreparation.settlingMinutes
+
+    /// Getting the phone's camera to look down the eyepiece. PROTOTYPE: written for the demo,
+    /// not yet checked against the team's microscope and phone holder.
+    static let mountingSteps = [
+        "Put the slide on the stage and turn the light on under it.",
+        "Focus on the slide by eye first, with the 10x objective, so the view is about 100x.",
+        "Clamp the phone holder onto the eyepiece.",
+        "Line the phone's main camera up over the eyepiece until the round view fills the "
+            + "middle of the screen.",
+        "Fine-tune focus with the focus slider in the app, not the phone's autofocus.",
+    ]
 
     private struct Step: Identifiable {
         var id: Int
@@ -87,6 +98,24 @@ struct SamplePrepView: View {
                     .accessibilityLabel(
                         "Step \(step.id). \(step.title). \(step.detail ?? "")")
                 }
+            }
+
+            Section {
+                ForEach(Array(Self.mountingSteps.enumerated()), id: \.offset) { index, step in
+                    HStack(alignment: .firstTextBaseline, spacing: 12) {
+                        Text("\(index + 1)")
+                            .font(.headline.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                            .frame(width: 18, alignment: .trailing)
+                            .accessibilityHidden(true)
+                        Text(step)
+                    }
+                    .accessibilityElement(children: .combine)
+                }
+            } header: {
+                Text("Mounting the phone")
+            } footer: {
+                Text("Prototype guidance. Check it against your own microscope and phone holder.")
             }
 
             Section {

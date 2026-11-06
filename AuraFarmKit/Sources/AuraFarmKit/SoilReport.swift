@@ -89,6 +89,12 @@ extension SoilReport {
         public var gramsOfSoil: Double?
         /// Extract placed on the slide and scanned, in millilitres.
         public var millilitresScanned: Double?
+        /// Water the soil was mixed into, in millilitres. nil in reports from before it was
+        /// recorded.
+        public var millilitresOfWater: Double?
+        /// How the slide was made, in words, so tests made differently are not compared.
+        /// nil in reports from before it was recorded.
+        public var preparation: String?
         /// When the sweep was recorded.
         public var recordedAt: Date
 
@@ -98,6 +104,8 @@ extension SoilReport {
             moisture: String,
             gramsOfSoil: Double?,
             millilitresScanned: Double?,
+            millilitresOfWater: Double? = nil,
+            preparation: String? = nil,
             recordedAt: Date
         ) {
             self.sampleID = sampleID
@@ -105,6 +113,8 @@ extension SoilReport {
             self.moisture = moisture
             self.gramsOfSoil = gramsOfSoil
             self.millilitresScanned = millilitresScanned
+            self.millilitresOfWater = millilitresOfWater
+            self.preparation = preparation
             self.recordedAt = recordedAt
         }
     }

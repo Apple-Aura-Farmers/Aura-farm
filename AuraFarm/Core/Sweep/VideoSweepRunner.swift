@@ -5,11 +5,11 @@ import Observation
 
 /// Runs a recorded video through the capture pipeline, frame by frame, as if it were coming
 /// from the camera: the same analyzer, the same quality check, the same sweep rules and the
-/// same writer. It exists so stitching can be tried against real microscope footage on a
-/// machine with no microscope attached.
+/// same writer, and the same detector and tally. It exists so the whole pipeline, stitching
+/// and counting included, can be tried against real microscope footage without a microscope.
 ///
-/// It writes an ordinary sweep, so what comes out can be opened in Saved sweeps like any
-/// other. Nothing here touches the video it reads.
+/// It writes an ordinary sweep, counts included, so what comes out can be opened in Saved
+/// sweeps and sent to the Mac like any other. Nothing here touches the video it reads.
 @Observable
 final class VideoSweepRunner {
     private(set) var isRunning = false
@@ -86,6 +86,11 @@ final class VideoSweepRunner {
             return ("The folder for this sweep could not be created.", nil, sweep.progress)
         }
 
+        // Counting the way the camera does. A sweep is still worth having if the detector
+        // cannot open, so its counts are saved as missing rather than as zero.
+        let detector = try? OrganismDetector(computeUnits: .cpuAndGPU)
+        var tally = OrganismTally()
+
         var frameNumber = 0
         var analyzed = 0
         while !sweep.isFinished, let sample = output.copyNextSampleBuffer() {
@@ -103,6 +108,17 @@ final class VideoSweepRunner {
             )
             monitor.update(with: reading)
 
+            // Every analyzed frame is counted, kept or not, as on the camera: the tally needs
+            // to see the ground between kept frames to follow what it has already counted.
+            if let detector, let detections = try? detector.detections(in: buffer) {
+                let width = Double(CVPixelBufferGetWidth(buffer))
+                let height = Double(CVPixelBufferGetHeight(buffer))
+                tally.update(
+                    found: detections.map { OrganismTally.Found($0, frameWidth: width, frameHeight: height) },
+                    pictureMoved: CaptureViewModel.pictureMoved(registered: shake.lastShift)
+                )
+            }
+
             let step = sweep.update(
                 isSettled: monitor.hasSettled,
                 issue: monitor.topIssue,
@@ -115,9 +131,13 @@ final class VideoSweepRunner {
         reader.cancelReading()
 
         let kept = sweep.keptCount
-        let finished = recorder.finish(stoppedEarly: !sweep.isFinished)
+        let finished = recorder.finish(
+            stoppedEarly: !sweep.isFinished,
+            organismCounts: detector == nil ? nil : tally.countByLabel
+        )
 
         var message = "Read \(analyzed) frames, kept \(kept)."
+        message += detector == nil ? " The detector could not open." : " Counted \(tally.total)."
         if kept == 0 {
             message +=
                 " Nothing was steady and sharp enough, or the view never travelled far enough"

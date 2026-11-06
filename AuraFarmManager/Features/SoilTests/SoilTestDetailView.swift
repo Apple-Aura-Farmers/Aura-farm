@@ -100,7 +100,10 @@ struct SoilTestDetailView: View {
             }
             LabeledContent("Soil", value: test.moistureLabel)
             LabeledContent("Soil used", value: Self.amount(test.gramsOfSoil, unit: "g"))
-            LabeledContent("Extract scanned", value: Self.amount(test.millilitresScanned, unit: "mL"))
+            LabeledContent("Water", value: Self.amount(test.millilitresOfWater, unit: "mL"))
+            if !test.preparation.isEmpty {
+                LabeledContent("Preparation", value: test.preparation)
+            }
             LabeledContent("Microscope field", value: "\(test.microscopeField)")
         }
     }

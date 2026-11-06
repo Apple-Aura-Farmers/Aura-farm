@@ -21,6 +21,9 @@ final class SoilTest {
     var moisture: String
     var gramsOfSoil: Double? = nil
     var millilitresScanned: Double? = nil
+    var millilitresOfWater: Double? = nil
+    /// How the slide was made, in words. Empty for reports from before it was recorded.
+    var preparation: String = ""
     var frameCount: Int
     /// True when the sweep stopped at its size limit instead of finishing its path.
     var stoppedEarly: Bool
@@ -46,6 +49,8 @@ final class SoilTest {
         self.moisture = report.sample.moisture
         self.gramsOfSoil = report.sample.gramsOfSoil
         self.millilitresScanned = report.sample.millilitresScanned
+        self.millilitresOfWater = report.sample.millilitresOfWater
+        self.preparation = report.sample.preparation ?? ""
         self.frameCount = report.capture.frameCount
         self.stoppedEarly = report.capture.stoppedEarly
         self.detectorModel = report.capture.detectorModel

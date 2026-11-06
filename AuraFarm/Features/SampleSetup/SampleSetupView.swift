@@ -12,6 +12,9 @@ struct SampleSetupView: View {
         recordedAt: .now
     )
     @State private var showCamera = false
+    @State private var showRecordedSample = false
+    /// The sweep the camera just saved, to show its result.
+    @State private var finishedSweep: SavedSweep?
 
     var body: some View {
         NavigationStack {
@@ -51,21 +54,42 @@ struct SampleSetupView: View {
                     #endif
                 }
                 .safeAreaInset(edge: .bottom) {
-                    Button {
-                        showCamera = true
-                    } label: {
-                        Text("Start")
-                            .font(.title3.bold())
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 6)
+                    VStack(spacing: 8) {
+                        Button {
+                            showCamera = true
+                        } label: {
+                            Text("Start")
+                                .font(.title3.bold())
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 6)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(!details.isComplete)
+
+                        // Prototype: the same pipeline, fed from a recorded microscope video.
+                        Button {
+                            showRecordedSample = true
+                        } label: {
+                            Label("Use a recorded video", systemImage: "film")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(!details.isComplete)
                     .padding()
                     .background(.bar)
                 }
                 .navigationDestination(isPresented: $showCamera) {
-                    CaptureView(details: $details)
+                    CaptureView(details: $details) { name in
+                        finishedSweep = SweepLibrary.sweeps().first { $0.name == name }
+                    }
+                }
+                .navigationDestination(isPresented: $showRecordedSample) {
+                    RecordedSampleView(details: $details)
+                }
+                .sheet(item: $finishedSweep) { sweep in
+                    NavigationStack {
+                        SoilTestResultView(sweep: sweep)
+                    }
                 }
         }
     }

@@ -15,6 +15,8 @@ final class SoilReportExporterTests: XCTestCase {
         XCTAssertEqual(report.sample.gramsOfSoil, 10)
         XCTAssertEqual(report.capture.frameCount, 12)
         XCTAssertEqual(report.capture.detectorModel, OrganismDetector.modelName)
+        XCTAssertEqual(report.sample.millilitresOfWater, SamplePreparation.millilitresOfWater)
+        XCTAssertEqual(report.sample.preparation, SamplePreparation.summary)
         // Most counted first; a group found zero times is left out.
         XCTAssertEqual(
             report.organisms,
