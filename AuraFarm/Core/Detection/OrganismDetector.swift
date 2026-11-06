@@ -5,8 +5,12 @@ import Vision
 /// The trained detector: a YOLO26n model exported to Core ML with non-maximum suppression
 /// built into the model, so Vision hands back finished boxes rather than raw tensors.
 ///
-/// The model was trained on soil microscopy frames and knows five classes: Arcellinida,
-/// Digononta, Monogononta, Nematoda and Hypotrichida.
+/// The model knows five classes, named as it names them: euglena, paramecium, stentor,
+/// volvox and vorticella.
+///
+/// Two other trained weights were tried against the same footage. The nineteen-class one
+/// answered "Nematode" with a box covering the whole frame on 74 of its 134 hits, which is
+/// the model shrugging rather than finding anything, so this one is in instead.
 ///
 /// `computeUnits` is open so the benchmark can hold the Neural Engine, the GPU and the CPU
 /// against each other. Anywhere else, leave it at `.all` and let Core ML choose.
@@ -32,6 +36,24 @@ struct OrganismDetector {
 
     /// Xcode compiles `SoilDetector.mlpackage` into `SoilDetector.mlmodelc` in the bundle.
     static let modelName = "SoilDetector"
+
+    /// A box covering more of the frame than this is thrown away before anything counts it.
+    ///
+    /// The nineteen-class weights answered "Nematode" with a box covering the whole frame on
+    /// 74 of their 134 hits on real microscope footage, median 108% of the frame, which is
+    /// the model shrugging rather than finding anything. Boxes on things that are really
+    /// there measured 1% to 9% of the frame across the same footage and two still datasets,
+    /// so the gap either side of this is wide.
+    ///
+    /// Not calibrated against a stage. At a low enough magnification one large organism
+    /// could fill this much of the field honestly, and it would be dropped.
+    static let largestBoxShare = 0.8
+
+    /// Whether a box is the model answering about the whole picture rather than finding
+    /// something in it. The box is a share of the frame, so its area is one already.
+    static func coversWholeFrame(_ box: CGRect) -> Bool {
+        box.width * box.height > largestBoxShare
+    }
 
     private let visionModel: VNCoreMLModel
 
@@ -59,7 +81,7 @@ struct OrganismDetector {
         request.imageCropAndScaleOption = .scaleFill
         try handler.perform([request])
         let observations = request.results as? [VNRecognizedObjectObservation] ?? []
-        return observations.map { observation in
+        return observations.filter { !Self.coversWholeFrame($0.boundingBox) }.map { observation in
             Detection(
                 label: observation.labels.first?.identifier ?? "?",
                 confidence: observation.labels.first?.confidence ?? 0,

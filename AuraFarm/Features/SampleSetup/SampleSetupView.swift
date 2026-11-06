@@ -7,7 +7,7 @@ struct SampleSetupView: View {
         sampleID: "",
         field: 1,
         moisture: .drained,
-        gramsOfSoil: nil,
+        gramsOfSoil: SamplePrepView.gramsOfSoil,
         millilitresScanned: nil,
         recordedAt: .now
     )
@@ -33,6 +33,11 @@ struct SampleSetupView: View {
                                     VideoStitchWorkbenchView()
                                 } label: {
                                     Label("Stitch from video", systemImage: "film")
+                                }
+                                NavigationLink {
+                                    DetectVideoView()
+                                } label: {
+                                    Label("Detect from video", systemImage: "viewfinder")
                                 }
                                 NavigationLink {
                                     DetectorBenchmarkView()

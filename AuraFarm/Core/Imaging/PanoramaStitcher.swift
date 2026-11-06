@@ -11,6 +11,11 @@ import Vision
 ///
 /// The panorama is a derived file. The frames it is built from are the raw data and are
 /// never edited or deleted to make it.
+///
+/// Two things here follow Akbar's write-up on stitching microscope images with OpenPano
+/// (auriza.github.io/micro-stitch): frames are feathered together rather than pasted, with
+/// the weight falling off vertically as well as horizontally, and a frame that will not
+/// match is stepped over instead of ending the sweep.
 enum PanoramaStitcher {
     enum Failure: Error, Equatable {
         case notEnoughFrames
@@ -33,33 +38,68 @@ enum PanoramaStitcher {
     /// treated as a failure to line up rather than clamped or guessed at.
     static let maxShiftFraction = 0.5
 
+    /// Above this many pixels the frames are pasted rather than feathered, because
+    /// feathering holds four floats per pixel of canvas: 8 megapixels is 128 MB of working
+    /// memory, and the sweeps this app records come out at 2.9 to 4.7 megapixels.
+    static let maxBlendPixels = 8_000_000
+
     /// Where each frame sits on the canvas, in pixels from its top-left corner, or nil for a
     /// frame that was left out. The first frame laid down is the origin, so offsets can be
     /// negative.
     ///
-    /// Each frame is registered against the one before it, so a pair that does not match breaks
-    /// the chain. The longest unbroken run is laid down and the rest are left out: one frame
-    /// pasted far out of place spoils the whole picture. Nothing is deleted, the frames are all
+    /// Each frame is registered against the one before it. When a pair does not match, the
+    /// frame after it is tried against the same anchor: if that one matches, the odd frame
+    /// was a single bad frame and it is stepped over, and the run carries on. A sweep's rows
+    /// overlap enough that skipping one frame still leaves the next within reach.
+    ///
+    /// Only when the frame after will not match either is the chain really broken, and the
+    /// run ends there. The longest run is laid down and the rest left out: one frame pasted
+    /// far out of place spoils the whole picture. Nothing is deleted, the frames are all
     /// still on disk.
+    ///
+    /// Stepping over the bad frame is what Akbar's write-up settles on after finding that
+    /// abandoning everything downstream of a failure throws away most of a sweep: on one of
+    /// its five sets, recovering this way cost 4 frames where giving up cost 13.
     static func offsets(for urls: [URL]) throws -> [CGPoint?] {
         guard urls.count >= 2 else { throw Failure.notEnoughFrames }
 
-        var runs: [(start: Int, offsets: [CGPoint])] = [(start: 0, offsets: [.zero])]
-        var previous = try load(urls[0])
+        var runs: [(indices: [Int], offsets: [CGPoint])] = [(indices: [0], offsets: [.zero])]
+        var anchor = try load(urls[0])
+        var index = 1
 
-        for index in 1..<urls.count {
+        while index < urls.count {
             let current = try load(urls[index])
-            if let shift = contentShift(from: previous, to: current),
+            if let shift = contentShift(from: anchor, to: current),
                 let last = runs[runs.count - 1].offsets.last
             {
                 // The content moved by `shift` between the two frames, so this frame has to be
                 // laid down that much further back for the content to line up again.
+                runs[runs.count - 1].indices.append(index)
                 runs[runs.count - 1].offsets.append(
                     CGPoint(x: last.x - shift.x, y: last.y - shift.y))
-            } else {
-                runs.append((start: index, offsets: [.zero]))
+                anchor = current
+                index += 1
+                continue
             }
-            previous = current
+
+            // Is it this frame that is bad, or has the sweep really jumped? Ask the frame
+            // after it, against the same anchor.
+            if index + 1 < urls.count,
+                let next = try? load(urls[index + 1]),
+                let shift = contentShift(from: anchor, to: next),
+                let last = runs[runs.count - 1].offsets.last
+            {
+                runs[runs.count - 1].indices.append(index + 1)
+                runs[runs.count - 1].offsets.append(
+                    CGPoint(x: last.x - shift.x, y: last.y - shift.y))
+                anchor = next
+                index += 2
+                continue
+            }
+
+            runs.append((indices: [index], offsets: [.zero]))
+            anchor = current
+            index += 1
         }
 
         guard let longest = runs.max(by: { $0.offsets.count < $1.offsets.count }),
@@ -68,7 +108,7 @@ enum PanoramaStitcher {
 
         var placed = [CGPoint?](repeating: nil, count: urls.count)
         for (position, offset) in longest.offsets.enumerated() {
-            placed[longest.start + position] = offset
+            placed[longest.indices[position]] = offset
         }
         return placed
     }
@@ -81,9 +121,11 @@ enum PanoramaStitcher {
 
     /// Draws the frames onto one canvas. Later frames are drawn over earlier ones, so the
     /// newest look at a patch of slide wins where they overlap.
-    static func stitch(frameURLs: [URL], maxCanvasPixels: Int = defaultMaxCanvasPixels) throws
-        -> Panorama
-    {
+    static func stitch(
+        frameURLs: [URL],
+        maxCanvasPixels: Int = defaultMaxCanvasPixels,
+        maxBlendPixels: Int = maxBlendPixels
+    ) throws -> Panorama {
         let offsets = try offsets(for: frameURLs)
         var placed: [(url: URL, offset: CGPoint, size: CGSize)] = []
         for (index, url) in frameURLs.enumerated() {
@@ -117,6 +159,12 @@ enum PanoramaStitcher {
                 bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue
             )
         else { throw Failure.couldNotDraw }
+
+        if width * height <= maxBlendPixels,
+            let feathered = try feather(placed, width: width, height: height, canvas: frame)
+        {
+            return Panorama(image: feathered, framesLeftOut: frameURLs.count - placed.count)
+        }
 
         context.setFillColor(CGColor(gray: 0, alpha: 1))
         context.fill(CGRect(x: 0, y: 0, width: width, height: height))
@@ -152,6 +200,102 @@ enum PanoramaStitcher {
     }
 
     // MARK: Private
+
+    /// Averages the frames together rather than letting the last one drawn win, weighting
+    /// each pixel by how near the middle of its own frame it is. A pasted frame leaves a
+    /// hard line wherever one ends and the next begins; this fades them into each other.
+    ///
+    /// The weight is OpenPano's, `(0.5 - |x/width - 0.5|)` across, but multiplied by the
+    /// same falloff down the frame. OpenPano applies the vertical term only for unordered
+    /// input, because it joins left to right; a sweep walks rows as well as columns, so the
+    /// seams run both ways and both terms are always needed.
+    ///
+    /// Returns nil if the buffers could not be made, and the caller pastes instead.
+    private static func feather(
+        _ placed: [(url: URL, offset: CGPoint, size: CGSize)],
+        width: Int, height: Int, canvas: CGRect
+    ) throws -> CGImage? {
+        let pixelCount = width * height
+        var totals = [Float](repeating: 0, count: pixelCount * 3)
+        var weights = [Float](repeating: 0, count: pixelCount)
+
+        for item in placed {
+            let image = try load(item.url)
+            let frameWidth = image.width
+            let frameHeight = image.height
+            var pixels = [UInt8](repeating: 0, count: frameWidth * frameHeight * 4)
+            guard
+                let reader = CGContext(
+                    data: &pixels, width: frameWidth, height: frameHeight, bitsPerComponent: 8,
+                    bytesPerRow: frameWidth * 4, space: CGColorSpaceCreateDeviceRGB(),
+                    bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)
+            else { return nil }
+            reader.draw(
+                image, in: CGRect(x: 0, y: 0, width: frameWidth, height: frameHeight))
+
+            // Both buffers count rows from the bottom, the way CGContext draws, so the
+            // frame's place on the canvas is worked out the same way as when pasting.
+            let left = Int((item.offset.x - canvas.minX).rounded())
+            let top = item.offset.y - canvas.minY
+            let bottom = Int((canvas.height - top - item.size.height).rounded())
+
+            pixels.withUnsafeBufferPointer { source in
+                totals.withUnsafeMutableBufferPointer { totals in
+                    weights.withUnsafeMutableBufferPointer { weights in
+                        for y in 0..<frameHeight {
+                            let canvasY = bottom + y
+                            guard canvasY >= 0, canvasY < height else { continue }
+                            // Never quite zero, so a pixel only one frame reaches still
+                            // divides back out to the colour that frame saw.
+                            let down = max(
+                                0.5 - abs(Float(y) / Float(frameHeight) - 0.5), 0.0001)
+                            for x in 0..<frameWidth {
+                                let canvasX = left + x
+                                guard canvasX >= 0, canvasX < width else { continue }
+                                let across = max(
+                                    0.5 - abs(Float(x) / Float(frameWidth) - 0.5), 0.0001)
+                                let weight = across * down
+                                let from = (y * frameWidth + x) * 4
+                                let into = canvasY * width + canvasX
+                                totals[into * 3] += Float(source[from]) * weight
+                                totals[into * 3 + 1] += Float(source[from + 1]) * weight
+                                totals[into * 3 + 2] += Float(source[from + 2]) * weight
+                                weights[into] += weight
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        var output = [UInt8](repeating: 0, count: pixelCount * 4)
+        output.withUnsafeMutableBufferPointer { output in
+            totals.withUnsafeBufferPointer { totals in
+                weights.withUnsafeBufferPointer { weights in
+                    for index in 0..<pixelCount {
+                        let weight = weights[index]
+                        // Canvas the frames never reached stays black, as it was when pasted.
+                        guard weight > 0 else { continue }
+                        for channel in 0..<3 {
+                            let value = totals[index * 3 + channel] / weight
+                            output[index * 4 + channel] = UInt8(
+                                max(0, min(255, value.rounded())))
+                        }
+                    }
+                }
+            }
+        }
+
+        return output.withUnsafeMutableBytes { bytes -> CGImage? in
+            guard
+                let context = CGContext(
+                    data: bytes.baseAddress, width: width, height: height, bitsPerComponent: 8,
+                    bytesPerRow: width * 4, space: CGColorSpaceCreateDeviceRGB(),
+                    bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)
+            else { return nil }
+            return context.makeImage()
+        }
+    }
 
     /// How far the picture moved between two frames, in pixels, or nil when the two do not
     /// have enough in common for the match to be trusted.

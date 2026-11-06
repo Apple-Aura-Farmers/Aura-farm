@@ -54,3 +54,6 @@ Package.resolved
 
 # Per-developer build settings (signing team). Start from Config/Local.example.xcconfig.
 Config/Local.xcconfig
+
+# Derived data from a command-line xcodebuild run.
+testbuild/

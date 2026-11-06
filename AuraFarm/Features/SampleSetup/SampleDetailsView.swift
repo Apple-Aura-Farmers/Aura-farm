@@ -7,6 +7,14 @@ struct SampleDetailsView: View {
 
     var body: some View {
         Form {
+            Section {
+                NavigationLink {
+                    SamplePrepView()
+                } label: {
+                    Label("How to prepare the sample", systemImage: "testtube.2")
+                }
+            }
+
             Section("Sample") {
                 TextField("Sample ID", text: $details.sampleID)
                     .textInputAutocapitalization(.characters)
@@ -18,48 +26,22 @@ struct SampleDetailsView: View {
                     }
                 }
             }
-            Section("Amounts") {
-                NumberRow(title: "Grams of soil", value: $details.gramsOfSoil)
-                NumberRow(title: "mL scanned", value: $details.millilitresScanned)
-            }
         }
-    }
-}
-
-/// Starts empty rather than at 0, so an untyped amount never looks like a measured one.
-private struct NumberRow: View {
-    let title: String
-    @Binding var value: Double?
-    @State private var text = ""
-
-    var body: some View {
-        HStack {
-            Text(title)
-            Spacer()
-            TextField("", text: $text)
-                .keyboardType(.decimalPad)
-                .multilineTextAlignment(.trailing)
-                .frame(width: 110)
-                .accessibilityLabel(title)
-                .onChange(of: text) { _, typed in
-                    // Accepts a decimal comma, which some keyboards give instead of a point.
-                    value = Double(typed.replacingOccurrences(of: ",", with: "."))
-                }
-        }
-        .onAppear { text = value.map { $0.formatted(.number) } ?? "" }
     }
 }
 
 #Preview {
-    SampleDetailsView(
-        details: .constant(
-            SampleDetails(
-                sampleID: "A12",
-                field: 1,
-                moisture: .drained,
-                gramsOfSoil: 10,
-                millilitresScanned: 0.5,
-                recordedAt: .now
-            )
-        ))
+    NavigationStack {
+        SampleDetailsView(
+            details: .constant(
+                SampleDetails(
+                    sampleID: "A12",
+                    field: 1,
+                    moisture: .drained,
+                    gramsOfSoil: 10,
+                    millilitresScanned: 0.5,
+                    recordedAt: .now
+                )
+            ))
+    }
 }
