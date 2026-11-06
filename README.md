@@ -125,7 +125,7 @@ opens in Saved sweeps like any other. Put `.mov` or `.mp4` files in the app's
 `Documents/DebugVideos` folder — on a simulator:
 
 ```bash
-xcrun simctl get_app_container booted com.example.microscopecounter data
+xcrun simctl get_app_container booted io.github.apple-aura-farmers.aurafarm data
 ```
 
 then copy them into `Documents/DebugVideos` inside what it prints. On a phone the app's
@@ -137,18 +137,21 @@ a part that is not will come back as frames that could not be joined.
 ## Getting started
 
 ```bash
-open MicroscopeCounter/MicroscopeCounter.xcodeproj
+cp Config/Local.example.xcconfig Config/Local.xcconfig   # then put your team ID in it
+open AuraFarm.xcodeproj
 ```
 
-Set your Team under Signing & Capabilities for both targets and replace the
-placeholder bundle ID `com.example.microscopecounter`.
+Signing lives in `Config/Local.xcconfig`, which is gitignored, so set your team there
+rather than under Signing & Capabilities (that writes it into the shared project file).
+Bundle identifiers start with `AURA_BUNDLE_ID_PREFIX` from `Config/Base.xcconfig`; override
+it in your `Local.xcconfig` if it is already registered to another team.
 
 Requires iOS 17 or later, iPhone, portrait only. No third-party dependencies.
 
 Run the unit tests:
 
 ```bash
-xcodebuild test -scheme MicroscopeCounter -destination 'platform=iOS Simulator,name=iPhone 17'
+xcodebuild test -scheme AuraFarm -destination 'platform=iOS Simulator,name=iPhone 17'
 ```
 
 The simulator name has to match a runtime installed on your machine;
@@ -160,12 +163,19 @@ mounted on the microscope.
 ## Repository layout
 
 ```
-MicroscopeCounter/
-  Sources/
-    App/        App entry point
-    Capture/    Camera session, frame analysis, quality monitor, recording
-    Views/      SwiftUI screens
-  Tests/        Unit tests
+AuraFarm.xcodeproj      The Xcode project. Target folders are synchronized: a file
+                        added to one on disk is in that target, no project edit needed.
+AuraFarm/               iOS field app
+  App/                  App entry point
+  Core/
+    Imaging/            Frame analysis, quality check, panorama stitching
+    Sweep/              Sweep rules, recorder, saved-sweep library, sample details
+    Detection/          Core ML organism detector, tally, benchmark
+  Features/             SwiftUI screens, one folder per feature
+    SampleSetup/  Capture/  SweepLibrary/  Workbench/
+  Resources/            Core ML model
+AuraFarmTests/          Unit tests for the iOS app
+Config/                 Shared xcconfig, Info.plist additions, your gitignored Local.xcconfig
 ```
 
 ## Contributing

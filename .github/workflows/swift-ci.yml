@@ -43,8 +43,8 @@ jobs:
       - name: Test
         run: |
           xcodebuild test \
-            -project MicroscopeCounter/MicroscopeCounter.xcodeproj \
-            -scheme MicroscopeCounter \
+            -project AuraFarm.xcodeproj \
+            -scheme AuraFarm \
             -destination "id=${{ steps.sim.outputs.udid }}" \
             -resultBundlePath TestResults.xcresult \
             CODE_SIGNING_ALLOWED=NO
@@ -67,4 +67,4 @@ jobs:
       - name: swift-format lint
         run: |
           xcrun swift-format lint --recursive --strict \
-            MicroscopeCounter/Sources MicroscopeCounter/Tests
+            AuraFarm AuraFarmTests

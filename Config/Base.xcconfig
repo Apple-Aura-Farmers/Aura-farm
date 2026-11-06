@@ -1,0 +1,14 @@
+// Build settings shared by every target and every developer.
+//
+// Per-developer values, such as your signing team, go in Config/Local.xcconfig. That file is
+// gitignored, so a teammate's team ID never lands in a pull request. Start from
+// Config/Local.example.xcconfig.
+
+// Every bundle identifier in the project starts with this. Override it in Local.xcconfig if
+// the default is already registered to another team.
+AURA_BUNDLE_ID_PREFIX = io.github.apple-aura-farmers
+
+// Set in Local.xcconfig. CI builds without signing, so it is not needed there.
+DEVELOPMENT_TEAM =
+
+#include? "Local.xcconfig"

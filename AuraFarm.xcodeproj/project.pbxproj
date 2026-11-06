@@ -1,0 +1,394 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXContainerItemProxy section */
+		9D37F3D5D8D6DA3610516E4B /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 46F86FAA6BBF9AC94A7E4595 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AC82A56DADE9490C6266E031;
+			remoteInfo = AuraFarm;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		84ED7D0120B576BF6D11D6DA /* AuraFarm.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AuraFarm.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		5FB2731037DECEBE98931F8A /* AuraFarmTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AuraFarmTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		CC1E047DDFE73CEDEAC8234A /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Base.xcconfig; sourceTree = "<group>"; };
+		741176162224DE8C476991CB /* Local.example.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Local.example.xcconfig; sourceTree = "<group>"; };
+		73FB7E2E6EAFB81057032C5C /* AuraFarm-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "AuraFarm-Info.plist"; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		4C13F7E86811430535F74193 /* AuraFarm */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = AuraFarm;
+			sourceTree = "<group>";
+		};
+		01A668C3D00B28E542C28A57 /* AuraFarmTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = AuraFarmTests;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		66508D23676586ECAED7CE50 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		959749FF7547F8080F0617D9 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		71DC27D9F8E3B109C877BFC4 = {
+			isa = PBXGroup;
+			children = (
+				4C13F7E86811430535F74193 /* AuraFarm */,
+				01A668C3D00B28E542C28A57 /* AuraFarmTests */,
+				89B104369EBC5E85E7E43C6B /* Config */,
+				113236722DEE1DC96F378B9D /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		89B104369EBC5E85E7E43C6B /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				CC1E047DDFE73CEDEAC8234A /* Base.xcconfig */,
+				741176162224DE8C476991CB /* Local.example.xcconfig */,
+				73FB7E2E6EAFB81057032C5C /* AuraFarm-Info.plist */,
+			);
+			path = Config;
+			sourceTree = "<group>";
+		};
+		113236722DEE1DC96F378B9D /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				84ED7D0120B576BF6D11D6DA /* AuraFarm.app */,
+				5FB2731037DECEBE98931F8A /* AuraFarmTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		AC82A56DADE9490C6266E031 /* AuraFarm */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 218ECE3DF0348606B29D13F0 /* Build configuration list for PBXNativeTarget "AuraFarm" */;
+			buildPhases = (
+				D7A3EA0B87279358BC5D4F8B /* Sources */,
+				66508D23676586ECAED7CE50 /* Frameworks */,
+				F5C7652308D8761E4A16AE51 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				4C13F7E86811430535F74193 /* AuraFarm */,
+			);
+			name = AuraFarm;
+			packageProductDependencies = (
+			);
+			productName = AuraFarm;
+			productReference = 84ED7D0120B576BF6D11D6DA /* AuraFarm.app */;
+			productType = "com.apple.product-type.application";
+		};
+		9E8FC280BF0D2B773764BFED /* AuraFarmTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D84DFC70657534399B90996E /* Build configuration list for PBXNativeTarget "AuraFarmTests" */;
+			buildPhases = (
+				2C7EEA3C0D66485A70FCCAB6 /* Sources */,
+				959749FF7547F8080F0617D9 /* Frameworks */,
+				6F80D12DFD7A36AC699D715C /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				3F63645E2BA839ED73B59205 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				01A668C3D00B28E542C28A57 /* AuraFarmTests */,
+			);
+			name = AuraFarmTests;
+			packageProductDependencies = (
+			);
+			productName = AuraFarmTests;
+			productReference = 5FB2731037DECEBE98931F8A /* AuraFarmTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		46F86FAA6BBF9AC94A7E4595 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1600;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					AC82A56DADE9490C6266E031 = {
+						CreatedOnToolsVersion = 16.0;
+					};
+					9E8FC280BF0D2B773764BFED = {
+						CreatedOnToolsVersion = 16.0;
+						TestTargetID = AC82A56DADE9490C6266E031;
+					};
+				};
+			};
+			buildConfigurationList = 946392D46B65BE2E368A0D3B /* Build configuration list for PBXProject "AuraFarm" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 71DC27D9F8E3B109C877BFC4;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 113236722DEE1DC96F378B9D /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				AC82A56DADE9490C6266E031 /* AuraFarm */,
+				9E8FC280BF0D2B773764BFED /* AuraFarmTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		F5C7652308D8761E4A16AE51 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		6F80D12DFD7A36AC699D715C /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		D7A3EA0B87279358BC5D4F8B /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		2C7EEA3C0D66485A70FCCAB6 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		3F63645E2BA839ED73B59205 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AC82A56DADE9490C6266E031 /* AuraFarm */;
+			targetProxy = 9D37F3D5D8D6DA3610516E4B /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		5E1134544568A0C1B09E583D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = CC1E047DDFE73CEDEAC8234A /* Base.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				ONLY_ACTIVE_ARCH = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		B3AFDE6F970A0432673383DD /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = CC1E047DDFE73CEDEAC8234A /* Base.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_VERSION = 5.0;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		EDE6FC8537F4448F01FBC917 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Config/AuraFarm-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Aura Farm";
+				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
+				INFOPLIST_KEY_NSCameraUsageDescription = "The camera looks through the microscope to check image quality and record soil samples.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UIFileSharingEnabled = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(AURA_BUNDLE_ID_PREFIX).aurafarm";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		D604D612E18D1A0FD2B082A5 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Config/AuraFarm-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Aura Farm";
+				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
+				INFOPLIST_KEY_NSCameraUsageDescription = "The camera looks through the microscope to check image quality and record soil samples.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UIFileSharingEnabled = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(AURA_BUNDLE_ID_PREFIX).aurafarm";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		B4B138851D93D9DFA07E7082 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(AURA_BUNDLE_ID_PREFIX).aurafarm.tests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/AuraFarm.app/AuraFarm";
+			};
+			name = Debug;
+		};
+		E818A9AC32ED058EEF01D391 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(AURA_BUNDLE_ID_PREFIX).aurafarm.tests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/AuraFarm.app/AuraFarm";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		946392D46B65BE2E368A0D3B /* Build configuration list for PBXProject "AuraFarm" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5E1134544568A0C1B09E583D /* Debug */,
+				B3AFDE6F970A0432673383DD /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		218ECE3DF0348606B29D13F0 /* Build configuration list for PBXNativeTarget "AuraFarm" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				EDE6FC8537F4448F01FBC917 /* Debug */,
+				D604D612E18D1A0FD2B082A5 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		D84DFC70657534399B90996E /* Build configuration list for PBXNativeTarget "AuraFarmTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B4B138851D93D9DFA07E7082 /* Debug */,
+				E818A9AC32ED058EEF01D391 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+	};
+	rootObject = 46F86FAA6BBF9AC94A7E4595 /* Project object */;
+}
