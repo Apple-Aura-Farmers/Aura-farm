@@ -26,35 +26,7 @@ struct SampleDetailsView: View {
                     }
                 }
             }
-            Section("Amounts") {
-                NumberRow(title: "Grams of soil", value: $details.gramsOfSoil)
-                NumberRow(title: "mL scanned", value: $details.millilitresScanned)
-            }
         }
-    }
-}
-
-/// Starts empty rather than at 0, so an untyped amount never looks like a measured one.
-private struct NumberRow: View {
-    let title: String
-    @Binding var value: Double?
-    @State private var text = ""
-
-    var body: some View {
-        HStack {
-            Text(title)
-            Spacer()
-            TextField("", text: $text)
-                .keyboardType(.decimalPad)
-                .multilineTextAlignment(.trailing)
-                .frame(width: 110)
-                .accessibilityLabel(title)
-                .onChange(of: text) { _, typed in
-                    // Accepts a decimal comma, which some keyboards give instead of a point.
-                    value = Double(typed.replacingOccurrences(of: ",", with: "."))
-                }
-        }
-        .onAppear { text = value.map { $0.formatted(.number) } ?? "" }
     }
 }
 

@@ -7,7 +7,7 @@ struct SampleSetupView: View {
         sampleID: "",
         field: 1,
         moisture: .drained,
-        gramsOfSoil: nil,
+        gramsOfSoil: SamplePrepView.gramsOfSoil,
         millilitresScanned: nil,
         recordedAt: .now
     )

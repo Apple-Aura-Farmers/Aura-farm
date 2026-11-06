@@ -28,20 +28,20 @@ final class FrameSetRecorderTests: XCTestCase {
         )
     }
 
-    func testIncompleteDetailsAreRejected() {
+    func testDetailsWithoutASampleIDAreRejected() {
         var incomplete = details()
-        incomplete.gramsOfSoil = nil
-        XCTAssertFalse(incomplete.isComplete)
-
-        incomplete.gramsOfSoil = 10
-        incomplete.millilitresScanned = nil
-        XCTAssertFalse(incomplete.isComplete)
-
-        incomplete.millilitresScanned = 0.5
         incomplete.sampleID = "   "
         XCTAssertFalse(incomplete.isComplete)
 
         XCTAssertTrue(details().isComplete)
+    }
+
+    func testTheAmountsAreNoLongerAskedForBeforeRecording() {
+        // They come from the preparation guide, so a clip with no droplet volume recorded
+        // is still traceable and still allowed.
+        var details = details()
+        details.millilitresScanned = nil
+        XCTAssertTrue(details.isComplete)
     }
 
     func testFreeURLNeverWritesIntoAnExistingSweep() throws {

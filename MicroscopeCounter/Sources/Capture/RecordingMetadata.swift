@@ -8,9 +8,11 @@ struct RecordingMetadata: Codable, Equatable {
     /// Which microscope field of this sample, counted from 1.
     var field: Int
     var moisture: Moisture
-    /// Soil used for the extraction, in grams. nil until the helper types it in.
+    /// Soil used for the extraction, in grams. Taken from the preparation guide rather
+    /// than typed in, because every sample is made the same way.
     var gramsOfSoil: Double?
-    /// Extract placed on the slide and scanned, in millilitres. nil until the helper types it in.
+    /// Extract placed on the slide and scanned, in millilitres. Nothing measures a droplet,
+    /// so this stays nil unless something later can put a real figure in it.
     var millilitresScanned: Double?
     var recordedAt: Date
 
@@ -23,10 +25,11 @@ struct RecordingMetadata: Codable, Equatable {
     }
 
     /// True when the clip can be traced later. Recording is blocked until then.
+    ///
+    /// The sample ID is the whole of it now: the amounts follow the preparation guide and
+    /// are filled in from it, so there is nothing left for the helper to forget.
     var isComplete: Bool {
         !sampleID.trimmingCharacters(in: .whitespaces).isEmpty
-            && (gramsOfSoil ?? 0) > 0
-            && (millilitresScanned ?? 0) > 0
     }
 
     /// Base name for the clip and its sidecar: safe as a file name and sorts by time.
