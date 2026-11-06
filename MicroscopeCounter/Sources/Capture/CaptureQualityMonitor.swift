@@ -7,7 +7,18 @@ struct CaptureQualityThresholds {
     /// Mean brightness (0...255) below this counts as too dark.
     var minBrightness: Double = 60
     /// Variance of the Laplacian below this counts as blurry.
-    var minSharpness: Double = 100
+    ///
+    /// NOT CALIBRATED against a stage, but measured on one 60 second stretch of real
+    /// microscope footage, 600 analyzed frames: sharpness ran from 0.8 at the 5th percentile
+    /// to 13.2 at its highest, median 6.0. The 100 this started at was a guess and nothing in
+    /// that footage came near it, so 585 of the 600 frames were called blurry and a sweep
+    /// kept nothing.
+    ///
+    /// What separates a usable frame from a smeared one on that footage is movement: frames
+    /// where the view had moved under 150 px had a median sharpness of 6.3, and frames where
+    /// it had moved more than that had a median of 1.0. This sits between the two. A
+    /// different microscope, eyepiece or phone will need its own number.
+    var minSharpness: Double = 2
     /// Average frame-to-frame shift (pixels, full frame) above this counts as shaky.
     var maxShakePixels: Double = 3
     /// Consecutive bad readings needed before an issue is raised.

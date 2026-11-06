@@ -51,6 +51,7 @@ final class VideoSweepRunner {
         let sweep = FrameSweep()
         let monitor = CaptureQualityMonitor()
         let shake = ShakeEstimator()
+        let travel = TravelSinceLastFrame()
         let recorder = FrameSetRecorder()
         // This is the stitching workbench, so joining the frames is the point of the run.
         recorder.joinsFrames = true
@@ -106,10 +107,12 @@ final class VideoSweepRunner {
             let step = sweep.update(
                 isSettled: monitor.hasSettled,
                 issue: monitor.topIssue,
-                shift: shake.lastShift
+                shift: shake.lastShift,
+                travel: travel.distance(to: buffer)
             )
-            if step == .keepFrame, let bytes = recorder.write(buffer) {
-                sweep.addWrittenBytes(bytes)
+            if step == .keepFrame {
+                travel.hold(buffer)
+                if let bytes = recorder.write(buffer) { sweep.addWrittenBytes(bytes) }
             }
         }
         reader.cancelReading()

@@ -3,10 +3,12 @@ import XCTest
 @testable import MicroscopeCounter
 
 final class CaptureQualityMonitorTests: XCTestCase {
-    private let good = CaptureQualityReading(brightness: 120, sharpness: 300, shakePixels: 0.5)
-    private let dark = CaptureQualityReading(brightness: 20, sharpness: 5, shakePixels: 0.5)
-    private let blurry = CaptureQualityReading(brightness: 120, sharpness: 10, shakePixels: 0.5)
-    private let shaky = CaptureQualityReading(brightness: 120, sharpness: 300, shakePixels: 9)
+    // Sharpness either side of minSharpness. Real microscope footage measured 0.8 to 13.2,
+    // so these are close to its own range rather than round numbers.
+    private let good = CaptureQualityReading(brightness: 120, sharpness: 6, shakePixels: 0.5)
+    private let dark = CaptureQualityReading(brightness: 20, sharpness: 0.5, shakePixels: 0.5)
+    private let blurry = CaptureQualityReading(brightness: 120, sharpness: 0.5, shakePixels: 0.5)
+    private let shaky = CaptureQualityReading(brightness: 120, sharpness: 6, shakePixels: 9)
 
     private func feed(_ reading: CaptureQualityReading, times: Int, into monitor: CaptureQualityMonitor) {
         for _ in 0..<times { monitor.update(with: reading) }
@@ -57,7 +59,7 @@ final class CaptureQualityMonitorTests: XCTestCase {
 
     func testTopIssueFollowsPriorityOrder() {
         let monitor = CaptureQualityMonitor()
-        let blurryAndShaky = CaptureQualityReading(brightness: 120, sharpness: 10, shakePixels: 9)
+        let blurryAndShaky = CaptureQualityReading(brightness: 120, sharpness: 0.5, shakePixels: 9)
         feed(blurryAndShaky, times: monitor.thresholds.readingsToRaise, into: monitor)
         XCTAssertEqual(monitor.activeIssues, [.blurry, .shaky])
         XCTAssertEqual(monitor.topIssue, .blurry)

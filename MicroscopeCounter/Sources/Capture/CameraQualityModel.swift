@@ -39,6 +39,7 @@ final class CameraQualityModel: NSObject {
 
     @ObservationIgnored private let monitor = CaptureQualityMonitor()
     @ObservationIgnored private let shakeEstimator = ShakeEstimator()
+    @ObservationIgnored private let travel = TravelSinceLastFrame()
     @ObservationIgnored private var frameCount = 0
     /// Analyze every Nth frame: about 10 fps at 30 fps capture.
     @ObservationIgnored private let analyzeEveryNthFrame = 3
@@ -84,6 +85,7 @@ final class CameraQualityModel: NSObject {
         analysisQueue.async { [weak self] in
             guard let self, !self.sweepActive else { return }
             self.sweep.reset()
+            self.travel.reset()
             self.tally.reset()
             self.openDetector()
             guard self.recorder.begin(details: details) else { return }
@@ -307,9 +309,13 @@ extension CameraQualityModel: AVCaptureVideoDataOutputSampleBufferDelegate {
         count(in: buffer)
         // Shake is not passed as a blocker: a sweep is the slide moving, so the sweep
         // decides for itself which issues stop a frame being kept.
-        let step = sweep.update(isSettled: settled, issue: top, shift: shakeEstimator.lastShift)
-        if step == .keepFrame, let bytes = recorder.write(buffer) {
-            sweep.addWrittenBytes(bytes)
+        let step = sweep.update(
+            isSettled: settled, issue: top, shift: shakeEstimator.lastShift,
+            travel: travel.distance(to: buffer)
+        )
+        if step == .keepFrame {
+            travel.hold(buffer)
+            if let bytes = recorder.write(buffer) { sweep.addWrittenBytes(bytes) }
         }
         publishPrompt(sweep.prompt, sweep.progress)
         if sweep.isFinished {
