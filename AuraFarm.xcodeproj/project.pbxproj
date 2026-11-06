@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		87D63309CF8EED96A02FA376 /* AuraFarmKit in Frameworks */ = {isa = PBXBuildFile; productRef = 328C0DD016C1485FB148287C /* AuraFarmKit */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		9D37F3D5D8D6DA3610516E4B /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -42,6 +46,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				87D63309CF8EED96A02FA376 /* AuraFarmKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -104,6 +109,7 @@
 			);
 			name = AuraFarm;
 			packageProductDependencies = (
+				328C0DD016C1485FB148287C /* AuraFarmKit */,
 			);
 			productName = AuraFarm;
 			productReference = 84ED7D0120B576BF6D11D6DA /* AuraFarm.app */;
@@ -160,6 +166,9 @@
 			);
 			mainGroup = 71DC27D9F8E3B109C877BFC4;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				EEDDE6742326E92E2FA695ED /* XCLocalSwiftPackageReference "AuraFarmKit" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 113236722DEE1DC96F378B9D /* Products */;
 			projectDirPath = "";
@@ -389,6 +398,19 @@
 		};
 /* End XCConfigurationList section */
 
+/* Begin XCLocalSwiftPackageReference section */
+		EEDDE6742326E92E2FA695ED /* XCLocalSwiftPackageReference "AuraFarmKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = AuraFarmKit;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		328C0DD016C1485FB148287C /* AuraFarmKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = AuraFarmKit;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 46F86FAA6BBF9AC94A7E4595 /* Project object */;
 }

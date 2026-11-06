@@ -49,6 +49,7 @@ struct SweepLibraryView: View {
         parts.append(set.recordedAt.formatted(date: .abbreviated, time: .shortened))
         if set.panoramaURL == nil, set.frameCount > 1 { parts.append("frames not joined") }
         if set.manifest?.stoppedEarly == true { parts.append("stopped at the size limit") }
+        if let counted = set.manifest?.totalOrganismCount { parts.append("\(counted) counted") }
         if set.manifest == nil { parts.append("sample details missing") }
         return parts.joined(separator: " · ")
     }

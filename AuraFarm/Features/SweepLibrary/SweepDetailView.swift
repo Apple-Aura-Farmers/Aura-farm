@@ -27,6 +27,9 @@ struct SweepDetailView: View {
     @GestureState private var pinch = 1.0
     /// Decoded once, so playback does not stall on reading each frame off disk.
     @State private var frames: [UIImage] = []
+    /// The soil report for the farm manager, written when the screen opens. nil while it is
+    /// being written, and for a sweep that has nothing to send.
+    @State private var reportURL: URL?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -63,8 +66,17 @@ struct SweepDetailView: View {
             ToolbarItem(placement: .topBarTrailing) {
                 Toggle("Grayscale", isOn: $showGrayscale).toggleStyle(.button)
             }
+            ToolbarItem(placement: .topBarTrailing) {
+                // AirDrop it to the Mac, or save it to Files and open it there.
+                if let reportURL {
+                    ShareLink(item: reportURL) {
+                        Label("Send to Mac", systemImage: "laptopcomputer.and.arrow.down")
+                    }
+                }
+            }
         }
         .task { await loadFrames() }
+        .task { await prepareReport() }
         .task(id: isPlaying) { await playIfNeeded() }
         .onChange(of: mode) { _, new in
             if new == .panorama { isPlaying = false }
@@ -188,7 +200,16 @@ struct SweepDetailView: View {
             "\(manifest.details.sampleID) · field \(manifest.details.field) · \(manifest.details.moisture.label)"
         line += " · \(sweep.byteCount.formatted(.byteCount(style: .file)))"
         if manifest.stoppedEarly { line += " · stopped at the size limit" }
+        if let counted = manifest.totalOrganismCount { line += " · \(counted) counted" }
         return line
+    }
+
+    /// Writes the report off the main thread: it can carry the panorama, which is a few MB.
+    private func prepareReport() async {
+        let sweep = sweep
+        reportURL = await Task.detached(priority: .utility) {
+            try? SoilReportExporter.writeTemporaryFile(for: sweep)
+        }.value
     }
 
     /// Reading and decoding happens off the main thread; only the array is handed back to it.

@@ -56,6 +56,16 @@ jobs:
           name: TestResults
           path: TestResults.xcresult
 
+  kit:
+    name: AuraFarmKit tests
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      # The report format both apps share. Foundation only, so it tests on its own in
+      # seconds, without an app or a simulator.
+      - run: swift test --package-path AuraFarmKit
+
   lint:
     name: Format check
     runs-on: macos-15
@@ -67,4 +77,4 @@ jobs:
       - name: swift-format lint
         run: |
           xcrun swift-format lint --recursive --strict \
-            AuraFarm AuraFarmTests
+            AuraFarm AuraFarmTests AuraFarmKit

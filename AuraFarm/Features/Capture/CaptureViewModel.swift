@@ -98,7 +98,7 @@ final class CaptureViewModel: NSObject {
         analysisQueue.async { [weak self] in
             guard let self, self.sweepActive else { return }
             self.sweepActive = false
-            self.recorder.finish(stoppedEarly: !self.sweep.isFinished)
+            self.recorder.finish(stoppedEarly: !self.sweep.isFinished, organismCounts: self.countsToSave)
             self.clearBoxes()
         }
     }
@@ -231,6 +231,12 @@ final class CaptureViewModel: NSObject {
         publishCount(frameWidth: width, frameHeight: height)
     }
 
+    /// What this sweep counted, to save with its frames. nil when the detector never opened,
+    /// so a sweep that was not counted is not saved as one that found nothing.
+    private var countsToSave: [String: Int]? {
+        detector == nil ? nil : tally.countByLabel
+    }
+
     /// The sweep is over, so nothing is outlined any more. The count stays on screen.
     private func clearBoxes() {
         DispatchQueue.main.async { [weak self] in self?.countedBoxes = [] }
@@ -303,7 +309,10 @@ extension CaptureViewModel: AVCaptureVideoDataOutputSampleBufferDelegate {
         publishPrompt(sweep.prompt, sweep.progress)
         if sweep.isFinished {
             sweepActive = false
-            recorder.finish(stoppedEarly: sweep.bytesWritten >= sweep.thresholds.maxBytes)
+            recorder.finish(
+                stoppedEarly: sweep.bytesWritten >= sweep.thresholds.maxBytes,
+                organismCounts: countsToSave
+            )
             clearBoxes()
         }
     }

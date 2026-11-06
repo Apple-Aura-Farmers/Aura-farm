@@ -17,4 +17,13 @@ struct SweepManifest: Codable, Equatable {
     /// out of it. The frames are kept either way: the panorama is derived, they are the raw
     /// data.
     var panoramaProblem: String?
+    /// What the detector counted in this sweep, by class label. Empty when it ran and found
+    /// nothing; nil when it did not run, and for a sweep saved before counts were kept, so a
+    /// sweep that was never counted is not mistaken for one that found nothing.
+    var organismCounts: [String: Int]?
+
+    /// Every organism counted, or nil when the sweep was not counted.
+    var totalOrganismCount: Int? {
+        organismCounts.map { $0.values.reduce(0, +) }
+    }
 }

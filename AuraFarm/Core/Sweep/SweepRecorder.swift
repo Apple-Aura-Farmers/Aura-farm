@@ -108,8 +108,10 @@ final class SweepRecorder {
         var panoramaProblem: String?
     }
 
+    /// - Parameter organismCounts: what the detector counted, saved with the sweep. nil when it
+    ///   did not run.
     @discardableResult
-    func finish(stoppedEarly: Bool) -> Finished? {
+    func finish(stoppedEarly: Bool, organismCounts: [String: Int]? = nil) -> Finished? {
         guard let folder, let details else { return nil }
         self.folder = nil
         self.details = nil
@@ -135,7 +137,8 @@ final class SweepRecorder {
             byteCount: frameBytes,
             stoppedEarly: stoppedEarly,
             panoramaFile: joined.file,
-            panoramaProblem: joined.problem
+            panoramaProblem: joined.problem,
+            organismCounts: organismCounts
         )
         if frameCount == 1 { manifest.panoramaProblem = nil }
 
