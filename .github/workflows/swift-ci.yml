@@ -1,5 +1,5 @@
 # Gate for merging into main: every pull request has to build and pass the unit
-# tests on an iOS Simulator before it is merged.
+# tests of the iOS app on a Simulator, of the Mac app, and of the shared package.
 name: Swift CI
 
 on:
@@ -56,6 +56,29 @@ jobs:
           name: TestResults
           path: TestResults.xcresult
 
+  mac:
+    name: Mac build and test
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      # The farm manager, which reads the reports the iPhone app sends.
+      - name: Test
+        run: |
+          xcodebuild test \
+            -project AuraFarm.xcodeproj \
+            -scheme AuraFarmManager \
+            -destination 'platform=macOS' \
+            -resultBundlePath MacTestResults.xcresult \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: MacTestResults
+          path: MacTestResults.xcresult
+
   kit:
     name: AuraFarmKit tests
     runs-on: macos-15
@@ -77,4 +100,4 @@ jobs:
       - name: swift-format lint
         run: |
           xcrun swift-format lint --recursive --strict \
-            AuraFarm AuraFarmTests AuraFarmKit
+            AuraFarm AuraFarmTests AuraFarmKit AuraFarmManager AuraFarmManagerTests
