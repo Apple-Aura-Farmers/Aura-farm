@@ -116,6 +116,39 @@ final class PanoramaStitcherTests: XCTestCase {
             PanoramaStitcher.leastAgreement)
     }
 
+    func testAWrongShiftIsCorrectedRatherThanTheFrameBeingDropped() throws {
+        let source = makeTexturedImage(width: 800, height: frameHeight)
+        let first = try XCTUnwrap(
+            source.cropping(to: CGRect(x: 0, y: 0, width: frameWidth, height: frameHeight)))
+        let second = try XCTUnwrap(
+            source.cropping(to: CGRect(x: step, y: 0, width: frameWidth, height: frameHeight)))
+        let grey = try XCTUnwrap(PanoramaStitcher.Grey(first))
+        let greyShifted = try XCTUnwrap(PanoramaStitcher.Grey(second))
+
+        // A confident wrong answer: 100 px short across and 40 px out down, the kind that
+        // looks like any other shift. The picture moved the other way from the frame.
+        let wrong = CGPoint(x: Double(-step + 100), y: 40)
+        let corrected = try XCTUnwrap(
+            PanoramaStitcher.shiftNearby(wrong, between: grey, and: greyShifted))
+
+        XCTAssertEqual(corrected.x, Double(-step), accuracy: 2)
+        XCTAssertEqual(corrected.y, 0, accuracy: 2)
+    }
+
+    func testThereIsNothingToCorrectTowardsWhenTheFramesAreOfDifferentGround() throws {
+        let source = makeTexturedImage(width: 800, height: frameHeight)
+        let first = try XCTUnwrap(
+            source.cropping(to: CGRect(x: 0, y: 0, width: frameWidth, height: frameHeight)))
+        let elsewhere = try XCTUnwrap(
+            source.cropping(to: CGRect(x: 600, y: 0, width: frameWidth, height: frameHeight)))
+        let grey = try XCTUnwrap(PanoramaStitcher.Grey(first))
+        let greyElsewhere = try XCTUnwrap(PanoramaStitcher.Grey(elsewhere))
+
+        // Searching around a wrong answer must not talk itself into one: these two frames
+        // have no shared ground to find, whatever shift is tried.
+        XCTAssertNil(PanoramaStitcher.shiftNearby(.zero, between: grey, and: greyElsewhere))
+    }
+
     func testASmallShiftIsStillRefusedWhenTheFramesDoNotAgree() throws {
         // A wrong answer that reports an ordinary shift is the one the size limit cannot
         // catch: two frames of different ground, claimed to be a few pixels apart.

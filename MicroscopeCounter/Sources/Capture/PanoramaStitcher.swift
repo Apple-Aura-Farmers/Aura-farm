@@ -65,6 +65,17 @@ enum PanoramaStitcher {
     /// a guess is worse than a frame left out.
     static let leastAgreement = 0.5
 
+    /// How far from registration's answer to look for a shift the frames do agree on, in
+    /// pixels. The misses worth correcting are near misses: on the sweep to hand the one
+    /// wrong answer was 104 px out, and on the photograph 58 px. An answer further out than
+    /// this is not a near miss but a pair that does not belong together.
+    static let searchReach = 150.0
+
+    /// The search looks over eighth-size copies first. A 1080 px frame comes down to 135 px,
+    /// which still carries the grit and debris the match turns on, and makes a search over
+    /// 1369 shifts a few hundredths of a second instead of several seconds.
+    static let coarseScale = 8
+
     /// Above this many pixels the frames are pasted rather than feathered, because
     /// feathering holds four floats per pixel of canvas: 8 megapixels is 128 MB of working
     /// memory, and the sweeps this app records come out at 2.9 to 4.7 megapixels.
@@ -344,76 +355,183 @@ enum PanoramaStitcher {
         // Registration answers with a shift and no word on whether it means it, so the answer
         // is checked against the frames themselves. The frame moved the other way from the
         // picture inside it.
-        let moved = CGPoint(x: -shift.x, y: -shift.y)
-        guard agreement(between: previous, and: current, movedBy: moved) >= leastAgreement
+        guard let first = Grey(previous), let second = Grey(current) else { return nil }
+        if first.agreement(with: second, movedBy: CGPoint(x: -shift.x, y: -shift.y))
+            >= leastAgreement
+        {
+            return shift
+        }
+
+        // Confident and wrong. The shift the frames do agree on is usually close by, so it is
+        // worth looking before giving the frame up.
+        return shiftNearby(shift, between: first, and: second)
+    }
+
+    /// Looks for a shift the two frames agree on, around the one registration gave. Returns
+    /// nil when the best it can find is still not agreement.
+    ///
+    /// Searched around registration's answer rather than over everything: an answer a whole
+    /// field out is not a near miss to be nudged into place but a pair that does not belong
+    /// together, and leaving it out is the right end for it.
+    ///
+    /// Coarse then fine. Eighth-size copies carry enough to find the right neighbourhood for
+    /// a few hundred thousand comparisons, and the answer is then settled a pixel at a time
+    /// at full size, since a frame laid down eight pixels out still shows at the seam.
+    ///
+    /// Only shifts inside `maxShiftFraction` are tried. That is not only the same rule the
+    /// caller applies: trying hundreds of shifts means hundreds of chances to land on a
+    /// spurious agreement, and a shift that leaves the two frames sharing a sliver is where
+    /// one is found. Holding the search to shifts that leave most of the frame shared is
+    /// what keeps it from talking itself into a match.
+    static func shiftNearby(_ proposed: CGPoint, between first: Grey, and second: Grey)
+        -> CGPoint?
+    {
+        guard let coarseFirst = first.scaledDown(by: coarseScale),
+            let coarseSecond = second.scaledDown(by: coarseScale)
         else { return nil }
-        return shift
+        let furthestX = Double(second.width) * maxShiftFraction
+        let furthestY = Double(second.height) * maxShiftFraction
+        func allowed(x: Int, y: Int) -> Bool {
+            Double(abs(x)) <= furthestX && Double(abs(y)) <= furthestY
+        }
+
+        let from = CGPoint(x: -proposed.x, y: -proposed.y)
+        let reach = Int(searchReach) / coarseScale
+        let centreX = Int(from.x.rounded()) / coarseScale
+        let centreY = Int(from.y.rounded()) / coarseScale
+        var best = (score: -2.0, x: 0, y: 0)
+        for y in (centreY - reach)...(centreY + reach) {
+            for x in (centreX - reach)...(centreX + reach)
+            where allowed(x: x * coarseScale, y: y * coarseScale) {
+                let score = coarseFirst.agreement(
+                    with: coarseSecond, movedBy: CGPoint(x: x, y: y), sampling: 1)
+                if score > best.score { best = (score, x * coarseScale, y * coarseScale) }
+            }
+        }
+        guard best.score > -2 else { return nil }
+
+        var settled = (score: -2.0, x: best.x, y: best.y)
+        for y in (best.y - coarseScale)...(best.y + coarseScale) {
+            for x in (best.x - coarseScale)...(best.x + coarseScale) where allowed(x: x, y: y) {
+                let score = first.agreement(with: second, movedBy: CGPoint(x: x, y: y))
+                if score > settled.score { settled = (score, x, y) }
+            }
+        }
+        guard settled.score >= leastAgreement else { return nil }
+        // Back to how the picture moved, which is what the caller works in.
+        return CGPoint(x: -Double(settled.x), y: -Double(settled.y))
     }
 
     /// How closely two frames agree on the ground they share, once one is moved onto the
-    /// other: 1 is the same ground seen twice, 0 is unrelated, and below 0 they disagree.
-    /// Normalised, so one frame being brighter or flatter than the other does not count
-    /// against it.
-    ///
-    /// Sampled every fourth pixel in each direction. The answer is a correlation over the
-    /// whole shared area, so leaving fifteen pixels in sixteen out of it changes the figure
-    /// in the third decimal and makes the check cost a few milliseconds a pair.
+    /// other. See `Grey.agreement(with:movedBy:sampling:)`.
     static func agreement(between previous: CGImage, and current: CGImage, movedBy: CGPoint)
         -> Double
     {
-        guard let first = grey(previous), let second = grey(current) else { return 0 }
-        let dx = Int(movedBy.x.rounded())
-        let dy = Int(movedBy.y.rounded())
-        // The part of `current` that lands on `previous` once it is moved.
-        let left = max(0, dx)
-        let right = min(previous.width, current.width + dx)
-        let top = max(0, dy)
-        let bottom = min(previous.height, current.height + dy)
-        guard right - left > 16, bottom - top > 16 else { return 0 }
-
-        var sumFirst = 0.0
-        var sumSecond = 0.0
-        var squaresFirst = 0.0
-        var squaresSecond = 0.0
-        var products = 0.0
-        var count = 0.0
-        for y in stride(from: top, to: bottom, by: 4) {
-            for x in stride(from: left, to: right, by: 4) {
-                let a = Double(first[y * previous.width + x])
-                let b = Double(second[(y - dy) * current.width + (x - dx)])
-                sumFirst += a
-                sumSecond += b
-                squaresFirst += a * a
-                squaresSecond += b * b
-                products += a * b
-                count += 1
-            }
-        }
-        guard count > 64 else { return 0 }
-
-        let covariance = products / count - (sumFirst / count) * (sumSecond / count)
-        let spreadFirst = squaresFirst / count - (sumFirst / count) * (sumFirst / count)
-        let spreadSecond = squaresSecond / count - (sumSecond / count) * (sumSecond / count)
-        // A frame of one flat colour correlates with nothing, itself included.
-        guard spreadFirst > 0.0001, spreadSecond > 0.0001 else { return 0 }
-        return covariance / (spreadFirst * spreadSecond).squareRoot()
+        guard let first = Grey(previous), let second = Grey(current) else { return 0 }
+        return first.agreement(with: second, movedBy: movedBy)
     }
 
-    private static func grey(_ image: CGImage) -> [UInt8]? {
-        var buffer = [UInt8](repeating: 0, count: image.width * image.height)
-        let drawn = buffer.withUnsafeMutableBytes { bytes -> Bool in
-            guard
-                let context = CGContext(
-                    data: bytes.baseAddress, width: image.width, height: image.height,
-                    bitsPerComponent: 8, bytesPerRow: image.width,
-                    space: CGColorSpaceCreateDeviceGray(),
-                    bitmapInfo: CGImageAlphaInfo.none.rawValue)
-            else { return false }
-            context.draw(
-                image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
-            return true
+    /// A frame as one grey value per pixel, which is all that comparing two of them needs.
+    /// Kept rather than drawn each time, because the search tries hundreds of shifts.
+    struct Grey {
+        var pixels: [UInt8]
+        var width: Int
+        var height: Int
+
+        init?(_ image: CGImage) {
+            width = image.width
+            height = image.height
+            pixels = [UInt8](repeating: 0, count: width * height)
+            guard draw(image) else { return nil }
         }
-        return drawn ? buffer : nil
+
+        private init(pixels: [UInt8], width: Int, height: Int) {
+            self.pixels = pixels
+            self.width = width
+            self.height = height
+        }
+
+        private mutating func draw(_ image: CGImage) -> Bool {
+            let size = CGRect(x: 0, y: 0, width: width, height: height)
+            let drawnWidth = width
+            let drawnHeight = height
+            return pixels.withUnsafeMutableBytes { bytes -> Bool in
+                guard
+                    let context = CGContext(
+                        data: bytes.baseAddress, width: drawnWidth, height: drawnHeight,
+                        bitsPerComponent: 8, bytesPerRow: drawnWidth,
+                        space: CGColorSpaceCreateDeviceGray(),
+                        bitmapInfo: CGImageAlphaInfo.none.rawValue)
+                else { return false }
+                context.interpolationQuality = .medium
+                context.draw(image, in: size)
+                return true
+            }
+        }
+
+        /// Every `factor`th pixel, averaged over the square it stands for, so a feature
+        /// smaller than the square still leaves a mark on the smaller copy.
+        func scaledDown(by factor: Int) -> Grey? {
+            let small = (width: width / factor, height: height / factor)
+            guard small.width > 8, small.height > 8 else { return nil }
+            var buffer = [UInt8](repeating: 0, count: small.width * small.height)
+            for y in 0..<small.height {
+                for x in 0..<small.width {
+                    var total = 0
+                    for innerY in 0..<factor {
+                        let row = (y * factor + innerY) * width + x * factor
+                        for innerX in 0..<factor { total += Int(pixels[row + innerX]) }
+                    }
+                    buffer[y * small.width + x] = UInt8(total / (factor * factor))
+                }
+            }
+            return Grey(pixels: buffer, width: small.width, height: small.height)
+        }
+
+        /// 1 is the same ground seen twice, 0 is unrelated, and below 0 they disagree.
+        /// Normalised, so one frame being brighter or flatter than the other does not count
+        /// against it.
+        ///
+        /// `sampling` is how many pixels to step between samples. The answer is a correlation
+        /// over the whole shared area, so leaving fifteen pixels in sixteen out of it changes
+        /// the figure in the third decimal and makes the check cost a few milliseconds.
+        func agreement(with other: Grey, movedBy: CGPoint, sampling: Int = 4) -> Double {
+            let dx = Int(movedBy.x.rounded())
+            let dy = Int(movedBy.y.rounded())
+            // The part of `other` that lands on this one once it is moved.
+            let left = max(0, dx)
+            let right = min(width, other.width + dx)
+            let top = max(0, dy)
+            let bottom = min(height, other.height + dy)
+            guard right - left > 8, bottom - top > 8 else { return -2 }
+
+            var sumFirst = 0.0
+            var sumSecond = 0.0
+            var squaresFirst = 0.0
+            var squaresSecond = 0.0
+            var products = 0.0
+            var count = 0.0
+            for y in stride(from: top, to: bottom, by: sampling) {
+                for x in stride(from: left, to: right, by: sampling) {
+                    let a = Double(pixels[y * width + x])
+                    let b = Double(other.pixels[(y - dy) * other.width + (x - dx)])
+                    sumFirst += a
+                    sumSecond += b
+                    squaresFirst += a * a
+                    squaresSecond += b * b
+                    products += a * b
+                    count += 1
+                }
+            }
+            guard count > 64 else { return -2 }
+
+            let covariance = products / count - (sumFirst / count) * (sumSecond / count)
+            let spreadFirst = squaresFirst / count - (sumFirst / count) * (sumFirst / count)
+            let spreadSecond = squaresSecond / count - (sumSecond / count) * (sumSecond / count)
+            // A frame of one flat colour correlates with nothing, itself included.
+            guard spreadFirst > 0.0001, spreadSecond > 0.0001 else { return -2 }
+            return covariance / (spreadFirst * spreadSecond).squareRoot()
+        }
     }
 
     private static func load(_ url: URL) throws -> CGImage {
