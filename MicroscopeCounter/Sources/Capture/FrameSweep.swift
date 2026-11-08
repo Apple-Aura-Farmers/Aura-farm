@@ -25,7 +25,7 @@ struct SweepThresholds {
     ///
     /// There is a ceiling either way. Frames are lined up by registration, which needs them to
     /// overlap, and `PanoramaStitcher.maxShiftFraction` refuses a pair that has moved more than
-    /// half a frame, so on a 1080 px wide frame this cannot go far above 400.
+    /// 0.4 of a frame, so on a 1080 px wide frame nothing above 432 can be joined at all.
     var shiftBetweenFrames: Double = 120
     /// A single reading above this means the slide was moved faster than frames can be placed
     /// against each other. Such a frame is not kept, because the next one could not be lined

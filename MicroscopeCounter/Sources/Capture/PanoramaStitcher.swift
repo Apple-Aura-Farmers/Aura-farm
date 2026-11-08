@@ -31,12 +31,24 @@ enum PanoramaStitcher {
     /// has drifted badly.
     static let defaultMaxCanvasPixels = 40_000_000
 
-    /// The most a frame may be judged to have moved, as a fraction of its own size. Two frames
-    /// that share less than half their area have too little in common for the match to be
-    /// trusted, and registration does sometimes return a confident, badly wrong answer. A
-    /// panorama with a frame pasted far out of place is worse than no panorama, so this is
-    /// treated as a failure to line up rather than clamped or guessed at.
-    static let maxShiftFraction = 0.5
+    /// The most a frame may be judged to have moved, as a fraction of its own size. Past this
+    /// two frames have too little in common for the match to be trusted, and registration
+    /// does sometimes return a confident, badly wrong answer. A panorama with a frame pasted
+    /// far out of place is worse than no panorama, so this is treated as a failure to line up
+    /// rather than clamped or guessed at.
+    ///
+    /// Measured, on one photograph. Cutting a 4000x3013 photograph into the twelve
+    /// overlapping fields a sweep walks and joining them back gives a known right answer for
+    /// every frame. Stepping 0.42 of a frame between them, each of the twelve landed on the
+    /// pixel it was cut from; at 0.44 and at 0.46 one pair came back 58 and 114 px wrong, and
+    /// the frames after it carried that error. So the point where registration stops being
+    /// trustworthy sits just above 0.42 on that picture, and this leaves a margin under it.
+    ///
+    /// NOT calibrated on a microscope. A star field is high-contrast points and a slide under
+    /// a lens is not, so the number this was measured at may not carry over. It costs nothing
+    /// on the footage to hand: of the eleven pairs in a sweep recorded through a microscope,
+    /// the six that 0.5 admitted are all under 0.37, so tightening refused none of them.
+    static let maxShiftFraction = 0.4
 
     /// Above this many pixels the frames are pasted rather than feathered, because
     /// feathering holds four floats per pixel of canvas: 8 megapixels is 128 MB of working

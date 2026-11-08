@@ -99,13 +99,16 @@ Known limitations:
 - Brightness does not detect over-exposure.
 - Joining the frames needs something to lock onto. On a field with little in it, the
   registration can return a confident but badly wrong match, and a frame pasted far out
-  of place makes the whole picture misleading. A shift of more than half a frame is
+  of place makes the whole picture misleading. A shift of more than 0.4 of a frame is
   therefore treated as a failure to line up: the sweep keeps its frames and says they
-  were not joined, rather than showing a panorama that cannot be trusted.
+  were not joined, rather than showing a panorama that cannot be trusted. That number
+  comes from cutting one photograph into twelve overlapping fields and joining them
+  back, where every frame's right place is known; it is not measured on a microscope.
 - A frame is kept once the view has moved far enough from where the last one was taken,
-  and only while the slide is moving slowly enough for the next frame to be lined up
-  against it. Moving it in a hurry does not lose ground — the travel still counts — but
-  no frame is kept until it slows down.
+  measured against that frame rather than added up along the way, and only while the
+  slide is moving slowly enough for the next frame to be lined up against it. Move it
+  far enough in one go and the last kept frame drops out of reach: the next usable frame
+  then starts a fresh run, and the two runs do not join.
 - Nothing checks free space before a sweep. A full phone fails part-way through, and
   the frames written so far are kept.
 - The app asks for a direction but cannot tell which way the slide actually went: the
