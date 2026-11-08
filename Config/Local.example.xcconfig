@@ -1,0 +1,9 @@
+// Copy this file to Config/Local.xcconfig and fill it in. Local.xcconfig is gitignored.
+//
+// Your team ID is under Membership details at developer.apple.com/account, or in Xcode under
+// Settings > Accounts.
+
+DEVELOPMENT_TEAM = ABCDE12345
+
+// Uncomment if the default prefix in Base.xcconfig is already taken by another team.
+// AURA_BUNDLE_ID_PREFIX = com.yourname

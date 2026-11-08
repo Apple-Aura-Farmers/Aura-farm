@@ -1,6 +1,7 @@
 # Aura Farm
 
-An iOS app that turns an iPhone and a microscope into an on-site soil test.
+An iOS app that turns an iPhone and a microscope into an on-site soil test, and a Mac
+app that keeps the results by farm and field.
 
 A field helper mounts the phone on a microscope, prepares a soil sample with the
 in-app guide, records the sample, and the app looks for the microbes that indicate
@@ -51,7 +52,26 @@ helper visiting farms, not a lab technician.
   image, scrolled and zoomed around the slide, or switch to the frames, which play back
   like a clip, a second a frame, or step through one at a time. The frames are drawn in
   grayscale, so the files on disk keep their colour.
+- **Live counting** — during a sweep a Core ML detector outlines five groups of soil
+  organisms and counts each one once as the slide moves. The count is saved with the
+  sweep. It is not calibrated and claims no accuracy.
+- **Send to Mac** — a saved sweep with counts shares a `.aurafarm` soil report by
+  AirDrop, Files or Mail, for the farm manager.
 - **Export** — frames can be copied off the phone with the Files app.
+
+**Farm manager (Mac)**
+
+- **Farms and fields** — each farm with its farmer, village and notes, and the fields
+  (paddies) it is split into.
+- **Inbox** — soil reports from the iPhone land here. Open a `.aurafarm` file, drag it
+  onto the window, or use File › Import Soil Reports. The same sweep sent twice is
+  recognised and skipped.
+- **Soil tests** — file each test under its field, then see what was counted, as a chart
+  and a table, with the sample details, how it was counted, the slide and notes.
+- **Trends** — organisms counted per field over time, on each farm's page.
+
+The Mac app shows raw counts only. It gives no soil rating, because a rating needs the
+recommended actions behind it, and those are not built yet.
 
 ### Why frames, not video
 
@@ -63,13 +83,13 @@ now and the same rule applies to them: nothing in the app edits or deletes one.
 **Planned**
 
 - Sample preparation and microscope mounting guides
-- Microbe detection with computer vision
+- Calibrated counts (pixel to µm per phone and lens) measured against expert counts
 - A soil health result the helper can read out, with its confidence
 - Recommended actions with every result
 - History of past tests, and PDF export of a single record
 
-Nothing in the detection, result or recommendation list is started. The app does not
-score soil yet, and it does not claim any accuracy.
+Nothing in the result or recommendation list is started. Neither app scores soil yet,
+and neither claims any accuracy.
 
 ## How the quality check works
 
@@ -128,7 +148,7 @@ opens in Saved sweeps like any other. Put `.mov` or `.mp4` files in the app's
 `Documents/DebugVideos` folder — on a simulator:
 
 ```bash
-xcrun simctl get_app_container booted com.example.microscopecounter data
+xcrun simctl get_app_container booted io.github.apple-aura-farmers.aurafarm data
 ```
 
 then copy them into `Documents/DebugVideos` inside what it prints. On a phone the app's
@@ -140,18 +160,29 @@ a part that is not will come back as frames that could not be joined.
 ## Getting started
 
 ```bash
-open MicroscopeCounter/MicroscopeCounter.xcodeproj
+cp Config/Local.example.xcconfig Config/Local.xcconfig   # then put your team ID in it
+open AuraFarm.xcodeproj
 ```
 
-Set your Team under Signing & Capabilities for both targets and replace the
-placeholder bundle ID `com.example.microscopecounter`.
+Signing lives in `Config/Local.xcconfig`, which is gitignored, so set your team there
+rather than under Signing & Capabilities (that writes it into the shared project file).
+Bundle identifiers start with `AURA_BUNDLE_ID_PREFIX` from `Config/Base.xcconfig`; override
+it in your `Local.xcconfig` if it is already registered to another team.
 
-Requires iOS 17 or later, iPhone, portrait only. No third-party dependencies.
+Requires Xcode 16 or later. The field app runs on iOS 17 or later, iPhone, portrait only;
+the farm manager on macOS 14 or later. No third-party dependencies.
+
+| Scheme | Builds |
+|---|---|
+| `AuraFarm` | The iOS field app and its tests |
+| `AuraFarmManager` | The Mac farm manager and its tests |
 
 Run the unit tests:
 
 ```bash
-xcodebuild test -scheme MicroscopeCounter -destination 'platform=iOS Simulator,name=iPhone 17'
+xcodebuild test -scheme AuraFarm -destination 'platform=iOS Simulator,name=iPhone 17'
+xcodebuild test -scheme AuraFarmManager -destination 'platform=macOS'
+swift test --package-path AuraFarmKit
 ```
 
 The simulator name has to match a runtime installed on your machine;
@@ -160,15 +191,48 @@ The simulator name has to match a runtime installed on your machine;
 The camera does not work in the Simulator. Test the capture screen on a real iPhone,
 mounted on the microscope.
 
+### Try the whole flow, iPhone to Mac
+
+No microscope needed: a recorded microscope video goes through exactly the pipeline the
+camera does.
+
+1. **Mac:** run the `AuraFarmManager` scheme on My Mac once, so the Mac knows it opens
+   `.aurafarm` files. Leave it open.
+2. **iPhone:** run the `AuraFarm` scheme on your iPhone. Put a microscope recording in
+   Photos first.
+3. **Prepare:** on the first screen, Step 1 opens the preparation guide: the mix, making
+   the slide, mounting the phone, and the path to walk the slide along.
+4. **Sample:** type a sample ID, then tap **Use a recorded video**. Choose the video, set
+   where the slide starts moving steadily, and tap **Run sample**. With a microscope, tap
+   **Start** instead and follow the arrows.
+5. **Result:** when the sweep finishes, the result shows what was counted per organism
+   group. Tap **Send to Mac** and AirDrop it to your Mac.
+6. **Mac:** the report opens in Aura Farm Manager's Inbox. Add a farm and a field in the
+   sidebar, then file the test under the field.
+
 ## Repository layout
 
 ```
-MicroscopeCounter/
-  Sources/
-    App/        App entry point
-    Capture/    Camera session, frame analysis, quality monitor, recording
-    Views/      SwiftUI screens
-  Tests/        Unit tests
+AuraFarm.xcodeproj      The Xcode project. Target folders are synchronized: a file
+                        added to one on disk is in that target, no project edit needed.
+AuraFarm/               iOS field app
+  App/                  App entry point
+  Core/
+    Imaging/            Frame analysis, quality check, panorama stitching
+    Sweep/              Sweep rules, recorder, saved-sweep library, sample details
+    Detection/          Core ML organism detector, tally, benchmark
+  Features/             SwiftUI screens, one folder per feature
+    SampleSetup/  Capture/  SweepLibrary/  Workbench/
+  Resources/            Core ML model
+AuraFarmTests/          Unit tests for the iOS app
+AuraFarmManager/        macOS farm manager
+  App/                  App entry point, file opening, menu commands
+  Models/               SwiftData records: Farm, Field, SoilTest, OrganismCount
+  Services/             Importing soil reports
+  Features/             SwiftUI screens: Navigation/  Farms/  SoilTests/
+AuraFarmManagerTests/   Unit tests for the Mac app
+AuraFarmKit/            Swift package both apps share: the .aurafarm soil report format
+Config/                 Shared xcconfig, Info.plist additions, your gitignored Local.xcconfig
 ```
 
 ## Contributing
@@ -182,9 +246,11 @@ Every pull request into `main` runs:
 
 | Check | Does |
 |---|---|
-| `Build and test` | Builds the app and runs the unit tests on an iOS Simulator |
+| `Build and test` | Builds the iOS app and runs its unit tests on an iOS Simulator |
+| `Mac build and test` | Builds the Mac app and runs its unit tests |
+| `AuraFarmKit tests` | Runs the shared package's unit tests |
 | `Format check` | `swift-format lint`, settings in `.swift-format` |
-| `Repo checks` | Every Swift file is in the Xcode project; no video or file over 5 MB |
+| `Repo checks` | Every Swift file is inside a target folder; no video or file over 5 MB |
 | `Conflict check` | Labels the pull request `has-conflicts` when it stops merging cleanly |
 
 Engineering rules and code conventions are in [CONTRIBUTING.md](CONTRIBUTING.md).

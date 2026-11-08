@@ -52,5 +52,8 @@ Package.resolved
 # app builds with, and each one is over the 5 MB limit the repo checks enforce.
 *.pt
 
+# Per-developer build settings (signing team). Start from Config/Local.example.xcconfig.
+Config/Local.xcconfig
+
 # Derived data from a command-line xcodebuild run.
 testbuild/

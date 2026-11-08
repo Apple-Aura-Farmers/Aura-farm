@@ -14,19 +14,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # A .swift file on disk but missing from project.pbxproj never compiles.
-      # Tests still pass, so nothing else catches it.
-      - name: Check every Swift file is referenced
+      # Target folders are synchronized with the Xcode project, so every Swift file inside
+      # one compiles on its own. A Swift file anywhere else is in no target and never
+      # compiles, while the tests still pass, so nothing else would catch it.
+      - name: Check every Swift file is inside a target folder
         run: |
-          pbx=MicroscopeCounter/MicroscopeCounter.xcodeproj/project.pbxproj
-          missing=0
+          stray=0
           while IFS= read -r f; do
-            if ! grep -qF "$(basename "$f")" "$pbx"; then
-              echo "::error file=$f::not referenced in project.pbxproj, so it is never compiled"
-              missing=1
-            fi
-          done < <(find MicroscopeCounter/Sources MicroscopeCounter/Tests -name '*.swift')
-          exit $missing
+            echo "::error file=$f::outside every target folder, so it is never compiled"
+            stray=1
+          done < <(git ls-files '*.swift' | grep -vE '^(AuraFarm|AuraFarmTests|AuraFarmKit|AuraFarmManager|AuraFarmManagerTests)/')
+          exit $stray
 
   no-raw-footage:
     name: No raw footage or large files

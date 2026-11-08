@@ -7,8 +7,7 @@ Trunk-based, with short-lived branches off `main`.
 - **`main` is the trunk.** It always builds and its tests always pass. Nobody pushes
   to it directly; every change arrives through a pull request.
 - **One branch per change**, cut from an up-to-date `main`, and deleted once merged.
-  Keep them to a few days. A long branch is a conflict waiting to happen, and the
-  Xcode project file conflicts badly.
+  Keep them to a few days. A long branch is a conflict waiting to happen.
 - **Name the branch for what it does**, using one of these prefixes:
 
   | Prefix | For |
@@ -30,9 +29,10 @@ Trunk-based, with short-lived branches off `main`.
 
 A pull request can merge once:
 
-1. `Build and test` is green — the app builds and the unit tests pass on an iOS Simulator
+1. `Build and test`, `Mac build and test` and `AuraFarmKit tests` are green — both apps
+   build and every unit test passes
 2. `Format check` is green — `swift-format lint` is clean
-3. `Repo checks` are green — every Swift file is in the Xcode project, and no video or
+3. `Repo checks` are green — every Swift file is inside a target folder, and no video or
    oversized file is committed
 4. It has no `has-conflicts` label
 5. Someone has reviewed it, if the team requires that
@@ -42,15 +42,18 @@ Label a pull request `automerge` and it merges itself as soon as those checks pa
 ## Making a change
 
 1. Branch: `git switch -c feat/thing main`
-2. Add new Swift files **from Xcode** (File > New > File), inside the matching group,
-   with the right target ticked. A file that is only on disk never compiles, and CI
-   fails the pull request for it.
+2. Put new Swift files inside the right target folder (`AuraFarm/`, `AuraFarmTests/`, …),
+   from Xcode or on disk. The folders are synchronized with the project, so the file is
+   in that target with no project edit. A Swift file outside every target folder never
+   compiles, and CI fails the pull request for it.
 3. Write a unit test for any decision logic that does not need the camera.
 4. Run the tests and the formatter before pushing:
 
    ```bash
-   xcodebuild test -scheme MicroscopeCounter -destination 'platform=iOS Simulator,name=iPhone 17'
-   xcrun swift-format format -i -r MicroscopeCounter/Sources MicroscopeCounter/Tests
+   xcodebuild test -scheme AuraFarm -destination 'platform=iOS Simulator,name=iPhone 17'
+   xcodebuild test -scheme AuraFarmManager -destination 'platform=macOS'
+   swift test --package-path AuraFarmKit
+   xcrun swift-format format -i -r AuraFarm AuraFarmTests AuraFarmManager AuraFarmManagerTests AuraFarmKit
    ```
 
 5. Open a pull request into `main` and fill in the template.
@@ -62,6 +65,8 @@ Label a pull request `automerge` and it merges itself as soon as those checks pa
   `.mp4`, `.m4v`, `.avi` or `.mkv`, and on any file over 5 MB. Frames are small enough
   to slip under that, so keep `Documents/FrameSets` off the repository yourself.
 - `xcuserdata/`, `*.xcuserstate`, `DerivedData/` — already ignored.
+- Your signing team. It goes in `Config/Local.xcconfig`, which is ignored. Setting it under
+  Signing & Capabilities writes it into `project.pbxproj` instead; do not commit that.
 - Accuracy numbers, soil ratings or scores that have not been measured. See rule 6
   below.
 
@@ -77,7 +82,7 @@ because breaking it costs data or credibility.
 3. **Do not hold on to camera buffers.** Keep at most one previous frame for shake
    estimation.
 4. **Keep detection logic out of views.** Views read state from the model; thresholds
-   and rules live in `Sources/Capture/`.
+   and rules live in `AuraFarm/Core/`.
 5. **Thresholds are data, not magic numbers.** Put new ones in
    `CaptureQualityThresholds`, with a comment saying whether they are calibrated.
 6. **Do not claim accuracy.** No accuracy number in code, UI or docs until it is
@@ -89,6 +94,17 @@ because breaking it costs data or credibility.
 8. **No soil verdict without the actions behind it.** Do not ship a rating, score or
    band on its own. Every result carries recommended actions, states its confidence,
    and says when a retest or a lab test is needed.
+
+## The soil report format
+
+The iPhone app and the Mac app talk only through the `.aurafarm` soil report in
+`AuraFarmKit`. Change it with care: a field helper's phone and the office Mac are rarely
+updated on the same day.
+
+- Add new fields as optionals, so a report from an older phone still opens.
+- Raise `SoilReport.currentSchemaVersion` only for a change an older reader cannot ignore.
+  An older Mac app then says the report needs an update instead of failing on it.
+- Keep it Foundation only, so its tests run with `swift test` and nothing else.
 
 ## UI copy
 
