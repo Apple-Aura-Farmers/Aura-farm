@@ -1,15 +1,20 @@
+import PhotosUI
 import SwiftUI
 
-/// Runs the detector over a recorded video and shows a picture of everything it found.
+/// Runs the detector over a recorded video, or over a single photograph, and shows a picture
+/// of everything it found.
 ///
-/// Debug builds only, and nothing to do with a sweep: this is here to judge the model. Every
-/// organism is given an id the first time it is seen and followed from frame to frame, so
-/// the count is of organisms rather than of detections, and a picture is kept each time
-/// something new turns up.
+/// Debug builds only, and nothing to do with a sweep: this is here to judge the model. Over
+/// a video, every organism is given an id the first time it is seen and followed from frame
+/// to frame, so the count is of organisms rather than of detections, and a picture is kept
+/// each time something new turns up. A photograph is one look at a slide, so every box in it
+/// is its own find.
 struct DetectVideoView: View {
     @State private var runner = VideoDetectionRunner()
     @State private var startMinutes = 0.0
     @State private var selected: URL?
+    @State private var chosenPhoto: PhotosPickerItem?
+    @State private var photoProblem: String?
     @State private var showing: Picture?
     /// How far the open picture is zoomed in, as a multiple of fitting the screen.
     @State private var zoom = 1.0
@@ -64,6 +69,24 @@ struct DetectVideoView: View {
                 )
             }
 
+            Section {
+                PhotosPicker(selection: $chosenPhoto, matching: .images, photoLibrary: .shared()) {
+                    Text("Or run it on one photo…")
+                }
+                .disabled(runner.isRunning)
+                if let photoProblem {
+                    Text(photoProblem)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+            } footer: {
+                Text(
+                    """
+                    A microscope still rather than footage. The whole picture goes through                     the model once and comes back with its boxes drawn on.
+                    """
+                )
+            }
+
             if let outcome = runner.outcome {
                 Section("Result") {
                     Text(outcome)
@@ -92,7 +115,22 @@ struct DetectVideoView: View {
                 }
             }
         }
-        .navigationTitle("Detect from video")
+        .navigationTitle("Detect in a sample")
+        .onChange(of: chosenPhoto) { _, item in
+            guard let item else { return }
+            Task {
+                photoProblem = nil
+                do {
+                    guard let data = try await item.loadTransferable(type: Data.self) else {
+                        photoProblem = "That photo could not be read."
+                        return
+                    }
+                    runner.run(photo: data, named: "photo")
+                } catch {
+                    photoProblem = error.localizedDescription
+                }
+            }
+        }
         .navigationBarTitleDisplayMode(.inline)
         .sheet(item: $showing) { picture in
             NavigationStack {

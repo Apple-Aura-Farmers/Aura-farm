@@ -265,6 +265,14 @@ final class FrameSweepTests: XCTestCase {
         XCTAssertEqual(layout.indices(inRow: 2, frameCount: 12), [8, 9, 10, 11])
     }
 
+    func testTheGuideBarFillsTheWayTheSlideIsBeingPushed() {
+        // Row one runs left to right and row two comes back, so the bar has to run back too
+        // or it would fill against the direction of the arrow on it.
+        XCTAssertEqual(SweepGuide.cells(inRow: 1, framesPerRow: 4), [0, 1, 2, 3])
+        XCTAssertEqual(SweepGuide.cells(inRow: 2, framesPerRow: 4), [3, 2, 1, 0])
+        XCTAssertEqual(SweepGuide.cells(inRow: 3, framesPerRow: 4), [0, 1, 2, 3])
+    }
+
     func testASweepThatStoppedEarlyStillGetsItsLastPartRow() {
         // Nine frames is two full rows and one on its own, not two rows with a frame lost.
         let layout = SweepLayout(frameCount: 9)

@@ -68,7 +68,7 @@ private struct HomeTab: View {
                             NavigationLink {
                                 DetectVideoView()
                             } label: {
-                                Label("Detect from video", systemImage: "viewfinder")
+                                Label("Detect in a sample", systemImage: "viewfinder")
                             }
                             NavigationLink {
                                 DetectorBenchmarkView()
