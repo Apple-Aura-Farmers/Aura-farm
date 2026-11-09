@@ -1,5 +1,5 @@
 //
-//  AddFarmView.swift
+//  FarmFormView.swift
 //  AuraFarm
 //
 //  Created by William Silvano Angga on 09/11/26.
@@ -7,14 +7,24 @@
 
 import SwiftUI
 
-/// Adding a farm: the farmer's name and where their land is. Both are needed before it can be
-/// saved, because a farm with no outline cannot be shown on the map.
-struct AddFarmView: View {
+/// Adding a farm, or changing one that is already saved: the farmer's name and where their land
+/// is. Both are needed before it can be saved, because a farm with no outline cannot be shown
+/// on the map.
+struct FarmFormView: View {
+    /// The farm being changed, or nil when adding a new one.
+    private let editing: Farm?
+
     @Environment(FarmStore.self) private var store
     @Environment(\.dismiss) private var dismiss
 
-    @State private var farmerName = ""
-    @State private var corners: [GeoPoint] = []
+    @State private var farmerName: String
+    @State private var corners: [GeoPoint]
+
+    init(editing farm: Farm? = nil) {
+        editing = farm
+        _farmerName = State(initialValue: farm?.farmerName ?? "")
+        _corners = State(initialValue: farm?.corners ?? [])
+    }
 
     var body: some View {
         NavigationStack {
@@ -32,7 +42,11 @@ struct AddFarmView: View {
                         LabeledContent("Area", value: areaText)
                     }
                     NavigationLink {
-                        LandOutlineEditorView(corners: $corners)
+                        LandOutlineEditorView(
+                            corners: corners, neighbours: otherFarms
+                        ) { confirmed in
+                            corners = confirmed
+                        }
                     } label: {
                         Label(
                             corners.isEmpty ? "Mark the land on the map" : "Edit the outline",
@@ -41,12 +55,17 @@ struct AddFarmView: View {
                 } header: {
                     Text("Land")
                 } footer: {
-                    if let landProblem {
-                        Text(landProblem).foregroundStyle(.orange)
+                    VStack(alignment: .leading, spacing: 4) {
+                        if let landProblem {
+                            Text(landProblem).foregroundStyle(.orange)
+                        }
+                        if let overlapNote {
+                            Text(overlapNote).foregroundStyle(.orange)
+                        }
                     }
                 }
             }
-            .navigationTitle("Add a farm")
+            .navigationTitle(editing == nil ? "Add a farm" : "Edit farm")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -62,6 +81,11 @@ struct AddFarmView: View {
 
     private var trimmedName: String {
         farmerName.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Every saved farm except the one being edited, which cannot overlap itself.
+    private var otherFarms: [Farm] {
+        store.farms.filter { $0.id != editing?.id }
     }
 
     /// Three corners that do not cross themselves, so the area means something.
@@ -85,13 +109,28 @@ struct AddFarmView: View {
         return nil
     }
 
+    /// A reminder, not a block: the helper may have confirmed an overlap on purpose.
+    private var overlapNote: String? {
+        guard hasUsableOutline else { return nil }
+        let overlapping = otherFarms.filter { LandGeometry.overlap(corners, $0.corners) }
+        guard !overlapping.isEmpty else { return nil }
+        let names = overlapping.map(\.farmerName).formatted(.list(type: .and))
+        return "This outline overlaps \(names)'s land."
+    }
+
     private func save() {
-        store.add(Farm(farmerName: trimmedName, corners: corners))
+        if var farm = editing {
+            farm.farmerName = trimmedName
+            farm.corners = corners
+            store.update(farm)
+        } else {
+            store.add(Farm(farmerName: trimmedName, corners: corners))
+        }
         dismiss()
     }
 }
 
 #Preview {
-    AddFarmView()
+    FarmFormView()
         .environment(FarmStore(fileURL: nil))
 }

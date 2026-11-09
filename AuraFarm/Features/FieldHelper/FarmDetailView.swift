@@ -13,12 +13,39 @@ import SwiftUI
 /// lab results come from the Microscope Operator side, which does not know which farm a
 /// sample belongs to.
 struct FarmDetailView: View {
-    let farm: Farm
+    /// Looked up in the store each time, so the page shows changes made by Edit straight away.
+    let farmID: UUID
+
+    @Environment(FarmStore.self) private var store
+    @State private var showEdit = false
+
+    private var farm: Farm? { store.farms.first { $0.id == farmID } }
 
     var body: some View {
+        Group {
+            if let farm {
+                details(for: farm)
+                    .navigationTitle(farm.farmerName)
+                    .toolbar {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button("Edit") { showEdit = true }
+                        }
+                    }
+                    .sheet(isPresented: $showEdit) {
+                        FarmFormView(editing: farm)
+                    }
+            } else {
+                ContentUnavailableView("This farm is no longer here", systemImage: "leaf")
+            }
+        }
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func details(for farm: Farm) -> some View {
         List {
             Section {
                 LandMapView(corners: farm.corners, isInteractive: true)
+                    .id(farm.corners)
                     .frame(height: 260)
                     .listRowInsets(EdgeInsets())
             }
@@ -50,21 +77,20 @@ struct FarmDetailView: View {
                 Text("Results from the microscope operator will show here.")
             }
         }
-        .navigationTitle(farm.farmerName)
-        .navigationBarTitleDisplayMode(.inline)
     }
 }
 
 #Preview {
+    let farm = Farm(
+        farmerName: "Pak Wayan",
+        corners: [
+            GeoPoint(latitude: -8.4095, longitude: 115.1889),
+            GeoPoint(latitude: -8.4095, longitude: 115.1900),
+            GeoPoint(latitude: -8.4105, longitude: 115.1900),
+            GeoPoint(latitude: -8.4105, longitude: 115.1889),
+        ])
     NavigationStack {
-        FarmDetailView(
-            farm: Farm(
-                farmerName: "Pak Wayan",
-                corners: [
-                    GeoPoint(latitude: -8.4095, longitude: 115.1889),
-                    GeoPoint(latitude: -8.4095, longitude: 115.1900),
-                    GeoPoint(latitude: -8.4105, longitude: 115.1900),
-                    GeoPoint(latitude: -8.4105, longitude: 115.1889),
-                ]))
+        FarmDetailView(farmID: farm.id)
     }
+    .environment(FarmStore(fileURL: nil, farms: [farm]))
 }

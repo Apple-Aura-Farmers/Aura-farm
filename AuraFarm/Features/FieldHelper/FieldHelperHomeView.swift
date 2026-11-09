@@ -1,3 +1,10 @@
+//
+//  FieldHelperHomeView.swift
+//  AuraFarm
+//
+//  Created by William Silvano Angga on 09/11/26.
+//
+
 import SwiftUI
 
 /// The Field Helper's home: the farms they look after, and a way to add one.
@@ -9,6 +16,8 @@ struct FieldHelperHomeView: View {
     @State private var showAddFarm = false
     /// The farm waiting on a yes to being deleted.
     @State private var farmToDelete: Farm?
+    /// Set when a farm is tapped on the map, which opens its page.
+    @State private var openedFarmID: UUID?
 
     var body: some View {
         NavigationStack {
@@ -46,7 +55,10 @@ struct FieldHelperHomeView: View {
                 }
             }
             .sheet(isPresented: $showAddFarm) {
-                AddFarmView()
+                FarmFormView()
+            }
+            .navigationDestination(item: $openedFarmID) { id in
+                FarmDetailView(farmID: id)
             }
             .confirmationDialog(
                 "Delete this farm?",
@@ -76,18 +88,27 @@ struct FieldHelperHomeView: View {
     }
 
     private var farmList: some View {
-        List {
-            ForEach(sortedFarms) { farm in
-                NavigationLink {
-                    FarmDetailView(farm: farm)
-                } label: {
-                    row(for: farm)
-                }
-                .swipeActions {
-                    Button(role: .destructive) {
-                        farmToDelete = farm
+        VStack(spacing: 0) {
+            FarmsOverviewMap(farms: store.farms) { farm in
+                openedFarmID = farm.id
+            }
+            // A new map when farms are added, deleted or reshaped, so it refits to them.
+            .id(store.farms.flatMap(\.corners))
+            .frame(height: 280)
+
+            List {
+                ForEach(sortedFarms) { farm in
+                    NavigationLink {
+                        FarmDetailView(farmID: farm.id)
                     } label: {
-                        Label("Delete", systemImage: "trash")
+                        row(for: farm)
+                    }
+                    .swipeActions {
+                        Button(role: .destructive) {
+                            farmToDelete = farm
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
                     }
                 }
             }

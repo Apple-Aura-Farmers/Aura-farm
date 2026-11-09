@@ -29,6 +29,13 @@ final class FarmStore {
         save()
     }
 
+    /// Replaces the saved farm that has the same id. Does nothing if it is not there.
+    func update(_ farm: Farm) {
+        guard let index = farms.firstIndex(where: { $0.id == farm.id }) else { return }
+        farms[index] = farm
+        save()
+    }
+
     func delete(_ farm: Farm) {
         farms.removeAll { $0.id == farm.id }
         save()
