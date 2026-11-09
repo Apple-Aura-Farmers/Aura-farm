@@ -9,19 +9,23 @@ public struct NutrientResult: Equatable, Sendable {
     /// pH in water, when it was measured.
     public var pH: Double?
     public var straw: StrawPractice
+    /// Organic carbon (C-organik), percent of dry soil, when a lab measured it.
+    public var organicCarbonPercent: Double?
 
     public init(
         testedAt: Date,
         source: NutrientSource,
         levels: [Nutrient: NutrientLevel],
         pH: Double? = nil,
-        straw: StrawPractice = .unknown
+        straw: StrawPractice = .unknown,
+        organicCarbonPercent: Double? = nil
     ) {
         self.testedAt = testedAt
         self.source = source
         self.levels = levels
         self.pH = pH
         self.straw = straw
+        self.organicCarbonPercent = organicCarbonPercent
     }
 }
 

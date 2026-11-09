@@ -34,9 +34,13 @@ struct NutrientTestRow: View {
         return name.isEmpty ? test.source.label : "\(test.source.label) · \(name)"
     }
 
+    /// "pH 6.2", with organic carbon after it when it was measured: "pH 6.2 · C 1.8%"
     private var pHLabel: String {
-        guard let pH = test.pH else { return "pH –" }
-        return "pH \(pH.formatted(.number.precision(.fractionLength(1))))"
+        var label = test.pH.map { "pH \($0.formatted(.number.precision(.fractionLength(1))))" } ?? "pH –"
+        if let carbon = test.organicCarbonPercent {
+            label += " · C \(carbon.formatted(.number.precision(.fractionLength(1))))%"
+        }
+        return label
     }
 }
 

@@ -9,6 +9,8 @@ enum FarmStore {
         SoilTest.self,
         OrganismCount.self,
         NutrientTest.self,
+        Season.self,
+        FertilizerApplication.self,
     ]
 
     /// - Parameter inMemory: true for tests and previews, so nothing is written to disk.

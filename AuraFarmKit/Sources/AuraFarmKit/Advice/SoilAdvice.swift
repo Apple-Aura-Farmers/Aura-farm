@@ -40,19 +40,23 @@ public struct FertilizerDose: Equatable, Sendable {
     public var kilogramsForField: Double?
     /// When to put it on.
     public var schedule: String
+    /// The days to put each part on, when the season's transplanting date is known.
+    public var dates: [Date]
 
     public init(
         fertilizer: Fertilizer,
         level: NutrientLevel,
         kilogramsPerHectare: Double,
         kilogramsForField: Double?,
-        schedule: String
+        schedule: String,
+        dates: [Date] = []
     ) {
         self.fertilizer = fertilizer
         self.level = level
         self.kilogramsPerHectare = kilogramsPerHectare
         self.kilogramsForField = kilogramsForField
         self.schedule = schedule
+        self.dates = dates
     }
 }
 

@@ -21,12 +21,14 @@ public enum SoilAdvisor {
     ///   - nutrients: The field's latest NPK results, if any.
     ///   - organisms: The field's microscope soil tests, in any order.
     ///   - areaHectares: The field's planted area, to give doses for the whole field.
+    ///   - plantedOn: The current season's transplanting date, to put dates on the doses.
     ///   - now: Today, to judge how old the NPK results are.
     /// - Returns: nil when there is nothing to go on.
     public static func advise(
         nutrients: NutrientResult?,
         organisms: [OrganismCountSummary],
         areaHectares: Double? = nil,
+        plantedOn: Date? = nil,
         now: Date = Date()
     ) -> SoilAdvice? {
         guard nutrients != nil || !organisms.isEmpty else { return nil }
@@ -38,8 +40,9 @@ public enum SoilAdvisor {
         let confidence: AdviceConfidence
 
         if let nutrients {
-            doses = Self.doses(for: nutrients, areaHectares: areaHectares)
+            doses = Self.doses(for: nutrients, areaHectares: areaHectares, plantedOn: plantedOn)
             actions += Self.acidityActions(for: nutrients.pH)
+            actions += Self.organicMatterActions(for: nutrients.organicCarbonPercent)
             actions += Self.missingNutrientActions(for: nutrients)
             confidence = Self.confidence(for: nutrients, now: now)
             retests.append("Test the NPK again before the next planting.")
@@ -82,7 +85,11 @@ public enum SoilAdvisor {
 
     // MARK: - Fertilizer
 
-    static func doses(for nutrients: NutrientResult, areaHectares: Double?) -> [FertilizerDose] {
+    static func doses(
+        for nutrients: NutrientResult,
+        areaHectares: Double?,
+        plantedOn: Date? = nil
+    ) -> [FertilizerDose] {
         Nutrient.allCases.compactMap { nutrient -> FertilizerDose? in
             guard let level = nutrients.levels[nutrient] else { return nil }
             let fertilizer = Fertilizer.forNutrient(nutrient)
@@ -97,7 +104,12 @@ public enum SoilAdvisor {
                 level: level,
                 kilogramsPerHectare: perHectare,
                 kilogramsForField: forField,
-                schedule: PaddyFertilizerGuide.schedule(for: fertilizer)
+                schedule: PaddyFertilizerGuide.schedule(for: fertilizer),
+                dates: plantedOn.map { start in
+                    PaddyFertilizerGuide.applicationDays(for: fertilizer).map { day in
+                        start.addingTimeInterval(Double(day) * 86_400)
+                    }
+                } ?? []
             )
         }
     }
@@ -153,6 +165,23 @@ public enum SoilAdvisor {
                 )
             ]
         }
+    }
+
+    // MARK: - Organic matter
+
+    static func organicMatterActions(for organicCarbonPercent: Double?) -> [AdviceAction] {
+        guard let percent = organicCarbonPercent, percent < PaddyFertilizerGuide.lowOrganicCarbonPercent
+        else { return [] }
+        let range = PaddyFertilizerGuide.organicMatterTonnesPerHectare
+        return [
+            AdviceAction(
+                kind: .soil,
+                title: "Add organic matter before planting",
+                detail: "Organic carbon is low (\(Self.oneDecimal(percent))%). Work in compost, manure or "
+                    + "straw compost when preparing the field; trials in Indonesian paddies used "
+                    + "\(range.lowerBound) to \(range.upperBound) tonnes a hectare."
+            )
+        ]
     }
 
     // MARK: - Confidence

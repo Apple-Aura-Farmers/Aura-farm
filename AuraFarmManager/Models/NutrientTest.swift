@@ -31,6 +31,8 @@ final class NutrientTest {
 
     /// pH in water. nil when it was not measured.
     var pH: Double? = nil
+    /// Organic carbon (C-organik), percent of dry soil. nil when it was not measured.
+    var organicCarbonPercent: Double? = nil
     /// A `StrawPractice` raw value: what happened to the straw after the last harvest.
     var strawRaw: String = StrawPractice.unknown.rawValue
     var notes: String = ""
@@ -97,7 +99,14 @@ final class NutrientTest {
         for nutrient in Nutrient.allCases {
             levels[nutrient] = level(of: nutrient)
         }
-        return NutrientResult(testedAt: testedAt, source: source, levels: levels, pH: pH, straw: straw)
+        return NutrientResult(
+            testedAt: testedAt,
+            source: source,
+            levels: levels,
+            pH: pH,
+            straw: straw,
+            organicCarbonPercent: organicCarbonPercent
+        )
     }
 
     private func levelRaw(of nutrient: Nutrient) -> String? {

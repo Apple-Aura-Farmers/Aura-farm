@@ -10,6 +10,7 @@ enum FieldAdvice {
             nutrients: field.latestNutrientTest?.result,
             organisms: field.soilTests.map(summary(of:)),
             areaHectares: field.areaHectares,
+            plantedOn: field.currentSeason?.plantedOn,
             now: now
         )
     }

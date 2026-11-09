@@ -90,6 +90,26 @@ public enum PaddyFertilizerGuide {
         }
     }
 
+    /// Days after transplanting to put each part of the dose on: urea at 3, 30 and 50, SP-36
+    /// at 3, KCl at 3 and 30. The same West Sumatra schedule as `schedule(for:)`. Not
+    /// calibrated by this team.
+    public static func applicationDays(for fertilizer: Fertilizer) -> [Int] {
+        switch fertilizer {
+        case .urea: return [3, 30, 50]
+        case .sp36: return [3]
+        case .kcl: return [3, 30]
+        }
+    }
+
+    /// Below this percentage of organic carbon (C-organik) the soil is low in organic matter.
+    /// The 2% line used in Indonesian paddy soil surveys (as in the Malinau site-specific study).
+    /// Not calibrated by this team.
+    public static let lowOrganicCarbonPercent = 2.0
+
+    /// The organic matter put on in Indonesian paddy trials: 2 t/ha with the Permentan doses,
+    /// 5 t/ha of manure or straw compost in West Sumatra. A range to discuss, not a dose.
+    public static let organicMatterTonnesPerHectare = 2...5
+
     /// When to put the fertilizer on, in days after transplanting.
     ///
     /// A common split for irrigated paddy (urea at about 3, 30 and 50 days, all SP-36 at the

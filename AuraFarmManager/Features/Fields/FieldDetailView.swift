@@ -26,6 +26,7 @@ struct FieldDetailView: View {
                     }
                     nutrientList
                     NutrientTrendChart(tests: field.nutrientTests)
+                    SeasonsSection(field: field, doses: FieldAdvice.advice(for: field)?.doses ?? [])
                     latestCounts
                     FieldTrendChart(fields: [field], emptyMessage: Self.countTrendEmptyMessage)
                 }

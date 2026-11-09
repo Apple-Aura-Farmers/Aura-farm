@@ -85,7 +85,7 @@ struct SoilAdviceView: View {
                     }
                 }
                 GridRow {
-                    Text(dose.schedule)
+                    Text(scheduleText(for: dose))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -93,6 +93,15 @@ struct SoilAdviceView: View {
                 }
             }
         }
+    }
+
+    /// The schedule, with the actual days added once the transplanting date is known.
+    private func scheduleText(for dose: FertilizerDose) -> String {
+        guard !dose.dates.isEmpty else { return dose.schedule }
+        let days = dose.dates
+            .map { $0.formatted(.dateTime.day().month(.abbreviated)) }
+            .formatted(.list(type: .and))
+        return "\(dose.schedule) This season: around \(days)."
     }
 
     private func bulletList(_ lines: [String]) -> some View {

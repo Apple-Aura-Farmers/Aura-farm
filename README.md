@@ -80,12 +80,19 @@ helper visiting farms, not a lab technician.
 - **NPK results** — type in N, P and K from the paddy soil test kit (PUTS), which gives a
   class of low, medium or high, or from a lab report. A lab value in % total N, or in mg
   P₂O₅ or K₂O per 100 g with 25% HCl, is classed for you; in any other unit, pick the class
-  the report gives. Add the pH and whether last season's straw went back into the field.
+  the report gives. Add the pH, organic carbon (C-organik) from a lab, and whether last
+  season's straw went back into the field.
   NPK is kept apart from the microscope soil tests: it comes from a different test, on a
   different day, and never arrives in an `.aurafarm` report.
+- **Seasons** — each field's growing seasons: the rice variety, the transplanting and
+  harvest dates, and the yield in t/ha, or a total harvest in kg turned into t/ha from the
+  field's area. Record each fertilizer the farmer put on, with its amount for the field;
+  the current season shows urea, SP-36 and KCl put on against the plan. Once there are two
+  harvests, a chart shows the yield by season against the 5 to 7 t/ha the doses assume.
 - **What to do** — from the latest NPK results, a fertilizer plan in urea, SP-36 and KCl,
-  per hectare and for the whole field when its area is entered, with when to put each on.
-  Then any pH action, a confidence (low, fair or good) with the reasons for it, and when
+  per hectare and for the whole field when its area is entered, with when to put each on,
+  as real dates once the current season's transplanting date is in. Then any pH action,
+  organic matter when organic carbon is below 2%, a confidence (low, fair or good) with the reasons for it, and when
   to test again or send a sample to a lab.
 
 The fertilizer plan follows the national paddy soil test guide for irrigated rice yielding
@@ -252,9 +259,10 @@ AuraFarmTests/          Unit tests for the iOS app
 AuraFarmManager/        macOS farm manager
   App/                  App entry point, file opening, menu commands
   Models/               SwiftData records: Farm, Field, SoilTest, OrganismCount,
-                        NutrientTest
+                        NutrientTest, Season, FertilizerApplication
   Services/             Importing soil reports, handing a field to the advisor
-  Features/             SwiftUI screens: Navigation/  Farms/  Fields/  Map/  SoilTests/
+  Features/             SwiftUI screens: Navigation/  Farms/  Fields/  Map/  Seasons/
+                        SoilTests/
 AuraFarmManagerTests/   Unit tests for the Mac app
 AuraFarmKit/            Swift package both apps share: the .aurafarm soil report format,
                         Advice/, the NPK thresholds, fertilizer doses and advisor, and

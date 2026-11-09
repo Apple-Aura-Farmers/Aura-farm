@@ -25,6 +25,10 @@ final class Field {
     @Relationship(deleteRule: .cascade, inverse: \NutrientTest.field)
     var nutrientTests: [NutrientTest] = []
 
+    /// Growing seasons, with what was planted, put on and harvested. Deleted with the field.
+    @Relationship(deleteRule: .cascade, inverse: \Season.field)
+    var seasons: [Season] = []
+
     init(name: String, crop: String = "Rice", areaHectares: Double? = nil, createdAt: Date = .now) {
         self.name = name
         self.crop = crop
@@ -58,6 +62,16 @@ final class Field {
     /// NPK results, newest first.
     var sortedNutrientTests: [NutrientTest] {
         nutrientTests.sorted { $0.testedAt > $1.testedAt }
+    }
+
+    /// Seasons, newest first.
+    var sortedSeasons: [Season] {
+        seasons.sorted { $0.startedAt > $1.startedAt }
+    }
+
+    /// The newest season not harvested yet: the one the plan's dates and progress are for.
+    var currentSeason: Season? {
+        sortedSeasons.first { $0.harvestedOn == nil }
     }
 
     /// Soil tests, newest first.

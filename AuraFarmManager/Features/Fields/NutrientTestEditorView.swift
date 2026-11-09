@@ -22,6 +22,7 @@ struct NutrientTestEditorView: View {
     @State private var values: [Nutrient: String] = [:]
     @State private var units: [Nutrient: NutrientUnit] = [:]
     @State private var pHText = ""
+    @State private var organicCarbonText = ""
     @State private var straw: StrawPractice = .unknown
     @State private var notes = ""
 
@@ -48,6 +49,11 @@ struct NutrientTestEditorView: View {
 
                 Section {
                     TextField("pH", text: $pHText, prompt: Text("Optional, for example 6.2"))
+                    TextField(
+                        "Organic carbon (C-organik, %)",
+                        text: $organicCarbonText,
+                        prompt: Text("Optional, from a lab, for example 1.8")
+                    )
                     Picker("Straw from the last harvest", selection: $straw) {
                         ForEach(StrawPractice.allCases, id: \.self) { practice in
                             Text(practice.label).tag(practice)
@@ -59,8 +65,14 @@ struct NutrientTestEditorView: View {
                     if !pHText.isBlank && pH == nil {
                         Text("Enter a pH between 2.5 and 10.5.")
                             .foregroundStyle(.red)
+                    } else if !organicCarbonText.isBlank && organicCarbon == nil {
+                        Text("Enter organic carbon as a percentage between 0 and 60.")
+                            .foregroundStyle(.red)
                     } else {
-                        Text("Straw put back into the field lowers the KCl dose.")
+                        Text(
+                            "Straw put back into the field lowers the KCl dose. Organic carbon below 2% "
+                                + "adds organic matter to the plan."
+                        )
                     }
                 }
 
@@ -192,13 +204,23 @@ struct NutrientTestEditorView: View {
         return number
     }
 
+    /// Organic carbon, when one is entered and is a percentage a soil can have. Peat soils run
+    /// high, so the ceiling is generous.
+    private var organicCarbon: Double? {
+        guard let number = Self.number(from: organicCarbonText), (0...60).contains(number) else {
+            return nil
+        }
+        return number
+    }
+
     private var hasAnyResult: Bool {
-        !levels.isEmpty || pH != nil
+        !levels.isEmpty || pH != nil || organicCarbon != nil
     }
 
     private var canSave: Bool {
         hasAnyResult
             && (pHText.isBlank || pH != nil)
+            && (organicCarbonText.isBlank || organicCarbon != nil)
             && !Nutrient.allCases.contains(where: isValueInvalid)
     }
 
@@ -224,6 +246,7 @@ struct NutrientTestEditorView: View {
         straw = test.straw
         notes = test.notes
         pHText = test.pH.map { $0.formatted(.number) } ?? ""
+        organicCarbonText = test.organicCarbonPercent.map { $0.formatted(.number) } ?? ""
         for nutrient in Nutrient.allCases {
             levels[nutrient] = test.level(of: nutrient)
             if let measurement = test.measurement(of: nutrient) {
@@ -247,6 +270,7 @@ struct NutrientTestEditorView: View {
         saved.sourceName = sourceName.trimmingCharacters(in: .whitespaces)
         saved.straw = straw
         saved.pH = pH
+        saved.organicCarbonPercent = organicCarbon
         saved.notes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
         for nutrient in Nutrient.allCases {
             saved.setLevel(levels[nutrient], of: nutrient)
