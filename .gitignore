@@ -57,3 +57,6 @@ Config/Local.xcconfig
 
 # Derived data from a command-line xcodebuild run.
 testbuild/
+
+# Derived data from a one-off build check, the same as testbuild/.
+build-check/

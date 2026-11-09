@@ -21,10 +21,10 @@ struct AuraFarmApp: App {
                 if let scenario = Self.launchScenario {
                     NavigationStack { ResultScenarioScreen(scenario: scenario) }
                 } else {
-                    SampleSetupView()
+                    HomeView()
                 }
             #else
-                SampleSetupView()
+                HomeView()
             #endif
         }
     }

@@ -68,6 +68,92 @@ final class VideoDetectionRunner {
         var total = 0
     }
 
+    /// Runs the detector over one photograph, for judging the model on a still rather than
+    /// on footage. The picture lands beside the ones a video run keeps.
+    func run(photo data: Data, named name: String) {
+        guard !isRunning else { return }
+        isRunning = true
+        outcome = nil
+        savedFrames = []
+        countByLabel = [:]
+        total = 0
+
+        queue.async { [weak self] in
+            let result = Self.detect(photo: data, named: name)
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.isRunning = false
+                self.outcome = result.message
+                self.savedFrames = result.frames
+                self.countByLabel = result.countByLabel
+                self.total = result.total
+            }
+        }
+    }
+
+    private static func detect(photo data: Data, named name: String) -> Result {
+        let detector: OrganismDetector
+        do {
+            detector = try OrganismDetector(computeUnits: .cpuAndGPU)
+        } catch {
+            return Result(message: error.localizedDescription)
+        }
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+            let image = CGImageSourceCreateImageAtIndex(source, 0, nil)
+        else {
+            return Result(message: "That photo could not be read.")
+        }
+
+        let started = CFAbsoluteTimeGetCurrent()
+        let detections = (try? detector.detections(in: image)) ?? []
+        let milliseconds = (CFAbsoluteTimeGetCurrent() - started) * 1000
+
+        // No tracking on a still: there is one look at the slide, so every box is its own
+        // find and the ids just number them.
+        let width = Double(image.width)
+        let height = Double(image.height)
+        let tracks = detections.enumerated().map { index, detection in
+            OrganismTally.Track(
+                id: index + 1,
+                label: detection.label,
+                // Vision counts from the bottom left; everything else here counts from the
+                // top left.
+                box: CGRect(
+                    x: detection.box.minX * width,
+                    y: (1 - detection.box.maxY) * height,
+                    width: detection.box.width * width,
+                    height: detection.box.height * height
+                ),
+                confidence: detection.confidence,
+                unseenFrames: 0
+            )
+        }
+
+        let folder = detectionsDirectory.appending(
+            path: folderName(called: name), directoryHint: .isDirectory)
+        guard
+            (try? FileManager.default.createDirectory(
+                at: folder, withIntermediateDirectories: true)) != nil
+        else {
+            return Result(message: "The folder for the picture could not be created.")
+        }
+
+        var saved: [URL] = []
+        if let url = write(
+            image: image, tracks: tracks, to: folder.appending(path: "photo.jpg"))
+        {
+            saved.append(url)
+        }
+
+        var counts: [String: Int] = [:]
+        for track in tracks { counts[track.label, default: 0] += 1 }
+        let message = String(
+            format: "One photo, %d x %d. %d found in %.1f ms.",
+            image.width, image.height, tracks.count, milliseconds)
+        return Result(
+            message: message, frames: saved, countByLabel: counts, total: tracks.count)
+    }
+
     private static func detect(videoURL: URL, startSeconds: Double) -> Result {
         let detector: OrganismDetector
         do {
@@ -153,9 +239,10 @@ final class VideoDetectionRunner {
             // anything in it: the same organism is in shot for many frames running.
             guard !appeared.isEmpty, saved.count < maxSavedFrames else { continue }
             let name = String(format: "frame-%04d.jpg", analyzed)
-            if let url = write(
-                buffer: buffer, tracks: tally.visible, to: folder.appending(path: name),
-                context: context)
+            let frame = CIImage(cvPixelBuffer: buffer)
+            if let base = context.createCGImage(frame, from: frame.extent),
+                let url = write(
+                    image: base, tracks: tally.visible, to: folder.appending(path: name))
             {
                 saved.append(url)
             }
@@ -181,11 +268,8 @@ final class VideoDetectionRunner {
     /// Writes one frame with every box and id drawn on it, so the picture alone says what the
     /// model saw.
     private static func write(
-        buffer: CVPixelBuffer, tracks: [OrganismTally.Track], to url: URL, context: CIContext
+        image base: CGImage, tracks: [OrganismTally.Track], to url: URL
     ) -> URL? {
-        let image = CIImage(cvPixelBuffer: buffer)
-        guard let base = context.createCGImage(image, from: image.extent) else { return nil }
-
         let width = base.width
         let height = base.height
         guard
@@ -241,10 +325,14 @@ final class VideoDetectionRunner {
 
     /// One folder per run, named after the video and when it ran.
     private static func folderName(for videoURL: URL) -> String {
+        folderName(called: videoURL.deletingPathExtension().lastPathComponent)
+    }
+
+    private static func folderName(called name: String) -> String {
         let stamp = ISO8601DateFormatter()
         stamp.formatOptions = [.withYear, .withMonth, .withDay, .withTime, .withColonSeparatorInTime]
         let when = stamp.string(from: .now).replacingOccurrences(of: ":", with: "-")
-        return "\(videoURL.deletingPathExtension().lastPathComponent)-\(when)"
+        return "\(name)-\(when)"
     }
 
     /// AVFoundation's track loading is async; this run is already off the main thread.

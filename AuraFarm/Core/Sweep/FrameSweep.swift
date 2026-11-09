@@ -11,26 +11,35 @@ struct SweepThresholds {
     var framesPerSweep: Int = 12
     /// Frames along one row before the sweep turns down and comes back the other way.
     var framesPerRow: Int = 4
-    /// How far the view has to have actually moved from the last frame before another is
-    /// kept, in pixels, so two frames are not taken of the same field of view. This is a
-    /// distance from where the last frame was, not a total of wandering about: a slide pushed
-    /// back and forth returns to where it started and has covered no new ground.
+    /// How far the view has to have moved from the last kept frame before another is kept, in
+    /// pixels, so two frames are not taken of the same field of view. `TravelSinceLastFrame`
+    /// measures this against the kept frame itself, so a slide pushed back and forth returns
+    /// to where it started and has covered no new ground.
     ///
-    /// Raising this to cover more ground was tried against 11 recorded clips at 120, 180, 240
-    /// and 300. It covered less, not more: at 300 the number of frames that could not be lined
-    /// up against the one before went from 13 to 23, and the joined picture came out smaller on
-    /// three of the four clips measured. The reason is that the shift readings under-measure
-    /// fast movement, so the slide has really travelled much further than this by the time the
-    /// frame is kept. Leave it here until the pilot can measure it on a stage, where the slide
-    /// moves slowly and the readings can be trusted.
+    /// NOT CALIBRATED on a stage, but measured: on 600 frames of microscope footage this kept
+    /// 114 frames with a median of 305 px between them, and every pair could still be lined
+    /// up. Raising it was tried earlier at 180, 240 and 300 against a running total of
+    /// frame-to-frame shifts, and covered less ground rather than more; that total is no
+    /// longer what the threshold is measured against, so those runs say nothing about this
+    /// number.
     ///
     /// There is a ceiling either way. Frames are lined up by registration, which needs them to
     /// overlap, and `PanoramaStitcher.maxShiftFraction` refuses a pair that has moved more than
-    /// half a frame, so on a 1080 px wide frame this cannot go far above 400.
+    /// 0.4 of a frame, so on a 1080 px wide frame nothing above 432 can be joined at all.
     var shiftBetweenFrames: Double = 120
-    /// A single reading below this is treated as the mount wobbling rather than the slide
-    /// moving, and is ignored.
-    var ignoreShiftBelow: Double = 3
+    /// How far the view has to have moved before the frame that starts a new row is kept.
+    ///
+    /// A step down is a whole row, not a nudge along one, and the sweep only measures
+    /// distance: without this it keeps the first frame of the new row after the same 120 px
+    /// as a sideways nudge, which is a hand's width into the step rather than at the end of
+    /// it. The prompt then flips to "move left" while the slide is still on its way down, so
+    /// the row that follows lies on top of the one before instead of below it.
+    ///
+    /// PLACEHOLDER, not calibrated. It has the same ceiling as a sideways step and a tighter
+    /// one in practice: `PanoramaStitcher.maxShiftFraction` refuses a pair past 0.4 of a
+    /// frame, which is 768 px down a 1920 px tall frame, and the frame above has to still be
+    /// joinable to the one below it.
+    var shiftBetweenRows: Double = 600
     /// A single reading above this means the slide was moved faster than frames can be placed
     /// against each other. Such a frame is not kept, because the next one could not be lined
     /// up with it; the sweep waits for the slide to be moved at a workable speed.
@@ -148,10 +157,6 @@ final class FrameSweep {
     private(set) var isFinished = false
     private(set) var prompt: SweepPrompt
 
-    /// Where the view has got to since the last frame was kept, as a distance and direction
-    /// from it.
-    private var offsetSinceLastFrame = CGPoint.zero
-
     init(thresholds: SweepThresholds = SweepThresholds()) {
         self.thresholds = thresholds
         prompt = .move(.right, kept: 0, of: thresholds.framesPerSweep)
@@ -202,17 +207,19 @@ final class FrameSweep {
     ///   - issue: the issue the check is showing, if any.
     ///   - shift: how far and which way the view moved since the frame before, or nil before
     ///     the first comparison.
+    ///   - travel: how far the view has moved from the last kept frame, from
+    ///     `TravelSinceLastFrame`. nil when nothing is kept yet, or when the two frames no
+    ///     longer have enough in common to be lined up.
     @discardableResult
-    func update(isSettled: Bool, issue: CaptureIssue?, shift: CGPoint?) -> Step {
+    func update(isSettled: Bool, issue: CaptureIssue?, shift: CGPoint?, travel: Double?) -> Step {
         guard !isFinished else { return .wait }
 
         let step = shift.map { hypot($0.x, $0.y) } ?? 0
-        // Follow the view even while saving is paused: the slide may well be moved past a dark
-        // or blurred patch, and that ground should not have to be covered again.
-        if let shift, step >= thresholds.ignoreShiftBelow {
-            offsetSinceLastFrame.x += shift.x
-            offsetSinceLastFrame.y += shift.y
-        }
+        // No reading at all once a frame is kept means the view has gone beyond it
+        // altogether. Waiting for the distance to reach the mark would then be waiting for a
+        // reading that cannot come back, so the next usable frame starts a fresh run. The
+        // checks below still apply: a frame kept here has to be worth keeping.
+        let outOfReach = keptCount > 0 && travel == nil
 
         guard isSettled, !Self.blocksCapture(issue) else {
             prompt = .fixTheImage
@@ -220,22 +227,34 @@ final class FrameSweep {
         }
 
         // Mid-lurch: the next frame could not be lined up against this one, so it is no use
-        // keeping it. The travel still counts, so nothing is lost by waiting.
+        // keeping it. The slide is still where it is, so nothing is lost by waiting.
         guard step <= thresholds.maxStepPixels else {
             prompt = movePrompt
             return .wait
         }
 
         // The first frame is kept as soon as the image is good; after that the view has to
-        // have moved away from where the last one was taken.
-        let travelled = hypot(offsetSinceLastFrame.x, offsetSinceLastFrame.y)
-        guard keptCount == 0 || travelled >= thresholds.shiftBetweenFrames else {
+        // have moved away from where the last one was taken, by a row's worth when the next
+        // move is the step down between rows.
+        guard keptCount == 0 || outOfReach || (travel ?? 0) >= travelWanted
+        else {
             prompt = movePrompt
             return .wait
         }
 
+        return keep()
+    }
+
+    /// How far the view has to travel before the next frame is kept. A step down between
+    /// rows is a whole row; everything else is a nudge along one.
+    private var travelWanted: Double {
+        Self.direction(afterKeeping: keptCount, framesPerRow: thresholds.framesPerRow) == .down
+            ? thresholds.shiftBetweenRows
+            : thresholds.shiftBetweenFrames
+    }
+
+    private func keep() -> Step {
         keptCount += 1
-        offsetSinceLastFrame = .zero
         if keptCount >= thresholds.framesPerSweep {
             isFinished = true
             prompt = .done(kept: keptCount, stoppedEarly: false)
@@ -257,7 +276,6 @@ final class FrameSweep {
     func reset() {
         keptCount = 0
         bytesWritten = 0
-        offsetSinceLastFrame = .zero
         isFinished = false
         prompt = .move(.right, kept: 0, of: thresholds.framesPerSweep)
     }

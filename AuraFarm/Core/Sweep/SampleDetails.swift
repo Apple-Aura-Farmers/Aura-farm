@@ -3,8 +3,14 @@ import Foundation
 /// What a raw clip is of. Saved as a JSON sidecar next to the clip so footage
 /// can be traced back to the sample it came from.
 struct SampleDetails: Codable, Equatable {
-    /// Identifier written on the sample bag or tube.
+    /// What the field is called: the farmer's name for it, written on the sample bag.
     var sampleID: String
+    /// Where the field is. Optional in the type because sweeps saved before it existed are
+    /// still read; the form asks for it.
+    var location: String?
+    /// Why this test is being taken, in the helper's own words. Free text, and nothing reads
+    /// it but a person.
+    var note: String?
     /// Which microscope field of this sample, counted from 1.
     var field: Int
     var moisture: Moisture
@@ -24,12 +30,15 @@ struct SampleDetails: Codable, Equatable {
         var label: String { rawValue.capitalized }
     }
 
-    /// True when the clip can be traced later. Recording is blocked until then.
+    /// True when the sweep can be traced back to a place later. Recording is blocked until
+    /// then.
     ///
-    /// The sample ID is the whole of it now: the amounts follow the preparation guide and
-    /// are filled in from it, so there is nothing left for the helper to forget.
+    /// The name and the location are the whole of it: the amounts follow the preparation
+    /// guide and are filled in from it, and the note is for whoever reads the result, so
+    /// neither can hold a test up.
     var isComplete: Bool {
         !sampleID.trimmingCharacters(in: .whitespaces).isEmpty
+            && !(location ?? "").trimmingCharacters(in: .whitespaces).isEmpty
     }
 
     /// Base name for the clip and its sidecar: safe as a file name and sorts by time.

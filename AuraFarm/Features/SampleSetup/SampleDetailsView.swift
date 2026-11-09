@@ -20,8 +20,11 @@ struct SampleDetailsView: View {
             }
 
             Section("Step 2 · Sample") {
-                TextField("Sample ID", text: $details.sampleID)
-                    .textInputAutocapitalization(.characters)
+                TextField("Name", text: $details.sampleID)
+                    .textInputAutocapitalization(.words)
+                    .autocorrectionDisabled()
+                TextField("Location", text: $details.location.orEmpty)
+                    .textInputAutocapitalization(.words)
                     .autocorrectionDisabled()
                 Stepper("Field \(details.field)", value: $details.field, in: 1...999)
                 Picker("Soil", selection: $details.moisture) {
@@ -39,7 +42,9 @@ struct SampleDetailsView: View {
         SampleDetailsView(
             details: .constant(
                 SampleDetails(
-                    sampleID: "A12",
+                    sampleID: "Pak Wayan",
+                    location: "Tabanan",
+                    note: nil,
                     field: 1,
                     moisture: .drained,
                     gramsOfSoil: 10,

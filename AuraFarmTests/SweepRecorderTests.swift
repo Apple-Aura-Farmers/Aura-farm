@@ -3,12 +3,30 @@ import XCTest
 @testable import AuraFarm
 
 final class SweepRecorderTests: XCTestCase {
+    func testATestNeedsBothANameAndAPlaceBeforeItCanStart() {
+        var details = SampleDetails.blank
+        XCTAssertFalse(details.isComplete)
+
+        details.sampleID = "Pak Wayan"
+        XCTAssertFalse(details.isComplete, "a name with nowhere to put it cannot be traced back")
+
+        details.location = "Tabanan"
+        XCTAssertTrue(details.isComplete)
+
+        // The description is for whoever reads the result, so it cannot hold a test up.
+        XCTAssertNil(details.note)
+        details.location = "   "
+        XCTAssertFalse(details.isComplete, "whitespace is not a place")
+    }
+
     /// 2026-10-28 08:30:05 UTC, so the expected stamp does not depend on the test machine.
     private let fixedDate = Date(timeIntervalSince1970: 1_793_176_205)
 
     private func details(sampleID: String = "A12", field: Int = 3) -> SampleDetails {
         SampleDetails(
             sampleID: sampleID,
+            // A test needs somewhere it was taken before it can start.
+            location: "Tabanan",
             field: field,
             moisture: .drained,
             gramsOfSoil: 10,
