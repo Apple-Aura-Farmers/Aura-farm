@@ -27,6 +27,19 @@ struct SweepThresholds {
     /// overlap, and `PanoramaStitcher.maxShiftFraction` refuses a pair that has moved more than
     /// 0.4 of a frame, so on a 1080 px wide frame nothing above 432 can be joined at all.
     var shiftBetweenFrames: Double = 120
+    /// How far the view has to have moved before the frame that starts a new row is kept.
+    ///
+    /// A step down is a whole row, not a nudge along one, and the sweep only measures
+    /// distance: without this it keeps the first frame of the new row after the same 120 px
+    /// as a sideways nudge, which is a hand's width into the step rather than at the end of
+    /// it. The prompt then flips to "move left" while the slide is still on its way down, so
+    /// the row that follows lies on top of the one before instead of below it.
+    ///
+    /// PLACEHOLDER, not calibrated. It has the same ceiling as a sideways step and a tighter
+    /// one in practice: `PanoramaStitcher.maxShiftFraction` refuses a pair past 0.4 of a
+    /// frame, which is 768 px down a 1920 px tall frame, and the frame above has to still be
+    /// joinable to the one below it.
+    var shiftBetweenRows: Double = 600
     /// A single reading above this means the slide was moved faster than frames can be placed
     /// against each other. Such a frame is not kept, because the next one could not be lined
     /// up with it; the sweep waits for the slide to be moved at a workable speed.
@@ -221,14 +234,23 @@ final class FrameSweep {
         }
 
         // The first frame is kept as soon as the image is good; after that the view has to
-        // have moved away from where the last one was taken.
-        guard keptCount == 0 || outOfReach || (travel ?? 0) >= thresholds.shiftBetweenFrames
+        // have moved away from where the last one was taken, by a row's worth when the next
+        // move is the step down between rows.
+        guard keptCount == 0 || outOfReach || (travel ?? 0) >= travelWanted
         else {
             prompt = movePrompt
             return .wait
         }
 
         return keep()
+    }
+
+    /// How far the view has to travel before the next frame is kept. A step down between
+    /// rows is a whole row; everything else is a nudge along one.
+    private var travelWanted: Double {
+        Self.direction(afterKeeping: keptCount, framesPerRow: thresholds.framesPerRow) == .down
+            ? thresholds.shiftBetweenRows
+            : thresholds.shiftBetweenFrames
     }
 
     private func keep() -> Step {

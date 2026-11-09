@@ -8,6 +8,7 @@ final class FrameSweepTests: XCTestCase {
         framesPerSweep: 3,
         framesPerRow: 2,
         shiftBetweenFrames: 100,
+        shiftBetweenRows: 500,
         maxStepPixels: 150,
         maxBytes: 1_000
     )
@@ -206,7 +207,8 @@ final class FrameSweepTests: XCTestCase {
 
         sweep.update(isSettled: true, issue: nil, shift: nil, travel: nil)
         sweep.update(isSettled: true, issue: nil, shift: CGPoint(x: 120, y: 0), travel: 120)
-        sweep.update(isSettled: true, issue: nil, shift: CGPoint(x: 120, y: 0), travel: 120)
+        // Two frames fill a row here, so the third is the step down and wants a row's worth.
+        sweep.update(isSettled: true, issue: nil, shift: CGPoint(x: 0, y: 120), travel: 500)
 
         XCTAssertEqual(sweep.keptCount, 3)
         XCTAssertTrue(sweep.isFinished)
@@ -263,6 +265,30 @@ final class FrameSweepTests: XCTestCase {
         XCTAssertEqual(layout.indices(inRow: 0, frameCount: 12), [0, 1, 2, 3])
         XCTAssertEqual(layout.indices(inRow: 1, frameCount: 12), [7, 6, 5, 4])
         XCTAssertEqual(layout.indices(inRow: 2, frameCount: 12), [8, 9, 10, 11])
+    }
+
+    func testTheStepDownBetweenRowsWaitsForAWholeRow() {
+        // Two frames fill a row in these thresholds, so the third starts a new one.
+        let sweep = FrameSweep(thresholds: thresholds)
+        XCTAssertEqual(
+            sweep.update(isSettled: true, issue: nil, shift: nil, travel: nil), .keepFrame)
+        XCTAssertEqual(
+            sweep.update(isSettled: true, issue: nil, shift: CGPoint(x: 10, y: 0), travel: 120),
+            .keepFrame)
+        XCTAssertEqual(sweep.prompt, .move(.down, kept: 2, of: 3))
+
+        // A sideways nudge's worth of travel is not a row, so nothing is kept yet and the
+        // helper is still being told to go down.
+        XCTAssertEqual(
+            sweep.update(isSettled: true, issue: nil, shift: CGPoint(x: 0, y: 10), travel: 120),
+            .wait)
+        XCTAssertEqual(sweep.keptCount, 2)
+        XCTAssertEqual(sweep.prompt, .move(.down, kept: 2, of: 3))
+
+        XCTAssertEqual(
+            sweep.update(isSettled: true, issue: nil, shift: CGPoint(x: 0, y: 10), travel: 500),
+            .keepFrame)
+        XCTAssertEqual(sweep.keptCount, 3)
     }
 
     func testTheGuideBarFillsTheWayTheSlideIsBeingPushed() {
