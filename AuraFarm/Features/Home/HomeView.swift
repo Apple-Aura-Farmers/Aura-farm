@@ -75,6 +75,11 @@ private struct HomeTab: View {
                             } label: {
                                 Label("Detector speed", systemImage: "speedometer")
                             }
+                            NavigationLink {
+                                ResultStatesGallery()
+                            } label: {
+                                Label("Result states", systemImage: "list.bullet.rectangle")
+                            }
                         } label: {
                             Label("Workbench", systemImage: "hammer")
                         }
@@ -100,7 +105,7 @@ private struct HomeTab: View {
             }
             .sheet(item: $finishedSweep) { sweep in
                 NavigationStack {
-                    SoilTestResultView(sweep: sweep)
+                    SoilResultScreen(sweep: sweep)
                 }
             }
             .task(id: isRecording) { sweeps = SweepLibrary.sweeps() }

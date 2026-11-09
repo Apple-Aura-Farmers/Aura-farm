@@ -15,7 +15,23 @@ struct AuraFarmApp: App {
 
     var body: some Scene {
         WindowGroup {
-            HomeView()
+            #if DEBUG
+                // Launched with -resultScenario good (or any ResultScenario name), the app opens
+                // straight on that result state, for screenshots without tapping through.
+                if let scenario = Self.launchScenario {
+                    NavigationStack { ResultScenarioScreen(scenario: scenario) }
+                } else {
+                    HomeView()
+                }
+            #else
+                HomeView()
+            #endif
         }
     }
+
+    #if DEBUG
+        private static var launchScenario: ResultScenario? {
+            UserDefaults.standard.string(forKey: "resultScenario").flatMap(ResultScenario.init(rawValue:))
+        }
+    #endif
 }
