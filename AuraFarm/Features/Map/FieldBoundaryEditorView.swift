@@ -1,5 +1,6 @@
 import AuraFarmKit
 import MapKit
+import SwiftData
 import SwiftUI
 
 /// Draws a field's outline on satellite imagery: tap each corner in turn, then save.

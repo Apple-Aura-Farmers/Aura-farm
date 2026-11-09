@@ -66,8 +66,10 @@ struct FieldDetailView: View {
         .sheet(isPresented: $isAddingNutrientTest) {
             NutrientTestEditorView(field: field, test: nil)
         }
-        .sheet(item: $nutrientTestToEdit) { test in
-            NutrientTestEditorView(field: field, test: test)
+        .sheet(isPresented: isEditingNutrientTest) {
+            if let test = nutrientTestToEdit {
+                NutrientTestEditorView(field: field, test: test)
+            }
         }
         .fullScreenCover(isPresented: $isDrawingBoundary) {
             FieldBoundaryEditorView(field: field)
@@ -239,6 +241,15 @@ struct FieldDetailView: View {
             parts.append("Area not entered")
         }
         return parts.joined(separator: " · ")
+    }
+
+    private var isEditingNutrientTest: Binding<Bool> {
+        Binding(
+            get: { nutrientTestToEdit != nil },
+            set: { isShowing in
+                if !isShowing { nutrientTestToEdit = nil }
+            }
+        )
     }
 
     private var isConfirmingDelete: Binding<Bool> {
