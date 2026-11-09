@@ -47,6 +47,11 @@ struct SampleSetupView: View {
                                 } label: {
                                     Label("Detector speed", systemImage: "speedometer")
                                 }
+                                NavigationLink {
+                                    ResultStatesGallery()
+                                } label: {
+                                    Label("Result states", systemImage: "list.bullet.rectangle")
+                                }
                             } label: {
                                 Label("Workbench", systemImage: "hammer")
                             }
@@ -88,7 +93,7 @@ struct SampleSetupView: View {
                 }
                 .sheet(item: $finishedSweep) { sweep in
                     NavigationStack {
-                        SoilTestResultView(sweep: sweep)
+                        SoilResultScreen(sweep: sweep)
                     }
                 }
         }

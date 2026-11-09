@@ -12,13 +12,6 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
-		9D37F3D5D8D6DA3610516E4B /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 46F86FAA6BBF9AC94A7E4595 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = AC82A56DADE9490C6266E031;
-			remoteInfo = AuraFarm;
-		};
 		50C6DAEC3879276215A74CDF /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 46F86FAA6BBF9AC94A7E4595 /* Project object */;
@@ -26,39 +19,46 @@
 			remoteGlobalIDString = 1AFC2776C01A0FDB440FAD95;
 			remoteInfo = AuraFarmManager;
 		};
+		9D37F3D5D8D6DA3610516E4B /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 46F86FAA6BBF9AC94A7E4595 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AC82A56DADE9490C6266E031;
+			remoteInfo = AuraFarm;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		84ED7D0120B576BF6D11D6DA /* AuraFarm.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AuraFarm.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		5FB2731037DECEBE98931F8A /* AuraFarmTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AuraFarmTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		B1F2383680B649129260616B /* Aura Farm Manager.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Aura Farm Manager.app"; sourceTree = BUILT_PRODUCTS_DIR; };
-		CC850CD6B43F4A94A80F1ED7 /* AuraFarmManagerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AuraFarmManagerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		CC1E047DDFE73CEDEAC8234A /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Base.xcconfig; sourceTree = "<group>"; };
-		741176162224DE8C476991CB /* Local.example.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Local.example.xcconfig; sourceTree = "<group>"; };
-		73FB7E2E6EAFB81057032C5C /* AuraFarm-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "AuraFarm-Info.plist"; sourceTree = "<group>"; };
-		62C263418C5EA4B04AA3F879 /* AuraFarmManager-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "AuraFarmManager-Info.plist"; sourceTree = "<group>"; };
 		140C6DC1A3868F8AD6A856F1 /* AuraFarmManager.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = AuraFarmManager.entitlements; sourceTree = "<group>"; };
+		5FB2731037DECEBE98931F8A /* AuraFarmTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AuraFarmTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		62C263418C5EA4B04AA3F879 /* AuraFarmManager-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "AuraFarmManager-Info.plist"; sourceTree = "<group>"; };
+		73FB7E2E6EAFB81057032C5C /* AuraFarm-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "AuraFarm-Info.plist"; sourceTree = "<group>"; };
+		741176162224DE8C476991CB /* Local.example.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Local.example.xcconfig; sourceTree = "<group>"; };
+		84ED7D0120B576BF6D11D6DA /* AuraFarm.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AuraFarm.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B1F2383680B649129260616B /* Aura Farm Manager.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Aura Farm Manager.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		CC1E047DDFE73CEDEAC8234A /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Base.xcconfig; sourceTree = "<group>"; };
+		CC850CD6B43F4A94A80F1ED7 /* AuraFarmManagerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AuraFarmManagerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		4C13F7E86811430535F74193 /* AuraFarm */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = AuraFarm;
-			sourceTree = "<group>";
-		};
 		01A668C3D00B28E542C28A57 /* AuraFarmTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = AuraFarmTests;
 			sourceTree = "<group>";
 		};
-		94F0079B3C8D09B5351A97FF /* AuraFarmManager */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = AuraFarmManager;
-			sourceTree = "<group>";
-		};
 		4916AD487896A0A34D036269 /* AuraFarmManagerTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = AuraFarmManagerTests;
+			sourceTree = "<group>";
+		};
+		4C13F7E86811430535F74193 /* AuraFarm */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = AuraFarm;
+			sourceTree = "<group>";
+		};
+		94F0079B3C8D09B5351A97FF /* AuraFarmManager */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = AuraFarmManager;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -79,6 +79,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		C40B2F468261FA21BF2CC71B /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		D527ECA02E16A386F9EBEAB5 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -87,16 +94,20 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		C40B2F468261FA21BF2CC71B /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		113236722DEE1DC96F378B9D /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				84ED7D0120B576BF6D11D6DA /* AuraFarm.app */,
+				5FB2731037DECEBE98931F8A /* AuraFarmTests.xctest */,
+				B1F2383680B649129260616B /* Aura Farm Manager.app */,
+				CC850CD6B43F4A94A80F1ED7 /* AuraFarmManagerTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
 		71DC27D9F8E3B109C877BFC4 = {
 			isa = PBXGroup;
 			children = (
@@ -121,66 +132,9 @@
 			path = Config;
 			sourceTree = "<group>";
 		};
-		113236722DEE1DC96F378B9D /* Products */ = {
-			isa = PBXGroup;
-			children = (
-				84ED7D0120B576BF6D11D6DA /* AuraFarm.app */,
-				5FB2731037DECEBE98931F8A /* AuraFarmTests.xctest */,
-				B1F2383680B649129260616B /* Aura Farm Manager.app */,
-				CC850CD6B43F4A94A80F1ED7 /* AuraFarmManagerTests.xctest */,
-			);
-			name = Products;
-			sourceTree = "<group>";
-		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		AC82A56DADE9490C6266E031 /* AuraFarm */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = 218ECE3DF0348606B29D13F0 /* Build configuration list for PBXNativeTarget "AuraFarm" */;
-			buildPhases = (
-				D7A3EA0B87279358BC5D4F8B /* Sources */,
-				66508D23676586ECAED7CE50 /* Frameworks */,
-				F5C7652308D8761E4A16AE51 /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-			);
-			fileSystemSynchronizedGroups = (
-				4C13F7E86811430535F74193 /* AuraFarm */,
-			);
-			name = AuraFarm;
-			packageProductDependencies = (
-				328C0DD016C1485FB148287C /* AuraFarmKit */,
-			);
-			productName = AuraFarm;
-			productReference = 84ED7D0120B576BF6D11D6DA /* AuraFarm.app */;
-			productType = "com.apple.product-type.application";
-		};
-		9E8FC280BF0D2B773764BFED /* AuraFarmTests */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = D84DFC70657534399B90996E /* Build configuration list for PBXNativeTarget "AuraFarmTests" */;
-			buildPhases = (
-				2C7EEA3C0D66485A70FCCAB6 /* Sources */,
-				959749FF7547F8080F0617D9 /* Frameworks */,
-				6F80D12DFD7A36AC699D715C /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-				3F63645E2BA839ED73B59205 /* PBXTargetDependency */,
-			);
-			fileSystemSynchronizedGroups = (
-				01A668C3D00B28E542C28A57 /* AuraFarmTests */,
-			);
-			name = AuraFarmTests;
-			packageProductDependencies = (
-			);
-			productName = AuraFarmTests;
-			productReference = 5FB2731037DECEBE98931F8A /* AuraFarmTests.xctest */;
-			productType = "com.apple.product-type.bundle.unit-test";
-		};
 		1AFC2776C01A0FDB440FAD95 /* AuraFarmManager */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = C024FD4BBB2A2010B6985D07 /* Build configuration list for PBXNativeTarget "AuraFarmManager" */;
@@ -227,6 +181,52 @@
 			productReference = CC850CD6B43F4A94A80F1ED7 /* AuraFarmManagerTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		9E8FC280BF0D2B773764BFED /* AuraFarmTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D84DFC70657534399B90996E /* Build configuration list for PBXNativeTarget "AuraFarmTests" */;
+			buildPhases = (
+				2C7EEA3C0D66485A70FCCAB6 /* Sources */,
+				959749FF7547F8080F0617D9 /* Frameworks */,
+				6F80D12DFD7A36AC699D715C /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				3F63645E2BA839ED73B59205 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				01A668C3D00B28E542C28A57 /* AuraFarmTests */,
+			);
+			name = AuraFarmTests;
+			packageProductDependencies = (
+			);
+			productName = AuraFarmTests;
+			productReference = 5FB2731037DECEBE98931F8A /* AuraFarmTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		AC82A56DADE9490C6266E031 /* AuraFarm */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 218ECE3DF0348606B29D13F0 /* Build configuration list for PBXNativeTarget "AuraFarm" */;
+			buildPhases = (
+				D7A3EA0B87279358BC5D4F8B /* Sources */,
+				66508D23676586ECAED7CE50 /* Frameworks */,
+				F5C7652308D8761E4A16AE51 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				4C13F7E86811430535F74193 /* AuraFarm */,
+			);
+			name = AuraFarm;
+			packageProductDependencies = (
+				328C0DD016C1485FB148287C /* AuraFarmKit */,
+			);
+			productName = AuraFarm;
+			productReference = 84ED7D0120B576BF6D11D6DA /* AuraFarm.app */;
+			productType = "com.apple.product-type.application";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -237,19 +237,19 @@
 				LastSwiftUpdateCheck = 1600;
 				LastUpgradeCheck = 1600;
 				TargetAttributes = {
-					AC82A56DADE9490C6266E031 = {
-						CreatedOnToolsVersion = 16.0;
-					};
-					9E8FC280BF0D2B773764BFED = {
-						CreatedOnToolsVersion = 16.0;
-						TestTargetID = AC82A56DADE9490C6266E031;
-					};
 					1AFC2776C01A0FDB440FAD95 = {
 						CreatedOnToolsVersion = 16.0;
 					};
 					6C03BD762F34BAEBC0B59B05 = {
 						CreatedOnToolsVersion = 16.0;
 						TestTargetID = 1AFC2776C01A0FDB440FAD95;
+					};
+					9E8FC280BF0D2B773764BFED = {
+						CreatedOnToolsVersion = 16.0;
+						TestTargetID = AC82A56DADE9490C6266E031;
+					};
+					AC82A56DADE9490C6266E031 = {
+						CreatedOnToolsVersion = 16.0;
 					};
 				};
 			};
@@ -279,7 +279,7 @@
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		F5C7652308D8761E4A16AE51 /* Resources */ = {
+		0994E0C9D29D405C5392F786 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -300,7 +300,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		0994E0C9D29D405C5392F786 /* Resources */ = {
+		F5C7652308D8761E4A16AE51 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -310,13 +310,6 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		D7A3EA0B87279358BC5D4F8B /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		2C7EEA3C0D66485A70FCCAB6 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -324,14 +317,21 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		E0B1E8DD72318A2DC5292EA1 /* Sources */ = {
+		C752804B31010706468F7B1D /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		C752804B31010706468F7B1D /* Sources */ = {
+		D7A3EA0B87279358BC5D4F8B /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E0B1E8DD72318A2DC5292EA1 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -373,7 +373,7 @@
 					"DEBUG=1",
 					"$(inherited)",
 				);
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				ONLY_ACTIVE_ARCH = YES;
@@ -383,91 +383,7 @@
 			};
 			name = Debug;
 		};
-		B3AFDE6F970A0432673383DD /* Release */ = {
-			isa = XCBuildConfiguration;
-			baseConfigurationReference = CC1E047DDFE73CEDEAC8234A /* Base.xcconfig */;
-			buildSettings = {
-				ALWAYS_SEARCH_USER_PATHS = NO;
-				CLANG_ANALYZER_NONNULL = YES;
-				CLANG_ENABLE_MODULES = YES;
-				CLANG_ENABLE_OBJC_ARC = YES;
-				COPY_PHASE_STRIP = NO;
-				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				ENABLE_NS_ASSERTIONS = NO;
-				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MTL_ENABLE_DEBUG_INFO = NO;
-				SWIFT_COMPILATION_MODE = wholemodule;
-				SWIFT_VERSION = 5.0;
-				VALIDATE_PRODUCT = YES;
-			};
-			name = Release;
-		};
-		EDE6FC8537F4448F01FBC917 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = "Config/AuraFarm-Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = "Aura Farm";
-				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
-				INFOPLIST_KEY_NSCameraUsageDescription = "The camera looks through the microscope to check image quality and record soil samples.";
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UIFileSharingEnabled = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-				);
-				MARKETING_VERSION = 0.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "$(AURA_BUNDLE_ID_PREFIX).aurafarm";
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = iphoneos;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
-				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
-				TARGETED_DEVICE_FAMILY = 1;
-			};
-			name = Debug;
-		};
-		D604D612E18D1A0FD2B082A5 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = "Config/AuraFarm-Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = "Aura Farm";
-				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
-				INFOPLIST_KEY_NSCameraUsageDescription = "The camera looks through the microscope to check image quality and record soil samples.";
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UIFileSharingEnabled = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-				);
-				MARKETING_VERSION = 0.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "$(AURA_BUNDLE_ID_PREFIX).aurafarm";
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = iphoneos;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
-				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
-				TARGETED_DEVICE_FAMILY = 1;
-			};
-			name = Release;
-		};
-		B4B138851D93D9DFA07E7082 /* Debug */ = {
+		7D234326C38CFD9DEE5C9EC9 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
@@ -475,57 +391,13 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 0.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "$(AURA_BUNDLE_ID_PREFIX).aurafarm.tests";
+				PRODUCT_BUNDLE_IDENTIFIER = "$(AURA_BUNDLE_ID_PREFIX).aurafarm.manager.tests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = iphoneos;
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				TARGETED_DEVICE_FAMILY = 1;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/AuraFarm.app/AuraFarm";
-			};
-			name = Debug;
-		};
-		E818A9AC32ED058EEF01D391 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 0.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "$(AURA_BUNDLE_ID_PREFIX).aurafarm.tests";
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = iphoneos;
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				TARGETED_DEVICE_FAMILY = 1;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/AuraFarm.app/AuraFarm";
-			};
-			name = Release;
-		};
-		F72F8E52F157263C4E1EFD4B /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = Config/AuraFarmManager.entitlements;
-				CODE_SIGN_STYLE = Automatic;
-				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
-				ENABLE_HARDENED_RUNTIME = YES;
-				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = "Config/AuraFarmManager-Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = "Aura Farm Manager";
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.business";
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/../Frameworks",
-				);
-				MARKETING_VERSION = 0.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "$(AURA_BUNDLE_ID_PREFIX).aurafarm.manager";
-				PRODUCT_MODULE_NAME = AuraFarmManager;
-				PRODUCT_NAME = "Aura Farm Manager";
 				SDKROOT = macosx;
-				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Aura Farm Manager.app/Contents/MacOS/Aura Farm Manager";
 			};
-			name = Debug;
+			name = Release;
 		};
 		A8A3DCCC2152756919E49DD1 /* Release */ = {
 			isa = XCBuildConfiguration;
@@ -553,6 +425,77 @@
 			};
 			name = Release;
 		};
+		B3AFDE6F970A0432673383DD /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = CC1E047DDFE73CEDEAC8234A /* Base.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_VERSION = 5.0;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		B4B138851D93D9DFA07E7082 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(AURA_BUNDLE_ID_PREFIX).aurafarm.tests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/AuraFarm.app/AuraFarm";
+			};
+			name = Debug;
+		};
+		D604D612E18D1A0FD2B082A5 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 38YF89G59F;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Config/AuraFarm-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Aura Farm";
+				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
+				INFOPLIST_KEY_NSCameraUsageDescription = "The camera looks through the microscope to check image quality and record soil samples.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UIFileSharingEnabled = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(AURA_BUNDLE_ID_PREFIX).aurafarm";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
 		D8D27B42C1C38EBEBF3898A8 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -569,7 +512,7 @@
 			};
 			name = Debug;
 		};
-		7D234326C38CFD9DEE5C9EC9 /* Release */ = {
+		E818A9AC32ED058EEF01D391 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
@@ -577,26 +520,76 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 0.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "$(AURA_BUNDLE_ID_PREFIX).aurafarm.manager.tests";
+				PRODUCT_BUNDLE_IDENTIFIER = "$(AURA_BUNDLE_ID_PREFIX).aurafarm.tests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = macosx;
+				SDKROOT = iphoneos;
 				SWIFT_EMIT_LOC_STRINGS = NO;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Aura Farm Manager.app/Contents/MacOS/Aura Farm Manager";
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/AuraFarm.app/AuraFarm";
 			};
 			name = Release;
+		};
+		EDE6FC8537F4448F01FBC917 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 38YF89G59F;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Config/AuraFarm-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Aura Farm";
+				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
+				INFOPLIST_KEY_NSCameraUsageDescription = "The camera looks through the microscope to check image quality and record soil samples.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UIFileSharingEnabled = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(AURA_BUNDLE_ID_PREFIX).aurafarm";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		F72F8E52F157263C4E1EFD4B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Config/AuraFarmManager.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Config/AuraFarmManager-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Aura Farm Manager";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.business";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(AURA_BUNDLE_ID_PREFIX).aurafarm.manager";
+				PRODUCT_MODULE_NAME = AuraFarmManager;
+				PRODUCT_NAME = "Aura Farm Manager";
+				SDKROOT = macosx;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+			};
+			name = Debug;
 		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		946392D46B65BE2E368A0D3B /* Build configuration list for PBXProject "AuraFarm" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				5E1134544568A0C1B09E583D /* Debug */,
-				B3AFDE6F970A0432673383DD /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
 		218ECE3DF0348606B29D13F0 /* Build configuration list for PBXNativeTarget "AuraFarm" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -606,11 +599,20 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		D84DFC70657534399B90996E /* Build configuration list for PBXNativeTarget "AuraFarmTests" */ = {
+		946392D46B65BE2E368A0D3B /* Build configuration list for PBXProject "AuraFarm" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				B4B138851D93D9DFA07E7082 /* Debug */,
-				E818A9AC32ED058EEF01D391 /* Release */,
+				5E1134544568A0C1B09E583D /* Debug */,
+				B3AFDE6F970A0432673383DD /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B4D53298E1F53D6D64CBA248 /* Build configuration list for PBXNativeTarget "AuraFarmManagerTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D8D27B42C1C38EBEBF3898A8 /* Debug */,
+				7D234326C38CFD9DEE5C9EC9 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
@@ -624,11 +626,11 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		B4D53298E1F53D6D64CBA248 /* Build configuration list for PBXNativeTarget "AuraFarmManagerTests" */ = {
+		D84DFC70657534399B90996E /* Build configuration list for PBXNativeTarget "AuraFarmTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				D8D27B42C1C38EBEBF3898A8 /* Debug */,
-				7D234326C38CFD9DEE5C9EC9 /* Release */,
+				B4B138851D93D9DFA07E7082 /* Debug */,
+				E818A9AC32ED058EEF01D391 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

@@ -19,7 +19,8 @@ concurrency:
 jobs:
   test:
     name: Build and test
-    runs-on: macos-15
+    # The field app targets iOS 26 for Apple's Foundation Models, which needs Xcode 26.
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
 

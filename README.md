@@ -55,6 +55,15 @@ helper visiting farms, not a lab technician.
 - **Live counting** — during a sweep a Core ML detector outlines five groups of soil
   organisms and counts each one once as the slide moves. The count is saved with the
   sweep. It is not calibrated and claims no accuracy.
+- **Result screen** — when a sweep ends: a rough estimate of the soil life seen, with its
+  confidence, its reasons and when to test again; the number of microbes found, which opens
+  out to each kind, named either by the model's classes or by organism group; a note that
+  none of it is scientifically tested; and what to do next, written on the phone by Apple
+  Intelligence, or standard advice when that cannot run. The estimate is a placeholder
+  (`PlaceholderSoilHealthEstimator`, every limit a guess) and the layout is a placeholder
+  until there is a design: each section is its own view in `Features/Results/Components`.
+  The model's classes are matched to organism groups by `ProvisionalTaxonMapping`, which
+  the team still has to confirm.
 - **Send to Mac** — a saved sweep with counts shares a `.aurafarm` soil report by
   AirDrop, Files or Mail, for the farm manager.
 - **Export** — frames can be copied off the phone with the Files app.
@@ -166,8 +175,19 @@ rather than under Signing & Capabilities (that writes it into the shared project
 Bundle identifiers start with `AURA_BUNDLE_ID_PREFIX` from `Config/Base.xcconfig`; override
 it in your `Local.xcconfig` if it is already registered to another team.
 
-Requires Xcode 16 or later. The field app runs on iOS 17 or later, iPhone, portrait only;
-the farm manager on macOS 14 or later. No third-party dependencies.
+Requires Xcode 26 or later. The field app runs on iOS 26 or later, iPhone, portrait only;
+its written advice needs an iPhone with Apple Intelligence turned on, and falls back to
+standard advice without it. The farm manager runs on macOS 14 or later. No third-party
+dependencies.
+
+### Seeing every result state
+
+Debug builds have **Result states** in the hammer menu on the first screen. It opens the
+result screen with made-up results: lots, some or little soil life, a low count, nothing
+counted, a detector that failed, missing sample details, Apple Intelligence unavailable,
+advice that fails or never arrives, and one that asks the real on-device model. The same
+states are Xcode previews in `ResultStatesGallery.swift`. Add a case to `ResultScenario`
+for a new state.
 
 | Scheme | Builds |
 |---|---|
@@ -218,8 +238,9 @@ AuraFarm/               iOS field app
     Imaging/            Frame analysis, quality check, panorama stitching
     Sweep/              Sweep rules, recorder, saved-sweep library, sample details
     Detection/          Core ML organism detector, tally, benchmark
+    Results/            Soil life estimate, recommendations, organism naming
   Features/             SwiftUI screens, one folder per feature
-    SampleSetup/  Capture/  SweepLibrary/  Workbench/
+    SampleSetup/  Capture/  Results/  SweepLibrary/  Workbench/
   Resources/            Core ML model
 AuraFarmTests/          Unit tests for the iOS app
 AuraFarmManager/        macOS farm manager
