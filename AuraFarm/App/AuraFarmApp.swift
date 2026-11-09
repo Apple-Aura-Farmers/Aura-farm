@@ -15,7 +15,7 @@ struct AuraFarmApp: App {
 
     var body: some Scene {
         WindowGroup {
-            SampleSetupView()
+            RootView()
         }
     }
 }

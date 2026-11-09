@@ -16,6 +16,13 @@ struct SampleSetupView: View {
     /// The sweep the camera just saved, to show its result.
     @State private var finishedSweep: SavedSweep?
 
+    /// Sends the person back to the role picker. nil where there is no picker, as in previews.
+    var onSwitchRole: (() -> Void)?
+
+    init(onSwitchRole: (() -> Void)? = nil) {
+        self.onSwitchRole = onSwitchRole
+    }
+
     var body: some View {
         NavigationStack {
             SampleDetailsView(details: $details)
@@ -26,6 +33,13 @@ struct SampleSetupView: View {
                             SweepLibraryView()
                         } label: {
                             Label("Saved sweeps", systemImage: "square.stack.3d.up")
+                        }
+                    }
+                    if let onSwitchRole {
+                        ToolbarItem(placement: .topBarLeading) {
+                            Button(action: onSwitchRole) {
+                                Label("Switch role", systemImage: "arrow.left.arrow.right")
+                            }
                         }
                     }
                     #if DEBUG
