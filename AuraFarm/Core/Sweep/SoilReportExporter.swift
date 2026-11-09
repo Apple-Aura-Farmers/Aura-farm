@@ -2,7 +2,8 @@ import AuraFarmKit
 import CryptoKit
 import Foundation
 
-/// Turns a saved sweep into the soil report the farm manager on a Mac reads.
+/// Turns a saved sweep into a soil report: what the farm records save, and the file shared off
+/// the phone.
 ///
 /// Read only, like the rest of the library: the report is written to a temporary file for the
 /// share sheet, and nothing in the sweep's folder is changed.
@@ -14,9 +15,9 @@ enum SoilReportExporter {
         var errorDescription: String? {
             switch self {
             case .noSampleDetails:
-                return "This sweep has no sample details, so it cannot be sent."
+                return "This sweep has no sample details, so it cannot be saved or shared."
             case .notCounted:
-                return "Nothing was counted in this sweep, so there is no result to send."
+                return "This sweep was not counted, so there is no result to save or share."
             }
         }
     }
@@ -73,9 +74,9 @@ enum SoilReportExporter {
         return url
     }
 
-    /// The same for every send of one sweep, so the farm manager knows a repeat when it sees
-    /// one. Taken from the sweep's folder name, which holds the sample ID and the UTC time it
-    /// was recorded and is never reused on a phone.
+    /// The same every time one sweep is saved or shared, so the records know a repeat when
+    /// they see one. Taken from the sweep's folder name, which holds the sample ID and the UTC
+    /// time it was recorded and is never reused on a phone.
     static func reportID(for sweep: SavedSweep) -> UUID {
         var bytes = Array(SHA256.hash(data: Data(sweep.name.utf8)).prefix(16))
         // Mark it as a name-based UUID (version 5 layout, RFC 4122 variant).

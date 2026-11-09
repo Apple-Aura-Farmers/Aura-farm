@@ -30,7 +30,7 @@ struct SweepDetailView: View {
     @State private var frames: [UIImage] = []
     /// The frames the stitcher could not place, by index, once it has been asked.
     @State private var unplaced: Set<Int>?
-    /// The soil report for the farm manager, written when the screen opens. nil while it is
+    /// The soil report file to share, written when the screen opens. nil while it is
     /// being written, and for a sweep that has nothing to send.
     @State private var reportURL: URL?
 
@@ -71,10 +71,10 @@ struct SweepDetailView: View {
                 Toggle("Grayscale", isOn: $showGrayscale).toggleStyle(.button)
             }
             ToolbarItem(placement: .topBarTrailing) {
-                // AirDrop it to the Mac, or save it to Files and open it there.
+                // Off the phone: AirDrop it to another phone, or keep a copy in Files.
                 if let reportURL {
                     ShareLink(item: reportURL) {
-                        Label("Send to Mac", systemImage: "laptopcomputer.and.arrow.down")
+                        Label("Share Report", systemImage: "square.and.arrow.up")
                     }
                 }
             }

@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// Where the app opens: start a test, or look at the ones already taken.
+/// The field helper's screens: start a test, look at the ones already taken, and look up a
+/// farm's fields and plan to explain a result to the farmer.
 struct HomeView: View {
     var body: some View {
         TabView {
@@ -10,6 +11,11 @@ struct HomeView: View {
                 SweepLibraryView()
             }
             .tabItem { Label("Results", systemImage: "doc.text.image") }
+            NavigationStack {
+                FarmListView()
+                    .farmRecordDestinations()
+            }
+            .tabItem { Label("Farms", systemImage: "leaf") }
         }
     }
 }
@@ -164,4 +170,5 @@ extension SampleDetails {
 
 #Preview {
     HomeView()
+        .modelContainer(for: FarmStore.models, inMemory: true)
 }

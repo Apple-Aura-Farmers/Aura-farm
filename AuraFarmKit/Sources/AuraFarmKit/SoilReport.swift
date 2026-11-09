@@ -1,11 +1,10 @@
 import Foundation
 
-/// One soil test, as the field app hands it to the farm manager.
+/// One soil test, as a finished sweep is saved into the farm records or shared off the phone.
 ///
-/// The field app writes it when a helper sends a sweep on; the farm manager reads it and
-/// files it under a farm. It carries what the sweep counted and the sample it came from,
-/// never a verdict on the soil: the counts are raw, and only comparable between tests
-/// prepared the same way.
+/// The app builds it from a saved sweep, and the records file it under a field. It carries
+/// what the sweep counted and the sample it came from, never a verdict on the soil: the
+/// counts are raw, and only comparable between tests prepared the same way.
 ///
 /// The format is versioned. Add fields as optionals so older reports still decode, and
 /// raise `currentSchemaVersion` only for a change an older reader cannot ignore.
@@ -13,7 +12,7 @@ public struct SoilReport: Codable, Equatable, Identifiable, Sendable {
     /// The version this build writes, and the newest it can read.
     public static let currentSchemaVersion = 1
 
-    /// The uniform type identifier, declared in both apps' Info.plist.
+    /// The uniform type identifier, declared in the app's Info.plist.
     public static let typeIdentifier = "io.github.apple-aura-farmers.aurafarm.soil-report"
 
     /// The file extension the report is saved with.

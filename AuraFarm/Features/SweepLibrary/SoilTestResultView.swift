@@ -1,15 +1,21 @@
 import AuraFarmKit
+import SwiftData
 import SwiftUI
 
-/// What one sweep counted, with the button that sends it to the farm manager on the Mac.
+/// What one sweep counted, saved into the farm records the program manager works from.
 ///
-/// Shown when a sweep finishes, from the camera or from a recorded video. The counts are raw:
-/// the screen says so and gives no verdict on the soil, because a verdict needs recommended
-/// actions behind it and those are not built yet.
+/// Shown when a sweep finishes, from the camera or from a recorded video. The test is saved as
+/// soon as the screen opens, so nothing depends on remembering a button; the helper then
+/// picks the field it came from, and the field's plan is one tap away to explain to the
+/// farmer. The counts are raw: the screen says so and gives no verdict on the soil.
 struct SoilTestResultView: View {
     let sweep: SavedSweep
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+    /// The soil test this sweep became in the records. nil until saved, or when it cannot be.
+    @State private var savedTest: SoilTest?
+    @State private var saveProblem: String?
     /// The soil report file for the share sheet. nil while it is being written, and for a
     /// sweep that has nothing to send, which `reportProblem` then explains.
     @State private var reportURL: URL?
@@ -37,12 +43,20 @@ struct SoilTestResultView: View {
             }
 
             Section {
-                sendButton
+                recordsRows
+            } header: {
+                Text("Farm records")
             } footer: {
                 Text(
-                    "AirDrop it to the office Mac and open it there with Aura Farm Manager, or "
-                        + "save it to Files and import it on the Mac."
+                    "Saved on this phone for the program manager. Pick the field the sample came "
+                        + "from; until then it waits in the manager's inbox."
                 )
+            }
+
+            Section {
+                sendButton
+            } footer: {
+                Text("Only needed to move the test to another phone, or to keep a copy in Files.")
             }
 
             Section {
@@ -61,6 +75,50 @@ struct SoilTestResultView: View {
             }
         }
         .task { await prepareReport() }
+        .task { saveToRecords() }
+    }
+
+    @ViewBuilder
+    private var recordsRows: some View {
+        if let savedTest {
+            FieldPicker(selection: fieldBinding(for: savedTest))
+            if let field = savedTest.field {
+                NavigationLink {
+                    FieldDetailView(field: field)
+                        .farmRecordDestinations()
+                } label: {
+                    Label("What to do on \(field.name)", systemImage: "list.bullet.clipboard")
+                }
+            }
+        } else if let saveProblem {
+            Text(saveProblem)
+                .foregroundStyle(.secondary)
+        } else {
+            ProgressView("Saving")
+        }
+    }
+
+    /// Filing changes the test and is saved straight away, so leaving the screen keeps it.
+    private func fieldBinding(for test: SoilTest) -> Binding<Field?> {
+        Binding(
+            get: { test.field },
+            set: { field in
+                test.field = field
+                try? modelContext.save()
+            }
+        )
+    }
+
+    /// Saving twice finds the same test again, so reopening a result does not double it.
+    private func saveToRecords() {
+        do {
+            switch try SoilReportImporter(context: modelContext).importSweep(sweep) {
+            case .imported(let test), .alreadyImported(let test):
+                savedTest = test
+            }
+        } catch {
+            saveProblem = error.localizedDescription
+        }
     }
 
     private var details: SampleDetails? { sweep.manifest?.details }
@@ -72,7 +130,7 @@ struct SoilTestResultView: View {
         var id: String { taxon }
     }
 
-    /// Most counted first, the same order the Mac shows them in. nil when the sweep was not
+    /// Most counted first, the same order the records show them in. nil when the sweep was not
     /// counted at all.
     private var counts: [GroupCount]? {
         sweep.manifest?.organismCounts.map { counts in
@@ -118,7 +176,7 @@ struct SoilTestResultView: View {
     private var sendButton: some View {
         if let reportURL {
             ShareLink(item: reportURL) {
-                Label("Send to Mac", systemImage: "laptopcomputer.and.arrow.down")
+                Label("Share Report", systemImage: "square.and.arrow.up")
                     .font(.headline)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 6)

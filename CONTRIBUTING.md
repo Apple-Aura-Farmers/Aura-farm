@@ -29,8 +29,8 @@ Trunk-based, with short-lived branches off `main`.
 
 A pull request can merge once:
 
-1. `Build and test`, `Mac build and test` and `AuraFarmKit tests` are green — both apps
-   build and every unit test passes
+1. `Build and test` and `AuraFarmKit tests` are green — the app builds and every unit
+   test passes
 2. `Format check` is green — `swift-format lint` is clean
 3. `Repo checks` are green — every Swift file is inside a target folder, and no video or
    oversized file is committed
@@ -51,9 +51,8 @@ Label a pull request `automerge` and it merges itself as soon as those checks pa
 
    ```bash
    xcodebuild test -scheme AuraFarm -destination 'platform=iOS Simulator,name=iPhone 17'
-   xcodebuild test -scheme AuraFarmManager -destination 'platform=macOS'
    swift test --package-path AuraFarmKit
-   xcrun swift-format format -i -r AuraFarm AuraFarmTests AuraFarmManager AuraFarmManagerTests AuraFarmKit
+   xcrun swift-format format -i -r AuraFarm AuraFarmTests AuraFarmKit
    ```
 
 5. Open a pull request into `main` and fill in the template.
@@ -97,13 +96,14 @@ because breaking it costs data or credibility.
 
 ## The soil report format
 
-The iPhone app and the Mac app talk only through the `.aurafarm` soil report in
-`AuraFarmKit`. Change it with care: a field helper's phone and the office Mac are rarely
-updated on the same day.
+Field helpers and the program manager share one phone and one set of farm records, so a
+finished sweep is saved straight into them. The `.aurafarm` soil report in `AuraFarmKit`
+remains for sharing a test off the phone and importing one from another phone. Change it
+with care: two phones are rarely updated on the same day.
 
 - Add new fields as optionals, so a report from an older phone still opens.
 - Raise `SoilReport.currentSchemaVersion` only for a change an older reader cannot ignore.
-  An older Mac app then says the report needs an update instead of failing on it.
+  An older app then says the report needs an update instead of failing on it.
 - Keep it Foundation only, so its tests run with `swift test` and nothing else.
 
 ## UI copy

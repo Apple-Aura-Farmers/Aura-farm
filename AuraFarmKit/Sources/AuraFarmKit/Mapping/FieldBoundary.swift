@@ -18,8 +18,8 @@ public struct FieldPoint: Codable, Equatable, Hashable, Sendable {
 
 /// The outline of a field, as clicked on a satellite map: its corners in order.
 ///
-/// Stored as JSON on the Mac, so the shape survives schema changes and can later travel in a
-/// report if the iPhone needs it.
+/// Stored as JSON in the farm records, so the shape survives schema changes and could later
+/// travel in a report.
 public struct FieldBoundary: Codable, Equatable, Hashable, Sendable {
     /// Corners in the order they were clicked. The last joins back to the first.
     public var corners: [FieldPoint]

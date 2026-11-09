@@ -9,7 +9,7 @@ import Observation
 /// and counting included, can be tried against real microscope footage without a microscope.
 ///
 /// It writes an ordinary sweep, counts included, so what comes out can be opened in Saved
-/// sweeps and sent to the Mac like any other. Nothing here touches the video it reads.
+/// sweeps and saved to the farm records like any other. Nothing here touches the video it reads.
 @Observable
 final class VideoSweepRunner {
     private(set) var isRunning = false

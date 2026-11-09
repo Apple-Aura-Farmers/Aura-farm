@@ -2,7 +2,7 @@
 
 import PackageDescription
 
-/// What the field app and the farm manager share: the soil report one hands to the other.
+/// What the app is built on that needs no UI: the soil report, the NPK advice, field outlines.
 ///
 /// Foundation only, so it builds and tests anywhere, including `swift test` on Linux CI.
 let package = Package(

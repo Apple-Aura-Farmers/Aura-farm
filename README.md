@@ -1,7 +1,18 @@
 # Aura Farm
 
-An iOS app that turns an iPhone and a microscope into an on-site soil test, and a Mac
-app that keeps the results by farm and field.
+An iOS app that turns an iPhone and a microscope into an on-site soil test, and keeps the
+results by farm and field with a fertilizer plan for each field.
+
+Two people share one phone, each with their own screens. A toggle at the top of every
+screen switches between them:
+
+- **Field helper** — prepares the sample, runs the sweep, gets the result, files it under
+  the field it came from, and opens that field's plan to explain it to the farmer. Sees
+  farms, fields and plans but does not change them.
+- **Program manager** — sets up farms and fields, draws them on the map, types in NPK
+  results, keeps the seasons, and files any test the helper left in the inbox.
+
+The toggle is a placeholder for sign-in: anyone can switch.
 
 A field helper mounts the phone on a microscope, prepares a soil sample with the
 in-app guide, records the sample, and the app looks for the microbes that indicate
@@ -55,27 +66,30 @@ helper visiting farms, not a lab technician.
 - **Live counting** — during a sweep a Core ML detector outlines five groups of soil
   organisms and counts each one once as the slide moves. The count is saved with the
   sweep. It is not calibrated and claims no accuracy.
-- **Send to Mac** — a saved sweep with counts shares a `.aurafarm` soil report by
-  AirDrop, Files or Mail, for the farm manager.
+- **Saved to the farm records** — the result screen saves the test into the records both
+  roles share, as soon as it opens, and asks which field it came from. Saving the same
+  sweep twice is recognised and skipped.
+- **Share report** — a saved sweep can still be shared as a `.aurafarm` soil report by
+  AirDrop, Files or Mail, to move it to another phone or keep a copy.
 - **Export** — frames can be copied off the phone with the Files app.
 
-**Farm manager (Mac)**
+**Farm records** (the program manager changes them; field helpers look them up)
 
 - **Farms and fields** — each farm with its farmer, village and notes, and the fields
   (paddies) it is split into.
-- **Inbox** — soil reports from the iPhone land here. Open a `.aurafarm` file, drag it
-  onto the window, or use File › Import Soil Reports. The same sweep sent twice is
-  recognised and skipped.
+- **Inbox** — tests a helper saved without picking a field wait here to be filed. From
+  here the manager can also add sweeps saved on the phone before the records existed, or
+  import `.aurafarm` files from another phone.
 - **Soil tests** — file each test under its field, then see what was counted, as a chart
   and a table, with the sample details, how it was counted, the slide and notes.
 - **Trends** — organisms counted per field over time, on each farm's page.
-- **Field page** — click a field on its farm's page, or in the sidebar, to see everything
+- **Field page** — tap a field on its farm's page to see everything
   about it in one place: what to do, its NPK results, the latest microscope count, and
   both trends.
-- **Satellite map** — on a field's page, choose **Draw Boundary** and click the paddy's
+- **Satellite map** — on a field's page, choose **Draw Boundary** and tap the paddy's
   corners on satellite imagery; search for the farm's village to get there. The outline's
   area can replace the field's typed-in area, so the fertilizer doses for the field use the
-  real size. The farm's page shows every drawn field on one map; click a name to open it.
+  real size. The farm's page shows every drawn field on one map; tap a name to open it.
   Imagery comes from Apple Maps and needs an internet connection.
 - **NPK results** — type in N, P and K from the paddy soil test kit (PUTS), which gives a
   class of low, medium or high, or from a lab report. A lab value in % total N, or in mg
@@ -198,19 +212,17 @@ rather than under Signing & Capabilities (that writes it into the shared project
 Bundle identifiers start with `AURA_BUNDLE_ID_PREFIX` from `Config/Base.xcconfig`; override
 it in your `Local.xcconfig` if it is already registered to another team.
 
-Requires Xcode 16 or later. The field app runs on iOS 17 or later, iPhone, portrait only;
-the farm manager on macOS 14 or later. No third-party dependencies.
+Requires Xcode 16 or later. The app runs on iOS 17 or later, iPhone, portrait only. No
+third-party dependencies.
 
 | Scheme | Builds |
 |---|---|
-| `AuraFarm` | The iOS field app and its tests |
-| `AuraFarmManager` | The Mac farm manager and its tests |
+| `AuraFarm` | The iOS app and its tests |
 
 Run the unit tests:
 
 ```bash
 xcodebuild test -scheme AuraFarm -destination 'platform=iOS Simulator,name=iPhone 17'
-xcodebuild test -scheme AuraFarmManager -destination 'platform=macOS'
 swift test --package-path AuraFarmKit
 ```
 
@@ -220,51 +232,44 @@ The simulator name has to match a runtime installed on your machine;
 The camera does not work in the Simulator. Test the capture screen on a real iPhone,
 mounted on the microscope.
 
-### Try the whole flow, iPhone to Mac
+### Try the whole flow on one phone
 
 No microscope needed: a recorded microscope video goes through exactly the pipeline the
 camera does.
 
-1. **Mac:** run the `AuraFarmManager` scheme on My Mac once, so the Mac knows it opens
-   `.aurafarm` files. Leave it open.
-2. **iPhone:** run the `AuraFarm` scheme on your iPhone. Put a microscope recording in
-   Photos first.
-3. **Prepare:** on the first screen, Step 1 opens the preparation guide: the mix, making
-   the slide, mounting the phone, and the path to walk the slide along.
-4. **Sample:** type a sample ID, then tap **Use a recorded video**. Choose the video, set
-   where the slide starts moving steadily, and tap **Run sample**. With a microscope, tap
-   **Start** instead and follow the arrows.
-5. **Result:** when the sweep finishes, the result shows what was counted per organism
-   group. Tap **Send to Mac** and AirDrop it to your Mac.
-6. **Mac:** the report opens in Aura Farm Manager's Inbox. Add a farm and a field in the
-   sidebar, then file the test under the field.
-7. **Mac:** open the field and choose **Add NPK Results**. Enter the kit's classes, or a
-   lab's values, and the field page shows what to do.
+1. **Program manager:** run the `AuraFarm` scheme on your iPhone and pick **Program
+   manager** at the top. On **Farms**, add a farm and a field. Put a microscope recording
+   in Photos.
+2. **Field helper:** switch to **Field helper**. Tap **New Test**, open the preparation
+   guide if you need it, type a sample name, and use a recorded video, or with a
+   microscope start the camera and follow the arrows.
+3. **Result:** when the sweep finishes, the result shows what was counted and is already
+   saved. Pick the field under **Farm records**, then open **What to do** for the plan.
+4. **Program manager:** switch back. Open the field, choose **Add NPK Results**, enter
+   the kit's classes or a lab's values, and the field page shows the fertilizer plan.
 
 ## Repository layout
 
 ```
 AuraFarm.xcodeproj      The Xcode project. Target folders are synchronized: a file
                         added to one on disk is in that target, no project edit needed.
-AuraFarm/               iOS field app
-  App/                  App entry point
+AuraFarm/               The iOS app
+  App/                  App entry point, with the farm records store
   Core/
     Imaging/            Frame analysis, quality check, panorama stitching
     Sweep/              Sweep rules, recorder, saved-sweep library, sample details
     Detection/          Core ML organism detector, tally, benchmark
-  Features/             SwiftUI screens, one folder per feature
-    SampleSetup/  Capture/  SweepLibrary/  Workbench/
-  Resources/            Core ML model
-AuraFarmTests/          Unit tests for the iOS app
-AuraFarmManager/        macOS farm manager
-  App/                  App entry point, file opening, menu commands
-  Models/               SwiftData records: Farm, Field, SoilTest, OrganismCount,
+  Records/
+    Models/             SwiftData records: Farm, Field, SoilTest, OrganismCount,
                         NutrientTest, Season, FertilizerApplication
-  Services/             Importing soil reports, handing a field to the advisor
-  Features/             SwiftUI screens: Navigation/  Farms/  Fields/  Map/  Seasons/
-                        SoilTests/
-AuraFarmManagerTests/   Unit tests for the Mac app
-AuraFarmKit/            Swift package both apps share: the .aurafarm soil report format,
+    Services/           Saving sweeps and importing reports, handing a field to the advisor
+  Features/             SwiftUI screens, one folder per feature
+    Roles/              The role toggle and each role's home
+    Home/  SampleSetup/  Capture/  SweepLibrary/  RecordedSample/  Workbench/
+    Farms/  Fields/  Map/  Seasons/  SoilTests/
+  Resources/            Core ML model
+AuraFarmTests/          Unit tests for the app
+AuraFarmKit/            Swift package the app is built on: the .aurafarm soil report format,
                         Advice/, the NPK thresholds, fertilizer doses and advisor, and
                         Mapping/, field outlines and their area
 Config/                 Shared xcconfig, Info.plist additions, your gitignored Local.xcconfig
@@ -282,7 +287,6 @@ Every pull request into `main` runs:
 | Check | Does |
 |---|---|
 | `Build and test` | Builds the iOS app and runs its unit tests on an iOS Simulator |
-| `Mac build and test` | Builds the Mac app and runs its unit tests |
 | `AuraFarmKit tests` | Runs the shared package's unit tests |
 | `Format check` | `swift-format lint`, settings in `.swift-format` |
 | `Repo checks` | Every Swift file is inside a target folder; no video or file over 5 MB |
