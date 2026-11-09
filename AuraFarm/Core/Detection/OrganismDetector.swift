@@ -5,12 +5,22 @@ import Vision
 /// The trained detector: a YOLO26n model exported to Core ML with non-maximum suppression
 /// built into the model, so Vision hands back finished boxes rather than raw tensors.
 ///
-/// The model knows five classes, named as it names them: euglena, paramecium, stentor,
-/// volvox and vorticella.
+/// The model knows twenty-six classes, named as it names them: Amoeba, Nematode, Ceratium,
+/// Coleps, Collodictyon, Colsterium, Cylindrocystis, Didinium, Dinobryon, Frontonia,
+/// Lepocinclis, Micrasterias, Paramecium, Peridinium, Phacus, Pinnularia, Pleurotaenium,
+/// Pyrocystis, Volvox, Euglena, Stentor, Vorticella, Arcellinida, Digononta, Monogononta
+/// and Hypotrichida.
 ///
-/// Two other trained weights were tried against the same footage. The nineteen-class one
-/// answered "Nematode" with a box covering the whole frame on 74 of its 134 hits, which is
-/// the model shrugging rather than finding anything, so this one is in instead.
+/// Four trained weights were held against each other on 200 nematode stills, 200 stills of
+/// ciliates and 600 frames of real microscope footage. This one, the only one that knows all
+/// twenty-six, found the most on the footage of any that kept its boxes sensible: 61 boxes
+/// over 600 frames with none covering more than 80% of the frame. The five-class weights it
+/// replaced found 48 on the same frames, and the nineteen-class one found 153 but 39 of
+/// those covered the frame, which is the model shrugging rather than finding anything.
+///
+/// It does not settle nematodes. On 200 stills that are all nematodes it labelled 7 of them
+/// Nematode and 52 Paramecium, and over the 600 frames it never said Nematode once, though
+/// one is plainly in them. Counting nematodes needs weights that can find them.
 ///
 /// `computeUnits` is open so the benchmark can hold the Neural Engine, the GPU and the CPU
 /// against each other. Anywhere else, leave it at `.all` and let Core ML choose.
@@ -39,11 +49,12 @@ struct OrganismDetector {
 
     /// A box covering more of the frame than this is thrown away before anything counts it.
     ///
-    /// The nineteen-class weights answered "Nematode" with a box covering the whole frame on
-    /// 74 of their 134 hits on real microscope footage, median 108% of the frame, which is
-    /// the model shrugging rather than finding anything. Boxes on things that are really
-    /// there measured 1% to 9% of the frame across the same footage and two still datasets,
-    /// so the gap either side of this is wide.
+    /// A model with nothing to say answers with the whole picture. The nineteen-class
+    /// weights did it on 39 of their 107 nematode boxes over 600 frames of real footage, and
+    /// the five-class ones on 113 of their 160 boxes over 200 nematode stills, which are
+    /// images of an organism neither of them knows. The weights in use here do it on 42 of
+    /// 118 boxes over those same stills and on none at all over the footage, so the guard
+    /// still has work to do on a slide the model was not trained for.
     ///
     /// Not calibrated against a stage. At a low enough magnification one large organism
     /// could fill this much of the field honestly, and it would be dropped.

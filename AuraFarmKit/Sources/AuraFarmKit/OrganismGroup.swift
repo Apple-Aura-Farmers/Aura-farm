@@ -9,6 +9,9 @@ public enum OrganismGroup: String, CaseIterable, Sendable {
     case digononta = "Digononta"
     case monogononta = "Monogononta"
     case nematoda = "Nematoda"
+    /// The spelling the detector in the app uses. The weights before it said `Nematoda`, and
+    /// reports written then are still read, so both spellings stay.
+    case nematode = "Nematode"
     case hypotrichida = "Hypotrichida"
 
     /// The everyday name, for example "Nematodes".
@@ -17,7 +20,7 @@ public enum OrganismGroup: String, CaseIterable, Sendable {
         case .arcellinida: return "Testate amoebae"
         case .digononta: return "Bdelloid rotifers"
         case .monogononta: return "Monogonont rotifers"
-        case .nematoda: return "Nematodes"
+        case .nematoda, .nematode: return "Nematodes"
         case .hypotrichida: return "Hypotrich ciliates"
         }
     }
