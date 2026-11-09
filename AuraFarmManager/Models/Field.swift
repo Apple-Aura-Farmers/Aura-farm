@@ -1,3 +1,4 @@
+import AuraFarmKit
 import Foundation
 import SwiftData
 
@@ -11,6 +12,9 @@ final class Field {
     var areaHectares: Double? = nil
     var createdAt: Date
     var farm: Farm? = nil
+    /// The field's outline as drawn on the satellite map, as `FieldBoundary` JSON. nil until
+    /// someone draws it.
+    var boundaryData: Data? = nil
 
     /// Deleting a field keeps its soil tests: they go back to the inbox to be filed again.
     @Relationship(deleteRule: .nullify, inverse: \SoilTest.field)
@@ -31,6 +35,19 @@ final class Field {
     /// The most recent soil test filed here, if any.
     var latestSoilTest: SoilTest? {
         soilTests.max { $0.recordedAt < $1.recordedAt }
+    }
+
+    /// The outline drawn on the map. Setting nil, or an outline with fewer than three corners,
+    /// removes it.
+    var boundary: FieldBoundary? {
+        get { boundaryData.flatMap(FieldBoundary.init(data:)) }
+        set {
+            guard let newValue, newValue.isComplete else {
+                boundaryData = nil
+                return
+            }
+            boundaryData = try? newValue.encoded()
+        }
     }
 
     /// The most recent NPK results, if any.

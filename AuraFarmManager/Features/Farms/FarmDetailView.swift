@@ -1,8 +1,8 @@
 import SwiftData
 import SwiftUI
 
-/// A farm: who farms it, its fields, how their soil life has moved, and every soil test filed
-/// under them.
+/// A farm: who farms it, its fields and where they are, how their soil life has moved, and every
+/// soil test filed under them.
 struct FarmDetailView: View {
     @Bindable var farm: Farm
     @Binding var selection: PersistentIdentifier?
@@ -21,6 +21,7 @@ struct FarmDetailView: View {
                 VStack(alignment: .leading, spacing: 24) {
                     header
                     fieldList
+                    FarmMapView(fields: farm.sortedFields, onOpenField: onOpenField)
                     FieldTrendChart(fields: farm.sortedFields)
                 }
                 .padding(20)

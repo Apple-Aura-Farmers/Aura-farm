@@ -2,8 +2,8 @@ import AuraFarmKit
 import SwiftData
 import SwiftUI
 
-/// One field: what to do about it, its NPK results, what the microscope counted, and every soil
-/// test filed under it.
+/// One field: what to do about it, where it is, its NPK results, what the microscope counted, and
+/// every soil test filed under it.
 struct FieldDetailView: View {
     @Bindable var field: Field
     @Binding var selection: PersistentIdentifier?
@@ -13,6 +13,7 @@ struct FieldDetailView: View {
     @State private var nutrientTestToEdit: NutrientTest?
     @State private var nutrientTestToDelete: NutrientTest?
     @State private var isEditingField = false
+    @State private var isDrawingBoundary = false
 
     var body: some View {
         VSplitView {
@@ -20,6 +21,9 @@ struct FieldDetailView: View {
                 VStack(alignment: .leading, spacing: 24) {
                     header
                     advice
+                    FieldMapPreview(field: field) {
+                        isDrawingBoundary = true
+                    }
                     nutrientList
                     NutrientTrendChart(tests: field.nutrientTests)
                     latestCounts
@@ -59,6 +63,9 @@ struct FieldDetailView: View {
         }
         .sheet(item: $nutrientTestToEdit) { test in
             NutrientTestEditorView(field: field, test: test)
+        }
+        .sheet(isPresented: $isDrawingBoundary) {
+            FieldBoundaryEditorView(field: field)
         }
         .sheet(isPresented: $isEditingField) {
             if let farm = field.farm {

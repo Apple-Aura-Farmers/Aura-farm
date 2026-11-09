@@ -72,6 +72,11 @@ helper visiting farms, not a lab technician.
 - **Field page** — click a field on its farm's page, or in the sidebar, to see everything
   about it in one place: what to do, its NPK results, the latest microscope count, and
   both trends.
+- **Satellite map** — on a field's page, choose **Draw Boundary** and click the paddy's
+  corners on satellite imagery; search for the farm's village to get there. The outline's
+  area can replace the field's typed-in area, so the fertilizer doses for the field use the
+  real size. The farm's page shows every drawn field on one map; click a name to open it.
+  Imagery comes from Apple Maps and needs an internet connection.
 - **NPK results** — type in N, P and K from the paddy soil test kit (PUTS), which gives a
   class of low, medium or high, or from a lab report. A lab value in % total N, or in mg
   P₂O₅ or K₂O per 100 g with 25% HCl, is classed for you; in any other unit, pick the class
@@ -249,10 +254,11 @@ AuraFarmManager/        macOS farm manager
   Models/               SwiftData records: Farm, Field, SoilTest, OrganismCount,
                         NutrientTest
   Services/             Importing soil reports, handing a field to the advisor
-  Features/             SwiftUI screens: Navigation/  Farms/  Fields/  SoilTests/
+  Features/             SwiftUI screens: Navigation/  Farms/  Fields/  Map/  SoilTests/
 AuraFarmManagerTests/   Unit tests for the Mac app
 AuraFarmKit/            Swift package both apps share: the .aurafarm soil report format,
-                        and Advice/, the NPK thresholds, fertilizer doses and advisor
+                        Advice/, the NPK thresholds, fertilizer doses and advisor, and
+                        Mapping/, field outlines and their area
 Config/                 Shared xcconfig, Info.plist additions, your gitignored Local.xcconfig
 ```
 
