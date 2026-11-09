@@ -22,8 +22,11 @@ private struct HomeTab: View {
     @State private var isNaming = false
     @State private var isRecording = false
     @State private var sweeps: [SavedSweep] = []
+    @State private var isReadingNotices = false
     /// The sweep the camera just saved, to show its result.
     @State private var finishedSweep: SavedSweep?
+
+    private var notices: [SweepNotice] { SweepNotice.all(for: sweeps) }
 
     var body: some View {
         NavigationStack {
@@ -50,6 +53,9 @@ private struct HomeTab: View {
             }
             .navigationTitle("Home")
             .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    NoticesButton(notices: notices) { isReadingNotices = true }
+                }
                 #if DEBUG
                     // A workbench for trying the pipeline without a microscope.
                     ToolbarItem(placement: .topBarTrailing) {
@@ -74,6 +80,9 @@ private struct HomeTab: View {
                         }
                     }
                 #endif
+            }
+            .sheet(isPresented: $isReadingNotices) {
+                NoticesView(notices: notices)
             }
             .sheet(isPresented: $isNaming) {
                 NewTestView(details: $details) {
