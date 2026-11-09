@@ -79,7 +79,11 @@ struct RootView: View {
         case .allTests:
             SoilTestListView(scope: .all, selection: $selectedTestID)
         case .farm(let farm):
-            FarmDetailView(farm: farm, selection: $selectedTestID)
+            FarmDetailView(farm: farm, selection: $selectedTestID) { field in
+                sidebarSelection = .field(field)
+            }
+        case .field(let field):
+            FieldDetailView(field: field, selection: $selectedTestID)
         case nil:
             ContentUnavailableView("Choose the Inbox or a Farm", systemImage: "sidebar.left")
         }

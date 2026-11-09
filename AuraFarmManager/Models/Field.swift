@@ -16,6 +16,11 @@ final class Field {
     @Relationship(deleteRule: .nullify, inverse: \SoilTest.field)
     var soilTests: [SoilTest] = []
 
+    /// NPK results typed in for this field. They belong to it alone, so deleting the field
+    /// deletes them.
+    @Relationship(deleteRule: .cascade, inverse: \NutrientTest.field)
+    var nutrientTests: [NutrientTest] = []
+
     init(name: String, crop: String = "Rice", areaHectares: Double? = nil, createdAt: Date = .now) {
         self.name = name
         self.crop = crop
@@ -26,5 +31,20 @@ final class Field {
     /// The most recent soil test filed here, if any.
     var latestSoilTest: SoilTest? {
         soilTests.max { $0.recordedAt < $1.recordedAt }
+    }
+
+    /// The most recent NPK results, if any.
+    var latestNutrientTest: NutrientTest? {
+        nutrientTests.max { $0.testedAt < $1.testedAt }
+    }
+
+    /// NPK results, newest first.
+    var sortedNutrientTests: [NutrientTest] {
+        nutrientTests.sorted { $0.testedAt > $1.testedAt }
+    }
+
+    /// Soil tests, newest first.
+    var sortedSoilTests: [SoilTest] {
+        soilTests.sorted { $0.recordedAt > $1.recordedAt }
     }
 }

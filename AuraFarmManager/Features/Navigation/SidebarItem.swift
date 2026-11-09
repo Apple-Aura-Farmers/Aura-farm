@@ -6,4 +6,6 @@ enum SidebarItem: Hashable {
     case inbox
     case allTests
     case farm(Farm)
+    /// One field of a farm: its NPK results, soil tests and what to do about it.
+    case field(Field)
 }

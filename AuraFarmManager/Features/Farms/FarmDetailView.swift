@@ -6,11 +6,14 @@ import SwiftUI
 struct FarmDetailView: View {
     @Bindable var farm: Farm
     @Binding var selection: PersistentIdentifier?
+    /// Opens a field's own page, with its NPK results and what to do about it.
+    var onOpenField: (Field) -> Void = { _ in }
 
     @Environment(\.modelContext) private var modelContext
     @State private var isEditingFarm = false
     @State private var isAddingField = false
     @State private var fieldToEdit: Field?
+    @State private var fieldToDelete: Field?
 
     var body: some View {
         VSplitView {
@@ -48,6 +51,17 @@ struct FarmDetailView: View {
         .sheet(item: $fieldToEdit) { field in
             FieldEditorView(farm: farm, field: field)
         }
+        .confirmationDialog(
+            "Delete \(fieldToDelete?.name ?? "this field")?",
+            isPresented: isConfirmingDelete,
+            presenting: fieldToDelete
+        ) { field in
+            Button("Delete Field", role: .destructive) {
+                delete(field)
+            }
+        } message: { field in
+            Text(deleteMessage(for: field))
+        }
     }
 
     private var header: some View {
@@ -80,15 +94,24 @@ struct FarmDetailView: View {
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(farm.sortedFields) { field in
-                    FieldRow(field: field)
-                        .contextMenu {
-                            Button("Edit Field…") {
-                                fieldToEdit = field
-                            }
-                            Button("Delete Field", role: .destructive) {
-                                delete(field)
-                            }
+                    Button {
+                        onOpenField(field)
+                    } label: {
+                        FieldRow(field: field)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Open the field's NPK results and what to do")
+                    .contextMenu {
+                        Button("Open Field") {
+                            onOpenField(field)
                         }
+                        Button("Edit Field…") {
+                            fieldToEdit = field
+                        }
+                        Button("Delete Field…", role: .destructive) {
+                            fieldToDelete = field
+                        }
+                    }
                 }
             }
         }
@@ -101,7 +124,24 @@ struct FarmDetailView: View {
             .joined(separator: " · ")
     }
 
-    /// The field's soil tests are kept and go back to the inbox.
+    private var isConfirmingDelete: Binding<Bool> {
+        Binding(
+            get: { fieldToDelete != nil },
+            set: { isShowing in
+                if !isShowing { fieldToDelete = nil }
+            }
+        )
+    }
+
+    private func deleteMessage(for field: Field) -> String {
+        var message = "Its soil tests go back to the inbox."
+        if !field.nutrientTests.isEmpty {
+            message += " Its NPK results are deleted."
+        }
+        return message
+    }
+
+    /// The field's soil tests are kept and go back to the inbox. Its NPK results are deleted.
     private func delete(_ field: Field) {
         modelContext.delete(field)
         try? modelContext.save()

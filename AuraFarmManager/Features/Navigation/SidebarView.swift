@@ -1,7 +1,7 @@
 import SwiftData
 import SwiftUI
 
-/// The inbox, every soil test, and the farms.
+/// The inbox, every soil test, and the farms with their fields.
 struct SidebarView: View {
     @Binding var selection: SidebarItem?
 
@@ -30,6 +30,11 @@ struct SidebarView: View {
                                 farmToDelete = farm
                             }
                         }
+                    ForEach(farm.sortedFields) { field in
+                        Label(field.name, systemImage: "square.grid.2x2")
+                            .padding(.leading, 16)
+                            .tag(SidebarItem.field(field))
+                    }
                 }
             }
         }
@@ -77,8 +82,13 @@ struct SidebarView: View {
     }
 
     private func delete(_ farm: Farm) {
-        if selection == .farm(farm) {
+        switch selection {
+        case .farm(let selected) where selected == farm:
             selection = .inbox
+        case .field(let field) where field.farm == farm:
+            selection = .inbox
+        default:
+            break
         }
         modelContext.delete(farm)
         try? modelContext.save()

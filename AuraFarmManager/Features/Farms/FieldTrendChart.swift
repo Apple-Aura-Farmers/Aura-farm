@@ -6,6 +6,8 @@ import SwiftUI
 /// falling stands out.
 struct FieldTrendChart: View {
     let fields: [Field]
+    /// Shown until there are two tests to draw a line between.
+    var emptyMessage = "The trend appears once two or more soil tests are filed under this farm's fields."
 
     private struct Point: Identifiable {
         var id: PersistentIdentifier
@@ -19,7 +21,7 @@ struct FieldTrendChart: View {
             Text("Organisms Counted Over Time")
                 .font(.headline)
             if points.count < 2 {
-                Text("The trend appears once two or more soil tests are filed under this farm's fields.")
+                Text(emptyMessage)
                     .foregroundStyle(.secondary)
             } else {
                 Chart(points) { point in

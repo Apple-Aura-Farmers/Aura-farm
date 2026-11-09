@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// A field in a farm's list: its name and crop, and when it was last tested.
+/// A field in a farm's list: its name and crop, when it was last tested, and its latest NPK.
 struct FieldRow: View {
     let field: Field
 
@@ -17,10 +17,14 @@ struct FieldRow: View {
             Text(lastTested)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+            Image(systemName: "chevron.right")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
         }
         .padding(.vertical, 8)
         .padding(.horizontal, 12)
         .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 8))
+        .contentShape(Rectangle())
     }
 
     /// "Rice · 1.2 ha · 3 soil tests"
@@ -31,6 +35,9 @@ struct FieldRow: View {
         }
         let tests = field.soilTests.count
         parts.append(tests == 1 ? "1 soil test" : "\(tests) soil tests")
+        if let npk = field.latestNutrientTest {
+            parts.append("NPK \(npk.testedAt.formatted(date: .abbreviated, time: .omitted))")
+        }
         return parts.joined(separator: " · ")
     }
 

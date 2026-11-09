@@ -69,9 +69,26 @@ helper visiting farms, not a lab technician.
 - **Soil tests** — file each test under its field, then see what was counted, as a chart
   and a table, with the sample details, how it was counted, the slide and notes.
 - **Trends** — organisms counted per field over time, on each farm's page.
+- **Field page** — click a field on its farm's page, or in the sidebar, to see everything
+  about it in one place: what to do, its NPK results, the latest microscope count, and
+  both trends.
+- **NPK results** — type in N, P and K from the paddy soil test kit (PUTS), which gives a
+  class of low, medium or high, or from a lab report. A lab value in % total N, or in mg
+  P₂O₅ or K₂O per 100 g with 25% HCl, is classed for you; in any other unit, pick the class
+  the report gives. Add the pH and whether last season's straw went back into the field.
+  NPK is kept apart from the microscope soil tests: it comes from a different test, on a
+  different day, and never arrives in an `.aurafarm` report.
+- **What to do** — from the latest NPK results, a fertilizer plan in urea, SP-36 and KCl,
+  per hectare and for the whole field when its area is entered, with when to put each on.
+  Then any pH action, a confidence (low, fair or good) with the reasons for it, and when
+  to test again or send a sample to a lab.
 
-The Mac app shows raw counts only. It gives no soil rating, because a rating needs the
-recommended actions behind it, and those are not built yet.
+The fertilizer plan follows the national paddy soil test guide for irrigated rice yielding
+about 5 to 7 t/ha, as published, and is not calibrated by this team. The thresholds, doses
+and their sources are in `AuraFarmKit/Sources/AuraFarmKit/Advice/`. The microscope counts
+never change a dose: they are raw and not calibrated, so they only ask for a slide to be
+checked when nothing was counted, or for a repeat when a count falls sharply against a test
+prepared the same way. The app still gives no soil health rating.
 
 ### Why frames, not video
 
@@ -209,6 +226,8 @@ camera does.
    group. Tap **Send to Mac** and AirDrop it to your Mac.
 6. **Mac:** the report opens in Aura Farm Manager's Inbox. Add a farm and a field in the
    sidebar, then file the test under the field.
+7. **Mac:** open the field and choose **Add NPK Results**. Enter the kit's classes, or a
+   lab's values, and the field page shows what to do.
 
 ## Repository layout
 
@@ -227,11 +246,13 @@ AuraFarm/               iOS field app
 AuraFarmTests/          Unit tests for the iOS app
 AuraFarmManager/        macOS farm manager
   App/                  App entry point, file opening, menu commands
-  Models/               SwiftData records: Farm, Field, SoilTest, OrganismCount
-  Services/             Importing soil reports
-  Features/             SwiftUI screens: Navigation/  Farms/  SoilTests/
+  Models/               SwiftData records: Farm, Field, SoilTest, OrganismCount,
+                        NutrientTest
+  Services/             Importing soil reports, handing a field to the advisor
+  Features/             SwiftUI screens: Navigation/  Farms/  Fields/  SoilTests/
 AuraFarmManagerTests/   Unit tests for the Mac app
-AuraFarmKit/            Swift package both apps share: the .aurafarm soil report format
+AuraFarmKit/            Swift package both apps share: the .aurafarm soil report format,
+                        and Advice/, the NPK thresholds, fertilizer doses and advisor
 Config/                 Shared xcconfig, Info.plist additions, your gitignored Local.xcconfig
 ```
 
