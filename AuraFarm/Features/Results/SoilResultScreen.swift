@@ -14,6 +14,8 @@ struct SoilResultScreen: View {
 
     private let content: Content
     private let recommender: any RecommendationProviding
+    private let historyProvider: @Sendable (SoilResult) async -> [PastResult]
+    private let adviceStore: (any AdviceStore)?
 
     /// The result of a saved sweep, with advice from the on-device model.
     init(sweep: SavedSweep, recommender: any RecommendationProviding = FoundationModelRecommender()) {
@@ -23,18 +25,31 @@ struct SoilResultScreen: View {
             content = .failure(error.localizedDescription)
         }
         self.recommender = recommender
+        historyProvider = SoilResultViewModel.savedHistory
+        adviceStore = FileAdviceStore()
     }
 
-    /// A result made directly, as the test scenarios do.
-    init(result: SoilResult, recommender: any RecommendationProviding = FoundationModelRecommender()) {
+    /// A result made directly, as the test scenarios do, with its own earlier samples so
+    /// nothing is read from disk.
+    init(
+        result: SoilResult,
+        recommender: any RecommendationProviding = FoundationModelRecommender(),
+        historyProvider: @escaping @Sendable (SoilResult) async -> [PastResult] = SoilResultViewModel
+            .savedHistory,
+        adviceStore: (any AdviceStore)? = FileAdviceStore()
+    ) {
         content = .result(result)
         self.recommender = recommender
+        self.historyProvider = historyProvider
+        self.adviceStore = adviceStore
     }
 
     /// The screen for a result that could not be read.
     init(failure: String) {
         content = .failure(failure)
         recommender = RuleBasedRecommender()
+        historyProvider = SoilResultViewModel.savedHistory
+        adviceStore = nil
     }
 
     @Environment(\.dismiss) private var dismiss
@@ -43,7 +58,9 @@ struct SoilResultScreen: View {
         Group {
             switch content {
             case .result(let result):
-                SoilResultContent(viewModel: SoilResultViewModel(result: result, recommender: recommender))
+                SoilResultContent(
+                    result: result, recommender: recommender, historyProvider: historyProvider,
+                    adviceStore: adviceStore)
             case .failure(let message):
                 ContentUnavailableView(
                     "No result to show",
@@ -68,8 +85,16 @@ private struct SoilResultContent: View {
     /// Bumped by Try again, to restart the recommendation task.
     @State private var attempt = 0
 
-    init(viewModel: @autoclosure @escaping () -> SoilResultViewModel) {
-        _viewModel = State(wrappedValue: viewModel())
+    init(
+        result: SoilResult,
+        recommender: any RecommendationProviding,
+        historyProvider: @escaping @Sendable (SoilResult) async -> [PastResult],
+        adviceStore: (any AdviceStore)?
+    ) {
+        _viewModel = State(
+            wrappedValue: SoilResultViewModel(
+                result: result, recommender: recommender, historyProvider: historyProvider,
+                adviceStore: adviceStore))
     }
 
     var body: some View {
@@ -95,8 +120,22 @@ private struct SoilResultContent: View {
                 RecommendationCard(
                     state: viewModel.recommendationState,
                     modelUnavailableReason: viewModel.modelUnavailableReason,
+                    progress: viewModel.progress,
+                    basis: viewModel.adviceBasis,
+                    savedAt: viewModel.savedAt,
+                    savedFromOlderRules: viewModel.savedFromOlderRules,
+                    rating: viewModel.feedback?.rating,
+                    onRate: { rating, reasons in
+                        Task { await viewModel.rate(rating, reasons: reasons) }
+                    },
                     onRetry: { attempt += 1 }
                 )
+                if viewModel.canWriteAgain {
+                    Button("Write again", systemImage: "arrow.clockwise") {
+                        viewModel.requestFreshWording()
+                        attempt += 1
+                    }
+                }
             } header: {
                 Text("What to do next")
             }
@@ -107,7 +146,9 @@ private struct SoilResultContent: View {
                 ResultActions(sweep: sweep)
             }
         }
-        .task(id: attempt) { await viewModel.loadRecommendation() }
+        .task(id: attempt) {
+            await viewModel.loadRecommendation(freshWording: viewModel.wantsFreshWording)
+        }
     }
 }
 

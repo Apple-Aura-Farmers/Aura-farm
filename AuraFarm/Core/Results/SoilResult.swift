@@ -19,6 +19,13 @@ struct SoilResult: Equatable {
     /// The saved sweep this came from, for sending it on and looking through its frames.
     /// nil for a result made up for testing.
     var sweep: SavedSweep?
+    /// The farm plot the helper named, if any. Not the microscope field.
+    var plotName: String? = nil
+    var cropStage: SampleDetails.CropStage? = nil
+    /// What was done to the plot in the last two weeks. Empty when nothing was entered.
+    var recentActions: [SampleDetails.RecentAction] = []
+    /// True when the sweep stopped on its size ceiling instead of finishing.
+    var stoppedEarly: Bool = false
 
     enum Failure: Error, Equatable, LocalizedError {
         case noSampleDetails
@@ -53,7 +60,11 @@ extension SoilResult {
             framesKept: manifest.frameCount,
             moisture: manifest.details.moisture,
             countsByClass: manifest.organismCounts,
-            sweep: sweep
+            sweep: sweep,
+            plotName: manifest.details.plotName,
+            cropStage: manifest.details.cropStage,
+            recentActions: manifest.details.recentActions ?? [],
+            stoppedEarly: manifest.stoppedEarly
         )
     }
 }

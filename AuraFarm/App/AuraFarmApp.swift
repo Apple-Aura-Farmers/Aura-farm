@@ -19,7 +19,7 @@ struct AuraFarmApp: App {
                 // Launched with -resultScenario good (or any ResultScenario name), the app opens
                 // straight on that result state, for screenshots without tapping through.
                 if let scenario = Self.launchScenario {
-                    NavigationStack { ResultScenarioScreen(scenario: scenario) }
+                    NavigationStack { ResultScenarioScreen(scenario: scenario, useLiveModel: false) }
                 } else {
                     SampleSetupView()
                 }
