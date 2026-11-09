@@ -2,6 +2,9 @@ import SwiftUI
 
 @main
 struct AuraFarmApp: App {
+    /// The farms the Field Helper manages. Made once here so every screen shares it.
+    @State private var farmStore = FarmStore()
+
     init() {
         #if DEBUG
             // Launched with -benchmarkDetector, the app times the detector and prints the
@@ -16,6 +19,7 @@ struct AuraFarmApp: App {
     var body: some Scene {
         WindowGroup {
             RootView()
+                .environment(farmStore)
         }
     }
 }
