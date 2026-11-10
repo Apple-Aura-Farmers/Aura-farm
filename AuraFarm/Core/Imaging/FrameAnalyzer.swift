@@ -113,3 +113,41 @@ final class ShakeEstimator {
         lastShift = nil
     }
 }
+
+/// How far the view has travelled from the frame the sweep last kept, in pixels.
+///
+/// A running total of frame-to-frame shifts cannot do this job. Measured against a held
+/// frame on microscope footage, a view that had really moved 864 px had summed 5305 px of
+/// frame-to-frame readings, so a threshold on the total fires at no particular distance.
+/// This measures the one pair that matters, which is also the pair the stitcher will have to
+/// line up.
+///
+/// Each measurement gets a `VNSequenceRequestHandler` of its own. A handler reused across
+/// measurements against the same held frame reads 1 px every time, whatever has happened: on
+/// 600 frames of microscope footage a reused handler never read above 1 px, where a fresh one
+/// read a median of 305 px between kept frames. A sequence handler expects to be fed a
+/// sequence, and a frame held still for several measurements is not one.
+final class TravelSinceLastFrame {
+    private var held: CVPixelBuffer?
+
+    /// The distance from the held frame, or nil when no frame is held yet or the two no
+    /// longer have enough in common to be lined up at all.
+    func distance(to buffer: CVPixelBuffer) -> Double? {
+        guard let held else { return nil }
+        let request = VNTranslationalImageRegistrationRequest(targetedCVPixelBuffer: held)
+        guard (try? VNSequenceRequestHandler().perform([request], on: buffer)) != nil,
+            let observation = request.results?.first
+        else { return nil }
+        let transform = observation.alignmentTransform
+        return Double(hypot(transform.tx, transform.ty))
+    }
+
+    /// Call with every frame the sweep keeps: travel is measured from the last of them.
+    func hold(_ buffer: CVPixelBuffer) {
+        held = buffer
+    }
+
+    func reset() {
+        held = nil
+    }
+}

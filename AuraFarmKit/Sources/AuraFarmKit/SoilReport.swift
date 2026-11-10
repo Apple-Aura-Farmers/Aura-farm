@@ -140,7 +140,7 @@ extension SoilReport {
 
     /// How many of one organism group the sweep counted.
     public struct OrganismCount: Codable, Equatable, Hashable, Sendable {
-        /// The detector's class label, for example `Nematoda`.
+        /// The detector's class label, for example `Nematode`.
         public var taxon: String
         public var count: Int
 

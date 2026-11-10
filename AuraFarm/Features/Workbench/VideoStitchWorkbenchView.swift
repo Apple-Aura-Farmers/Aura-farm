@@ -43,7 +43,7 @@ struct VideoStitchWorkbenchView: View {
                 }
                 .disabled(selected == nil || runner.isRunning)
             } footer: {
-                Text("The sweep is saved like any other, so open Saved sweeps to see the result.")
+                Text("The sweep is saved like any other, so open Results to see it.")
             }
 
             if let outcome = runner.outcome {

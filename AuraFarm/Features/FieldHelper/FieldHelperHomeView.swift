@@ -156,10 +156,10 @@ struct FieldHelperHomeView: View {
     }
 }
 
-private extension View {
+extension View {
     /// Liquid Glass circle where the system has it (iOS 26), frosted material before that.
     @ViewBuilder
-    func glassCircle() -> some View {
+    fileprivate func glassCircle() -> some View {
         if #available(iOS 26, *) {
             glassEffect(.regular.interactive(), in: .circle)
         } else {

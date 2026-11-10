@@ -70,7 +70,7 @@ struct RecordedSampleView: View {
         }
         .sheet(item: $result) { sweep in
             NavigationStack {
-                SoilTestResultView(sweep: sweep)
+                SoilResultScreen(sweep: sweep)
             }
         }
     }

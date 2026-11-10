@@ -22,7 +22,7 @@ struct RootView: View {
             case .fieldHelper:
                 FieldHelperHomeView(onSwitchRole: { role = nil })
             case .microscopeOperator:
-                SampleSetupView(onSwitchRole: { role = nil })
+                HomeView(onSwitchRole: { role = nil })
             }
         }
         .animation(.default, value: role)
