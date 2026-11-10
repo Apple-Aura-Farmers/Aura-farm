@@ -91,6 +91,75 @@ final class PanoramaStitcherTests: XCTestCase {
         XCTAssertEqual(try XCTUnwrap(offsets[4]).x, Double(3 * step), accuracy: 2)
     }
 
+    func testTwoLooksAtTheSameGroundAgreeAndTwoAtDifferentGroundDoNot() throws {
+        let source = makeTexturedImage(width: 800, height: frameHeight)
+        let first = try XCTUnwrap(
+            source.cropping(to: CGRect(x: 0, y: 0, width: frameWidth, height: frameHeight)))
+        let shifted = try XCTUnwrap(
+            source.cropping(to: CGRect(x: step, y: 0, width: frameWidth, height: frameHeight)))
+        let elsewhere = try XCTUnwrap(
+            source.cropping(to: CGRect(x: 600, y: 0, width: frameWidth, height: frameHeight)))
+
+        // The same ground, lined up: the two should agree almost exactly.
+        XCTAssertGreaterThan(
+            PanoramaStitcher.agreement(
+                between: first, and: shifted, movedBy: CGPoint(x: step, y: 0)),
+            0.95)
+        // The same pair, but told the frame did not move: now they are compared against the
+        // wrong ground, which is what a wrong answer from registration looks like.
+        XCTAssertLessThan(
+            PanoramaStitcher.agreement(between: first, and: shifted, movedBy: .zero),
+            PanoramaStitcher.leastAgreement)
+        // Two frames from different parts of the picture, whatever shift is claimed.
+        XCTAssertLessThan(
+            PanoramaStitcher.agreement(between: first, and: elsewhere, movedBy: .zero),
+            PanoramaStitcher.leastAgreement)
+    }
+
+    func testAWrongShiftIsCorrectedRatherThanTheFrameBeingDropped() throws {
+        let source = makeTexturedImage(width: 800, height: frameHeight)
+        let first = try XCTUnwrap(
+            source.cropping(to: CGRect(x: 0, y: 0, width: frameWidth, height: frameHeight)))
+        let second = try XCTUnwrap(
+            source.cropping(to: CGRect(x: step, y: 0, width: frameWidth, height: frameHeight)))
+        let grey = try XCTUnwrap(PanoramaStitcher.Grey(first))
+        let greyShifted = try XCTUnwrap(PanoramaStitcher.Grey(second))
+
+        // A confident wrong answer: 100 px short across and 40 px out down, the kind that
+        // looks like any other shift. The picture moved the other way from the frame.
+        let wrong = CGPoint(x: Double(-step + 100), y: 40)
+        let corrected = try XCTUnwrap(
+            PanoramaStitcher.shiftNearby(wrong, between: grey, and: greyShifted))
+
+        XCTAssertEqual(corrected.x, Double(-step), accuracy: 2)
+        XCTAssertEqual(corrected.y, 0, accuracy: 2)
+    }
+
+    func testThereIsNothingToCorrectTowardsWhenTheFramesAreOfDifferentGround() throws {
+        let source = makeTexturedImage(width: 800, height: frameHeight)
+        let first = try XCTUnwrap(
+            source.cropping(to: CGRect(x: 0, y: 0, width: frameWidth, height: frameHeight)))
+        let elsewhere = try XCTUnwrap(
+            source.cropping(to: CGRect(x: 600, y: 0, width: frameWidth, height: frameHeight)))
+        let grey = try XCTUnwrap(PanoramaStitcher.Grey(first))
+        let greyElsewhere = try XCTUnwrap(PanoramaStitcher.Grey(elsewhere))
+
+        // Searching around a wrong answer must not talk itself into one: these two frames
+        // have no shared ground to find, whatever shift is tried.
+        XCTAssertNil(PanoramaStitcher.shiftNearby(.zero, between: grey, and: greyElsewhere))
+    }
+
+    func testASmallShiftIsStillRefusedWhenTheFramesDoNotAgree() throws {
+        // A wrong answer that reports an ordinary shift is the one the size limit cannot
+        // catch: two frames of different ground, claimed to be a few pixels apart.
+        let source = makeTexturedImage(width: 800, height: frameHeight)
+        let urls = try write(windows: [0, 500], of: source)
+
+        XCTAssertThrowsError(try PanoramaStitcher.stitch(frameURLs: urls)) { error in
+            XCTAssertEqual(error as? PanoramaStitcher.Failure, .nothingLinedUp)
+        }
+    }
+
     func testTheSeamBetweenTwoFramesIsFadedRatherThanCut() throws {
         // Two windows overlapping by most of their width. Pasting leaves a step in
         // brightness down the line where the second frame starts; feathering should not.

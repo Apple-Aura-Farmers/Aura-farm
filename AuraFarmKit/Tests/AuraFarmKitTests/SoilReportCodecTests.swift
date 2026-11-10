@@ -69,6 +69,9 @@ final class SoilReportCodecTests: XCTestCase {
 
     func testKnownTaxaHaveCommonNamesAndUnknownOnesPassThrough() {
         XCTAssertEqual(OrganismGroup.commonName(forTaxon: "Nematoda"), "Nematodes")
+        // The detector in the app says Nematode; reports written by the weights before it
+        // say Nematoda. Both have to read as the same thing.
+        XCTAssertEqual(OrganismGroup.commonName(forTaxon: "Nematode"), "Nematodes")
         XCTAssertEqual(OrganismGroup.commonName(forTaxon: "Tardigrada"), "Tardigrada")
     }
 

@@ -122,19 +122,22 @@ struct CaptureView: View {
                         .fill(.black.opacity(0.45))
                         .frame(width: diameter, height: diameter)
                 }
-                SweepRing(fraction: ringFraction, diameter: diameter + 56)
                 if let hint { hintOverlay(hint) }
+                if model.recorder.isSweeping {
+                    SweepGuide(
+                        progress: model.sweepProgress,
+                        direction: FrameSweep.direction(
+                            afterKeeping: model.sweepProgress.kept,
+                            framesPerRow: model.sweepProgress.framesPerRow)
+                    )
+                    .offset(y: diameter / 2 + 44)
+                }
             }
             .frame(width: geometry.size.width, height: geometry.size.height)
         }
         .ignoresSafeArea()
         .accessibilityElement(children: .combine)
         .accessibilityLabel(ringLabel)
-    }
-
-    /// How much of the ring is filled in: the share of the sweep's frames already kept.
-    private var ringFraction: Double {
-        model.recorder.isSweeping ? model.sweepProgress.fraction : 0
     }
 
     private var ringLabel: String {
@@ -317,31 +320,6 @@ struct CaptureView: View {
 
 /// The ring of ticks around the viewfinder. Ticks turn green as the sweep fills up, so how
 /// far along it is can be read at a glance from across a bench.
-private struct SweepRing: View {
-    var fraction: Double
-    /// Distance across the ring, measured through the middle of the ticks.
-    var diameter: Double
-    var tickCount = 48
-
-    var body: some View {
-        ZStack {
-            ForEach(0..<tickCount, id: \.self) { index in
-                Capsule()
-                    .fill(isFilled(index) ? Color.green : Color.white)
-                    .frame(width: 3, height: 12)
-                    .offset(y: -diameter / 2)
-                    .rotationEffect(.degrees(Double(index) / Double(tickCount) * 360))
-            }
-        }
-        .animation(.easeOut(duration: 0.2), value: fraction)
-        .accessibilityHidden(true)
-    }
-
-    private func isFilled(_ index: Int) -> Bool {
-        Double(index) < (fraction * Double(tickCount)).rounded()
-    }
-}
-
 #Preview {
     NavigationStack {
         CaptureView(

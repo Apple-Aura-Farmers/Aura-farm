@@ -26,7 +26,7 @@ struct SweepLibraryView: View {
                 }
             }
         }
-        .navigationTitle("Saved sweeps")
+        .navigationTitle("Results")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear { sweeps = SweepLibrary.sweeps() }
     }
