@@ -9,7 +9,9 @@ import Foundation
 struct SweepThresholds {
     /// Frames kept per sweep. Twelve 720p JPEGs come to roughly 4 MB.
     var framesPerSweep: Int = 12
-    /// Frames along one row before the sweep turns down and comes back the other way.
+    /// How many fields the guide bar draws in a row. A row now ends where the helper says
+    /// the cover slip ends, so this is only how wide the bar is drawn, not where the sweep
+    /// turns.
     var framesPerRow: Int = 4
     /// How far the view has to have moved from the last kept frame before another is kept, in
     /// pixels, so two frames are not taken of the same field of view. `TravelSinceLastFrame`
@@ -60,9 +62,9 @@ enum SweepDirection: String, Equatable {
 struct SweepProgress: Equatable {
     var kept: Int
     var total: Int
-    /// The row being walked, counted from 1.
+    /// The row being walked, counted from 1. There is no total: a sweep runs until the
+    /// helper reaches the bottom of the cover slip.
     var row: Int
-    var rowCount: Int
     /// Frames kept so far in this row, and how many it holds.
     var keptInRow: Int
     var framesPerRow: Int
@@ -98,11 +100,14 @@ extension SweepPrompt {
         case .fixTheImage:
             return "The warning above says what to fix. Saving starts again by itself."
         case .move(.right, let kept, let total):
-            return "Slide it slowly to the right. Frames save on their own. \(kept) of \(total) saved."
+            return "Slide it slowly right, to the far edge of the cover slip. Tap At the edge "
+                + "when that straight line comes into view. \(kept) of \(total) saved."
         case .move(.down, let kept, let total):
-            return "Nudge it down one step, then carry on the other way. \(kept) of \(total) saved."
+            return "Nudge it down one step, then carry on back the other way. \(kept) of "
+                + "\(total) saved."
         case .move(.left, let kept, let total):
-            return "Slide it slowly to the left. Frames save on their own. \(kept) of \(total) saved."
+            return "Slide it slowly left, to the near edge of the cover slip. Tap At the edge "
+                + "when that straight line comes into view. \(kept) of \(total) saved."
         case .done(let kept, let stoppedEarly):
             return stoppedEarly
                 ? "The size limit was reached. \(kept) frames were saved."
@@ -153,6 +158,13 @@ final class FrameSweep {
     let thresholds: SweepThresholds
 
     private(set) var keptCount = 0
+    /// The row being walked, counted from 1. A row lasts until the helper says the cover
+    /// slip edge is in view.
+    private(set) var row = 1
+    /// Frames kept before this row started, so the guide bar can show how far along it is.
+    private var keptWhenRowStarted = 0
+    /// Set between the helper reaching the edge and the first frame of the row below.
+    private var isTurning = false
     private(set) var bytesWritten = 0
     private(set) var isFinished = false
     private(set) var prompt: SweepPrompt
@@ -165,32 +177,37 @@ final class FrameSweep {
     /// Where to send the slide next, given how many frames are already kept. Rows run right,
     /// then left, then right again; between rows the slide goes down one step, and the frame
     /// after that step starts the new row.
-    static func direction(afterKeeping kept: Int, framesPerRow: Int) -> SweepDirection {
-        guard framesPerRow > 0 else { return .right }
-        if kept > 0, kept % framesPerRow == 0 { return .down }
-        return (kept / framesPerRow) % 2 == 0 ? .right : .left
+    /// Which way to send the slide next. Rows alternate: the first runs right, the one
+    /// below it comes back left. A row ends when the helper says the cover slip does.
+    var direction: SweepDirection {
+        if isTurning { return .down }
+        return row.isMultiple(of: 2) ? .left : .right
+    }
+
+    /// Called when the helper can see the edge of the cover slip in the view. The next frame
+    /// kept starts the row below, however many were kept in this one.
+    ///
+    /// The app cannot find that edge itself: it is a straight line at the boundary of a
+    /// bright field, and nothing here looks for it. The helper is looking right at it.
+    func reachedTheEdge() {
+        guard !isFinished, keptCount > 0, !isTurning else { return }
+        isTurning = true
+        prompt = movePrompt
     }
 
     /// Where the sweep has got to, for the progress bar.
     var progress: SweepProgress {
-        let perRow = max(thresholds.framesPerRow, 1)
-        let total = max(thresholds.framesPerSweep, 1)
-        return SweepProgress(
+        SweepProgress(
             kept: keptCount,
-            total: total,
-            row: min(keptCount / perRow + 1, (total + perRow - 1) / perRow),
-            rowCount: (total + perRow - 1) / perRow,
-            keptInRow: keptCount % perRow,
-            framesPerRow: perRow
+            total: max(thresholds.framesPerSweep, 1),
+            row: row,
+            keptInRow: keptCount - keptWhenRowStarted,
+            framesPerRow: max(thresholds.framesPerRow, 1)
         )
     }
 
     private var movePrompt: SweepPrompt {
-        .move(
-            Self.direction(afterKeeping: keptCount, framesPerRow: thresholds.framesPerRow),
-            kept: keptCount,
-            of: thresholds.framesPerSweep
-        )
+        .move(direction, kept: keptCount, of: thresholds.framesPerSweep)
     }
 
     /// An issue that stops frames being kept. Shake is not one of them.
@@ -248,13 +265,17 @@ final class FrameSweep {
     /// How far the view has to travel before the next frame is kept. A step down between
     /// rows is a whole row; everything else is a nudge along one.
     private var travelWanted: Double {
-        Self.direction(afterKeeping: keptCount, framesPerRow: thresholds.framesPerRow) == .down
-            ? thresholds.shiftBetweenRows
-            : thresholds.shiftBetweenFrames
+        direction == .down ? thresholds.shiftBetweenRows : thresholds.shiftBetweenFrames
     }
 
     private func keep() -> Step {
         keptCount += 1
+        if isTurning {
+            // This frame is the first of the row below.
+            isTurning = false
+            row += 1
+            keptWhenRowStarted = keptCount - 1
+        }
         if keptCount >= thresholds.framesPerSweep {
             isFinished = true
             prompt = .done(kept: keptCount, stoppedEarly: false)
@@ -277,6 +298,9 @@ final class FrameSweep {
         keptCount = 0
         bytesWritten = 0
         isFinished = false
+        row = 1
+        keptWhenRowStarted = 0
+        isTurning = false
         prompt = .move(.right, kept: 0, of: thresholds.framesPerSweep)
     }
 }
