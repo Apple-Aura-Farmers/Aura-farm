@@ -24,6 +24,8 @@ struct LandOutlineEditorView: View {
     @State private var position: MapCameraPosition
     @State private var location = LocationProvider()
     @State private var confirmDiscard = false
+    /// The corner being dragged, and where it sat on screen when the drag began.
+    @State private var drag: (index: Int, start: CGPoint)?
     @Environment(\.dismiss) private var dismiss
 
     private let startingCorners: [GeoPoint]
@@ -43,7 +45,7 @@ struct LandOutlineEditorView: View {
 
     var body: some View {
         MapReader { proxy in
-            Map(position: $position) {
+            Map(position: $position, interactionModes: drag == nil ? .all : []) {
                 UserAnnotation()
 
                 ForEach(neighbours) { farm in
@@ -75,12 +77,27 @@ struct LandOutlineEditorView: View {
                     Annotation(
                         "Corner \(index + 1)", coordinate: corner.coordinate, anchor: .center
                     ) {
+                        let isDragging = drag?.index == index
                         Text("\(index + 1)")
                             .font(.caption2.bold())
                             .foregroundStyle(.white)
                             .frame(width: 22, height: 22)
                             .background(.orange, in: Circle())
                             .overlay(Circle().stroke(.white, lineWidth: 2))
+                            .scaleEffect(isDragging ? 1.35 : 1)
+                            .animation(.spring(duration: 0.2), value: isDragging)
+                            // A bigger area to grab than the dot itself, for a thumb.
+                            .frame(width: 44, height: 44)
+                            .contentShape(Circle())
+                            .gesture(
+                                DragGesture(minimumDistance: 0, coordinateSpace: .global)
+                                    .onChanged { value in
+                                        moveCorner(index, by: value.translation, using: proxy)
+                                    }
+                                    .onEnded { _ in drag = nil }
+                            )
+                            .accessibilityLabel("Corner \(index + 1)")
+                            .accessibilityHint("Drag to move this corner")
                     }
                     .annotationTitles(.hidden)
                 }
@@ -92,7 +109,14 @@ struct LandOutlineEditorView: View {
                 MapScaleView()
             }
             .onTapGesture { point in
-                if let coordinate = proxy.convert(point, from: .local) {
+                // A tap on an existing dot is for that dot, not a new corner beside it.
+                let onADot = corners.contains { corner in
+                    guard let spot = proxy.convert(corner.coordinate, to: .local) else {
+                        return false
+                    }
+                    return hypot(spot.x - point.x, spot.y - point.y) < 22
+                }
+                if !onADot, let coordinate = proxy.convert(point, from: .local) {
                     corners.append(GeoPoint(coordinate))
                 }
             }
@@ -123,6 +147,27 @@ struct LandOutlineEditorView: View {
         .onDisappear { location.stop() }
     }
 
+    // MARK: Dragging corners
+
+    /// Moves a corner to follow the finger. The corner's screen position is noted when the drag
+    /// starts and the finger's movement added to it, so the dot keeps its distance from the
+    /// finger instead of jumping to sit under it.
+    private func moveCorner(_ index: Int, by translation: CGSize, using proxy: MapProxy) {
+        guard corners.indices.contains(index) else { return }
+        if drag?.index != index {
+            guard let start = proxy.convert(corners[index].coordinate, to: .global) else {
+                return
+            }
+            drag = (index, start)
+        }
+        guard let start = drag?.start,
+            let coordinate = proxy.convert(
+                CGPoint(x: start.x + translation.width, y: start.y + translation.height),
+                from: .global)
+        else { return }
+        corners[index] = GeoPoint(coordinate)
+    }
+
     // MARK: Controls
 
     private var controls: some View {
@@ -131,6 +176,12 @@ struct LandOutlineEditorView: View {
                 .font(.subheadline)
                 .multilineTextAlignment(.center)
                 .foregroundStyle(crossesItself ? Color.orange : Color.primary)
+
+            if !corners.isEmpty {
+                Text("Drag a dot to move it.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
 
             if !overlappingFarms.isEmpty {
                 Text(overlapWarning)
