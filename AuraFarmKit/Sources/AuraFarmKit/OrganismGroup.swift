@@ -13,6 +13,8 @@ public enum OrganismGroup: String, CaseIterable, Sendable {
     /// reports written then are still read, so both spellings stay.
     case nematode = "Nematode"
     case hypotrichida = "Hypotrichida"
+    case euglenoid = "Euglenoid"
+    case volvox = "Volvox"
 
     /// The everyday name, for example "Nematodes".
     public var commonName: String {
@@ -22,6 +24,8 @@ public enum OrganismGroup: String, CaseIterable, Sendable {
         case .monogononta: return "Monogonont rotifers"
         case .nematoda, .nematode: return "Nematodes"
         case .hypotrichida: return "Hypotrich ciliates"
+        case .euglenoid: return "Euglenoids"
+        case .volvox: return "Volvox colonies"
         }
     }
 

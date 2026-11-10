@@ -34,9 +34,13 @@ jobs:
 
       # Raw clips are training data and live off the repo. Once committed they are
       # in the history for good, so block them at the pull request.
+      #
+      # The ceiling is 80 MB because the detector is a transformer: its Core ML weights are
+      # 57 MB where the YOLO model before it was 4.9. Nothing else in here is close, so this
+      # still catches a clip or a stray build folder.
       - name: Check for committed video and oversized files
         run: |
-          limit=$((5 * 1024 * 1024))
+          limit=$((80 * 1024 * 1024))
           fail=0
           while IFS= read -r f; do
             case "$f" in

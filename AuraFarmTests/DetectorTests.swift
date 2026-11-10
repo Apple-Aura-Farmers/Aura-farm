@@ -1,9 +1,62 @@
 import CoreGraphics
+import CoreML
 import XCTest
 
 @testable import AuraFarm
 
 final class DetectorTests: XCTestCase {
+    func testAQueryIsReadAsTheBestClassThatIsNotNoObject() throws {
+        // Three queries: one a nematode, one the model saying it found nothing, one a
+        // volvox so small the guard leaves it alone.
+        let (logits, boxes) = try queries([
+            (slot: 4, logit: 3.0, box: (0.5, 0.5, 0.2, 0.1)),
+            (slot: 0, logit: 5.0, box: (0.5, 0.5, 0.9, 0.9)),
+            (slot: 5, logit: 2.0, box: (0.25, 0.25, 0.1, 0.1)),
+        ])
+
+        let found = OrganismDetector.decode(logits: logits, boxes: boxes)
+
+        XCTAssertEqual(found.map(\.label), ["Nematode", "Volvox"])
+        // Boxes come in as the middle and the size counted from the top left; everything
+        // downstream counts from the bottom left.
+        let nematode = try XCTUnwrap(found.first)
+        XCTAssertEqual(nematode.box.minX, 0.4, accuracy: 0.001)
+        XCTAssertEqual(nematode.box.minY, 0.45, accuracy: 0.001)
+        XCTAssertEqual(nematode.box.width, 0.2, accuracy: 0.001)
+    }
+
+    func testAQuietQueryIsNotAFind() throws {
+        // Well under leastConfidence once it has been through a sigmoid.
+        let (logits, boxes) = try queries([(slot: 4, logit: -3.0, box: (0.5, 0.5, 0.1, 0.1))])
+        XCTAssertTrue(OrganismDetector.decode(logits: logits, boxes: boxes).isEmpty)
+    }
+
+    func testAQueryBoxingTheWholeFrameIsStillThrownAway() throws {
+        let (logits, boxes) = try queries([(slot: 4, logit: 5.0, box: (0.5, 0.5, 1.0, 1.0))])
+        XCTAssertTrue(OrganismDetector.decode(logits: logits, boxes: boxes).isEmpty)
+    }
+
+    /// Builds the two tensors the model hands back, one row per query.
+    private func queries(
+        _ rows: [(slot: Int, logit: Float, box: (Double, Double, Double, Double))]
+    ) throws -> (MLMultiArray, MLMultiArray) {
+        let classes = OrganismDetector.classNames.count
+        let logits = try MLMultiArray(
+            shape: [1, NSNumber(value: rows.count), NSNumber(value: classes)], dataType: .float32)
+        let boxes = try MLMultiArray(shape: [1, NSNumber(value: rows.count), 4], dataType: .float32)
+        for (query, row) in rows.enumerated() {
+            for klass in 0..<classes {
+                logits[[0, NSNumber(value: query), NSNumber(value: klass)]] =
+                    NSNumber(value: klass == row.slot ? row.logit : -10)
+            }
+            let values = [row.box.0, row.box.1, row.box.2, row.box.3]
+            for (index, value) in values.enumerated() {
+                boxes[[0, NSNumber(value: query), NSNumber(value: index)]] = NSNumber(value: value)
+            }
+        }
+        return (logits, boxes)
+    }
+
     func testABoxCoveringTheWholeFrameIsNotAFind() {
         // What the nineteen-class weights produced on real footage: a box the size of the
         // picture, and sometimes a little larger than it.
