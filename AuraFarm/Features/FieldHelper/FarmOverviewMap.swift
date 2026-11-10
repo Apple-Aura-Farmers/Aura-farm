@@ -9,6 +9,7 @@ import MapKit
 import SwiftUI
 
 /// Every saved farm on one satellite map. Tapping a farm's land, or its name, opens that farm.
+/// Plain imagery with no road or place labels, so the farms are the only thing drawn on it.
 struct FarmsOverviewMap: View {
     let farms: [Farm]
     /// Called with the farm the helper tapped.
@@ -39,10 +40,9 @@ struct FarmsOverviewMap: View {
                     }
                 }
             }
-            .mapStyle(.hybrid)
+            .mapStyle(.imagery)
             .mapControls {
                 MapCompass()
-                MapScaleView()
             }
             .onTapGesture { point in
                 guard let coordinate = proxy.convert(point, from: .local),
@@ -50,15 +50,6 @@ struct FarmsOverviewMap: View {
                 else { return }
                 onOpen(farm)
             }
-        }
-        .overlay(alignment: .bottomLeading) {
-            Text("Tap a farm to open it")
-                .font(.caption)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 4)
-                .background(.regularMaterial, in: Capsule())
-                .padding(8)
-                .allowsHitTesting(false)
         }
     }
 
@@ -101,4 +92,5 @@ struct FarmsOverviewMap: View {
         ],
         onOpen: { _ in }
     )
+    .ignoresSafeArea()
 }

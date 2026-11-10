@@ -168,6 +168,12 @@ enum LandGeometry {
                 longitudeDelta: max((east - west) * 1.5, minimumSpan)))
     }
 
+    /// "0.42 ha"
+    static func hectaresDescription(squareMetres: Double) -> String {
+        let hectares = (squareMetres / 10_000).formatted(.number.precision(.fractionLength(2)))
+        return "\(hectares) ha"
+    }
+
     /// "0.42 ha · 4,200 m²"
     static func areaDescription(squareMetres: Double) -> String {
         let hectares = (squareMetres / 10_000).formatted(.number.precision(.fractionLength(2)))
