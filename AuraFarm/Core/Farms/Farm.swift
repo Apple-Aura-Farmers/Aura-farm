@@ -29,6 +29,9 @@ struct Farm: Codable, Identifiable, Equatable {
     var farmerName: String
     var corners: [GeoPoint]
     var createdAt = Date()
+    /// What the field helper has recorded about the soil, apart from the microscope tests.
+    /// nil until they record something.
+    var soil: SoilMeasurements? = nil
 
     /// nil until there are at least three corners.
     var areaSquareMetres: Double? { LandGeometry.areaSquareMetres(of: corners) }
