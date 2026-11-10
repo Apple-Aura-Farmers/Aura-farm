@@ -12,7 +12,7 @@ struct NewTestView: View {
     @State private var isUsingRecording = false
 
     private enum Field {
-        case name, location, note
+        case note
     }
 
     var body: some View {
@@ -29,18 +29,32 @@ struct NewTestView: View {
                     .font(.headline)
 
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("Field")
+                        Text("Farm")
                             .font(.headline)
                         card {
-                            TextField("Name", text: $details.sampleID)
-                                .focused($focus, equals: .name)
-                                .submitLabel(.next)
-                                .onSubmit { focus = .location }
-                            Divider()
-                            TextField("Location", text: $details.location.orEmpty)
-                                .focused($focus, equals: .location)
-                                .submitLabel(.next)
-                                .onSubmit { focus = .note }
+                            NavigationLink {
+                                FarmChoiceList(details: $details)
+                            } label: {
+                                HStack {
+                                    Text(
+                                        details.sampleID.isEmpty
+                                            ? "Choose a farm" : details.sampleID
+                                    )
+                                    .foregroundStyle(details.sampleID.isEmpty ? .secondary : .primary)
+                                    Spacer()
+                                    Image(systemName: "chevron.right")
+                                        .font(.footnote.weight(.semibold))
+                                        .foregroundStyle(.tertiary)
+                                }
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            // Taken from the farm, so it is shown and not typed.
+                            if details.farmID != nil, let location = details.location {
+                                Divider()
+                                LabeledContent("Location", value: location)
+                                    .font(.subheadline)
+                            }
                         }
                     }
 
@@ -126,4 +140,5 @@ extension Binding where Value == String? {
 
 #Preview {
     NewTestView(details: .constant(.blank)) {}
+        .environment(FarmStore(fileURL: nil))
 }

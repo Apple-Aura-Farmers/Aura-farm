@@ -26,9 +26,8 @@ struct RecordedSampleView: View {
             }
 
             Section("Sample") {
-                TextField("Sample ID", text: $details.sampleID)
-                    .textInputAutocapitalization(.characters)
-                    .autocorrectionDisabled()
+                // Chosen on the New Test screen, so the recording is filed under that farm.
+                LabeledContent("Farm", value: details.sampleID)
             }
 
             DebugVideoPicker(selected: $selected)
@@ -58,7 +57,7 @@ struct RecordedSampleView: View {
                 if let outcome = runner.outcome {
                     Text(outcome)
                 } else if !details.isComplete {
-                    Text("Enter a sample ID first.")
+                    Text("Choose a farm first.")
                 }
             }
         }

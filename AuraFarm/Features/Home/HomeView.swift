@@ -190,4 +190,5 @@ extension SampleDetails {
 
 #Preview {
     HomeView()
+        .environment(FarmStore(fileURL: nil))
 }
