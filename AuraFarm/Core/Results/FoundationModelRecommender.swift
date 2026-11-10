@@ -117,8 +117,7 @@ final class FoundationModelRecommender: RecommendationProviding {
             latest = snapshot.rawContent
             let partial = snapshot.content
             let progress = AdviceProgress.from(
-                noticedCount: partial.noticed?.count ?? 0, actionCount: partial.actions?.count ?? 0,
-                hasSummary: partial.summary != nil)
+                actionCount: partial.actions?.count ?? 0, hasSummary: partial.summary != nil)
             if progress != reported {
                 reported = progress
                 onProgress(progress)

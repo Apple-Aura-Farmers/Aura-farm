@@ -20,10 +20,8 @@ enum AdviceFeedbackCSV {
             feedback.contentVersion, feedback.appVersion ?? "", feedback.recommendation.summary,
         ]
         let steps = feedback.recommendation.steps
-        for index in 0..<3 {
-            fields +=
-                index < steps.count
-                ? [steps[index].actionID?.rawValue ?? "", steps[index].why ?? ""] : ["", ""]
+        for step in (steps.map(Optional.some) + [nil, nil, nil]).prefix(3) {
+            fields += [step?.actionID?.rawValue ?? "", step?.why ?? ""]
         }
         return fields
     }

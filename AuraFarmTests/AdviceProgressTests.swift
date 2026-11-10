@@ -4,16 +4,16 @@ import XCTest
 
 final class AdviceProgressTests: XCTestCase {
     func testWhereAPartlyWrittenAnswerIs() {
-        XCTAssertEqual(AdviceProgress.from(noticedCount: 0, actionCount: 0, hasSummary: false), .noticing)
-        XCTAssertEqual(AdviceProgress.from(noticedCount: 2, actionCount: 0, hasSummary: false), .noticing)
+        XCTAssertEqual(AdviceProgress.from(actionCount: 0, hasSummary: false), .noticing)
+        XCTAssertEqual(AdviceProgress.from(actionCount: 0, hasSummary: false), .noticing)
         XCTAssertEqual(
-            AdviceProgress.from(noticedCount: 2, actionCount: 1, hasSummary: false), .choosingSteps(chosen: 1)
+            AdviceProgress.from(actionCount: 1, hasSummary: false), .choosingSteps(chosen: 1)
         )
         XCTAssertEqual(
-            AdviceProgress.from(noticedCount: 2, actionCount: 3, hasSummary: false), .choosingSteps(chosen: 3)
+            AdviceProgress.from(actionCount: 3, hasSummary: false), .choosingSteps(chosen: 3)
         )
-        XCTAssertEqual(AdviceProgress.from(noticedCount: 2, actionCount: 3, hasSummary: true), .summarizing)
-        XCTAssertEqual(AdviceProgress.from(noticedCount: 0, actionCount: 0, hasSummary: true), .summarizing)
+        XCTAssertEqual(AdviceProgress.from(actionCount: 3, hasSummary: true), .summarizing)
+        XCTAssertEqual(AdviceProgress.from(actionCount: 0, hasSummary: true), .summarizing)
     }
 
     func testTheWordsOnTheCard() {

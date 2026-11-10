@@ -26,12 +26,8 @@ enum AdviceEvalCSV {
             (result.recommendation?.noticed ?? []).joined(separator: " | "),
         ]
         let steps = result.recommendation?.steps ?? []
-        for index in 0..<3 {
-            if index < steps.count {
-                fields += [steps[index].actionID?.rawValue ?? "", steps[index].text, steps[index].why ?? ""]
-            } else {
-                fields += ["", "", ""]
-            }
+        for step in (steps.map(Optional.some) + [nil, nil, nil]).prefix(3) {
+            fields += [step?.actionID?.rawValue ?? "", step?.text ?? "", step?.why ?? ""]
         }
         fields += [AdviceContentVersion.current, appVersion ?? ""]
         // Left empty, for people to fill in.

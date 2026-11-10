@@ -19,7 +19,7 @@ enum AdviceProgress: Equatable {
     }
 
     /// The model writes what it noticed, then the steps, then the summary, in that order.
-    static func from(noticedCount: Int, actionCount: Int, hasSummary: Bool) -> AdviceProgress {
+    static func from(actionCount: Int, hasSummary: Bool) -> AdviceProgress {
         if hasSummary { return .summarizing }
         if actionCount > 0 { return .choosingSteps(chosen: actionCount) }
         return .noticing
