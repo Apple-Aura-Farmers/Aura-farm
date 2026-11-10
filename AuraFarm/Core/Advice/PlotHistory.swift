@@ -12,10 +12,9 @@ enum PlotHistory {
     /// `SweepLibrary.sweeps()`.
     static func earlierResults(
         for result: SoilResult,
-        among sweeps: [SavedSweep],
-        estimator: some SoilHealthEstimating = PlaceholderSoilHealthEstimator(),
-        limit: Int = 3
+        among sweeps: [SavedSweep]
     ) -> [PastResult] {
+        let estimator = PlaceholderSoilHealthEstimator()
         guard let plot = key(result.plotName) else { return [] }
         return
             sweeps
@@ -26,7 +25,7 @@ enum PlotHistory {
             }
             .filter { key($0.plotName) == plot && $0.recordedAt < result.recordedAt }
             .sorted { $0.recordedAt > $1.recordedAt }
-            .prefix(max(limit, 0))
+            .prefix(3)
             .map { PastResult($0, level: estimator.estimate($0).level) }
     }
 

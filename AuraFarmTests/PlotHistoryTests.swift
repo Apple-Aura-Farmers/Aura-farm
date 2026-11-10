@@ -75,7 +75,7 @@ final class PlotHistoryTests: XCTestCase {
     func testNewestFirstWithTheLimit() {
         let sweeps = [1.0, 9, 4, 2, 7].map { sweep("S\($0)", plot: "North 2", daysAgo: $0) }
 
-        let history = PlotHistory.earlierResults(for: result(plot: "North 2"), among: sweeps, limit: 3)
+        let history = PlotHistory.earlierResults(for: result(plot: "North 2"), among: sweeps)
 
         XCTAssertEqual(history.map(\.recordedAt), [1.0, 2, 4].map { now.addingTimeInterval(-$0 * day) })
     }

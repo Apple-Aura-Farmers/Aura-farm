@@ -46,6 +46,25 @@ final class SweepLibraryTests: XCTestCase {
         XCTAssertEqual(sets.first?.frameCount, 1)
     }
 
+    func testManifestsOnlyAgreesWithSweepsOnEverythingButTheFiles() throws {
+        let root = try makeTemporaryDirectory()
+        try makeSweep(
+            in: root, named: "A12_f001", frames: 2,
+            manifest: manifest(sampleID: "A12", field: 1, at: Date(timeIntervalSince1970: 1_000)))
+        try makeSweep(
+            in: root, named: "A12_f002", frames: 3,
+            manifest: manifest(sampleID: "A12", field: 2, at: Date(timeIntervalSince1970: 2_000)))
+        try makeSweep(in: root, named: "orphan", frames: 1, manifest: nil)
+
+        let full = SweepLibrary.sweeps(in: root)
+        let light = SweepLibrary.manifestsOnly(in: root)
+
+        XCTAssertEqual(light.map(\.url), full.map(\.url))
+        XCTAssertEqual(light.map(\.manifest), full.map(\.manifest))
+        XCTAssertEqual(light.map(\.recordedAt), full.map(\.recordedAt))
+        XCTAssertTrue(light.allSatisfy { $0.frameURLs.isEmpty && $0.byteCount == 0 && $0.panoramaURL == nil })
+    }
+
     func testAMissingFolderListsNothing() {
         let missing = URL.temporaryDirectory.appending(path: UUID().uuidString)
         XCTAssertTrue(SweepLibrary.sweeps(in: missing).isEmpty)

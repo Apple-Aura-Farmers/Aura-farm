@@ -71,7 +71,7 @@ final class SoilResultViewModel {
     /// listing the sweeps reads every manifest from disk.
     nonisolated static let savedHistory: @Sendable (SoilResult) async -> [PastResult] = { result in
         await Task.detached(priority: .userInitiated) {
-            PlotHistory.earlierResults(for: result, among: SweepLibrary.sweeps())
+            PlotHistory.earlierResults(for: result, among: SweepLibrary.manifestsOnly())
         }.value
     }
 

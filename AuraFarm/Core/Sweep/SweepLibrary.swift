@@ -23,22 +23,9 @@ struct SavedSweep: Identifiable, Equatable {
 /// a frame. Frames are the raw data the counting work will be trained on.
 enum SweepLibrary {
     static func sweeps(in directory: URL = SweepRecorder.sweepsDirectory) -> [SavedSweep] {
-        let folders =
-            (try? FileManager.default.contentsOfDirectory(
-                at: directory,
-                includingPropertiesForKeys: [.isDirectoryKey, .contentModificationDateKey]
-            )) ?? []
-
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-
-        return
-            folders
-            .filter { (try? $0.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true }
+        sweepFolders(in: directory)
             .map { folder in
-                let manifest = (try? Data(contentsOf: folder.appending(path: "manifest.json")))
-                    .flatMap { try? decoder.decode(SweepManifest.self, from: $0) }
-
+                let manifest = manifest(in: folder)
                 let frames = frameURLs(in: folder)
                 let panorama = folder.appending(path: SweepRecorder.panoramaFileName)
                 let hasPanorama = FileManager.default.fileExists(atPath: panorama.path)
@@ -48,18 +35,52 @@ enum SweepLibrary {
                     total += Int64((try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0)
                 }
 
-                let modified = (try? folder.resourceValues(forKeys: [.contentModificationDateKey]))?
-                    .contentModificationDate
                 return SavedSweep(
                     url: folder,
                     manifest: manifest,
-                    recordedAt: manifest?.details.recordedAt ?? modified ?? .distantPast,
+                    recordedAt: recordedAt(of: folder, manifest: manifest),
                     byteCount: bytes,
                     frameURLs: frames,
                     panoramaURL: hasPanorama ? panorama : nil
                 )
             }
             .sorted { $0.recordedAt > $1.recordedAt }
+    }
+
+    /// Like `sweeps(in:)` but reads only each manifest: no frame list, sizes or panorama, so
+    /// `frameURLs` is empty, `byteCount` is 0 and `panoramaURL` is nil. For callers that only
+    /// need the sample details, such as the plot history.
+    static func manifestsOnly(in directory: URL = SweepRecorder.sweepsDirectory) -> [SavedSweep] {
+        sweepFolders(in: directory)
+            .map { folder in
+                let manifest = manifest(in: folder)
+                return SavedSweep(
+                    url: folder, manifest: manifest, recordedAt: recordedAt(of: folder, manifest: manifest),
+                    byteCount: 0, frameURLs: [], panoramaURL: nil)
+            }
+            .sorted { $0.recordedAt > $1.recordedAt }
+    }
+
+    private static func sweepFolders(in directory: URL) -> [URL] {
+        let folders =
+            (try? FileManager.default.contentsOfDirectory(
+                at: directory,
+                includingPropertiesForKeys: [.isDirectoryKey, .contentModificationDateKey]
+            )) ?? []
+        return folders.filter { (try? $0.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true }
+    }
+
+    private static func manifest(in folder: URL) -> SweepManifest? {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return (try? Data(contentsOf: folder.appending(path: "manifest.json")))
+            .flatMap { try? decoder.decode(SweepManifest.self, from: $0) }
+    }
+
+    private static func recordedAt(of folder: URL, manifest: SweepManifest?) -> Date {
+        let modified = (try? folder.resourceValues(forKeys: [.contentModificationDateKey]))?
+            .contentModificationDate
+        return manifest?.details.recordedAt ?? modified ?? .distantPast
     }
 
     /// A sweep's frames, in the order they were taken. The joined-up image is not one of
