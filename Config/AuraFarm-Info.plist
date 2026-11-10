@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Your location centres the map and lets you drop a dot where you are standing, to mark out a farmer's land.</string>
 	<key>UTExportedTypeDeclarations</key>
 	<array>
 		<dict>

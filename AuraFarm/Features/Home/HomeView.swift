@@ -2,9 +2,16 @@ import SwiftUI
 
 /// Where the app opens: start a test, or look at the ones already taken.
 struct HomeView: View {
+    /// Sends the person back to the role picker. nil where there is no picker, as in previews.
+    var onSwitchRole: (() -> Void)?
+
+    init(onSwitchRole: (() -> Void)? = nil) {
+        self.onSwitchRole = onSwitchRole
+    }
+
     var body: some View {
         TabView {
-            HomeTab()
+            HomeTab(onSwitchRole: onSwitchRole)
                 .tabItem { Label("Home", systemImage: "house.fill") }
             NavigationStack {
                 SweepLibraryView()
@@ -16,6 +23,8 @@ struct HomeView: View {
 
 /// The first tab: one button to start a test, and what the finished ones add up to.
 private struct HomeTab: View {
+    var onSwitchRole: (() -> Void)?
+
     /// Carried across the sheet and the camera, so the camera is given the details the
     /// helper just typed.
     @State private var details = SampleDetails.blank
@@ -55,6 +64,13 @@ private struct HomeTab: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     NoticesButton(notices: notices) { isReadingNotices = true }
+                }
+                if let onSwitchRole {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button(action: onSwitchRole) {
+                            Label("Switch role", systemImage: "arrow.left.arrow.right")
+                        }
+                    }
                 }
                 #if DEBUG
                     // A workbench for trying the pipeline without a microscope.
