@@ -64,6 +64,25 @@ helper visiting farms, not a lab technician.
   until there is a design: each section is its own view in `Features/Results/Components`.
   The model's classes are matched to organism groups by `ProvisionalTaxonMapping`, which
   the team still has to confirm.
+
+  The advice is built from curated, provisional content in `AuraFarm/Core/Advice/`: code
+  picks the organism notes, patterns and approved actions that apply to the sample, and the
+  on-device model only phrases them. None of it is checked by an agronomist. The model
+  picks approved actions by id and adds a short reason; the action wording on screen is
+  always the team's approved wording, and the standard advice uses the same actions when
+  Apple Intelligence is unavailable. Every step comes with a plain reason; standard advice
+  uses the team's approved reasons, and the model builds on them. The app checks the model's
+  own words for banned words, amounts and organisms it must not mention, and shows standard
+  advice when Apple Intelligence refuses, can't handle the language, or its answer fails
+  the checks. Apple Intelligence advice is saved with the sample (`advice.json` in the sweep
+  folder) and shown again when the sample is reopened; Write again asks for new wording.
+  While the model writes, the card shows its progress, and a "Based on" line says what the
+  advice used. The advice is not part of the report sent to the Mac. Helpers can mark the
+  advice as useful or not, and say why; feedback is saved with the sample
+  (`advice-feedback.json`).
+  `docs/advice-content.md` is the human-readable source of that content, with its sources
+  and open review items. Sample setup has optional field notes (farm plot, crop stage, what
+  was done recently), so the advice can compare with earlier samples of the same plot.
 - **Send to Mac** — a saved sweep with counts shares a `.aurafarm` soil report by
   AirDrop, Files or Mail, for the farm manager.
 - **Export** — frames can be copied off the phone with the Files app.
@@ -191,6 +210,15 @@ counted, a detector that failed, missing sample details, Apple Intelligence unav
 advice that fails or never arrives, and one that asks the real on-device model. The same
 states are Xcode previews in `ResultStatesGallery.swift`. Add a case to `ResultScenario`
 for a new state.
+Each state has a **What the AI is told** button that shows the model's instructions and
+prompt, so the advice input can be reviewed without Apple Intelligence. On a device with
+Apple Intelligence, turn on "Use Apple Intelligence" at the top of Result states, and every
+scenario except the problem ones asks the real on-device model. In debug builds, the
+model's raw answer is logged to the Xcode console (category "advice").
+
+**Advice check** (Workbench) runs 21 fixed samples through Apple Intelligence on a phone,
+grades how well it follows the rules, and exports a sheet for people to score. It also exports
+the feedback helpers gave. It checks rule-following, not whether advice is right.
 
 | Scheme | Builds |
 |---|---|

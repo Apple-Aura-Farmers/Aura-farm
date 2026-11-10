@@ -26,14 +26,76 @@ struct SampleDetailsView: View {
                 TextField("Location", text: $details.location.orEmpty)
                     .textInputAutocapitalization(.words)
                     .autocorrectionDisabled()
-                Stepper("Field \(details.field)", value: $details.field, in: 1...999)
+                Stepper("Microscope field \(details.field)", value: $details.field, in: 1...999)
                 Picker("Soil", selection: $details.moisture) {
                     ForEach(SampleDetails.Moisture.allCases) { moisture in
                         Text(moisture.label).tag(moisture)
                     }
                 }
             }
+
+            Section {
+                TextField("Farm plot", text: plotName)
+                Picker("Crop stage", selection: $details.cropStage) {
+                    Text("Not set").tag(SampleDetails.CropStage?.none)
+                    ForEach(SampleDetails.CropStage.allCases) { stage in
+                        Text(stage.label).tag(Optional(stage))
+                    }
+                }
+                NavigationLink {
+                    RecentActionsList(actions: $details.recentActions)
+                } label: {
+                    LabeledContent(
+                        "Done recently",
+                        value: details.recentActions.map { "\($0.count)" } ?? "None")
+                }
+            } header: {
+                Text("Step 3 · Field notes (optional)")
+            } footer: {
+                Text(
+                    "Helps the advice compare with earlier samples from the same plot. Skip anything you don't know."
+                )
+            }
         }
+    }
+
+    /// The plot name, with an empty field stored as nil.
+    private var plotName: Binding<String> {
+        Binding(
+            get: { details.plotName ?? "" },
+            set: { details.plotName = $0.isEmpty ? nil : $0 }
+        )
+    }
+}
+
+/// One toggle per thing done to the plot lately. An empty choice is stored as nil.
+private struct RecentActionsList: View {
+    @Binding var actions: [SampleDetails.RecentAction]?
+
+    var body: some View {
+        Form {
+            Section {
+                ForEach(SampleDetails.RecentAction.allCases) { action in
+                    Toggle(action.label, isOn: isOn(action))
+                }
+            } footer: {
+                Text("In the last two weeks.")
+            }
+        }
+        .navigationTitle("Done recently")
+    }
+
+    private func isOn(_ action: SampleDetails.RecentAction) -> Binding<Bool> {
+        Binding(
+            get: { actions?.contains(action) ?? false },
+            set: { on in
+                // Kept in the list's own order, so the same choice always saves the same way.
+                let chosen = SampleDetails.RecentAction.allCases.filter {
+                    $0 == action ? on : actions?.contains($0) ?? false
+                }
+                actions = chosen.isEmpty ? nil : chosen
+            }
+        )
     }
 }
 
@@ -49,7 +111,10 @@ struct SampleDetailsView: View {
                     moisture: .drained,
                     gramsOfSoil: 10,
                     millilitresScanned: 0.5,
-                    recordedAt: .now
+                    recordedAt: .now,
+                    plotName: "North 2",
+                    cropStage: .tillering,
+                    recentActions: [.fertilized]
                 )
             ))
     }

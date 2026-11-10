@@ -21,6 +21,12 @@ struct SampleDetails: Codable, Equatable {
     /// so this stays nil unless something later can put a real figure in it.
     var millilitresScanned: Double?
     var recordedAt: Date
+    /// Which plot of the farm the soil came from. Used to find earlier samples of the same
+    /// plot. Not the microscope field (`field`).
+    var plotName: String? = nil
+    var cropStage: CropStage? = nil
+    /// What was done to the plot in the last two weeks.
+    var recentActions: [RecentAction]? = nil
 
     enum Moisture: String, Codable, CaseIterable, Identifiable {
         case flooded
@@ -28,6 +34,46 @@ struct SampleDetails: Codable, Equatable {
 
         var id: String { rawValue }
         var label: String { rawValue.capitalized }
+    }
+
+    enum CropStage: String, Codable, CaseIterable, Identifiable {
+        case seedling
+        case tillering
+        case flowering
+        case ripening
+        case fallow
+
+        var id: String { rawValue }
+        var label: String {
+            switch self {
+            case .seedling: return "Seedling"
+            case .tillering: return "Tillering"
+            case .flowering: return "Flowering"
+            case .ripening: return "Ripening"
+            case .fallow: return "Between seasons"
+            }
+        }
+    }
+
+    enum RecentAction: String, Codable, CaseIterable, Identifiable {
+        case fertilized
+        case drained
+        case flooded
+        case addedStraw
+        case addedCompost
+        case tilled
+
+        var id: String { rawValue }
+        var label: String {
+            switch self {
+            case .fertilized: return "Fertilized"
+            case .drained: return "Drained"
+            case .flooded: return "Flooded"
+            case .addedStraw: return "Added straw"
+            case .addedCompost: return "Added compost"
+            case .tilled: return "Tilled"
+            }
+        }
     }
 
     /// True when the sweep can be traced back to a place later. Recording is blocked until

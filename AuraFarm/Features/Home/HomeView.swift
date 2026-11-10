@@ -96,6 +96,11 @@ private struct HomeTab: View {
                             } label: {
                                 Label("Result states", systemImage: "list.bullet.rectangle")
                             }
+                            NavigationLink {
+                                AdviceCheckView()
+                            } label: {
+                                Label("Advice check", systemImage: "checklist")
+                            }
                         } label: {
                             Label("Workbench", systemImage: "hammer")
                         }

@@ -12,6 +12,25 @@ final class SoilResultTests: XCTestCase {
         XCTAssertEqual(result.totalCount, 5)
         XCTAssertEqual(result.classesFound, 2)
         XCTAssertNotNil(result.sweep)
+        XCTAssertNil(result.plotName)
+        XCTAssertNil(result.cropStage)
+        XCTAssertEqual(result.recentActions, [])
+        XCTAssertFalse(result.stoppedEarly)
+    }
+
+    func testResultCarriesTheFieldNotes() throws {
+        var sweep = makeSweep(counts: [:])
+        sweep.manifest?.details.plotName = "North 2"
+        sweep.manifest?.details.cropStage = .flowering
+        sweep.manifest?.details.recentActions = [.drained, .tilled]
+        sweep.manifest?.stoppedEarly = true
+
+        let result = try SoilResult(sweep: sweep)
+
+        XCTAssertEqual(result.plotName, "North 2")
+        XCTAssertEqual(result.cropStage, .flowering)
+        XCTAssertEqual(result.recentActions, [.drained, .tilled])
+        XCTAssertTrue(result.stoppedEarly)
     }
 
     func testSweepThatWasNotCountedHasNoTotal() throws {
