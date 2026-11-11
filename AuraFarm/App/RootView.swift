@@ -14,6 +14,8 @@ struct RootView: View {
     /// Saved between launches. nil means nothing has been chosen yet.
     @AppStorage("userRole") private var role: UserRole?
 
+    @Environment(SupabaseSession.self) private var session
+
     var body: some View {
         Group {
             switch role {
@@ -26,10 +28,14 @@ struct RootView: View {
             }
         }
         .animation(.default, value: role)
+        // Reports the session restored from the keychain first, so an operator who signed in
+        // last week is not asked again.
+        .task { await session.follow() }
     }
 }
 
 #Preview {
     RootView()
         .environment(FarmStore(fileURL: nil))
+        .environment(SupabaseSession(client: nil))
 }

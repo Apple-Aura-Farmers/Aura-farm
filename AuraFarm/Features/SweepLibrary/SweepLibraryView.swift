@@ -16,7 +16,10 @@ struct SweepLibraryView: View {
                 Section {
                     ForEach(sweeps) { set in
                         NavigationLink {
-                            SweepDetailView(sweep: set)
+                            // The result screen, not the frames: a test opened here is the
+                            // same test, so it is reviewed and published the same way. Its
+                            // own "Look through the frames" still reaches SweepDetailView.
+                            SoilResultScreen(sweep: set)
                         } label: {
                             row(for: set)
                         }
