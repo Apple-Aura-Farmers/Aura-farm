@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		6C27AD2530A449AC00CBFDD6 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = 5B1E0A9C7D4F42A8B3C6D1E1 /* Supabase */; };
 		87D63309CF8EED96A02FA376 /* AuraFarmKit in Frameworks */ = {isa = PBXBuildFile; productRef = 328C0DD016C1485FB148287C /* AuraFarmKit */; };
 		ACEEAA58A4D9EF7F6BE7D58A /* AuraFarmKit in Frameworks */ = {isa = PBXBuildFile; productRef = 328C0DD016C1485FB148287C /* AuraFarmKit */; };
 /* End PBXBuildFile section */
@@ -68,6 +69,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				6C27AD2530A449AC00CBFDD6 /* Supabase in Frameworks */,
 				87D63309CF8EED96A02FA376 /* AuraFarmKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -222,6 +224,7 @@
 			name = AuraFarm;
 			packageProductDependencies = (
 				328C0DD016C1485FB148287C /* AuraFarmKit */,
+				5B1E0A9C7D4F42A8B3C6D1E1 /* Supabase */,
 			);
 			productName = AuraFarm;
 			productReference = 84ED7D0120B576BF6D11D6DA /* AuraFarm.app */;
@@ -264,6 +267,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				EEDDE6742326E92E2FA695ED /* XCLocalSwiftPackageReference "AuraFarmKit" */,
+				5B1E0A9C7D4F42A8B3C6D1E0 /* XCRemoteSwiftPackageReference "supabase-swift" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 113236722DEE1DC96F378B9D /* Products */;
@@ -646,10 +650,26 @@
 		};
 /* End XCLocalSwiftPackageReference section */
 
+/* Begin XCRemoteSwiftPackageReference section */
+		5B1E0A9C7D4F42A8B3C6D1E0 /* XCRemoteSwiftPackageReference "supabase-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/supabase/supabase-swift.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
 		328C0DD016C1485FB148287C /* AuraFarmKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = AuraFarmKit;
+		};
+		5B1E0A9C7D4F42A8B3C6D1E1 /* Supabase */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 5B1E0A9C7D4F42A8B3C6D1E0 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Supabase;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

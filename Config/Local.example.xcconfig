@@ -7,3 +7,12 @@ DEVELOPMENT_TEAM = ABCDE12345
 
 // Uncomment if the default prefix in Base.xcconfig is already taken by another team.
 // AURA_BUNDLE_ID_PREFIX = com.yourname
+
+// The Supabase project. Both are on the project's API page in the Supabase dashboard:
+// Project Settings > API. The project ref is the subdomain of the project URL, so for
+// https://abcdefghijklmnop.supabase.co the ref is abcdefghijklmnop.
+//
+// The anon key is meant to ship inside the app and is safe here. The service_role key is not:
+// it bypasses every row-level security policy, so it must never go in this file or the app.
+AURA_SUPABASE_PROJECT_REF = abcdefghijklmnop
+AURA_SUPABASE_ANON_KEY = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.replace.me
