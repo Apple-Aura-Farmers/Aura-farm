@@ -76,6 +76,20 @@ struct FarmDetailView: View {
             } footer: {
                 Text("Results from the microscope operator will show here.")
             }
+
+            Section {
+                PublishButton(title: "Publish farm") {
+                    guard let uploader = FarmUploader() else {
+                        throw FarmUploader.Failure.notConfigured
+                    }
+                    try await uploader.upload(farm)
+                }
+            } footer: {
+                Text(
+                    "A sample can only be filed against land the records already know, so "
+                        + "publish the farm before taking one from it."
+                )
+            }
         }
     }
 }
