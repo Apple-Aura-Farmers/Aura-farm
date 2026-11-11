@@ -30,9 +30,6 @@ struct SweepDetailView: View {
     @State private var frames: [UIImage] = []
     /// The frames the stitcher could not place, by index, once it has been asked.
     @State private var unplaced: Set<Int>?
-    /// The soil report for the farm manager, written when the screen opens. nil while it is
-    /// being written, and for a sweep that has nothing to send.
-    @State private var reportURL: URL?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -70,21 +67,12 @@ struct SweepDetailView: View {
             ToolbarItem(placement: .topBarTrailing) {
                 Toggle("Grayscale", isOn: $showGrayscale).toggleStyle(.button)
             }
-            ToolbarItem(placement: .topBarTrailing) {
-                // AirDrop it to the Mac, or save it to Files and open it there.
-                if let reportURL {
-                    ShareLink(item: reportURL) {
-                        Label("Send to Mac", systemImage: "laptopcomputer.and.arrow.down")
-                    }
-                }
-            }
         }
         .task {
             // A sweep that never joined has no panorama to open on.
             if sweep.panoramaURL == nil { mode = .grid }
             await loadFrames()
         }
-        .task { await prepareReport() }
         .task(id: mode) { await checkPlacementIfNeeded() }
         .task(id: isPlaying) { await playIfNeeded() }
         .onChange(of: mode) { _, new in
@@ -306,14 +294,6 @@ struct SweepDetailView: View {
         if manifest.stoppedEarly { line += " · stopped at the size limit" }
         if let counted = manifest.totalOrganismCount { line += " · \(counted) counted" }
         return line
-    }
-
-    /// Writes the report off the main thread: it can carry the panorama, which is a few MB.
-    private func prepareReport() async {
-        let sweep = sweep
-        reportURL = await Task.detached(priority: .utility) {
-            try? SoilReportExporter.writeTemporaryFile(for: sweep)
-        }.value
     }
 
     /// Reading and decoding happens off the main thread; only the array is handed back to it.
