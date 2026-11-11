@@ -2,6 +2,20 @@ import CoreVideo
 import Foundation
 import Vision
 
+/// What one frame's luma says about it.
+///
+/// `contrast` is the standard deviation of the same downsampled luma values the
+/// brightness is the mean of, on the 0...255 scale.
+///
+/// Blank glass is expected to have low contrast AND low sharpness, while blur should keep
+/// some contrast with low sharpness. Both are hypotheses the slide movement lab is built
+/// to test; nothing here relies on them yet.
+struct FrameStats: Equatable {
+    var brightness: Double
+    var sharpness: Double
+    var contrast: Double
+}
+
 /// Measures brightness and sharpness from the luma (Y) plane of a camera frame.
 /// Expects a bi-planar YUV pixel buffer (420YpCbCr8BiPlanar).
 enum FrameAnalyzer {
@@ -11,6 +25,13 @@ enum FrameAnalyzer {
         of pixelBuffer: CVPixelBuffer,
         step: Int = 2
     ) -> (brightness: Double, sharpness: Double)? {
+        guard let stats = stats(of: pixelBuffer, step: step) else { return nil }
+        return (stats.brightness, stats.sharpness)
+    }
+
+    /// Brightness, sharpness and contrast in one pass over the luma plane.
+    /// - Parameter step: as for `brightnessAndSharpness`.
+    static func stats(of pixelBuffer: CVPixelBuffer, step: Int = 2) -> FrameStats? {
         CVPixelBufferLockBaseAddress(pixelBuffer, .readOnly)
         defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, .readOnly) }
 
@@ -30,15 +51,18 @@ enum FrameAnalyzer {
         // Downsampled copy of the luma plane.
         var grid = [Float](repeating: 0, count: w * h)
         var sum = 0.0
+        var squares = 0.0
         for y in 0..<h {
             let row = pixels + (y * step) * bytesPerRow
             for x in 0..<w {
                 let value = Float(row[x * step])
                 grid[y * w + x] = value
                 sum += Double(value)
+                squares += Double(value) * Double(value)
             }
         }
         let brightness = sum / Double(w * h)
+        let contrast = max(squares / Double(w * h) - brightness * brightness, 0).squareRoot()
 
         // Variance of the 4-neighbour Laplacian: low values mean few sharp edges.
         var lapSum = 0.0
@@ -56,7 +80,7 @@ enum FrameAnalyzer {
         let mean = lapSum / count
         let sharpness = lapSquares / count - mean * mean
 
-        return (brightness, sharpness)
+        return FrameStats(brightness: brightness, sharpness: sharpness, contrast: contrast)
     }
 }
 
@@ -70,6 +94,12 @@ final class ShakeEstimator {
     /// The last frame-to-frame shift, with direction, in pixels. nil until two frames have
     /// been compared.
     private(set) var lastShift: CGPoint?
+
+    /// Where to register, as a Vision region: normalised, origin at the bottom left. nil is
+    /// the whole frame, as it always was. It applies to the frame the request runs on (the
+    /// newer one); the previous frame is kept whole. Used to stay inside an eyepiece's round
+    /// field, whose static black ring would otherwise pin the answer at about 0 px.
+    var regionOfInterest: CGRect?
 
     private let handler = VNSequenceRequestHandler()
     private var previous: CVPixelBuffer?
@@ -87,6 +117,7 @@ final class ShakeEstimator {
         guard let previous else { return nil }
 
         let request = VNTranslationalImageRegistrationRequest(targetedCVPixelBuffer: previous)
+        if let regionOfInterest { request.regionOfInterest = regionOfInterest }
         do {
             try handler.perform([request], on: buffer)
         } catch {
@@ -130,16 +161,31 @@ final class ShakeEstimator {
 final class TravelSinceLastFrame {
     private var held: CVPixelBuffer?
 
+    /// Where to register, as a Vision region: normalised, origin at the bottom left. nil is
+    /// the whole frame, as it always was. It applies to the frame the request runs on (the
+    /// newer one); the held frame is kept whole. See `ShakeEstimator.regionOfInterest`.
+    var regionOfInterest: CGRect?
+
     /// The distance from the held frame, or nil when no frame is held yet or the two no
     /// longer have enough in common to be lined up at all.
     func distance(to buffer: CVPixelBuffer) -> Double? {
+        offset(to: buffer).map { hypot($0.x, $0.y) }
+    }
+
+    /// The signed shift from the held frame, in pixels, x to the right and y down: the same
+    /// registration as `distance(to:)`, with the vertical flipped the way `ShakeEstimator`
+    /// flips it, because Vision works bottom-up. It is the move that puts this frame back on
+    /// the held one, so content on the slide has gone the other way (see
+    /// `CaptureViewModel.pictureMoved`).
+    func offset(to buffer: CVPixelBuffer) -> CGPoint? {
         guard let held else { return nil }
         let request = VNTranslationalImageRegistrationRequest(targetedCVPixelBuffer: held)
+        if let regionOfInterest { request.regionOfInterest = regionOfInterest }
         guard (try? VNSequenceRequestHandler().perform([request], on: buffer)) != nil,
             let observation = request.results?.first
         else { return nil }
         let transform = observation.alignmentTransform
-        return Double(hypot(transform.tx, transform.ty))
+        return CGPoint(x: transform.tx, y: -transform.ty)
     }
 
     /// Call with every frame the sweep keeps: travel is measured from the last of them.

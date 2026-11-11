@@ -101,6 +101,11 @@ private struct HomeTab: View {
                             } label: {
                                 Label("Advice check", systemImage: "checklist")
                             }
+                            NavigationLink {
+                                SlideMovementLabView()
+                            } label: {
+                                Label("Slide movement lab", systemImage: "move.3d")
+                            }
                         } label: {
                             Label("Workbench", systemImage: "hammer")
                         }
