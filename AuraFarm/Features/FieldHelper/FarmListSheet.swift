@@ -7,6 +7,8 @@ struct FarmListSheet: View {
     let farms: [Farm]
     let onOpen: (Farm) -> Void
     let onAdd: () -> Void
+    /// Marking a piece of land before saying which farm it belongs to.
+    let onMarkPlot: () -> Void
 
     @Environment(FarmStore.self) private var store
     /// The farm waiting on a yes to being deleted.
@@ -38,11 +40,11 @@ struct FarmListSheet: View {
                 set: { if !$0 { farmToDelete = nil } }),
             presenting: farmToDelete
         ) { farm in
-            Button("Delete \(farm.farmerName)'s farm", role: .destructive) {
+            Button("Delete \(farm.name)", role: .destructive) {
                 store.delete(farm)
             }
         } message: { _ in
-            Text("The farm and its outline will be removed from this phone.")
+            Text("The farm and its plots will be removed from this phone.")
         }
     }
 
@@ -56,14 +58,25 @@ struct FarmListSheet: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
-            Button(action: onAdd) {
+            Menu {
+                Button {
+                    onAdd()
+                } label: {
+                    Label("New farm", systemImage: "leaf")
+                }
+                Button {
+                    onMarkPlot()
+                } label: {
+                    Label("Mark a plot on the map", systemImage: "mappin.and.ellipse")
+                }
+            } label: {
                 Image(systemName: "plus")
                     .font(.body.weight(.semibold))
                     .frame(width: 40, height: 40)
             }
             .buttonStyle(.borderedProminent)
             .buttonBorderShape(.circle)
-            .accessibilityLabel("Add a farm")
+            .accessibilityLabel("Add")
         }
         .padding(.top, Self.handleClearance)
         .padding(.horizontal, 20)
@@ -108,15 +121,16 @@ struct FarmListSheet: View {
 
     private func row(for farm: Farm) -> some View {
         HStack(spacing: 14) {
-            FarmOutlineThumbnail(corners: farm.corners)
+            FarmOutlineThumbnail(corners: farm.plots.first?.corners ?? [])
             VStack(alignment: .leading, spacing: 2) {
-                Text(farm.farmerName)
+                Text(farm.name)
                     .font(.headline)
-                if let area = farm.areaSquareMetres {
-                    Text(LandGeometry.hectaresDescription(squareMetres: area))
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
+                Text(farm.farmerName)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Text(plotsDescription(of: farm))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             Spacer()
             Image(systemName: "chevron.right")
@@ -127,22 +141,33 @@ struct FarmListSheet: View {
         .padding(.vertical, 6)
         .contentShape(Rectangle())
     }
+
+    /// How many plots and how much land, or a nudge where none is marked yet.
+    private func plotsDescription(of farm: Farm) -> String {
+        guard let area = farm.areaSquareMetres else { return "No land marked yet" }
+        let plots = farm.plots.count == 1 ? "1 plot" : "\(farm.plots.count) plots"
+        return plots + " · " + LandGeometry.hectaresDescription(squareMetres: area)
+    }
 }
 
 #Preview {
     FarmListSheet(
         farms: [
             Farm(
+                name: "Subak Jatiluwih",
                 farmerName: "Pak Wayan",
-                corners: [
-                    GeoPoint(latitude: -8.4095, longitude: 115.1889),
-                    GeoPoint(latitude: -8.4095, longitude: 115.1900),
-                    GeoPoint(latitude: -8.4105, longitude: 115.1896),
-                    GeoPoint(latitude: -8.4105, longitude: 115.1889),
+                plots: [
+                    Plot(corners: [
+                        GeoPoint(latitude: -8.4095, longitude: 115.1889),
+                        GeoPoint(latitude: -8.4095, longitude: 115.1900),
+                        GeoPoint(latitude: -8.4105, longitude: 115.1896),
+                        GeoPoint(latitude: -8.4105, longitude: 115.1889),
+                    ])
                 ])
         ],
         onOpen: { _ in },
-        onAdd: {}
+        onAdd: {},
+        onMarkPlot: {}
     )
     .environment(FarmStore(fileURL: nil))
 }

@@ -17,15 +17,35 @@ struct FieldHelperHomeView: View {
     @Environment(FarmStore.self) private var store
 
     @State private var showFarmList = false
-    @State private var showAddFarm = false
+    /// The one sheet slot this screen has for its forms. It carries what to show rather than
+    /// a flag, because a sheet reads a flag before the value beside it has arrived.
+    @State private var formSheet: FormSheet?
+    /// Whether the outline editor is pushed, for marking a plot before picking its farm.
+    @State private var markingPlot = false
     /// Set to open a farm's page.
     @State private var openedFarmID: UUID?
     /// Something to do as soon as the list sheet has finished closing.
     @State private var pending: Pending?
     @State private var listDetent = FieldHelperHomeView.collapsed
 
+    /// What the form sheet is showing.
+    private enum FormSheet: Identifiable {
+        /// Naming a farm that has no land marked yet.
+        case addFarm
+        /// Land marked on the map, waiting to be filed against a farm.
+        case filePlot(Plot)
+
+        var id: String {
+            switch self {
+            case .addFarm: "add"
+            case .filePlot(let plot): plot.id.uuidString
+            }
+        }
+    }
+
     private enum Pending {
         case add
+        case markPlot
         case open(UUID)
     }
 
@@ -48,11 +68,23 @@ struct FieldHelperHomeView: View {
                 // Deleting the last farm removes the map this sheet hangs from.
                 if isEmpty { showFarmList = false }
             }
-            .sheet(isPresented: $showAddFarm, onDismiss: { showFarmList = true }) {
-                FarmFormView()
+            .sheet(item: $formSheet, onDismiss: { showFarmList = true }) { sheet in
+                switch sheet {
+                case .addFarm:
+                    FarmFormView()
+                case .filePlot(let plot):
+                    PlotFarmPickerSheet(plot: plot)
+                }
             }
             .navigationDestination(item: $openedFarmID) { id in
                 FarmDetailView(farmID: id)
+            }
+            .navigationDestination(isPresented: $markingPlot) {
+                LandOutlineEditorView(corners: [], neighbours: store.farms.neighbours()) { corners in
+                    // Set before the editor pops, so reappearing here leaves the list sheet
+                    // closed and shows the picker instead.
+                    formSheet = .filePlot(Plot(corners: corners))
+                }
             }
         }
     }
@@ -64,15 +96,21 @@ struct FieldHelperHomeView: View {
             request(.open(farm.id))
         }
         // A new map when farms are added, deleted or reshaped, so it refits to them.
-        .id(store.farms.flatMap(\.corners))
+        .id(store.farms.flatMap(\.allCorners))
         .ignoresSafeArea()
-        // Runs on first showing and whenever a pushed page is popped back.
-        .onAppear { showFarmList = true }
+        // Runs on first showing, whenever a pushed page is popped back, and again whenever the
+        // map is rebuilt for a change to the farms. Only the first two should raise the sheet:
+        // editing a plot changes the farms while the farm's page is still open, and the sheet
+        // must not slide up over it.
+        .onAppear {
+            if openedFarmID == nil && !markingPlot && formSheet == nil { showFarmList = true }
+        }
         .sheet(isPresented: $showFarmList, onDismiss: runPending) {
             FarmListSheet(
                 farms: sortedFarms,
                 onOpen: { request(.open($0.id)) },
-                onAdd: { request(.add) }
+                onAdd: { request(.add) },
+                onMarkPlot: { request(.markPlot) }
             )
             .presentationDetents([Self.collapsed, .medium, .large], selection: $listDetent)
             // The map stays tappable until the sheet is pulled past half height.
@@ -91,8 +129,11 @@ struct FieldHelperHomeView: View {
         } description: {
             Text("Add the farms you look after to see their land and soil details here.")
         } actions: {
-            Button("Add a farm") { showAddFarm = true }
-                .buttonStyle(.borderedProminent)
+            VStack(spacing: 12) {
+                Button("Add a farm") { formSheet = .addFarm }
+                    .buttonStyle(.borderedProminent)
+                Button("Mark a plot on the map") { markingPlot = true }
+            }
         }
     }
 
@@ -144,14 +185,15 @@ struct FieldHelperHomeView: View {
 
     private func run(_ action: Pending) {
         switch action {
-        case .add: showAddFarm = true
+        case .add: formSheet = .addFarm
+        case .markPlot: markingPlot = true
         case .open(let id): openedFarmID = id
         }
     }
 
     private var sortedFarms: [Farm] {
         store.farms.sorted {
-            $0.farmerName.localizedStandardCompare($1.farmerName) == .orderedAscending
+            $0.name.localizedStandardCompare($1.name) == .orderedAscending
         }
     }
 }
@@ -175,12 +217,15 @@ extension View {
                 fileURL: nil,
                 farms: [
                     Farm(
+                        name: "Subak Jatiluwih",
                         farmerName: "Pak Wayan",
-                        corners: [
-                            GeoPoint(latitude: -8.4095, longitude: 115.1889),
-                            GeoPoint(latitude: -8.4095, longitude: 115.1900),
-                            GeoPoint(latitude: -8.4105, longitude: 115.1900),
-                            GeoPoint(latitude: -8.4105, longitude: 115.1889),
+                        plots: [
+                            Plot(corners: [
+                                GeoPoint(latitude: -8.4095, longitude: 115.1889),
+                                GeoPoint(latitude: -8.4095, longitude: 115.1900),
+                                GeoPoint(latitude: -8.4105, longitude: 115.1900),
+                                GeoPoint(latitude: -8.4105, longitude: 115.1889),
+                            ])
                         ])
                 ]))
 }
