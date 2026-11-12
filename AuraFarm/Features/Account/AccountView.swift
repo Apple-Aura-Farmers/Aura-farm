@@ -8,6 +8,11 @@ struct AccountView: View {
     @Environment(SupabaseSession.self) private var session
     @Environment(\.dismiss) private var dismiss
 
+    /// What this phone already goes by, so signing in without an account carries the same
+    /// name and job as everything else it files.
+    @AppStorage("operatorName") private var operatorName = ""
+    @AppStorage("userRole") private var pickedRole: UserRole?
+
     @State private var mode = Mode.signIn
     @State private var fullName = ""
     @State private var email = ""
@@ -153,7 +158,10 @@ struct AccountView: View {
 
         Section {
             Button("Carry on without an account") {
-                run { try await session.signInAnonymously() }
+                run {
+                    try await session.signInAnonymously(
+                        name: operatorName, role: pickedRole)
+                }
             }
             .disabled(isWorking)
         } footer: {

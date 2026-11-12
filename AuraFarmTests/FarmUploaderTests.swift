@@ -37,13 +37,9 @@ final class FarmUploaderTests: XCTestCase {
         XCTAssertEqual(row.plotNumber, 2)
     }
 
-    func testTheWriterIsSentOnlyWhenSomeoneIsSignedIn() throws {
-        let writer = UUID()
-
-        XCTAssertEqual(
-            try encode(FarmRow(farm: farm, writer: writer))["created_by"] as? String,
-            writer.uuidString)
-        // Left out rather than sent as null, so the column keeps its own default.
+    func testTheWriterIsLeftToTheRecords() throws {
+        // Sending it would take a farm read back from somebody else off them on the next
+        // publish. The column's own default names whoever is signed in.
         XCTAssertNil(try encode(FarmRow(farm: farm))["created_by"])
     }
 
@@ -52,6 +48,16 @@ final class FarmUploaderTests: XCTestCase {
 
         XCTAssertEqual(row.name, "Subak Jatiluwih")
         XCTAssertEqual(row.farmerName, "Pak Wayan")
+    }
+
+    func testThePlotsToKeepAreListedTheWayPostgrestParsesThem() {
+        let first = UUID()
+        let second = UUID()
+
+        // Brackets, or the filter is not parsed at all.
+        XCTAssertEqual(
+            FarmUploader.list([first, second]),
+            "(\(first.uuidString),\(second.uuidString))")
     }
 
     private func encode(_ value: some Encodable) throws -> [String: Any] {
