@@ -86,6 +86,13 @@ struct ReadingConsistency {
         return .predicted(prediction)
     }
 
+    /// Starts the streak afresh with `accepted` as the last offset, for when a reading has
+    /// been confirmed some other way (a picture match after a stretch with nothing to track).
+    mutating func reset(to accepted: CGPoint) {
+        lastAccepted = accepted
+        predictedStreak = 0
+    }
+
     /// Call when the anchor changes: the next offset is measured from zero.
     mutating func reset() {
         lastAccepted = .zero

@@ -77,6 +77,25 @@ struct MovementLogRow: Equatable {
     var noDetail = false
     /// Times the view went over nothing to track.
     var blindStretches = 0
+    /// The picture check against the Mark start picture: where the start picture sits against
+    /// this frame (px), the true distance from the start and the tracker's error, in fields.
+    /// nil when not available.
+    var startMatchX: Double?
+    var startMatchY: Double?
+    var trueOffStartFields: Double?
+    var trackerErrorFields: Double?
+    /// Detail returns recovered by matching the held picture, and those that were not.
+    var blankReturnsMatched = 0
+    var blankReturnsUnmatched = 0
+    /// "matched" or "unmatched" on the frame where a return was decided, else "".
+    var blankReturn = ""
+    /// The guide dry run; empty when it is off. `viewClass` is what the box looks like.
+    var viewClass = ""
+    var guideState = ""
+    var guideInstruction = ""
+    var guideTargetDx: Double?
+    var guideTargetDy: Double?
+    var guideCaptures: Int?
 }
 
 enum MovementLog {
@@ -91,6 +110,10 @@ enum MovementLog {
         "field_open_share", "box_side_px", "position_x_fields", "position_y_fields",
         "hop_limit_px", "box_brightness", "box_sharpness", "box_contrast",
         "reading", "predicted_streak", "no_detail", "blind_stretches",
+        "start_match_x_px", "start_match_y_px", "true_off_start_fields", "tracker_error_fields",
+        "blank_returns_matched", "blank_returns_unmatched", "blank_return",
+        "view_class", "guide_state", "guide_instruction", "guide_target_dx", "guide_target_dy",
+        "guide_captures",
     ]
 
     static func csv(_ rows: [MovementLogRow]) -> String {
@@ -119,6 +142,12 @@ enum MovementLog {
             number(row.boxBrightness, 3), number(row.boxSharpness, 3),
             number(row.boxContrast, 3), row.reading, String(row.predictedStreak),
             row.noDetail ? "1" : "0", String(row.blindStretches),
+            number(row.startMatchX, 2), number(row.startMatchY, 2),
+            number(row.trueOffStartFields, 3), number(row.trackerErrorFields, 3),
+            String(row.blankReturnsMatched), String(row.blankReturnsUnmatched), row.blankReturn,
+            row.viewClass, row.guideState, row.guideInstruction,
+            number(row.guideTargetDx, 2), number(row.guideTargetDy, 2),
+            row.guideCaptures.map(String.init) ?? "",
         ]
     }
 

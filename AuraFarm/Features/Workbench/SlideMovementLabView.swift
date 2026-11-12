@@ -23,6 +23,7 @@
         @AppStorage("slideLab.showsSees") private var showsSees = false
         @AppStorage("slideLab.fieldRegion") private var fieldRegionName = FieldRegionMode.auto.rawValue
         @AppStorage("slideLab.hopAgreement") private var hopAgreement = false
+        @AppStorage("slideLab.guideDryRun") private var guideDryRun = false
         @State private var noteText = ""
 
         // Recorded video.
@@ -50,6 +51,8 @@
                 model.setFieldRegion(FieldRegionMode(rawValue: fieldRegionName) ?? .auto)
                 model.setMeasuresHopAgreement(hopAgreement)
                 model.setShowsThumbnail(showsSees)
+                model.setGuideDryRun(guideDryRun)
+                model.setScreenMapping(mapping, mirrored: mirrored)
                 if mode == .live { model.start() }
             }
             .onChange(of: fieldRegionName) { _, name in
@@ -57,6 +60,9 @@
             }
             .onChange(of: hopAgreement) { _, enabled in model.setMeasuresHopAgreement(enabled) }
             .onChange(of: showsSees) { _, shown in model.setShowsThumbnail(shown) }
+            .onChange(of: guideDryRun) { _, enabled in model.setGuideDryRun(enabled) }
+            .onChange(of: mappingName) { model.setScreenMapping(mapping, mirrored: mirrored) }
+            .onChange(of: mirrored) { model.setScreenMapping(mapping, mirrored: mirrored) }
             .onDisappear { model.stop() }
             .onChange(of: mode) { _, newMode in
                 if newMode == .live { model.start() } else { model.stop() }
@@ -97,6 +103,7 @@
                     if model.isAnalyzing {
                         if showsSees { seesThumbnail }
                         BigReadouts(model: model)
+                        if model.guideDryRun { GuideReadout(model: model) }
                         analyzingControls
                     } else {
                         setupControls
@@ -272,6 +279,7 @@
                 .buttonStyle(.bordered)
                 Toggle("Show what the app sees", isOn: $showsSees)
                 Toggle("Measure hop agreement", isOn: $hopAgreement)
+                Toggle("Guide dry run", isOn: $guideDryRun)
                 Text("Red tint: treated as the eyepiece. Yellow box: where movement is measured.")
                     .font(.caption)
                     .foregroundStyle(.secondary)

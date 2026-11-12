@@ -8,24 +8,75 @@
     struct BigReadouts: View {
         var model: SlideMovementLabModel
 
+        /// The line under "Off start": hidden with no start picture.
+        private func pictureCheckLine(_ readouts: SlideMovementInfo.Readouts) -> String? {
+            switch readouts.pictureCheck {
+            case "out_of_range": return "Picture check: come back within 0.4 field of the start"
+            case "matching": return "Picture check: matching…"
+            case "confirmed":
+                guard let truth = readouts.trueOffStartFields,
+                    let error = readouts.trackerErrorFields
+                else { return nil }
+                // The tracker's own distance from the start is the "Off start" number.
+                return String(
+                    format: "Picture check: true %.2f · tracker %.2f · error %.2f field", truth,
+                    readouts.offStartFields ?? truth, error)
+            default: return nil
+            }
+        }
+
         var body: some View {
             let readouts = model.readouts
-            HStack {
-                // From the marked start if there is one, otherwise from the last reset.
-                Text(
-                    "\(readouts.offStartFields == nil ? "Moved" : "Off start") \(readouts.distanceFields, specifier: "%.2f") fields"
-                )
-                .foregroundStyle(readouts.isHome ? .green : .primary)
-                Text("Still \(readouts.stillSeconds, specifier: "%.1f") s")
-                    .foregroundStyle(
-                        readouts.stillSeconds >= slideLabStillGoalSeconds ? .green : .primary)
-                Text("Hops \(readouts.hops) · Gaps \(readouts.gaps)")
+            VStack(spacing: 0) {
+                HStack {
+                    // From the marked start if there is one, otherwise from the last reset.
+                    Text(
+                        "\(readouts.offStartFields == nil ? "Moved" : "Off start") \(readouts.distanceFields, specifier: "%.2f") fields"
+                    )
+                    .foregroundStyle(readouts.isHome ? .green : .primary)
+                    Text("Still \(readouts.stillSeconds, specifier: "%.1f") s")
+                        .foregroundStyle(
+                            readouts.stillSeconds >= slideLabStillGoalSeconds ? .green : .primary)
+                    Text("Hops \(readouts.hops) · Gaps \(readouts.gaps)")
+                }
+                .font(.title3.monospacedDigit().bold())
+                .lineLimit(1)
+                .minimumScaleFactor(0.5)
+                .padding(.horizontal)
+                .padding(.vertical, 6)
+                if let line = pictureCheckLine(readouts) {
+                    Text(line)
+                        .font(.footnote.monospaced())
+                        .padding(.horizontal)
+                }
             }
-            .font(.title3.monospacedDigit().bold())
-            .lineLimit(1)
-            .minimumScaleFactor(0.5)
+        }
+    }
+
+    /// The guide dry run: what the guide would say, in plain type. The Phase 3 guide will draw
+    /// the crosshairs; this only reads out.
+    struct GuideReadout: View {
+        var model: SlideMovementLabModel
+
+        var body: some View {
+            let info = model.guideInfo
+            VStack(alignment: .leading, spacing: 4) {
+                Text(info.instruction.isEmpty ? "Guide: waiting…" : info.instruction)
+                    .font(.title2.bold())
+                Text("Route: \(info.state.isEmpty ? "-" : info.state)")
+                if let dx = info.targetDx, let dy = info.targetDy {
+                    Text("Target: dx \(dx, specifier: "%.2f"), dy \(dy, specifier: "%.2f") fields")
+                } else {
+                    Text("Target: -")
+                }
+                Text("View: \(info.viewClass.isEmpty ? "-" : info.viewClass) · Captured: \(info.captures)")
+            }
+            .font(.footnote.monospaced())
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(10)
+            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 10))
             .padding(.horizontal)
-            .padding(.vertical, 6)
+            .padding(.bottom, 4)
         }
     }
 
@@ -142,6 +193,8 @@
                 .frame(width: 0, height: 0)
                 .sensoryFeedback(.impact(weight: .light), trigger: model.readouts.hopCount)
                 .sensoryFeedback(.warning, trigger: model.readouts.lostCount)
+                .sensoryFeedback(.impact(weight: .light), trigger: model.guideInfo.captureCount)
+                .sensoryFeedback(.impact(weight: .light), trigger: model.guideInfo.edgeCount)
                 .sensoryFeedback(.success, trigger: stopReached) { _, reached in reached }
         }
     }

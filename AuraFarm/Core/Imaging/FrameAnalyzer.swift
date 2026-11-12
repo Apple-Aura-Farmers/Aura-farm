@@ -240,31 +240,60 @@ final class TravelSinceLastFrame {
 /// It holds nothing between calls: the crops are lazy images over the caller's buffers.
 final class BoxRegistration {
     /// The least box side, in px, worth registering.
-    private let minimumSide: CGFloat = 16
+    private static let minimumSide: CGFloat = 16
 
     /// The signed shift from `held` to `current` inside `box` (full-frame pixels, origin at
     /// the top left), x to the right and y down: the same convention as
     /// `TravelSinceLastFrame.offset(to:)`. nil when the box is too small or Vision gives
     /// nothing.
     func offset(from held: CVPixelBuffer, to current: CVPixelBuffer, box: CGRect) -> CGPoint? {
-        let width = CGFloat(CVPixelBufferGetWidth(current))
-        let height = CGFloat(CVPixelBufferGetHeight(current))
+        guard let rect = Self.wholePixelRect(of: box, in: current) else { return nil }
+        return register(target: Self.crop(held, to: rect), on: Self.crop(current, to: rect))
+    }
+
+    /// The same, with the held picture a stored copy of the box (see `copy(of:box:context:)`)
+    /// rather than a camera buffer: x to the right and y down, from the stored picture to
+    /// `current`. nil when the stored picture is not the size of the box now.
+    func offset(fromStored stored: CGImage, to current: CVPixelBuffer, box: CGRect) -> CGPoint? {
+        guard let rect = Self.wholePixelRect(of: box, in: current),
+            stored.width == Int(rect.width), stored.height == Int(rect.height)
+        else { return nil }
+        return register(target: CIImage(cgImage: stored), on: Self.crop(current, to: rect))
+    }
+
+    /// A deep copy of the box, rendered to an image of its own. It holds no reference to the
+    /// camera's buffer, which must be given back to the capture pool.
+    func copy(of buffer: CVPixelBuffer, box: CGRect, context: CIContext) -> CGImage? {
+        guard let rect = Self.wholePixelRect(of: box, in: buffer) else { return nil }
+        let cropped = Self.crop(buffer, to: rect)
+        return context.createCGImage(cropped, from: cropped.extent)
+    }
+
+    /// The box in whole pixels, kept inside the frame; nil when it is too small to register.
+    private static func wholePixelRect(of box: CGRect, in buffer: CVPixelBuffer) -> CGRect? {
+        let bounds = CGRect(
+            x: 0, y: 0, width: CVPixelBufferGetWidth(buffer), height: CVPixelBufferGetHeight(buffer))
         let whole = CGRect(
             x: box.minX.rounded(), y: box.minY.rounded(),
             width: box.width.rounded(), height: box.height.rounded()
-        ).intersection(CGRect(x: 0, y: 0, width: width, height: height))
-        guard whole.width >= minimumSide, whole.height >= minimumSide else { return nil }
+        ).intersection(bounds)
+        guard !whole.isNull, whole.width >= minimumSide, whole.height >= minimumSide else { return nil }
+        return whole
+    }
 
-        // Core Image's origin is at the bottom left.
+    /// The crop moved to the origin, so both sides of a registration share one extent. Core
+    /// Image's origin is at the bottom left.
+    private static func crop(_ buffer: CVPixelBuffer, to rect: CGRect) -> CIImage {
+        let height = CGFloat(CVPixelBufferGetHeight(buffer))
         let cropRect = CGRect(
-            x: whole.minX, y: height - whole.maxY, width: whole.width, height: whole.height)
-        func crop(_ buffer: CVPixelBuffer) -> CIImage {
-            CIImage(cvPixelBuffer: buffer).cropped(to: cropRect)
-                .transformed(by: CGAffineTransform(translationX: -cropRect.minX, y: -cropRect.minY))
-        }
+            x: rect.minX, y: height - rect.maxY, width: rect.width, height: rect.height)
+        return CIImage(cvPixelBuffer: buffer).cropped(to: cropRect)
+            .transformed(by: CGAffineTransform(translationX: -cropRect.minX, y: -cropRect.minY))
+    }
 
-        let request = VNTranslationalImageRegistrationRequest(targetedCIImage: crop(held), options: [:])
-        guard (try? VNImageRequestHandler(ciImage: crop(current), options: [:]).perform([request])) != nil,
+    private func register(target: CIImage, on current: CIImage) -> CGPoint? {
+        let request = VNTranslationalImageRegistrationRequest(targetedCIImage: target, options: [:])
+        guard (try? VNImageRequestHandler(ciImage: current, options: [:]).perform([request])) != nil,
             let observation = request.results?.first
         else { return nil }
         let transform = observation.alignmentTransform

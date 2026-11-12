@@ -38,6 +38,10 @@
             var reading = ""
             var hasDetail = true
             var blindStretches = 0
+            /// "none", "out_of_range", "matching" or "confirmed"; see `SlideMovementStep`.
+            var pictureCheck = "none"
+            var trueOffStartFields: Double?
+            var trackerErrorFields: Double?
 
             /// How far the view is from the marked start, or from where the position was last
             /// reset when no start is marked, in fields.
@@ -59,6 +63,21 @@
             var hopCount = 0
             /// Parallel to `trail`: true where the box held nothing to follow, drawn dashed.
             var blind: [Bool] = []
+        }
+
+        /// The guide dry run's block. Counters drive haptics, like `Readouts`.
+        struct Guide: Equatable {
+            var isOn = false
+            var instruction = ""
+            var state = ""
+            /// The vector to the target, in fields (screen axes); nil when there is none.
+            var targetDx: Double?
+            var targetDy: Double?
+            var viewClass = ""
+            var captures = 0
+            var captureCount = 0
+            var edgeCount = 0
+            var isFinished = false
         }
 
         /// For the cards and outlines drawn on the camera preview, in frame pixels.

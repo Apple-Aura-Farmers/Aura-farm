@@ -20,6 +20,9 @@
         private(set) var readouts = SlideMovementInfo.Readouts()
         private(set) var trailInfo = SlideMovementInfo.Trail()
         private(set) var fieldInfo = SlideMovementInfo.Field()
+        /// The guide dry run's block (see `GuideDryRun`).
+        private(set) var guideInfo = SlideMovementInfo.Guide()
+        private(set) var guideDryRun = false
         /// The "What the app sees" picture, when it is switched on.
         private(set) var thumbnailImage: CGImage?
         private(set) var showsThumbnail = false
@@ -66,6 +69,10 @@
             pipeline.requiresReview = true
             return pipeline
         }()
+        @ObservationIgnored private let dryRun = GuideDryRun()
+        @ObservationIgnored private var guideEnabled = false
+        @ObservationIgnored private var latestGuide: GuideRowFields?
+        @ObservationIgnored private var latestGuideInfo = SlideMovementInfo.Guide()
         @ObservationIgnored private var frameCount = 0
         @ObservationIgnored private var analyzing = false
         /// Analyze every Nth frame: about 10 fps at 30 fps capture.
@@ -170,6 +177,8 @@
             analysisQueue.async { [weak self] in
                 guard let self else { return }
                 self.pipeline.resetPosition()
+                self.dryRun.reset()
+                self.latestGuide = nil
                 self.clearTrackingDisplay()
             }
         }
@@ -280,6 +289,27 @@
             analysisQueue.async { [weak self] in self?.pipeline.makesThumbnail = shown }
         }
 
+        /// Switches the guide dry run on or off; either way it starts afresh.
+        func setGuideDryRun(_ enabled: Bool) {
+            guideDryRun = enabled
+            if !enabled { guideInfo = SlideMovementInfo.Guide() }
+            analysisQueue.async { [weak self] in
+                guard let self else { return }
+                self.guideEnabled = enabled
+                self.dryRun.reset()
+                self.latestGuide = nil
+                self.latestGuideInfo = SlideMovementInfo.Guide()
+            }
+        }
+
+        /// How the frame's axes map onto the screen, which the guide works in.
+        func setScreenMapping(_ mapping: ScreenMapping, mirrored: Bool) {
+            analysisQueue.async { [weak self] in
+                self?.dryRun.mapping = mapping
+                self?.dryRun.mirrored = mirrored
+            }
+        }
+
         func setMeasuresHopAgreement(_ enabled: Bool) {
             measuresHopAgreement = enabled
             analysisQueue.async { [weak self] in self?.measureAgreementEnabled = enabled }
@@ -291,6 +321,7 @@
             analysisQueue.async { [weak self] in
                 guard let self else { return }
                 self.pendingMark.place(PendingMark(name: "start", millimetres: nil))
+                self.pipeline.setStartPicture()
                 self.indicators.markStart(at: self.latestPositionFields)
                 self.startTrailPoint = self.latestPositionFields
             }
@@ -298,7 +329,11 @@
 
         /// - Parameter millimetres: the distance the stage moved, read off its vernier scale.
         func markEnd(millimetres: Double?) {
-            showToast("Mark end ✓")
+            var text = "Mark end ✓"
+            if readouts.pictureCheck == "confirmed", let truth = readouts.trueOffStartFields {
+                text += String(format: " · true %.2f field", truth)
+            }
+            showToast(text)
             analysisQueue.async { [weak self] in
                 self?.pendingMark.place(PendingMark(name: "end", millimetres: millimetres))
             }
@@ -382,7 +417,8 @@
 
         private func row(
             from step: SlideMovementStep, indicators: MovementIndicators, seconds: Double,
-            label: String, mark: String, millimetres: Double?, test: SlideLabTest, note: String
+            label: String, mark: String, millimetres: Double?, test: SlideLabTest, note: String,
+            guide: GuideRowFields? = nil
         ) -> MovementLogRow {
             MovementLogRow(
                 seconds: seconds,
@@ -409,7 +445,17 @@
                 boxBrightness: step.boxStats.brightness, boxSharpness: step.boxStats.sharpness,
                 boxContrast: step.boxStats.contrast, reading: step.reading,
                 predictedStreak: step.predictedStreak, noDetail: !step.hasDetail,
-                blindStretches: step.blindStretches)
+                blindStretches: step.blindStretches,
+                startMatchX: step.startMatch.map { Double($0.x) },
+                startMatchY: step.startMatch.map { Double($0.y) },
+                trueOffStartFields: step.trueOffStartFields,
+                trackerErrorFields: step.trackerErrorFields,
+                blankReturnsMatched: step.blankReturnsMatched,
+                blankReturnsUnmatched: step.blankReturnsUnmatched,
+                blankReturn: step.blankReturnEvent, viewClass: guide?.viewClass ?? "",
+                guideState: guide?.state ?? "", guideInstruction: guide?.instruction ?? "",
+                guideTargetDx: guide?.targetDx, guideTargetDy: guide?.targetDy,
+                guideCaptures: guide?.captures)
         }
 
         private static func write(_ rows: [MovementLogRow], test: SlideLabTest) -> URL? {
@@ -569,6 +615,11 @@
                 positionFields: step.positionFields, isLost: step.isLost, event: step.event,
                 referenceSide: step.boxSide, seconds: time, hopDistance: step.hopLimit,
                 hasDetail: step.hasDetail)
+            if guideEnabled {
+                let result = dryRun.update(step: step, indicators: indicators, seconds: time)
+                latestGuide = result.fields
+                latestGuideInfo = result.info
+            }
             if step.event == .hop {
                 hopCount += 1
                 hopPoints.append(step.positionFields)
@@ -595,7 +646,8 @@
                 let logged = row(
                     from: step, indicators: indicators, seconds: time - origin,
                     label: currentLabel, mark: mark?.name ?? "",
-                    millimetres: mark?.millimetres, test: currentTest, note: currentNote)
+                    millimetres: mark?.millimetres, test: currentTest, note: currentNote,
+                    guide: guideEnabled ? latestGuide : nil)
                 rows.append(logged)
                 if !currentLabel.isEmpty { labelledRows.append(logged) }
                 refreshStatistics(at: time)
@@ -635,7 +687,10 @@
                 elapsedLogSeconds: logging ? time - (logOrigin ?? time) : 0, hopCount: hopCount,
                 lostCount: lostCount, analysisMilliseconds: step.analysisMilliseconds,
                 analyzedFps: step.analyzedFps, boxStats: step.boxStats, reading: step.reading,
-                hasDetail: step.hasDetail, blindStretches: step.blindStretches)
+                hasDetail: step.hasDetail, blindStretches: step.blindStretches,
+                pictureCheck: step.pictureCheck, trueOffStartFields: step.trueOffStartFields,
+                trackerErrorFields: step.trackerErrorFields)
+            let guideInfo = guideEnabled ? latestGuideInfo : SlideMovementInfo.Guide()
             let trailInfo = SlideMovementInfo.Trail(
                 trail: trail, hopPoints: hopPoints, lostPoints: lostPoints,
                 startPoint: startTrailPoint, hopProgress: indicators.hopProgress,
@@ -654,6 +709,7 @@
                 if self.readouts != readouts { self.readouts = readouts }
                 if self.trailInfo != trailInfo { self.trailInfo = trailInfo }
                 if self.fieldInfo != fieldInfo { self.fieldInfo = fieldInfo }
+                if self.guideInfo != guideInfo { self.guideInfo = guideInfo }
                 if isLogging, self.rowCount != count { self.rowCount = count }
             }
         }

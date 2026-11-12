@@ -15,7 +15,11 @@ final class MovementLogTests: XCTestCase {
             analysisMilliseconds: 41.66, analyzedFps: 9.84, fieldOpenShare: 0.6234, boxSidePx: 352.04,
             positionXFields: 0.0284, positionYFields: -0.0568, hopLimitPx: 88.01,
             boxBrightness: 63.4567, boxSharpness: 412.3456, boxContrast: 18.25, reading: "predicted",
-            predictedStreak: 2, noDetail: true, blindStretches: 3)
+            predictedStreak: 2, noDetail: true, blindStretches: 3, startMatchX: 41.234,
+            startMatchY: -3.5, trueOffStartFields: 0.12, trackerErrorFields: 0.183,
+            blankReturnsMatched: 2, blankReturnsUnmatched: 1, blankReturn: "matched",
+            viewClass: "sample", guideState: "column 2 up", guideInstruction: "move",
+            guideTargetDx: 0.5, guideTargetDy: -0.8, guideCaptures: 7)
     }
 
     func testHeaderAndEveryRowHaveTheSameColumnCount() {
@@ -41,11 +45,30 @@ final class MovementLogTests: XCTestCase {
         XCTAssertEqual(fields[index("position_x_frames")], "0.014")
         XCTAssertEqual(fields[index("frame_width")], "1280")
         XCTAssertEqual(
-            MovementLog.header.suffix(7),
+            MovementLog.header.suffix(20).prefix(7),
             [
                 "box_brightness", "box_sharpness", "box_contrast", "reading", "predicted_streak",
                 "no_detail", "blind_stretches",
             ])
+        XCTAssertEqual(
+            MovementLog.header.suffix(13),
+            [
+                "start_match_x_px", "start_match_y_px", "true_off_start_fields",
+                "tracker_error_fields", "blank_returns_matched", "blank_returns_unmatched",
+                "blank_return", "view_class", "guide_state", "guide_instruction",
+                "guide_target_dx", "guide_target_dy", "guide_captures",
+            ])
+        XCTAssertEqual(fields[index("start_match_x_px")], "41.23")
+        XCTAssertEqual(fields[index("true_off_start_fields")], "0.120")
+        XCTAssertEqual(fields[index("tracker_error_fields")], "0.183")
+        XCTAssertEqual(fields[index("blank_returns_matched")], "2")
+        XCTAssertEqual(fields[index("blank_returns_unmatched")], "1")
+        XCTAssertEqual(fields[index("blank_return")], "matched")
+        XCTAssertEqual(fields[index("view_class")], "sample")
+        XCTAssertEqual(fields[index("guide_state")], "column 2 up")
+        XCTAssertEqual(fields[index("guide_instruction")], "move")
+        XCTAssertEqual(fields[index("guide_target_dx")], "0.50")
+        XCTAssertEqual(fields[index("guide_captures")], "7")
         XCTAssertEqual(fields[index("box_brightness")], "63.457")
         XCTAssertEqual(fields[index("box_sharpness")], "412.346")
         XCTAssertEqual(fields[index("box_contrast")], "18.250")
@@ -94,6 +117,30 @@ final class MovementLogTests: XCTestCase {
         XCTAssertEqual(lines[2][mark], "end")
         XCTAssertEqual(lines[2][mm], "4.50")
         XCTAssertEqual(lines[3][mark], "")
+    }
+
+    func testGuideAndPictureColumnsAreEmptyWhenOff() {
+        var plain = row()
+        plain.startMatchX = nil
+        plain.startMatchY = nil
+        plain.trueOffStartFields = nil
+        plain.trackerErrorFields = nil
+        plain.viewClass = ""
+        plain.guideState = ""
+        plain.guideInstruction = ""
+        plain.guideTargetDx = nil
+        plain.guideTargetDy = nil
+        plain.guideCaptures = nil
+        let line = MovementLog.csv([plain]).split(separator: "\n")[1]
+        let fields = line.split(separator: ",", omittingEmptySubsequences: false).map(String.init)
+        for name in [
+            "start_match_x_px", "start_match_y_px", "true_off_start_fields", "tracker_error_fields",
+            "view_class", "guide_state", "guide_instruction", "guide_target_dx", "guide_target_dy",
+            "guide_captures",
+        ] {
+            let column = MovementLog.header.firstIndex(of: name) ?? -1
+            XCTAssertEqual(fields[column], "", name)
+        }
     }
 
     func testTextFieldsAreQuoted() {

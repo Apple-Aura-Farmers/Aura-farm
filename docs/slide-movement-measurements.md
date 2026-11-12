@@ -175,6 +175,26 @@ Seven more columns close the row, after `hop_limit_px`:
 | `no_detail` | 1 while the box holds too little detail to follow, else 0 |
 | `blind_stretches` | Times the view went over nothing to track |
 
+Thirteen more columns close the row, after `blind_stretches`. The picture and guide columns are
+empty when not available:
+
+| Column | Meaning |
+|---|---|
+| `start_match_x_px`, `start_match_y_px` | Where the Mark start picture sits against this frame, px (held to current). The true change of position since Mark start |
+| `true_off_start_fields` | The length of that, in fields |
+| `tracker_error_fields` | How far the tracker's change of position since Mark start is from the true one, in fields |
+| `blank_returns_matched` | Returns from NO DETAIL recovered by matching the held picture |
+| `blank_returns_unmatched` | Returns that could not be matched. The position may be off since then |
+| `blank_return` | `matched` or `unmatched` on the frame where it was decided |
+| `view_class` | Guide dry run: `sample`, `thin`, `blank`, `blurry` or `dark` |
+| `guide_state` | Guide dry run: the route step, for example `column 3 down` |
+| `guide_instruction` | Guide dry run: `move`, `holding`, `captured`, `edge_go_back` and so on |
+| `guide_target_dx`, `guide_target_dy` | Guide dry run: the vector to the target in fields, screen axes |
+| `guide_captures` | Guide dry run: frames it would have captured so far |
+
+The `reading` column can now also say `matching`: detail is back and the picture match is
+still deciding. The position stays where it was until then.
+
 `anchor_x_px` and `anchor_y_px` are always what registration returned, even on a `predicted`
 row, so a false jump stays visible there; the position uses the predicted value.
 
@@ -184,8 +204,10 @@ row, so a false jump stays visible there; the position uses the predicted value.
   blank glass it reads about 0, which looks like "not moving" and silently loses distance. The
   lab now checks the sharpness inside the box; when it stays low the banner says NO DETAIL, the
   distance is paused (it is not counted as lost), the trail is dashed and `no_detail` is 1. Keep
-  moves over the sample. When detail returns the lab re-anchors and carries on from the last
-  known position; the few readings it needs to be sure detail is back (three) are not tracked.
+  moves over the sample. When detail returns, the lab matches the last picture with detail (three
+  agreeing readings, after three readings to be sure detail is back). If it finds it, the
+  position is recovered with no loss (`blank_returns_matched`). If not, it carries on from the
+  last known position and counts `blank_returns_unmatched`: the position may be off since then.
   `blind_stretches` counts each time this happened.
 - **It rejects readings that disagree with the frame-to-frame movement.** Hand-moved tests
   showed single readings against the anchor jumping to about 250 px while the picture moved a
@@ -201,6 +223,78 @@ row, so a false jump stays visible there; the position uses the predicted value.
 - **Marks.** Mark start and Mark end only work while a log is running (the buttons are greyed
   otherwise). A short "Mark start ✓" or "Mark end ✓" appears on the camera strip, with
   "(not logging)" if nothing was written. The mark lands in the `mark` column of the next row.
+
+## Mechanical stage results (12 November 2026)
+
+Twelve runs (K1, K2, C1–C4, D1–D4, D6, D7) with the X and Y knobs, a 10x objective, a box side
+of 344–352 px and about 32 ms of analysis at 10 fps.
+
+| Run | Result |
+|---|---|
+| 10 of 12 runs | Zero LOST |
+| D1, D3, D4 (out and back) | Drift 0.23, 0.34 and 0.17 field |
+| C3 | Hop total (587, 107) px against a plain sum of frame-to-frame shifts (588, 103) px |
+| D3 | Hops (−115, −11) px against a sum of (−106, −15) px |
+| D6 | 1.80 field of error: 39% of the run in NO DETAIL, 5 LOST |
+| D7 | 0.96 field: 8% in NO DETAIL |
+| D2 | 0.76 field: 9% in NO DETAIL |
+| K1 | A full mm lost on the return |
+
+- **Over dense sample, tracking is good.** On clean runs the hop total and the sum of
+  frame-to-frame shifts agree almost exactly. Moving readings disagreed with the prediction by a
+  median of 0 px and a 90th percentile of 1 px. What is left is close to how well a vernier can
+  be read by eye (0.1–0.2 mm), so a measurement that does not depend on the vernier is needed:
+  the picture check below.
+- **Every large error came from NO DETAIL stretches.** While NO DETAIL shows, the position is
+  frozen. Everything that moves meanwhile is lost. Adding up frame-to-frame shifts over those
+  stretches does not fix it (it recovered 239 of 262 px on D2, 214 of 524 on K1, and added
+  movement on the wrong axis on C4), so the lab matches the held picture instead.
+- **Sharpness in the box** (lab scale, every 4th pixel): blank or very sparse 6–100, sparse
+  sample 120–280, dense sample 1,000–3,800 (900–2,200 while moving). `minBoxSharpness` = 120
+  sits in the right place.
+- **Brightness in the box:** blank patches are brighter than sample, about 205–220 against
+  165–190 at the same exposure.
+- **Scale:** about 530 px per mm on both axes, so one field (the box) is about 0.65 mm. Not
+  checked against a landmark (G1 was not run).
+- **Not measured:** blurry against blank, stop settling time, repeatability. Their limits are
+  guesses.
+
+The conclusion for the guided route: it must never travel across blank glass. Blank is the
+edge, so turn back. A short trip over blank must come back to a remembered picture, which the
+app matches to recover its exact position.
+
+### Thresholds set from these results
+
+All are PLACEHOLDER and not calibrated.
+
+- `PictureMatchThresholds.maxStepDisagreementOfBox` = 0.05 (about 17 px): readings agreed
+  within about 1 px. `readingsToConfirm` = 3 and `maxReadings` = 8 are guesses.
+  `maxOffsetOfBox` = 0.4 repeats the hop trust limit.
+- `ViewClassifierThresholds.lowDetailBelowSharpness` = 120 and `thinBelowSharpness` = 300: the
+  sharpness bands above. `blankBrightnessRatio` = 1.15 and `blankFallbackBrightness` = 195: the
+  brightness bands above. `darkBelowBrightness` = 40: nothing that dark was measured.
+- `SpotAlignmentThresholds`: `holdSeconds` = 1.0 (settling time not measured),
+  `tooFastSpeedFraction` = 0.18 (same as the lab's), and the tolerance and distance limits are
+  guesses.
+- `GuidedSweepThresholds`: 0.8 field between spots and columns is a 20% overlap. The rest are
+  guesses.
+
+### Picture check
+
+Mark start (while logging) stores a small copy of the yellow box. While you stay within 0.4
+field of the start, the lab matches that copy against each frame. That gives the true change of
+position, with no vernier. The readout under "Off start" shows true distance, the tracker's
+distance and the error, all in fields. Mark end adds the true distance to its confirmation. The
+check starts again if the box changes (re-detect, field adjusted, region changed) and when you
+tap Reset position.
+
+### Guide dry run
+
+Turn on "Guide dry run" in the lab settings. A block shows what the guide would say now, the
+route step, the vector to the target (in fields, screen axes), the view class and how many
+frames it would have captured. Nothing is saved and no frames are written. The haptic taps on a
+capture and when it says to go back from an edge. Pick the screen mapping first: the guide
+works in screen axes.
 
 ## If the lab shows no movement
 
