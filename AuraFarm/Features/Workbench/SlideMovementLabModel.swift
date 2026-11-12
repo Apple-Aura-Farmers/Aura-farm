@@ -20,9 +20,15 @@
         private(set) var readouts = SlideMovementInfo.Readouts()
         private(set) var trailInfo = SlideMovementInfo.Trail()
         private(set) var fieldInfo = SlideMovementInfo.Field()
+        /// The "What the app sees" picture, when it is switched on.
+        private(set) var thumbnailImage: CGImage?
+        private(set) var showsThumbnail = false
         private(set) var labelSummaries: [LabelStatistics.Summary] = []
         private(set) var fieldRegion = FieldRegionMode.auto
         private(set) var measuresHopAgreement = false
+        /// A brief confirmation after Mark start or Mark end ("Mark start ✓").
+        private(set) var markToast: String?
+        @ObservationIgnored private var toastTask: Task<Void, Never>?
         private(set) var cameraError: String?
         private(set) var lensPosition = CaptureViewModel.defaultLensPosition
         private(set) var label = ""
@@ -68,13 +74,14 @@
         @ObservationIgnored private var rows: [MovementLogRow] = []
         @ObservationIgnored private var logOrigin: Double?
         @ObservationIgnored private var currentLabel = ""
-        @ObservationIgnored private var pendingMark: (name: String, millimetres: Double?)?
+        @ObservationIgnored private var pendingMark = MarkSlot()
+        @ObservationIgnored private var trailBlind: [Bool] = []
         @ObservationIgnored private var trail: [CGPoint] = []
         @ObservationIgnored private var lastEventName = ""
         @ObservationIgnored private var indicators = MovementIndicators()
         @ObservationIgnored private var currentTest = SlideLabTest.free
         @ObservationIgnored private var currentNote = ""
-        @ObservationIgnored private var latestPositionFrames = CGPoint.zero
+        @ObservationIgnored private var latestPositionFields = CGPoint.zero
         @ObservationIgnored private var startTrailPoint: CGPoint?
         @ObservationIgnored private var hopPoints: [CGPoint] = []
         @ObservationIgnored private var lostPoints: [CGPoint] = []
@@ -193,13 +200,14 @@
 
         private func clearTrackingDisplay() {
             trail = []
+            trailBlind = []
             lastPublishAt = -Double.infinity
             lastEventName = ""
             indicators.clearStart()
             startTrailPoint = nil
             hopPoints = []
             lostPoints = []
-            latestPositionFrames = .zero
+            latestPositionFields = .zero
         }
 
         func startLog() {
@@ -207,7 +215,7 @@
                 guard let self else { return }
                 self.rows = []
                 self.logOrigin = nil
-                self.pendingMark = nil
+                self.pendingMark.clear()
                 self.labelledRows = []
                 self.lastSummaryAt = -Double.infinity
                 self.logging = true
@@ -265,6 +273,13 @@
 
         /// Whether a hop is checked against `PanoramaStitcher.agreement`. Off by default: it
         /// costs two image conversions and a correlation.
+        /// Switches the "What the app sees" picture on or off.
+        func setShowsThumbnail(_ shown: Bool) {
+            showsThumbnail = shown
+            if !shown { thumbnailImage = nil }
+            analysisQueue.async { [weak self] in self?.pipeline.makesThumbnail = shown }
+        }
+
         func setMeasuresHopAgreement(_ enabled: Bool) {
             measuresHopAgreement = enabled
             analysisQueue.async { [weak self] in self?.measureAgreementEnabled = enabled }
@@ -272,17 +287,33 @@
 
         /// Marks the start in the CSV, and the spot the "off start" distance is measured from.
         func markStart() {
+            showToast("Mark start ✓")
             analysisQueue.async { [weak self] in
                 guard let self else { return }
-                self.pendingMark = ("start", nil)
-                self.indicators.markStart(at: self.latestPositionFrames)
-                self.startTrailPoint = self.latestPositionFrames
+                self.pendingMark.place(PendingMark(name: "start", millimetres: nil))
+                self.indicators.markStart(at: self.latestPositionFields)
+                self.startTrailPoint = self.latestPositionFields
             }
         }
 
         /// - Parameter millimetres: the distance the stage moved, read off its vernier scale.
         func markEnd(millimetres: Double?) {
-            analysisQueue.async { [weak self] in self?.pendingMark = ("end", millimetres) }
+            showToast("Mark end ✓")
+            analysisQueue.async { [weak self] in
+                self?.pendingMark.place(PendingMark(name: "end", millimetres: millimetres))
+            }
+        }
+
+        /// Confirms a mark on screen for a moment. A mark made while no log is running is not
+        /// written anywhere, and the toast says so. Main queue only.
+        private func showToast(_ text: String) {
+            markToast = isLogging ? text : "\(text) (not logging)"
+            toastTask?.cancel()
+            toastTask = Task { [weak self] in
+                try? await Task.sleep(for: .seconds(1.5))
+                guard !Task.isCancelled else { return }
+                self?.markToast = nil
+            }
         }
 
         // MARK: Session
@@ -369,10 +400,16 @@
                 frameWidth: Int(step.frameSize.width), frameHeight: Int(step.frameSize.height),
                 test: test.fileSlug, note: note, speedFraction: indicators.speedFraction,
                 status: indicators.status.csvName, hopProgress: indicators.hopProgress,
-                stillSeconds: indicators.stillSeconds, offStartFrames: indicators.offStartFrames,
+                stillSeconds: indicators.stillSeconds, offStartFields: indicators.offStartFields,
                 fieldRegion: step.fieldRegionName,
                 analysisMilliseconds: step.analysisMilliseconds, analyzedFps: step.analyzedFps,
-                fieldOpenShare: step.fieldState?.openShare)
+                fieldOpenShare: step.fieldState?.openShare, boxSidePx: step.boxSide,
+                positionXFields: Double(step.positionFields.x),
+                positionYFields: Double(step.positionFields.y), hopLimitPx: step.hopLimit,
+                boxBrightness: step.boxStats.brightness, boxSharpness: step.boxStats.sharpness,
+                boxContrast: step.boxStats.contrast, reading: step.reading,
+                predictedStreak: step.predictedStreak, noDetail: !step.hasDetail,
+                blindStretches: step.blindStretches)
         }
 
         private static func write(_ rows: [MovementLogRow], test: SlideLabTest) -> URL? {
@@ -458,10 +495,10 @@
                     else { return false }
                     last = step
                     videoIndicators.update(
-                        shake: step.shake, anchorOffset: step.anchorOffset,
-                        positionFrames: step.positionFrames, isLost: step.isLost,
-                        event: step.event, frameSize: step.frameSize, seconds: time,
-                        hopFraction: HopOdometerThresholds().hopFraction)
+                        shake: step.shake, anchorOffset: step.usedOffset,
+                        positionFields: step.positionFields, isLost: step.isLost,
+                        event: step.event, referenceSide: step.boxSide, seconds: time,
+                        hopDistance: step.hopLimit, hasDetail: step.hasDetail)
                     logged.append(
                         row(
                             from: step, indicators: videoIndicators, seconds: time - start,
@@ -477,11 +514,11 @@
             reader.cancelReading()
 
             guard let last else { return ("No frame could be analyzed.", nil) }
-            let x = String(format: "%.2f", Double(last.positionFrames.x))
-            let y = String(format: "%.2f", Double(last.positionFrames.y))
+            let x = String(format: "%.2f", Double(last.positionFields.x))
+            let y = String(format: "%.2f", Double(last.positionFields.y))
             let summary =
                 "\(logged.count) frames analyzed, \(last.hops) hops, \(last.gaps) gaps. "
-                + "Final position (\(x), \(y)) frames."
+                + "Final position (\(x), \(y)) fields."
             return (summary, Self.write(logged, test: .free))
         }
 
@@ -520,32 +557,41 @@
                     buffer, seconds: time, measureAgreement: logging && measureAgreementEnabled)
             else { return }
 
-            latestPositionFrames = step.positionFrames
+            if let image = step.thumbnail {
+                DispatchQueue.main.async { [weak self] in
+                    guard let self, self.showsThumbnail else { return }
+                    self.thumbnailImage = image
+                }
+            }
+            latestPositionFields = step.positionFields
             indicators.update(
-                shake: step.shake, anchorOffset: step.anchorOffset,
-                positionFrames: step.positionFrames, isLost: step.isLost, event: step.event,
-                frameSize: step.frameSize, seconds: time,
-                hopFraction: HopOdometerThresholds().hopFraction)
+                shake: step.shake, anchorOffset: step.usedOffset,
+                positionFields: step.positionFields, isLost: step.isLost, event: step.event,
+                referenceSide: step.boxSide, seconds: time, hopDistance: step.hopLimit,
+                hasDetail: step.hasDetail)
             if step.event == .hop {
                 hopCount += 1
-                hopPoints.append(step.positionFrames)
+                hopPoints.append(step.positionFields)
                 if hopPoints.count > 300 { hopPoints.removeFirst() }
             }
             if step.event == .lost {
                 lostCount += 1
-                lostPoints.append(step.positionFrames)
+                lostPoints.append(step.positionFields)
                 if lostPoints.count > 100 { lostPoints.removeFirst() }
             }
             if step.event != .none { lastEventName = step.eventName }
 
-            trail.append(step.positionFrames)
-            if trail.count > trailLength { trail.removeFirst(trail.count - trailLength) }
+            trail.append(step.positionFields)
+            trailBlind.append(!step.hasDetail)
+            if trail.count > trailLength {
+                trail.removeFirst(trail.count - trailLength)
+                trailBlind.removeFirst(trailBlind.count - trailLength)
+            }
 
             if logging {
                 let origin = logOrigin ?? time
                 logOrigin = origin
-                let mark = pendingMark
-                pendingMark = nil
+                let mark = pendingMark.take()
                 let logged = row(
                     from: step, indicators: indicators, seconds: time - origin,
                     label: currentLabel, mark: mark?.name ?? "",
@@ -581,34 +627,23 @@
                 status: indicators.status, speedFraction: indicators.speedFraction)
             let readouts = SlideMovementInfo.Readouts(
                 stats: step.stats, position: step.position,
-                positionFrames: step.positionFrames, hops: step.hops, gaps: step.gaps,
+                positionFrames: step.positionFrames, positionFields: step.positionFields,
+                boxSide: step.boxSide, hopLimit: step.hopLimit, hops: step.hops, gaps: step.gaps,
                 lastEvent: lastEventName, frameSize: step.frameSize,
-                stillSeconds: indicators.stillSeconds, offStartFrames: indicators.offStartFrames,
+                stillSeconds: indicators.stillSeconds, offStartFields: indicators.offStartFields,
                 isHome: indicators.isHome,
                 elapsedLogSeconds: logging ? time - (logOrigin ?? time) : 0, hopCount: hopCount,
                 lostCount: lostCount, analysisMilliseconds: step.analysisMilliseconds,
-                analyzedFps: step.analyzedFps)
+                analyzedFps: step.analyzedFps, boxStats: step.boxStats, reading: step.reading,
+                hasDetail: step.hasDetail, blindStretches: step.blindStretches)
             let trailInfo = SlideMovementInfo.Trail(
                 trail: trail, hopPoints: hopPoints, lostPoints: lostPoints,
                 startPoint: startTrailPoint, hopProgress: indicators.hopProgress,
-                hopCount: hopCount)
-            var extent = CGRect.zero
-            switch step.fieldState {
-            case .ready(let mask), .untrusted(let mask):
-                extent = CGRect(
-                    x: 0, y: 0, width: mask.gridWidth * mask.gridStep,
-                    height: mask.gridHeight * mask.gridStep)
-            default: break
-            }
-            var circle: FieldCircle?
-            if step.awaitingReview {
-                switch step.fieldState {
-                case .ready(let mask), .untrusted(let mask): circle = FieldCircle(fitting: mask)
-                default: break
-                }
-            }
+                hopCount: hopCount, blind: trailBlind)
+            let circle =
+                step.awaitingReview ? step.fieldState?.mask.flatMap { FieldCircle(fitting: $0) } : nil
             let fieldInfo = SlideMovementInfo.Field(
-                state: step.fieldState, maskImage: step.maskImage, maskExtent: extent,
+                state: step.fieldState,
                 registrationRect: step.registrationRect, frameSize: step.frameSize,
                 awaitingReview: step.awaitingReview, circle: circle)
             let count = rows.count

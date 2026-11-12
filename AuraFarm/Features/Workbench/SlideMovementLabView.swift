@@ -19,6 +19,8 @@
         @State private var isAskingDistance = false
         @State private var distanceText = ""
         @State private var isShowingTrail = false
+        @State private var previewLayer: AVCaptureVideoPreviewLayer?
+        @AppStorage("slideLab.showsSees") private var showsSees = false
         @AppStorage("slideLab.fieldRegion") private var fieldRegionName = FieldRegionMode.auto.rawValue
         @AppStorage("slideLab.hopAgreement") private var hopAgreement = false
         @State private var noteText = ""
@@ -47,12 +49,14 @@
             .onAppear {
                 model.setFieldRegion(FieldRegionMode(rawValue: fieldRegionName) ?? .auto)
                 model.setMeasuresHopAgreement(hopAgreement)
+                model.setShowsThumbnail(showsSees)
                 if mode == .live { model.start() }
             }
             .onChange(of: fieldRegionName) { _, name in
                 model.setFieldRegion(FieldRegionMode(rawValue: name) ?? .auto)
             }
             .onChange(of: hopAgreement) { _, enabled in model.setMeasuresHopAgreement(enabled) }
+            .onChange(of: showsSees) { _, shown in model.setShowsThumbnail(shown) }
             .onDisappear { model.stop() }
             .onChange(of: mode) { _, newMode in
                 if newMode == .live { model.start() } else { model.stop() }
@@ -74,30 +78,56 @@
         // MARK: Live camera
 
         private var liveBody: some View {
-            VStack(spacing: 0) {
-                testPicker
-                ZStack {
-                    CameraPreview(session: model.session)
-                    if model.isAnalyzing {
-                        SlideMovementOverlays(
-                            model: model, mapping: mapping, mirrored: mirrored,
-                            onTapTrail: { isShowingTrail = true })
-                    } else {
-                        setupCard
+            ScrollView {
+                VStack(spacing: 0) {
+                    testPicker
+                    ZStack {
+                        CameraPreview(session: model.session, onLayer: { previewLayer = $0 })
+                        if model.isAnalyzing {
+                            SlideMovementOverlays(
+                                model: model, mapping: mapping, mirrored: mirrored,
+                                previewLayer: previewLayer, onTapTrail: { isShowingTrail = true })
+                        } else {
+                            setupCard
+                        }
                     }
-                }
-                .frame(height: 340)
-                .clipped()
+                    .frame(height: 440)
+                    .clipped()
 
-                if model.isAnalyzing {
-                    BigReadouts(model: model)
-                    analyzingControls
-                } else {
-                    setupControls
+                    if model.isAnalyzing {
+                        if showsSees { seesThumbnail }
+                        BigReadouts(model: model)
+                        analyzingControls
+                    } else {
+                        setupControls
+                    }
                 }
             }
             .background(SlideLabHaptics(model: model))
             .sheet(isPresented: $isShowingTrail) { fullTrail }
+        }
+
+        /// "What the app sees": the grid the analysis uses, in the frame's raw orientation.
+        private var seesThumbnail: some View {
+            VStack(spacing: 2) {
+                if let image = model.thumbnailImage {
+                    Image(decorative: image, scale: 1)
+                        .resizable()
+                        .interpolation(.none)
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 240)
+                } else {
+                    Text("Waiting for a frame…").font(.caption)
+                }
+                Text(
+                    "Raw frame as analysed (not rotated). Red = treated as eyepiece. Yellow = where movement is measured."
+                )
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+            }
+            .padding(.horizontal)
+            .padding(.top, 4)
         }
 
         /// Shown over the camera until Start: nothing is measured while the phone is set up.
@@ -125,37 +155,33 @@
 
         /// Before Start: only what is needed to place and focus the phone.
         private var setupControls: some View {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    cameraProblem
-                    focusSlider
-                    Text(
-                        "Tapping Start learns the eyepiece mask afresh, so set the phone and the light first."
-                    )
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    footer
-                }
-                .padding()
+            VStack(alignment: .leading, spacing: 16) {
+                cameraProblem
+                focusSlider
+                Text(
+                    "Tapping Start learns the eyepiece mask afresh, so set the phone and the light first."
+                )
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                footer
             }
+            .padding()
         }
 
         private var analyzingControls: some View {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    cameraProblem
-                    mappingControls
-                    TextReadout(model: model)
-                    settingsControls
-                    focusSlider
-                    labelButtons
-                    actionButtons
-                    StatisticsTable(model: model)
-                    notesField
-                    footer
-                }
-                .padding()
+            VStack(alignment: .leading, spacing: 16) {
+                cameraProblem
+                mappingControls
+                TextReadout(model: model)
+                settingsControls
+                focusSlider
+                labelButtons
+                actionButtons
+                StatisticsTable(model: model)
+                notesField
+                footer
             }
+            .padding()
         }
 
         @ViewBuilder
@@ -184,7 +210,7 @@
                 VStack(alignment: .leading, spacing: 4) {
                     Text(model.test.instruction).font(.callout)
                     Text(
-                        "1 frame = the height of the camera view. Count grid squares on the trail, or watch the “fr” number."
+                        "1 field = the side of the yellow box, about the width of the useful view. Count grid squares on the trail, or watch the “fields” number."
                     )
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -244,6 +270,7 @@
                     Button("Back to setup") { model.endAnalysis() }
                 }
                 .buttonStyle(.bordered)
+                Toggle("Show what the app sees", isOn: $showsSees)
                 Toggle("Measure hop agreement", isOn: $hopAgreement)
                 Text("Red tint: treated as the eyepiece. Yellow box: where movement is measured.")
                     .font(.caption)

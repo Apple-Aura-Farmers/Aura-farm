@@ -1,4 +1,5 @@
 #if DEBUG
+    import AVFoundation
     import SwiftUI
 
     /// The colour a label is shown in, on its chip and its button.
@@ -18,37 +19,50 @@
         var model: SlideMovementLabModel
         var mapping: ScreenMapping
         var mirrored: Bool
+        var previewLayer: AVCaptureVideoPreviewLayer?
         var onTapTrail: () -> Void = {}
 
         var body: some View {
             ZStack {
-                LiveFieldOutlines(model: model, mapping: mapping, mirrored: mirrored)
+                LiveFieldOutlines(model: model, previewLayer: previewLayer)
                 LiveFieldCard(model: model)
                 if model.fieldInfo.awaitingReview {
                     FieldReview(
-                        info: model.fieldInfo, mapping: mapping, mirrored: mirrored,
+                        info: model.fieldInfo,
+                        converter: FramePreviewConverter(
+                            layer: previewLayer, frameSize: model.fieldInfo.frameSize),
                         onConfirm: { model.confirmField() },
                         onAdjust: { model.adjustField(to: $0) })
                 } else {
-                VStack {
-                    HStack(alignment: .top) {
-                        LiveStatusBanner(model: model)
+                    VStack {
+                        HStack(alignment: .top) {
+                            LiveStatusBanner(model: model)
+                            Spacer()
+                            LiveRecBadge(model: model)
+                        }
                         Spacer()
-                        LiveRecBadge(model: model)
+                        HStack(alignment: .bottom) {
+                            LiveSpeedMeter(model: model)
+                                .frame(width: 140)
+                            Spacer()
+                            LiveTrail(model: model, mapping: mapping, mirrored: mirrored)
+                                .frame(width: 140, height: 140)
+                                .onTapGesture(perform: onTapTrail)
+                        }
                     }
-                    Spacer()
-                    HStack(alignment: .bottom) {
-                        LiveSpeedMeter(model: model)
-                            .frame(width: 140)
-                        Spacer()
-                        LiveTrail(model: model, mapping: mapping, mirrored: mirrored)
-                            .frame(width: 140, height: 140)
-                            .onTapGesture(perform: onTapTrail)
-                    }
+                    .padding(8)
                 }
-                .padding(8)
+                if let toast = model.markToast {
+                    Text(toast)
+                        .font(.subheadline.bold())
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(.black.opacity(0.75), in: Capsule())
+                        .foregroundStyle(.white)
+                        .transition(.opacity)
                 }
             }
+            .animation(.default, value: model.markToast)
         }
     }
 
@@ -86,39 +100,34 @@
 
     struct LiveFieldOutlines: View {
         var model: SlideMovementLabModel
-        var mapping: ScreenMapping
-        var mirrored: Bool
+        var previewLayer: AVCaptureVideoPreviewLayer?
         var body: some View {
-            FieldOutlines(info: model.fieldInfo, mapping: mapping, mirrored: mirrored)
+            FieldOutlines(
+                info: model.fieldInfo,
+                converter: FramePreviewConverter(
+                    layer: previewLayer, frameSize: model.fieldInfo.frameSize))
         }
     }
 
     // MARK: - Drawing from values
 
     /// The learned eyepiece mask as a faint red tint, and the rectangle registration looks in as
-    /// a thin yellow outline, drawn over the preview through the chosen mapping and the
-    /// preview's aspect fill. Rough: it is only as right as the mapping picked.
+    /// a thin yellow outline, drawn over the preview with the preview layer's own conversion
+    /// from frame pixels. Nothing is drawn without a converter (a preview with no camera).
     struct FieldOutlines: View {
         var info: SlideMovementInfo.Field
-        var mapping: ScreenMapping
-        var mirrored: Bool
+        var converter: FramePreviewConverter?
 
         var body: some View {
-            Canvas { context, size in
-                if let image = info.maskImage, info.maskExtent != .zero {
-                    var layer = context
-                    layer.transform = PreviewGeometry.transform(
-                        frameSize: info.frameSize, viewSize: size, mapping: mapping,
-                        mirrored: mirrored)
-                    layer.draw(
-                        layer.resolve(Image(decorative: image, scale: 1).interpolation(.none)),
-                        in: info.maskExtent)
+            Canvas { context, _ in
+                guard let converter else { return }
+                for rect in info.state?.mask?.eyepieceRects() ?? [] {
+                    context.fill(
+                        Path(converter.viewRect(of: rect)), with: .color(.red.opacity(0.35)))
                 }
                 if let rect = info.registrationRect {
-                    let placed = PreviewGeometry.rect(
-                        of: rect, frameSize: info.frameSize, viewSize: size, mapping: mapping,
-                        mirrored: mirrored)
-                    context.stroke(Path(placed), with: .color(.yellow), lineWidth: 1)
+                    context.stroke(
+                        Path(converter.viewRect(of: rect)), with: .color(.yellow), lineWidth: 1)
                 }
             }
             .allowsHitTesting(false)
@@ -227,6 +236,7 @@
             case .tracking: "TRACKING"
             case .tooFast: "TOO FAST"
             case .lost: "LOST"
+            case .noDetail: "NO DETAIL"
             }
         }
 
@@ -236,6 +246,7 @@
             case .tracking: "checkmark.circle.fill"
             case .tooFast: "tortoise.fill"
             case .lost: "exclamationmark.triangle.fill"
+            case .noDetail: "eye.slash"
             }
         }
 
@@ -243,6 +254,7 @@
             switch status {
             case .tooFast: "Slow down"
             case .lost: "Move slowly back"
+            case .noDetail: "Nothing to follow here. Move back over the sample."
             default: nil
             }
         }
@@ -253,6 +265,7 @@
             case .tracking: .green
             case .tooFast: .orange
             case .lost: .red
+            case .noDetail: Color(red: 0.36, green: 0.45, blue: 0.58)
             }
         }
     }
@@ -354,12 +367,12 @@
             axes.addLine(to: CGPoint(x: centre.x, y: size.height))
             context.stroke(axes, with: .color(.white.opacity(0.5)), lineWidth: 1)
             context.draw(
-                Text("grid = 1 frame").font(.system(size: 9, weight: .bold)).foregroundColor(.white),
+                Text("grid = 1 field").font(.system(size: 9, weight: .bold)).foregroundColor(.white),
                 at: CGPoint(x: size.width - 38, y: 10))
 
             if let start = info.startPoint {
                 let home = place(start)
-                let radius = thresholds.homeZoneFrames * scale
+                let radius = thresholds.homeZoneFields * scale
                 context.stroke(
                     Path(
                         ellipseIn: CGRect(
@@ -389,10 +402,23 @@
             }
 
             if let last = info.trail.last {
-                var line = Path()
-                line.move(to: place(info.trail[0]))
-                for point in info.trail.dropFirst() { line.addLine(to: place(point)) }
-                context.stroke(line, with: .color(.yellow), lineWidth: 2)
+                // Followed stretches are solid; stretches over nothing to track are dashed.
+                var solid = Path()
+                var dashed = Path()
+                for index in info.trail.indices.dropFirst() {
+                    let blind = info.blind.indices.contains(index) && info.blind[index]
+                    if blind {
+                        dashed.move(to: place(info.trail[index - 1]))
+                        dashed.addLine(to: place(info.trail[index]))
+                    } else {
+                        solid.move(to: place(info.trail[index - 1]))
+                        solid.addLine(to: place(info.trail[index]))
+                    }
+                }
+                context.stroke(solid, with: .color(.yellow), lineWidth: 2)
+                context.stroke(
+                    dashed, with: .color(.yellow.opacity(0.7)),
+                    style: StrokeStyle(lineWidth: 2, dash: [3, 4]))
                 let dot = place(last)
                 context.fill(
                     Path(ellipseIn: CGRect(x: dot.x - 5, y: dot.y - 5, width: 10, height: 10)),
@@ -436,9 +462,7 @@
             builder.add(luma: luma, gridWidth: width, gridHeight: height)
             guard let mask = builder.result() else { return .init() }
             return .init(
-                state: .ready(mask), maskImage: mask.tintImage(),
-                maskExtent: CGRect(x: 0, y: 0, width: 1280, height: 720),
-                registrationRect: mask.registrationRect,
+                state: .ready(mask), registrationRect: mask.registrationRect,
                 frameSize: CGSize(width: 1280, height: 720))
         }
     }
@@ -452,7 +476,7 @@
 
         var body: some View {
             ZStack {
-                FieldOutlines(info: PreviewData.field, mapping: mapping, mirrored: mirrored)
+                FieldOutlines(info: PreviewData.field, converter: nil)
                 if status == .lost { FieldCard(state: .learning(progress: 0.4)) }
                 VStack {
                     HStack(alignment: .top) {

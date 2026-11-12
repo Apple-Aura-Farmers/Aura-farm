@@ -10,11 +10,18 @@ import SwiftUI
 struct CameraPreview: UIViewRepresentable {
     let session: AVCaptureSession
     var boxes: [CountedBox] = []
+    /// Called once with the preview layer, for a screen that draws its own overlay through the
+    /// layer's coordinate conversion. nil (nothing happens) everywhere else.
+    var onLayer: ((AVCaptureVideoPreviewLayer) -> Void)?
 
     func makeUIView(context: Context) -> PreviewView {
         let view = PreviewView()
         view.previewLayer.session = session
         view.previewLayer.videoGravity = .resizeAspectFill
+        if let onLayer {
+            let layer = view.previewLayer
+            DispatchQueue.main.async { onLayer(layer) }
+        }
         return view
     }
 

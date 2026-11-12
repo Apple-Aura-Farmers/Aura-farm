@@ -9,6 +9,14 @@ enum FieldState: Equatable {
     /// Learned but not trusted: registration falls back to the centre square.
     case untrusted(FieldMask)
 
+    /// The mask, once learned (trusted or not).
+    var mask: FieldMask? {
+        switch self {
+        case .learning: nil
+        case .ready(let mask), .untrusted(let mask): mask
+        }
+    }
+
     /// The share of the frame that is open field, once learned.
     var openShare: Double? {
         switch self {

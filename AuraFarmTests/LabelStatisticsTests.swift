@@ -5,11 +5,13 @@ import XCTest
 final class LabelStatisticsTests: XCTestCase {
     private func row(_ label: String, contrast: Double, sharpness: Double = 0) -> MovementLogRow {
         MovementLogRow(
-            seconds: 0, brightness: 100, sharpness: sharpness, contrast: contrast,
+            seconds: 0, brightness: 100, sharpness: 999, contrast: 999,
             positionX: 0, positionY: 0, positionXFrames: 0, positionYFrames: 0, hops: 0, gaps: 0,
-            isLost: false, event: "", label: label, mark: "", frameWidth: 1280, frameHeight: 720)
+            isLost: false, event: "", label: label, mark: "", frameWidth: 1280, frameHeight: 720,
+            boxSharpness: sharpness, boxContrast: contrast)
     }
 
+    /// The whole-frame numbers (999 here) are dominated by the ring, so the table ignores them.
     func testNearestRankPercentiles() throws {
         let rows = (1...10).map { row("sample", contrast: Double($0), sharpness: Double($0 * 10)) }
         let summary = try XCTUnwrap(LabelStatistics.summaries(of: rows.shuffled()).first)

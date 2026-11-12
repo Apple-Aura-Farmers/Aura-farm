@@ -18,25 +18,47 @@ struct FieldMask: Equatable {
 
     var isTrusted: Bool { registrationRect != nil }
 
-    /// A small RGBA image of the grid for drawing over the preview: a faint red tint on the
-    /// eyepiece cells, clear elsewhere. Made once when the mask is decided, never per frame.
-    func tintImage() -> CGImage? {
+    /// The eyepiece cells as rectangles in FULL-FRAME pixels, top-down: consecutive cells in a
+    /// row are joined, and a run that repeats the one above it grows downwards. Few enough to
+    /// draw one by one on the preview.
+    func eyepieceRects() -> [CGRect] {
         guard gridWidth > 0, gridHeight > 0, eyepiece.count == gridWidth * gridHeight else {
-            return nil
+            return []
         }
-        // Premultiplied red at about 35% opacity.
-        var pixels = [UInt8](repeating: 0, count: gridWidth * gridHeight * 4)
-        for (index, masked) in eyepiece.enumerated() where masked {
-            pixels[index * 4] = 90
-            pixels[index * 4 + 3] = 90
+        struct Run: Hashable {
+            var start: Int
+            var length: Int
         }
-        return pixels.withUnsafeMutableBytes { bytes -> CGImage? in
-            CGContext(
-                data: bytes.baseAddress, width: gridWidth, height: gridHeight,
-                bitsPerComponent: 8, bytesPerRow: gridWidth * 4,
-                space: CGColorSpaceCreateDeviceRGB(),
-                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-            )?.makeImage()
+        var finished: [CGRect] = []
+        var open: [Run: Int] = [:]  // the run, and the row it began on
+        let step = Double(gridStep)
+
+        func close(_ run: Run, from row: Int, to endRow: Int) {
+            finished.append(
+                CGRect(
+                    x: Double(run.start) * step, y: Double(row) * step,
+                    width: Double(run.length) * step, height: Double(endRow - row) * step))
         }
+
+        for row in 0..<gridHeight {
+            var runs: [Run] = []
+            var column = 0
+            while column < gridWidth {
+                if eyepiece[row * gridWidth + column] {
+                    let start = column
+                    while column < gridWidth && eyepiece[row * gridWidth + column] { column += 1 }
+                    runs.append(Run(start: start, length: column - start))
+                } else {
+                    column += 1
+                }
+            }
+            for (run, began) in open where !runs.contains(run) {
+                close(run, from: began, to: row)
+                open[run] = nil
+            }
+            for run in runs where open[run] == nil { open[run] = row }
+        }
+        for (run, began) in open { close(run, from: began, to: gridHeight) }
+        return finished
     }
 }

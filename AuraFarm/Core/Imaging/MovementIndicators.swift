@@ -8,20 +8,21 @@ import Foundation
 /// not the true knob speed: a reading that failed counts as no movement, and a move too fast to
 /// register shows up as lost rather than as a high speed.
 struct MovementIndicators {
-    enum Status: Equatable { case starting, tracking, tooFast, lost }
+    enum Status: Equatable { case starting, tracking, tooFast, lost, noDetail }
     enum SpeedZone: Equatable { case comfortable, fast, tooFast }
 
     var thresholds: MovementIndicatorThresholds
 
     private(set) var status = Status.starting
-    /// Frame-to-frame movement as a share of the short side, averaged over `speedWindow`.
+    /// Frame-to-frame movement as a share of the reference side (the registration box's side;
+    /// the frame's short side with no box), averaged over `speedWindow`.
     private(set) var speedFraction = 0.0
     private(set) var speedZone = SpeedZone.comfortable
     /// 0...1: the live offset from the anchor against a hop. 0 right after a hop.
     private(set) var hopProgress = 0.0
     /// How long the frame-to-frame movement has stayed under `stillPixels`, in seconds.
     private(set) var stillSeconds = 0.0
-    /// Where Mark start was pressed, in frames.
+    /// Where Mark start was pressed, in fields.
     private(set) var startPosition: CGPoint?
 
     private var speeds: [Double] = []
@@ -33,31 +34,36 @@ struct MovementIndicators {
         self.thresholds = thresholds
     }
 
-    /// Distance from the marked start, in frames, to the latest position.
-    var offStartFrames: Double? {
+    /// Distance from the marked start, in fields, to the latest position.
+    var offStartFields: Double? {
         guard let startPosition else { return nil }
         return hypot(latestPosition.x - startPosition.x, latestPosition.y - startPosition.y)
     }
 
     var isHome: Bool {
-        guard let off = offStartFrames else { return false }
-        return off <= thresholds.homeZoneFrames
+        guard let off = offStartFields else { return false }
+        return off <= thresholds.homeZoneFields
     }
 
     /// - Parameters:
     ///   - shake: frame-to-frame shift in px, nil when registration gave nothing.
     ///   - anchorOffset: the live offset from the anchor in px.
     ///   - seconds: the frame's time; the stillness timer grows by the gap between calls.
-    ///   - hopFraction: the odometer's hop threshold, as a share of the short side.
+    ///   - positionFields: the odometer position in fields.
+    ///   - referenceSide: the registration box's side in px (the frame's short side when no
+    ///     box is used); speed is measured against it.
+    ///   - hopDistance: the odometer's hop distance in px.
+    ///   - hasDetail: false while the box holds nothing to follow; the status is then
+    ///     `.noDetail`, whatever else is going on.
     mutating func update(
-        shake: CGPoint?, anchorOffset: CGPoint?, positionFrames: CGPoint, isLost: Bool,
-        event: HopOdometer.Event, frameSize: CGSize, seconds: Double, hopFraction: Double
+        shake: CGPoint?, anchorOffset: CGPoint?, positionFields: CGPoint, isLost: Bool,
+        event: HopOdometer.Event, referenceSide: Double, seconds: Double, hopDistance: Double,
+        hasDetail: Bool = true
     ) {
-        let shortSide = Double(min(frameSize.width, frameSize.height))
-        latestPosition = positionFrames
+        latestPosition = positionFields
 
         if shake != nil { hasShake = true }
-        let speed = shake.map { hypot(Double($0.x), Double($0.y)) / max(shortSide, 1) } ?? 0
+        let speed = shake.map { hypot(Double($0.x), Double($0.y)) / max(referenceSide, 1) } ?? 0
         speeds.append(speed)
         if speeds.count > max(thresholds.speedWindow, 1) {
             speeds.removeFirst(speeds.count - max(thresholds.speedWindow, 1))
@@ -71,7 +77,9 @@ struct MovementIndicators {
             speedZone = .tooFast
         }
 
-        if isLost {
+        if !hasDetail {
+            status = .noDetail
+        } else if isLost {
             status = .lost
         } else if !hasShake {
             status = .starting
@@ -81,9 +89,9 @@ struct MovementIndicators {
             status = .tracking
         }
 
-        if let anchorOffset, event != .hop, shortSide > 0, hopFraction > 0 {
+        if let anchorOffset, event != .hop, hopDistance > 0 {
             let length = hypot(Double(anchorOffset.x), Double(anchorOffset.y))
-            hopProgress = min(max(length / (hopFraction * shortSide), 0), 1)
+            hopProgress = min(max(length / hopDistance, 0), 1)
         } else {
             hopProgress = 0
         }
@@ -98,8 +106,8 @@ struct MovementIndicators {
         }
     }
 
-    mutating func markStart(at positionFrames: CGPoint) {
-        startPosition = positionFrames
+    mutating func markStart(at positionFields: CGPoint) {
+        startPosition = positionFields
     }
 
     mutating func clearStart() {
@@ -119,6 +127,7 @@ extension MovementIndicators.Status {
         case .tracking: "tracking"
         case .tooFast: "too_fast"
         case .lost: "lost"
+        case .noDetail: "no_detail"
         }
     }
 }

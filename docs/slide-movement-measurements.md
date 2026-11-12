@@ -39,7 +39,8 @@ With logging on, set the label and hold the view there for about 10 seconds:
 - **Blank**: over empty glass inside the cover slip.
 - **Blurry**: deliberately out of focus.
 
-Do each in 3 different places. Stop the log and export.
+Do each in 3 different places. Stop the log and export. The table compares the statistics inside
+the yellow box, not the whole frame.
 
 ## 4. Drop size
 
@@ -100,20 +101,32 @@ card, and the test is written into every row and into the file name:
 `slide-movement-<test>-<yyyyMMdd-HHmmss>.csv` (for example `slide-movement-drift-20261110-143000.csv`).
 The tests are Free, 1 · Mapping, 2 · Drift, 3 · Labels, 4 · Drop size and 5 · Stops.
 
+**Setting up.** Opening the lab shows the live camera with a "Set up the phone" card and a
+**Start** button. Position the phone over the eyepiece and focus with the slider first; nothing
+is analysed until you tap **Start**, which also learns the eyepiece field afresh. **Back to
+setup** returns here. Once the field is learned the lab asks "Does this look right?": **Looks
+right** starts tracking, **Adjust** lets you drag and resize a circle over the lens and tap
+**Done**.
+
 **Reading the screen.**
 - **TRACKING** (green): the app is following the slide.
 - **TOO FAST** (orange) or **LOST** (red): the slide moved too fast to match from one frame to
   the next. Move slowly and steadily; for LOST, move slowly back to where it last tracked.
 - The **speed meter** (bottom left) should stay in the green.
 - The **hop ring** around the trail fills as the next hop approaches and flashes on a hop.
-- **Off start** is the distance from where you tapped Mark start, in frames; it is green inside
+- **Off start** is the distance from where you tapped Mark start, in fields; it is green inside
   the home zone (the dashed circle).
 - **Still** counts the seconds the view has held still. The stops test wants 2 s or more.
-- **1 frame = the height of the camera view** (the short side). The trail has a grid with one line per frame, and it zooms out on its own when you travel further than 3 frames. The big **Moved** number (or **Off start** once you tap Mark start) is the same distance in frames.
+- **1 field = the side of the yellow box**, about the width of the useful view. Hops come at
+  about a quarter of a field. The trail has a grid with one line per field, and it zooms out on
+  its own when you travel further than 3 fields. The big **Moved** number (or **Off start** once
+  you tap Mark start) is the same distance in fields. The readout line "Box 352 px · hop at 88 px"
+  shows the box side and the hop distance in use. With Whole frame there is no box, so a field
+  is the frame's short side and a hop comes at 30% of it, as before.
 - On the trail, a **white dot** is a hop the app tracked, and a **red cross** is where tracking was lost.
 - Tap the trail for a full-screen version, with the mapping picker.
 
-**Drift by landmark.** Centre a landmark, tap **Mark start**, go 3–5 frames away, then come back
+**Drift by landmark.** Centre a landmark, tap **Mark start**, go 3–5 fields away, then come back
 until the landmark is centred again, and **Mark end** with the distance left empty. The final
 **Off start** value is the drift: how far the odometer says you are from where you began.
 
@@ -129,22 +142,65 @@ Treat them as a pessimistic baseline and repeat the runs once the stage arrives.
 |---|---|
 | `test` | The test slug: `free`, `mapping`, `drift`, `labels`, `drop-size`, `stops` |
 | `note` | The free text typed in "Notes for this log" |
-| `speed_fraction` | Frame-to-frame movement as a share of the frame's short side, averaged over 3 readings |
+| `speed_fraction` | Frame-to-frame movement as a share of the box side (the frame's short side with no box), averaged over 3 readings |
 | `status` | `starting`, `tracking`, `too_fast` or `lost` |
 | `hop_progress` | 0 to 1 towards the next hop |
 | `still_seconds` | Seconds the movement has stayed under 2 px per reading |
-| `off_start_frames` | Distance from the marked start in frames; empty with no start marked |
+| `off_start_fields` | Distance from the marked start in fields (box sides); empty with no start marked. Was `off_start_frames` |
 
-The speed, still and "too fast" limits are placeholders and not calibrated.
+The speed, still and "too fast" limits are placeholders and not calibrated. The speed limits were set when the reference was the frame's short side and now mean a share of the box, so re-measure them.
 
-Four more columns follow, after `off_start_frames`:
+Eight more columns follow, after `off_start_fields`:
 
 | Column | Meaning |
 |---|---|
-| `field_region` | Where movement was registered: `auto-learned`, `auto-untrusted`, `auto-learning` (still learning), `centre-square` or `whole-frame` |
+| `field_region` | Where movement was registered: `auto-learned`, `auto-untrusted`, `auto-learning` (still learning), the same three with `bright-region-` for the one-frame mode, `centre-square` or `whole-frame` |
 | `analysis_ms` | Time spent analyzing this frame, in milliseconds |
 | `analyzed_fps` | Analyzed frames per second over the last second |
 | `field_open_share` | The share of the frame learned to be open field (0 to 1); empty when no mask was learned |
+| `box_side_px` | The side of the registration box in px (the frame's short side with no box); one field |
+| `position_x_fields`, `position_y_fields` | The odometer position divided by `box_side_px` |
+| `hop_limit_px` | The hop distance in use, px (a quarter of the box, or 30% of the short side with no box) |
+
+`position_x_frames` and `position_y_frames` stay, in frames of the frame's short side, for
+comparison.
+
+Seven more columns close the row, after `hop_limit_px`:
+
+| Column | Meaning |
+|---|---|
+| `box_brightness`, `box_sharpness`, `box_contrast` | The same three numbers as `brightness`, `sharpness` and `contrast`, measured only inside the yellow box (the whole frame when there is no box). The three earlier columns stay whole-frame, for comparison |
+| `reading` | `measured`: the anchor reading agreed with the frame-to-frame movement. `predicted`: it did not, so the last offset plus this frame's shift was used. `missing`: neither was available |
+| `predicted_streak` | Readings in a row that were predicted |
+| `no_detail` | 1 while the box holds too little detail to follow, else 0 |
+| `blind_stretches` | Times the view went over nothing to track |
+
+`anchor_x_px` and `anchor_y_px` are always what registration returned, even on a `predicted`
+row, so a false jump stays visible there; the position uses the predicted value.
+
+## What the lab can and can't track
+
+- **It can't measure movement over empty glass.** Registration needs detail to lock onto. Over
+  blank glass it reads about 0, which looks like "not moving" and silently loses distance. The
+  lab now checks the sharpness inside the box; when it stays low the banner says NO DETAIL, the
+  distance is paused (it is not counted as lost), the trail is dashed and `no_detail` is 1. Keep
+  moves over the sample. When detail returns the lab re-anchors and carries on from the last
+  known position; the few readings it needs to be sure detail is back (three) are not tracked.
+  `blind_stretches` counts each time this happened.
+- **It rejects readings that disagree with the frame-to-frame movement.** Hand-moved tests
+  showed single readings against the anchor jumping to about 250 px while the picture moved a
+  few px between frames. A real move cannot do that. Such a reading is replaced by the last
+  offset plus the frame-to-frame shift and written as `predicted`. After five predictions in a
+  row the prediction is trusted and counted as a hop. Both comparisons crop both frames to the
+  yellow box, so the box is matched against the same part of the held frame.
+- **The stats are now measured inside the yellow box.** The eyepiece ring dominated the
+  whole-frame numbers: blank glass scored the highest contrast. The readout and the label
+  statistics table use the box numbers. The detail limit (`minBoxSharpness`, 120) is a
+  placeholder set between the blank (about 55) and sample (260 to 600) whole-frame readings;
+  re-measure it from `box_sharpness` in labelled logs.
+- **Marks.** Mark start and Mark end only work while a log is running (the buttons are greyed
+  otherwise). A short "Mark start ✓" or "Mark end ✓" appears on the camera strip, with
+  "(not logging)" if nothing was written. The mark lands in the `mark` column of the next row.
 
 ## If the lab shows no movement
 
@@ -153,17 +209,28 @@ ring that never moves. Registering the whole frame locks onto the ring's edge an
 0 px however the slide moves. The lab therefore registers only inside the round field.
 
 **Field region** (a setting under the readout):
-- **Auto (learned once)** (default): at the start of a session the lab looks at about 15
-  frames (around 1.5 seconds) and learns which parts of the frame stay dark and touch the
-  frame's edge. That is the eyepiece ring. Then it locks that in and measures movement only
-  inside the largest rectangle of open field. Hold steady or move the slide gently while it
-  learns; nothing is tracked until it is done.
+- **Auto (learned once)** (default): after Start the lab looks at about 30 frames (around 3
+  seconds) and learns which parts of the frame stay dark and touch the frame's edge. That is the
+  eyepiece ring. Then it locks that in and measures movement only inside the largest rectangle
+  of open field. Move the slide slowly around while it learns, so a dark patch of the slide is
+  not mistaken for the ring; nothing is tracked until it is done.
+- **Bright region (one frame)**: decides from a single frame: an automatic light/dark cut, the
+  largest connected bright region is the field.
 - **Centre square**: always a square in the middle of the frame (70% of its height).
 - **Whole frame**: the old behaviour, for comparison.
 
 On the camera strip, the **red tint** is the part treated as the eyepiece, and the **yellow
-box** is where movement is measured. They are drawn through the screen mapping, so they are
-only as well aligned as that mapping is; a rough match is expected.
+box** is where movement is measured. They are placed by the camera preview layer's own
+conversion from frame pixels, which handles the rotation and the crop to fill the screen.
+
+**What the app sees.** Turn on **Show what the app sees** (under the field region) to get a
+small picture under the camera strip: the grid the analysis actually uses, in the camera's raw
+orientation (not rotated), with the red tint and the yellow box drawn on it. It refreshes about
+once a second. Use it to tell a detection problem from a drawing problem:
+- If the red and yellow are right on the small picture but wrong on the camera strip, the
+  detection is fine and the overlay on the strip is misplaced.
+- If they are wrong on the small picture as well, the field was detected wrongly: tap
+  **Re-detect field**, use Adjust, or try the other field region.
 
 Tap **Re-detect field** after adjusting the phone or the light. If the readout says "Field: not
 found, using centre" (an orange card on the preview), the light may be too dim or the phone too

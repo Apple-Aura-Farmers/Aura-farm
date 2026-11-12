@@ -1,6 +1,6 @@
 import Foundation
 
-/// How brightness-independent measures spread per label, so the team can see whether sample,
+/// How brightness-independent measures spread per label (measured inside the registration box), so the team can see whether sample,
 /// blank glass and blur separate.
 struct LabelStatistics {
     struct Spread: Equatable {
@@ -24,8 +24,8 @@ struct LabelStatistics {
             guard !matching.isEmpty else { return nil }
             return Summary(
                 label: label, count: matching.count,
-                contrast: spread(matching.map(\.contrast)),
-                sharpness: spread(matching.map(\.sharpness)))
+                contrast: spread(matching.map(\.boxContrast)),
+                sharpness: spread(matching.map(\.boxSharpness)))
         }
     }
 

@@ -3,8 +3,7 @@ import XCTest
 @testable import AuraFarm
 
 final class MovementIndicatorsTests: XCTestCase {
-    /// Short side 100 px, so speed fractions read as px / 100.
-    private let size = CGSize(width: 200, height: 100)
+    /// A reference side of 100 px, so speed fractions read as px / 100 and a hop is at 30 px.
 
     private func feed(
         _ indicators: inout MovementIndicators, shake: CGPoint?, at seconds: Double = 0,
@@ -12,8 +11,8 @@ final class MovementIndicatorsTests: XCTestCase {
         event: HopOdometer.Event = .none
     ) {
         indicators.update(
-            shake: shake, anchorOffset: anchorOffset, positionFrames: position, isLost: isLost,
-            event: event, frameSize: size, seconds: seconds, hopFraction: 0.3)
+            shake: shake, anchorOffset: anchorOffset, positionFields: position, isLost: isLost,
+            event: event, referenceSide: 100, seconds: seconds, hopDistance: 30)
     }
 
     func testStatuses() {
@@ -79,14 +78,14 @@ final class MovementIndicatorsTests: XCTestCase {
 
     func testOffStartAndHome() {
         var indicators = MovementIndicators()
-        XCTAssertNil(indicators.offStartFrames)
+        XCTAssertNil(indicators.offStartFields)
         XCTAssertFalse(indicators.isHome)
         feed(&indicators, shake: .zero, position: CGPoint(x: 1, y: 1))
         indicators.markStart(at: CGPoint(x: 1, y: 1))
-        XCTAssertEqual(indicators.offStartFrames ?? -1, 0, accuracy: 0.0001)
+        XCTAssertEqual(indicators.offStartFields ?? -1, 0, accuracy: 0.0001)
         XCTAssertTrue(indicators.isHome)
         feed(&indicators, shake: .zero, position: CGPoint(x: 4, y: 5))
-        XCTAssertEqual(indicators.offStartFrames ?? -1, 5, accuracy: 0.0001)
+        XCTAssertEqual(indicators.offStartFields ?? -1, 5, accuracy: 0.0001)
         XCTAssertFalse(indicators.isHome)
         feed(&indicators, shake: .zero, position: CGPoint(x: 1.2, y: 1))
         XCTAssertTrue(indicators.isHome)
@@ -100,7 +99,7 @@ final class MovementIndicatorsTests: XCTestCase {
         indicators.markStart(at: .zero)
         indicators.clearStart()
         XCTAssertNil(indicators.startPosition)
-        XCTAssertNil(indicators.offStartFrames)
+        XCTAssertNil(indicators.offStartFields)
 
         indicators.markStart(at: .zero)
         indicators.reset()

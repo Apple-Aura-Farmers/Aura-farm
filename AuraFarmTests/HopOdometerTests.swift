@@ -97,6 +97,52 @@ final class HopOdometerTests: XCTestCase {
         XCTAssertEqual(odometer.positionInFrames(shortSide: 0), .zero)
     }
 
+    func testTheFrameBasedPathIsUnchangedWhenNoReferenceSideIsGiven() {
+        var odometer = HopOdometer()
+        XCTAssertEqual(odometer.hopDistance(frameSize: size), 30)
+        XCTAssertEqual(
+            odometer.update(offset: CGPoint(x: 31, y: 0), frameSize: size, referenceSide: nil).event,
+            .hop)
+        XCTAssertEqual(odometer.update(offset: CGPoint(x: 41, y: 0), frameSize: size).event, .none)
+        XCTAssertEqual(odometer.update(offset: CGPoint(x: 41, y: 0), frameSize: size).event, .none)
+        XCTAssertEqual(odometer.update(offset: CGPoint(x: 41, y: 0), frameSize: size).event, .lost)
+    }
+
+    func testAReferenceSideSizesTheHopAndTrustLimitsToTheBox() {
+        // A 350 px box in a frame whose short side is 100: only the box counts.
+        var odometer = HopOdometer()
+        XCTAssertEqual(odometer.hopDistance(frameSize: size, referenceSide: 350), 87.5)
+        let below = odometer.update(offset: CGPoint(x: 87, y: 0), frameSize: size, referenceSide: 350)
+        XCTAssertEqual(below.event, .none)
+        let hop = odometer.update(offset: CGPoint(x: 87.5, y: 0), frameSize: size, referenceSide: 350)
+        XCTAssertEqual(hop.event, .hop)
+        XCTAssertTrue(hop.reanchor)
+        // Up to 0.4 x 350 = 140 px is trusted, beyond it is not.
+        var strict = HopOdometer()
+        for _ in 0..<2 {
+            XCTAssertEqual(
+                strict.update(offset: CGPoint(x: 141, y: 0), frameSize: size, referenceSide: 350).event,
+                .none)
+        }
+        XCTAssertEqual(
+            strict.update(offset: CGPoint(x: 141, y: 0), frameSize: size, referenceSide: 350).event,
+            .lost)
+        var trusted = HopOdometer()
+        XCTAssertEqual(
+            trusted.update(offset: CGPoint(x: 140, y: 0), frameSize: size, referenceSide: 350).event,
+            .hop)
+    }
+
+    func testPositionInFields() {
+        var odometer = HopOdometer()
+        _ = odometer.update(offset: CGPoint(x: 100, y: 0), frameSize: size, referenceSide: 400)
+        _ = odometer.update(offset: CGPoint(x: 0, y: -50), frameSize: size, referenceSide: 400)
+        let fields = odometer.positionInFields(fieldSide: 400)
+        XCTAssertEqual(fields.x, 0.25, accuracy: 0.0001)
+        XCTAssertEqual(fields.y, -0.125, accuracy: 0.0001)
+        XCTAssertEqual(odometer.positionInFields(fieldSide: 0), .zero)
+    }
+
     func testReset() {
         var odometer = HopOdometer()
         _ = odometer.update(offset: CGPoint(x: 31, y: 0), frameSize: size)

@@ -16,7 +16,7 @@ struct MovementLogRow: Equatable {
     /// The odometer position, px.
     var positionX: Double
     var positionY: Double
-    /// The odometer position in frames (position / short side).
+    /// The odometer position in frames (position / the frame's short side).
     var positionXFrames: Double
     var positionYFrames: Double
     var hops: Int
@@ -45,10 +45,11 @@ struct MovementLogRow: Equatable {
     /// 0...1 towards the next hop.
     var hopProgress = 0.0
     var stillSeconds = 0.0
-    /// Distance from the marked start in frames; nil when no start is marked.
-    var offStartFrames: Double?
+    /// Distance from the marked start in fields (box sides); nil when no start is marked.
+    var offStartFields: Double?
     /// Where movement was registered: "auto-learned", "auto-untrusted", "auto-learning",
-    /// "centre-square" or "whole-frame".
+    /// "bright-region-learned" (and "-untrusted", "-learning"), "centre-square" or
+    /// "whole-frame".
     var fieldRegion = ""
     /// Time spent analyzing this frame, in milliseconds.
     var analysisMilliseconds = 0.0
@@ -56,6 +57,26 @@ struct MovementLogRow: Equatable {
     var analyzedFps = 0.0
     /// The share of the frame that is open field; nil when no mask was learned.
     var fieldOpenShare: Double?
+    /// The side of the registration box in px; the frame's short side with no box.
+    var boxSidePx = 0.0
+    /// The odometer position in fields (position / box side).
+    var positionXFields = 0.0
+    var positionYFields = 0.0
+    /// The hop distance in use, px.
+    var hopLimitPx = 0.0
+    /// Brightness, sharpness and contrast measured inside the registration box only (the
+    /// whole frame when there is no box). The three columns before these are whole-frame.
+    var boxBrightness = 0.0
+    var boxSharpness = 0.0
+    var boxContrast = 0.0
+    /// "measured", "predicted" or "missing": see `ReadingVerdict`.
+    var reading = ""
+    /// Readings in a row replaced by a prediction.
+    var predictedStreak = 0
+    /// True while the box held too little detail to follow (`DetailCheck`).
+    var noDetail = false
+    /// Times the view went over nothing to track.
+    var blindStretches = 0
 }
 
 enum MovementLog {
@@ -66,8 +87,10 @@ enum MovementLog {
         "hops", "gaps", "is_lost", "event", "hop_agreement",
         "label", "mark", "mark_mm", "frame_width", "frame_height",
         "test", "note", "speed_fraction", "status", "hop_progress", "still_seconds",
-        "off_start_frames", "field_region", "analysis_ms", "analyzed_fps",
-        "field_open_share",
+        "off_start_fields", "field_region", "analysis_ms", "analyzed_fps",
+        "field_open_share", "box_side_px", "position_x_fields", "position_y_fields",
+        "hop_limit_px", "box_brightness", "box_sharpness", "box_contrast",
+        "reading", "predicted_streak", "no_detail", "blind_stretches",
     ]
 
     static func csv(_ rows: [MovementLogRow]) -> String {
@@ -88,9 +111,14 @@ enum MovementLog {
             String(row.frameWidth), String(row.frameHeight),
             row.test, row.note, number(row.speedFraction, 3), row.status,
             number(row.hopProgress, 2), number(row.stillSeconds, 2),
-            number(row.offStartFrames, 3), row.fieldRegion,
+            number(row.offStartFields, 3), row.fieldRegion,
             number(row.analysisMilliseconds, 1), number(row.analyzedFps, 1),
-            number(row.fieldOpenShare, 3),
+            number(row.fieldOpenShare, 3), number(row.boxSidePx, 1),
+            number(row.positionXFields, 3), number(row.positionYFields, 3),
+            number(row.hopLimitPx, 1),
+            number(row.boxBrightness, 3), number(row.boxSharpness, 3),
+            number(row.boxContrast, 3), row.reading, String(row.predictedStreak),
+            row.noDetail ? "1" : "0", String(row.blindStretches),
         ]
     }
 

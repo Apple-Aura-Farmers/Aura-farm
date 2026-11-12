@@ -1,3 +1,4 @@
+import CoreImage
 import CoreVideo
 import Foundation
 import Vision
@@ -32,6 +33,19 @@ enum FrameAnalyzer {
     /// Brightness, sharpness and contrast in one pass over the luma plane.
     /// - Parameter step: as for `brightnessAndSharpness`.
     static func stats(of pixelBuffer: CVPixelBuffer, step: Int = 2) -> FrameStats? {
+        stats(of: pixelBuffer, region: nil, step: step)
+    }
+
+    /// The same three numbers measured only inside `box`, given in full-frame pixels with the
+    /// origin at the top left. The box is rounded to whole pixels and kept inside the frame.
+    /// The eyepiece's dark ring is left out, which the whole-frame numbers cannot do: their
+    /// contrast is dominated by bright field against black ring, so blank glass scores
+    /// highest.
+    static func stats(of pixelBuffer: CVPixelBuffer, in box: CGRect, step: Int) -> FrameStats? {
+        stats(of: pixelBuffer, region: box, step: step)
+    }
+
+    private static func stats(of pixelBuffer: CVPixelBuffer, region: CGRect?, step: Int) -> FrameStats? {
         CVPixelBufferLockBaseAddress(pixelBuffer, .readOnly)
         defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, .readOnly) }
 
@@ -39,10 +53,26 @@ enum FrameAnalyzer {
             let base = CVPixelBufferGetBaseAddressOfPlane(pixelBuffer, 0)
         else { return nil }
 
-        let width = CVPixelBufferGetWidthOfPlane(pixelBuffer, 0)
-        let height = CVPixelBufferGetHeightOfPlane(pixelBuffer, 0)
+        let fullWidth = CVPixelBufferGetWidthOfPlane(pixelBuffer, 0)
+        let fullHeight = CVPixelBufferGetHeightOfPlane(pixelBuffer, 0)
         let bytesPerRow = CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 0)
         let pixels = base.assumingMemoryBound(to: UInt8.self)
+
+        var originX = 0
+        var originY = 0
+        var width = fullWidth
+        var height = fullHeight
+        if let region {
+            let minX = max(Int(region.minX.rounded()), 0)
+            let minY = max(Int(region.minY.rounded()), 0)
+            let maxX = min(Int(region.maxX.rounded()), fullWidth)
+            let maxY = min(Int(region.maxY.rounded()), fullHeight)
+            guard maxX > minX, maxY > minY else { return nil }
+            originX = minX
+            originY = minY
+            width = maxX - minX
+            height = maxY - minY
+        }
 
         let w = width / step
         let h = height / step
@@ -53,7 +83,7 @@ enum FrameAnalyzer {
         var sum = 0.0
         var squares = 0.0
         for y in 0..<h {
-            let row = pixels + (y * step) * bytesPerRow
+            let row = pixels + (originY + y * step) * bytesPerRow + originX
             for x in 0..<w {
                 let value = Float(row[x * step])
                 grid[y * w + x] = value
@@ -195,5 +225,49 @@ final class TravelSinceLastFrame {
 
     func reset() {
         held = nil
+    }
+}
+
+/// Registers a box of one frame against the same box of another: BOTH are cropped to the same
+/// rectangle before Vision sees them.
+///
+/// `regionOfInterest` only crops the newer frame (the frame the request runs on), so the held
+/// frame is matched whole, eyepiece ring and all, and a box can be matched against the wrong
+/// part of it. Hand-moved tests showed single readings jumping to about 250 px with the
+/// frame-to-frame shift at 1 to 16 px. Cropping both compares like with like.
+///
+/// Each call gets a fresh request handler, for the reason `TravelSinceLastFrame` documents.
+/// It holds nothing between calls: the crops are lazy images over the caller's buffers.
+final class BoxRegistration {
+    /// The least box side, in px, worth registering.
+    private let minimumSide: CGFloat = 16
+
+    /// The signed shift from `held` to `current` inside `box` (full-frame pixels, origin at
+    /// the top left), x to the right and y down: the same convention as
+    /// `TravelSinceLastFrame.offset(to:)`. nil when the box is too small or Vision gives
+    /// nothing.
+    func offset(from held: CVPixelBuffer, to current: CVPixelBuffer, box: CGRect) -> CGPoint? {
+        let width = CGFloat(CVPixelBufferGetWidth(current))
+        let height = CGFloat(CVPixelBufferGetHeight(current))
+        let whole = CGRect(
+            x: box.minX.rounded(), y: box.minY.rounded(),
+            width: box.width.rounded(), height: box.height.rounded()
+        ).intersection(CGRect(x: 0, y: 0, width: width, height: height))
+        guard whole.width >= minimumSide, whole.height >= minimumSide else { return nil }
+
+        // Core Image's origin is at the bottom left.
+        let cropRect = CGRect(
+            x: whole.minX, y: height - whole.maxY, width: whole.width, height: whole.height)
+        func crop(_ buffer: CVPixelBuffer) -> CIImage {
+            CIImage(cvPixelBuffer: buffer).cropped(to: cropRect)
+                .transformed(by: CGAffineTransform(translationX: -cropRect.minX, y: -cropRect.minY))
+        }
+
+        let request = VNTranslationalImageRegistrationRequest(targetedCIImage: crop(held), options: [:])
+        guard (try? VNImageRequestHandler(ciImage: crop(current), options: [:]).perform([request])) != nil,
+            let observation = request.results?.first
+        else { return nil }
+        let transform = observation.alignmentTransform
+        return CGPoint(x: transform.tx, y: -transform.ty)
     }
 }

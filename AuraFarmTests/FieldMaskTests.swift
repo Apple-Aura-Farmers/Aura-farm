@@ -162,17 +162,34 @@ final class FieldMaskTests: XCTestCase {
         XCTAssertEqual(FieldMaskBuilder.darkCut(of: even, count: 100, minRatio: 2), 0)
     }
 
-    func testTheLumaGridSamplesTheBufferAndTheTintImageHasTheGridsSize() throws {
+    func testTheLumaGridSamplesTheBuffer() throws {
         let buffer = SyntheticFrame.make(width: 320, height: 240) { x, _ in x < 160 ? 40 : 200 }
         let sampled = try XCTUnwrap(LumaGrid.sample(of: buffer, step: 8))
         XCTAssertEqual(sampled.width, 40)
         XCTAssertEqual(sampled.height, 30)
         XCTAssertEqual(sampled.luma[0], 40)
         XCTAssertEqual(sampled.luma[39], 200)
+    }
 
+    func testTheEyepieceRectsCoverExactlyTheEyepieceCells() throws {
         let mask = try XCTUnwrap(learn(same(disc(centreX: 20, centreY: 15, radius: 13))))
-        let image = try XCTUnwrap(mask.tintImage())
-        XCTAssertEqual(image.width, 40)
-        XCTAssertEqual(image.height, 30)
+        let rects = mask.eyepieceRects()
+        XCTAssertLessThan(rects.count, 80, "rows are merged, not one rect per cell")
+        // The rects' area is the eyepiece cells' area (8 x 8 px each), with no overlap.
+        let cells = mask.eyepiece.filter { $0 }.count
+        XCTAssertEqual(rects.reduce(0) { $0 + $1.width * $1.height }, Double(cells * 64))
+        for index in 0..<mask.eyepiece.count {
+            let centre = CGPoint(
+                x: Double(index % gridWidth) * 8 + 4, y: Double(index / gridWidth) * 8 + 4)
+            let inside = rects.filter { $0.contains(centre) }.count
+            XCTAssertEqual(inside, mask.eyepiece[index] ? 1 : 0)
+        }
+    }
+
+    func testARectangularMaskMergesIntoOneRect() {
+        let mask = FieldMask(
+            gridWidth: 6, gridHeight: 4, gridStep: 8,
+            eyepiece: (0..<24).map { ($0 % 6) < 2 }, openShare: 0.6, registrationRect: nil)
+        XCTAssertEqual(mask.eyepieceRects(), [CGRect(x: 0, y: 0, width: 16, height: 32)])
     }
 }

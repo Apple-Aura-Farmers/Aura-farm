@@ -12,7 +12,16 @@
         /// the anchor or the registration gave nothing.
         var anchorOffset: CGPoint?
         var position: CGPoint
+        /// The position in frames (the frame's short side), kept for the CSV.
         var positionFrames: CGPoint
+        /// The position in fields: one field is `boxSide`, the useful part of the view.
+        var positionFields: CGPoint
+        /// The side of the registration box in px; the frame's short side with no box.
+        var boxSide: Double
+        /// The hop distance in use, px.
+        var hopLimit: Double
+        /// A fresh "What the app sees" picture, at most once a second and only when asked for.
+        var thumbnail: CGImage?
         var hops: Int
         var gaps: Int
         var isLost: Bool
@@ -25,14 +34,25 @@
         /// Where registration looked, in frame pixels; nil when it used the whole frame.
         var registrationRect: CGRect?
         var fieldMode: FieldRegionMode
-        /// A tint of the learned mask for the overlay; set once the mask is decided.
-        var maskImage: CGImage?
         /// How long this frame's analysis took, in milliseconds.
         var analysisMilliseconds: Double
         /// Analyzed frames per second over the last second.
         var analyzedFps: Double
         /// Whether the learned field is waiting for the person to confirm or adjust it.
         var awaitingReview = false
+        /// Brightness, sharpness and contrast inside the registration box (the whole frame's
+        /// when there is no box). `stats` stays the whole frame's, for comparison.
+        var boxStats: FrameStats
+        /// The offset from the anchor the odometer was given: measured, or predicted when the
+        /// measurement disagreed with the frame-to-frame movement. `anchorOffset` stays what
+        /// registration returned.
+        var usedOffset: CGPoint?
+        /// "measured", "predicted" or "missing"; see `ReadingVerdict`.
+        var reading = "missing"
+        var predictedStreak = 0
+        /// False while the box holds too little detail to follow.
+        var hasDetail = true
+        var blindStretches = 0
 
         var eventName: String {
             switch event {
@@ -85,6 +105,18 @@
         private let maskThresholds: FieldMaskThresholds
         private let shake = ShakeEstimator()
         private let travel = TravelSinceLastFrame()
+        private let boxRegistration = BoxRegistration()
+        /// The previous frame, held only while a box is in use (`shake` holds it otherwise).
+        private var previousFrame: CVPixelBuffer?
+        private var consistency = ReadingConsistency()
+        private var detail = DetailCheck()
+        private(set) var blindStretches = 0
+        /// Set when detail went; the first frame with detail again re-anchors.
+        private var resumeAfterBlind = false
+        private var readingIndex = 0
+        /// A seam for tests: replaces the anchor registration's answer. Called with the
+        /// reading's number (1 for the first since tracking began) and what Vision returned.
+        var anchorReadingOverride: ((_ index: Int, _ measured: CGPoint?) -> CGPoint?)?
         private var odometer: HopOdometer
         /// The frame the travel is measured from. The same buffer `travel` holds, kept here
         /// as well because a hop's agreement needs both frames as images.
@@ -95,20 +127,31 @@
         private var builder: FieldMaskBuilder?
         private var lastFrameSize = CGSize.zero
 
+        /// Whether to make the "What the app sees" picture, at most once a second.
+        var makesThumbnail = false {
+            didSet { if makesThumbnail { lastThumbnailAt = -.infinity } }
+        }
+        private var lastThumbnailAt = -Double.infinity
+        /// The last luma grid sampled for the picture: a small copy, never a pixel buffer.
+        private var lastLuma: (luma: [UInt8], width: Int, height: Int)?
+
         /// When true, tracking waits after the mask is learned until `confirmField()`, so the
         /// person can check it (and adjust it with `adjustField`) first. The live lab sets it.
         var requiresReview = false
         private(set) var isAwaitingReview = false
         /// Where registration looks once the mode and the mask are settled, in frame pixels.
         private var registrationRect: CGRect?
-        private var maskImage: CGImage?
 
         init(
             thresholds: HopOdometerThresholds = HopOdometerThresholds(),
-            maskThresholds: FieldMaskThresholds = FieldMaskThresholds()
+            maskThresholds: FieldMaskThresholds = FieldMaskThresholds(),
+            consistencyThresholds: ReadingConsistencyThresholds = ReadingConsistencyThresholds(),
+            detailThresholds: DetailThresholds = DetailThresholds()
         ) {
             odometer = HopOdometer(thresholds: thresholds)
             self.maskThresholds = maskThresholds
+            consistency = ReadingConsistency(thresholds: consistencyThresholds)
+            detail = DetailCheck(thresholds: detailThresholds)
         }
 
         /// Whether the eyepiece mask is still being learned.
@@ -137,7 +180,6 @@
             let mask = circle.clamped(to: lastFrameSize).mask(
                 frameSize: lastFrameSize, thresholds: maskThresholds)
             fieldState = mask.isTrusted ? .ready(mask) : .untrusted(mask)
-            maskImage = mask.tintImage()
             clearTracking()
         }
 
@@ -163,31 +205,91 @@
             let learning =
                 fieldMode.learnsMask && (learn(from: buffer, frameSize: frameSize) || isAwaitingReview)
             applyRegion(frameSize: frameSize)
+            // The box the movement is measured in sizes the hop limits and the distance unit.
+            let referenceSide = registrationRect.map { Double(min($0.width, $0.height)) }
+            let shortSide = Double(min(frameSize.width, frameSize.height))
+            let boxSide = referenceSide ?? shortSide
+            let hopLimit = odometer.hopDistance(frameSize: frameSize, referenceSide: referenceSide)
+            var thumbnail: CGImage?
+            if makesThumbnail, seconds - lastThumbnailAt >= 1 {
+                lastThumbnailAt = seconds
+                thumbnail = makeThumbnail(from: buffer)
+            }
+
+            let boxStats =
+                registrationRect.flatMap {
+                    FrameAnalyzer.stats(of: buffer, in: $0, step: Self.sampleStep)
+                } ?? stats
 
             var offset: CGPoint?
+            var usedOffset: CGPoint?
+            var frameShift: CGPoint?
+            var verdictName = "missing"
+            var streak = 0
             var event = HopOdometer.Event.none
             var agreement: Double?
 
             if !learning {
-                _ = shake.update(with: buffer)
+                frameShift = measureFrameShift(buffer)
+                let hadDetail = detail.hasDetail
+                detail.update(boxSharpness: boxStats.sharpness)
+                if hadDetail && !detail.hasDetail {
+                    blindStretches += 1
+                    resumeAfterBlind = true
+                }
+
                 if let held = anchor {
-                    offset = travel.offset(to: buffer)
-                    let result = odometer.update(offset: offset, frameSize: frameSize)
-                    event = result.event
-                    if event == .hop, measureAgreement, let offset,
-                        seconds - lastAgreementAt >= Self.agreementEverySeconds
-                    {
-                        lastAgreementAt = seconds
-                        agreement = self.agreement(from: held, to: buffer, offset: offset)
+                    if !detail.hasDetail {
+                        // Nothing to follow: paused. Not a lost reading, no distance added.
+                    } else if resumeAfterBlind {
+                        // Detail is back: carry on from the last known position.
+                        resumeAfterBlind = false
+                        odometer.rebase()
+                        anchorOn(buffer)
+                    } else {
+                        readingIndex += 1
+                        var measured = measureAnchorOffset(held: held, current: buffer)
+                        if let override = anchorReadingOverride {
+                            measured = override(readingIndex, measured)
+                        }
+                        offset = measured
+                        var verdict = ReadingVerdict.missing
+                        if let box = registrationRect {
+                            verdict = consistency.judge(
+                                anchorOffset: measured, frameShift: frameShift,
+                                boxSide: Double(min(box.width, box.height)))
+                        } else if let measured {
+                            verdict = .measured(measured)
+                        }
+                        verdictName = verdict.csvName
+                        streak = consistency.predictedStreak
+                        usedOffset = verdict.offset
+
+                        var result: (event: HopOdometer.Event, reanchor: Bool)
+                        if case .predicted(let predicted) = verdict, consistency.mustCommit {
+                            // Predictions have stood in for too long: trust them as a hop.
+                            odometer.commit(offset: predicted)
+                            result = (.hop, true)
+                        } else {
+                            result = odometer.update(
+                                offset: usedOffset, frameSize: frameSize,
+                                referenceSide: referenceSide)
+                        }
+                        event = result.event
+                        if event == .hop, measureAgreement, let usedOffset,
+                            seconds - lastAgreementAt >= Self.agreementEverySeconds
+                        {
+                            lastAgreementAt = seconds
+                            agreement = self.agreement(from: held, to: buffer, offset: usedOffset)
+                        }
+                        if result.reanchor { anchorOn(buffer) }
                     }
-                    if result.reanchor { anchorOn(buffer) }
                 } else {
                     // No anchor yet: anchor on this frame. Not a lost reading.
                     anchorOn(buffer)
                 }
             }
 
-            let shortSide = Double(min(frameSize.width, frameSize.height))
             let taken = ContinuousClock.now - started
             let milliseconds =
                 Double(taken.components.seconds) * 1000
@@ -195,10 +297,12 @@
             let fps = rate.record(seconds)
             return SlideMovementStep(
                 stats: stats,
-                shake: learning ? nil : shake.lastShift,
+                shake: learning ? nil : frameShift,
                 anchorOffset: offset,
                 position: odometer.position,
                 positionFrames: odometer.positionInFrames(shortSide: shortSide),
+                positionFields: odometer.positionInFields(fieldSide: boxSide),
+                boxSide: boxSide, hopLimit: hopLimit, thumbnail: thumbnail,
                 hops: odometer.hops,
                 gaps: odometer.gaps,
                 isLost: odometer.isLost,
@@ -208,18 +312,42 @@
                 fieldState: fieldMode.learnsMask ? fieldState : nil,
                 registrationRect: registrationRect,
                 fieldMode: fieldMode,
-                maskImage: fieldMode.learnsMask ? maskImage : nil,
                 analysisMilliseconds: milliseconds,
-                analyzedFps: fps, awaitingReview: isAwaitingReview)
+                analyzedFps: fps, awaitingReview: isAwaitingReview, boxStats: boxStats,
+                usedOffset: usedOffset, reading: verdictName, predictedStreak: streak,
+                hasDetail: detail.hasDetail, blindStretches: blindStretches)
         }
 
         // MARK: Field mask
+
+        /// Samples the luma grid the same way learning does and draws the mask and box on it.
+        private func makeThumbnail(from buffer: CVPixelBuffer) -> CGImage? {
+            guard let grid = LumaGrid.sample(of: buffer, step: maskThresholds.gridStep) else {
+                return nil
+            }
+            lastLuma = grid
+            var mask: FieldMask?
+            switch fieldState {
+            case .ready(let learned), .untrusted(let learned): mask = learned
+            case .learning: break
+            }
+            return FieldMaskPicture.image(
+                luma: grid.luma, gridWidth: grid.width, gridHeight: grid.height,
+                mask: fieldMode.learnsMask ? mask : nil, registrationRect: registrationRect,
+                gridStep: maskThresholds.gridStep)
+        }
 
         private func clearTracking() {
             odometer.reset()
             travel.reset()
             shake.reset()
             anchor = nil
+            previousFrame = nil
+            consistency.reset()
+            detail.reset()
+            blindStretches = 0
+            resumeAfterBlind = false
+            readingIndex = 0
         }
 
         private func restartLearning() {
@@ -227,7 +355,6 @@
             isAwaitingReview = false
             fieldState = .learning(progress: 0)
             registrationRect = nil
-            maskImage = nil
             clearTracking()
         }
 
@@ -259,7 +386,6 @@
                 // Tracking starts afresh from the next frame, inside the settled region.
                 clearTracking()
                 fieldState = mask.isTrusted ? .ready(mask) : .untrusted(mask)
-                maskImage = mask.tintImage()
                 isAwaitingReview = requiresReview
             } else {
                 fieldState = .learning(progress: builder.progress)
@@ -267,7 +393,7 @@
             return true
         }
 
-        /// Points both registrations at the region the mode and the mask call for.
+        /// Works out the region the mode and the mask call for.
         private func applyRegion(frameSize: CGSize) {
             switch fieldMode {
             case .wholeFrame:
@@ -281,11 +407,10 @@
                 case .untrusted: registrationRect = EyepieceField.centreSquare(frameSize: frameSize)
                 }
             }
-            let region = registrationRect.map {
-                EyepieceField.visionRegion(of: $0, frameSize: frameSize)
-            }
-            shake.regionOfInterest = region
-            travel.regionOfInterest = region
+            // A box is registered by cropping both frames (`BoxRegistration`); the old
+            // regions stay unset so the whole-frame path really is the whole frame.
+            shake.regionOfInterest = nil
+            travel.regionOfInterest = nil
         }
 
         // MARK: Hops
@@ -293,6 +418,25 @@
         private func anchorOn(_ buffer: CVPixelBuffer) {
             travel.hold(buffer)
             anchor = buffer
+            consistency.reset()
+        }
+
+        /// The frame-to-frame shift. With a box, both frames are cropped to it; with the whole
+        /// frame it is `ShakeEstimator`'s, as it always was.
+        private func measureFrameShift(_ buffer: CVPixelBuffer) -> CGPoint? {
+            defer { previousFrame = registrationRect == nil ? nil : buffer }
+            guard let box = registrationRect else {
+                _ = shake.update(with: buffer)
+                return shake.lastShift
+            }
+            shake.reset()
+            guard let previousFrame else { return nil }
+            return boxRegistration.offset(from: previousFrame, to: buffer, box: box)
+        }
+
+        private func measureAnchorOffset(held: CVPixelBuffer, current: CVPixelBuffer) -> CGPoint? {
+            guard let box = registrationRect else { return travel.offset(to: current) }
+            return boxRegistration.offset(from: held, to: current, box: box)
         }
 
         /// How well the two frames agree once the picture is moved by the hop.

@@ -12,6 +12,13 @@ struct HopOdometerThresholds {
     /// Readings in a row with no trusted offset before tracking counts as lost.
     /// PLACEHOLDER: not calibrated.
     var readingsToLose: Int = 3
+    /// Used instead of `hopFraction` when the caller passes a `referenceSide`: re-anchor once
+    /// the view has moved this share of the registration box's side. A hop must stay well
+    /// inside the box, or the two frames hardly overlap there. PLACEHOLDER: not calibrated.
+    var hopFractionOfBox: Double = 0.25
+    /// Used instead of `maxTrustedFraction` with a `referenceSide`: an offset beyond this
+    /// share of the box's side is not trusted. PLACEHOLDER: not calibrated.
+    var maxTrustedFractionOfBox: Double = 0.4
 }
 
 /// Tracks where the view is from offsets measured against an anchor frame.
@@ -53,6 +60,19 @@ struct HopOdometer {
         CGPoint(x: committed.x + live.x, y: committed.y + live.y)
     }
 
+    /// The position in fields, one field being the side of the registration box (the useful
+    /// part of the view).
+    func positionInFields(fieldSide: Double) -> CGPoint {
+        guard fieldSide > 0 else { return .zero }
+        return CGPoint(x: position.x / fieldSide, y: position.y / fieldSide)
+    }
+
+    /// The hop distance in px for the given sizes; what `update` hops at.
+    func hopDistance(frameSize: CGSize, referenceSide: Double? = nil) -> Double {
+        if let referenceSide { return thresholds.hopFractionOfBox * referenceSide }
+        return thresholds.hopFraction * Double(min(frameSize.width, frameSize.height))
+    }
+
     /// The position in frames, one frame being the frame's short side.
     func positionInFrames(shortSide: Double) -> CGPoint {
         guard shortSide > 0 else { return .zero }
@@ -61,15 +81,25 @@ struct HopOdometer {
 
     /// Feeds one measurement against the current anchor.
     ///
+    /// The hop and trust limits are fractions of the frame's short side, or, when
+    /// `referenceSide` is given, of that side (the registration box's), using
+    /// `hopFractionOfBox` and `maxTrustedFractionOfBox`.
+    ///
     /// - Returns: what happened, and whether the caller must re-anchor on the current frame.
     ///   After `.lost` the caller re-anchors too, so tracking restarts from where it was
     ///   last known; the position keeps its last committed + live, and that error is
     ///   accepted. A hop that lands while lost also counts as tracking regained (`gaps`
     ///   goes up) but is reported as `.hop`, the more important of the two.
-    mutating func update(offset: CGPoint?, frameSize: CGSize) -> (event: Event, reanchor: Bool) {
+    mutating func update(
+        offset: CGPoint?, frameSize: CGSize, referenceSide: Double? = nil
+    ) -> (event: Event, reanchor: Bool) {
         let shortSide = Double(min(frameSize.width, frameSize.height))
+        let trusted =
+            referenceSide.map { thresholds.maxTrustedFractionOfBox * $0 }
+            ?? thresholds.maxTrustedFraction * shortSide
+        let hopAt = hopDistance(frameSize: frameSize, referenceSide: referenceSide)
 
-        guard let offset, hypot(offset.x, offset.y) <= thresholds.maxTrustedFraction * shortSide
+        guard let offset, hypot(offset.x, offset.y) <= trusted
         else {
             untrustedStreak += 1
             if untrustedStreak >= thresholds.readingsToLose && !isLost {
@@ -87,13 +117,37 @@ struct HopOdometer {
             gaps += 1
         }
 
-        if hypot(offset.x, offset.y) >= thresholds.hopFraction * shortSide {
+        if hypot(offset.x, offset.y) >= hopAt {
             committed = position
             live = .zero
             hops += 1
             return (.hop, true)
         }
         return (wasLost ? .regained : .none, false)
+    }
+
+    /// Commits `offset` as a hop whatever its size, for a run of predicted readings that the
+    /// caller has decided to trust. The caller re-anchors on the current frame.
+    mutating func commit(offset: CGPoint) {
+        untrustedStreak = 0
+        let wasLost = isLost
+        if wasLost {
+            isLost = false
+            gaps += 1
+        }
+        live = offset
+        committed = position
+        live = .zero
+        hops += 1
+    }
+
+    /// Folds the live offset into the committed position without counting a hop, for when the
+    /// caller re-anchors after a stretch with nothing to track. The position carries on from
+    /// where it was last known.
+    mutating func rebase() {
+        committed = position
+        live = .zero
+        untrustedStreak = 0
     }
 
     mutating func reset() {

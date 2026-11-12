@@ -60,6 +60,51 @@
             XCTAssertNotNil(step.anchorOffset)
         }
 
+        func testAutoHopsAtAQuarterOfTheBoxOnARealisticRoundField() throws {
+            // 1280 x 720 frames, a static round field of radius 285 px about the middle, and
+            // texture that moves 30 px to the right on every frame.
+            let width = 1280
+            let height = 720
+            let texture = SyntheticFrame.smoothNoise(size: width)
+            func ringFrame(shiftedBy dx: Int) -> CVPixelBuffer {
+                SyntheticFrame.make(width: width, height: height) { x, y in
+                    guard hypot(Double(x) - 640, Double(y) - 360) <= 285 else { return 2 }
+                    return UInt8(70 + texture[y * width + min(max(x - dx, 0), width - 1)] * 0.5)
+                }
+            }
+            let pipeline = SlideMovementPipeline()
+            let learningFrames = FieldMaskThresholds().framesToLearn
+            for index in 0..<learningFrames {
+                _ = pipeline.process(
+                    ringFrame(shiftedBy: 0), seconds: Double(index) * 0.1, measureAgreement: false)
+            }
+            guard case .ready(let mask) = pipeline.fieldState else {
+                return XCTFail("expected a learned field, got \(pipeline.fieldState)")
+            }
+            XCTAssertEqual(mask.openShare, .pi * 285 * 285 / Double(width * height), accuracy: 0.03)
+
+            var last: SlideMovementStep?
+            var hopFrames: [Int] = []
+            for index in 0...10 {
+                let seconds = Double(learningFrames + index) * 0.1
+                let step = try XCTUnwrap(
+                    pipeline.process(
+                        ringFrame(shiftedBy: index * 30), seconds: seconds, measureAgreement: false))
+                if step.event == .hop { hopFrames.append(index) }
+                XCTAssertFalse(step.isLost, "lost at frame \(index)")
+                last = step
+            }
+            let final = try XCTUnwrap(last)
+            // The box is the square inside the field: about 340 to 380 px, hopping at a quarter.
+            XCTAssertEqual(final.boxSide, 355, accuracy: 30)
+            XCTAssertEqual(final.hopLimit, final.boxSide * 0.25, accuracy: 0.001)
+            XCTAssertEqual(final.gaps, 0)
+            XCTAssertEqual(final.position.x, 300, accuracy: 15)
+            XCTAssertEqual(final.position.y, 0, accuracy: 6)
+            XCTAssertEqual(hopFrames, [3, 6, 9], "a hop about every 88 px, so every third frame")
+            XCTAssertEqual(final.positionFields.x, 300 / final.boxSide, accuracy: 0.05)
+        }
+
         func testBrightRegionLearnsFromOneFrame() throws {
             let pipeline = SlideMovementPipeline()
             pipeline.fieldMode = .brightRegion

@@ -13,7 +13,7 @@
             HStack {
                 // From the marked start if there is one, otherwise from the last reset.
                 Text(
-                    "\(readouts.offStartFrames == nil ? "Moved" : "Off start") \(readouts.distanceFrames, specifier: "%.2f") fr"
+                    "\(readouts.offStartFields == nil ? "Moved" : "Off start") \(readouts.distanceFields, specifier: "%.2f") fields"
                 )
                 .foregroundStyle(readouts.isHome ? .green : .primary)
                 Text("Still \(readouts.stillSeconds, specifier: "%.1f") s")
@@ -49,15 +49,27 @@
                 milliseconds: readouts.analysisMilliseconds,
                 framesPerSecond: readouts.analyzedFps)
             VStack(alignment: .leading, spacing: 2) {
-                if let stats = readouts.stats {
+                if let box = readouts.boxStats {
                     Text(
-                        "bright \(stats.brightness, specifier: "%.1f")  sharp \(stats.sharpness, specifier: "%.2f")  contrast \(stats.contrast, specifier: "%.1f")"
+                        "box sharp \(box.sharpness, specifier: "%.0f") · contrast \(box.contrast, specifier: "%.0f") · bright \(box.brightness, specifier: "%.0f")"
                     )
                 } else {
                     Text("No frames yet")
                 }
+                if let stats = readouts.stats {
+                    Text(
+                        "whole frame: sharp \(stats.sharpness, specifier: "%.0f") · contrast \(stats.contrast, specifier: "%.0f") · bright \(stats.brightness, specifier: "%.0f")"
+                    )
+                    .foregroundStyle(.secondary)
+                }
                 Text(
-                    "pos \(readouts.position.x, specifier: "%.0f"), \(readouts.position.y, specifier: "%.0f") px  =  \(readouts.positionFrames.x, specifier: "%.2f"), \(readouts.positionFrames.y, specifier: "%.2f") frames"
+                    "Reading: \(readouts.reading.isEmpty ? "-" : readouts.reading)\(readouts.hasDetail ? "" : " · NO DETAIL") · blind stretches \(readouts.blindStretches)"
+                )
+                Text(
+                    "pos \(readouts.position.x, specifier: "%.0f"), \(readouts.position.y, specifier: "%.0f") px  =  \(readouts.positionFields.x, specifier: "%.2f"), \(readouts.positionFields.y, specifier: "%.2f") fields"
+                )
+                Text(
+                    "Box \(readouts.boxSide, specifier: "%.0f") px · hop at \(readouts.hopLimit, specifier: "%.0f") px"
                 )
                 Text(fieldText)
                 Text("last event: \(readouts.lastEvent.isEmpty ? "-" : readouts.lastEvent)")
@@ -77,7 +89,7 @@
 
         var body: some View {
             VStack(alignment: .leading, spacing: 6) {
-                Text("Label statistics").font(.subheadline.bold())
+                Text("Label statistics (inside the box)").font(.subheadline.bold())
                 Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 4) {
                     GridRow {
                         Text("")
@@ -96,7 +108,7 @@
                             Text(range(summary.sharpness))
                         }
                     }
-                    if let stats = model.readouts.stats {
+                    if let stats = model.readouts.boxStats {
                         GridRow {
                             Text("now").bold()
                             Text("")

@@ -6,8 +6,7 @@
     /// resized; Done hands it back as the field. Tracking waits until the person confirms.
     struct FieldReview: View {
         var info: SlideMovementInfo.Field
-        var mapping: ScreenMapping
-        var mirrored: Bool
+        var converter: FramePreviewConverter?
         var onConfirm: () -> Void
         var onAdjust: (FieldCircle) -> Void
 
@@ -15,17 +14,15 @@
         @State private var dragStart: FieldCircle?
 
         var body: some View {
-            GeometryReader { proxy in
-                ZStack {
-                    if let circle {
-                        adjuster(circle: circle, size: proxy.size)
-                    }
-                    VStack {
-                        Spacer()
-                        controls
-                    }
-                    .padding(8)
+            ZStack {
+                if let circle, let converter {
+                    adjuster(circle: circle, converter: converter)
                 }
+                VStack {
+                    Spacer()
+                    controls
+                }
+                .padding(8)
             }
         }
 
@@ -79,13 +76,13 @@
                 set: { self.circle?.radius = $0 })
         }
 
-        /// The circle drawn on the preview, with a drag that moves it.
-        private func adjuster(circle: FieldCircle, size: CGSize) -> some View {
-            let placement = PreviewGeometry.transform(
-                frameSize: info.frameSize, viewSize: size, mapping: mapping, mirrored: mirrored)
-            let scale = hypot(placement.a, placement.b)
-            let centre = circle.centre.applying(placement)
-            let radius = circle.radius * scale
+        /// The circle drawn on the preview, with a drag that moves it. Frame pixels become preview
+        /// points, and back, through the preview layer.
+        private func adjuster(circle: FieldCircle, converter: FramePreviewConverter)
+            -> some View
+        {
+            let centre = converter.viewPoint(of: circle.centre)
+            let radius = converter.viewRadius(of: circle)
             return Circle()
                 .stroke(.white, style: StrokeStyle(lineWidth: 2, dash: [6, 4]))
                 .frame(width: radius * 2, height: radius * 2)
@@ -94,17 +91,16 @@
                 .overlay {
                     Color.clear
                         .contentShape(Rectangle())
-                        .gesture(
+                        .highPriorityGesture(
                             DragGesture()
                                 .onChanged { drag in
                                     let start = dragStart ?? circle
                                     dragStart = start
-                                    let moved = CGPoint(
-                                        x: start.centre.applying(placement).x
-                                            + drag.translation.width,
-                                        y: start.centre.applying(placement).y
-                                            + drag.translation.height)
-                                    self.circle?.centre = moved.applying(placement.inverted())
+                                    let from = converter.viewPoint(of: start.centre)
+                                    self.circle?.centre = converter.framePoint(
+                                        fromView: CGPoint(
+                                            x: from.x + drag.translation.width,
+                                            y: from.y + drag.translation.height))
                                 }
                                 .onEnded { _ in dragStart = nil })
                 }
