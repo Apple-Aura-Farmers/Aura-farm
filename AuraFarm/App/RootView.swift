@@ -31,6 +31,19 @@ struct RootView: View {
         // Reports the session restored from the keychain first, so an operator who signed in
         // last week is not asked again.
         .task { await session.follow() }
+        // Whichever comes first, picking the role or signing in, the records are told once
+        // both are known, and again whenever either changes.
+        .task(id: roleClaim) {
+            guard let role, !roleClaim.isEmpty else { return }
+            await session.claimRole(role)
+        }
+    }
+
+    /// The pairing of account and role the records have been told about. Empty until there is
+    /// both an account and a role to tell them.
+    private var roleClaim: String {
+        guard case .signedIn(let userID, _) = session.state, let role else { return "" }
+        return "\(userID.uuidString)-\(role.rawValue)"
     }
 }
 

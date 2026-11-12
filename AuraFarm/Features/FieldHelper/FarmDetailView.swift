@@ -44,10 +44,13 @@ struct FarmDetailView: View {
                         presenting: plotToDelete
                     ) { plot in
                         Button("Delete plot \(farm.number(of: plot))", role: .destructive) {
-                            remove(plot, from: farm)
+                            Task { await remove(plot, from: farm) }
                         }
                     } message: { _ in
-                        Text("The plot's outline will be removed from this phone.")
+                        Text(
+                            "The plot's outline will be removed from this phone and the "
+                                + "records."
+                        )
                     }
             } else {
                 ContentUnavailableView("This farm is no longer here", systemImage: "leaf")
@@ -182,7 +185,17 @@ struct FarmDetailView: View {
         store.update(changed)
     }
 
-    private func remove(_ plot: Plot, from farm: Farm) {
+    /// Takes the plot out of the records first, so one deleted here but left there does not
+    /// come back with the next pull.
+    private func remove(_ plot: Plot, from farm: Farm) async {
+        if let uploader = FarmUploader() {
+            do {
+                try await uploader.delete(plot)
+            } catch {
+                store.report(error.localizedDescription)
+                return
+            }
+        }
         var changed = farm
         changed.plots.removeAll { $0.id == plot.id }
         store.update(changed)

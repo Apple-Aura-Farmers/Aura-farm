@@ -5,11 +5,8 @@ import Supabase
 /// against the land it came from.
 ///
 /// One farm on the phone becomes a `farms` row and one `plots` row for each plot, numbered in
-/// the order they are held on the phone.
-///
-/// shortcut: a plot deleted on the phone stays in `plots`, because this only upserts what the
-/// phone still has. Delete the farm's rows that are not in the upload once a second helper can
-/// edit the same farm and the records have to agree.
+/// the order they are held on the phone. It also reads them back, and removes the rows for a
+/// farm or a plot the phone has deleted.
 struct FarmUploader {
     var client: SupabaseClient
 
@@ -39,6 +36,10 @@ struct FarmUploader {
     /// Every row is an upsert keyed on the phone's own ids, so a helper who edits an outline
     /// and publishes again changes the rows rather than adding a second farm.
     func upload(_ farm: Farm) async throws {
+        // The records file every row under whoever wrote it. The column has a default for
+        // that, but a project whose default was never set would leave it null and be turned
+        // away by its own policy, so the id is sent rather than assumed.
+        let writer = try? await client.auth.session.user.id
         let rows = try farm.plots.enumerated().map { index, plot in
             guard let boundary = PlotBoundary.wellKnownText(for: plot.corners) else {
                 throw Failure.noLandMarked
@@ -47,8 +48,97 @@ struct FarmUploader {
         }
         guard !rows.isEmpty else { throw Failure.noLandMarked }
 
-        try await client.from("farms").upsert(FarmRow(farm: farm)).execute()
+        try await client.from("farms").upsert(FarmRow(farm: farm, writer: writer)).execute()
         try await client.from("plots").upsert(rows).execute()
+        // Plots the phone no longer has are rows nobody will replace, so publishing takes
+        // them away rather than leaving land behind that the farm has given up.
+        try await client
+            .from("plots")
+            .delete()
+            .eq("farm_id", value: farm.id)
+            .not("id", operator: .in, value: rows.map(\.id.uuidString))
+            .execute()
+    }
+
+    /// Every farm in the records this account can see, with its plots.
+    ///
+    /// A farm whose plots cannot be read comes back without them rather than not at all, so
+    /// one unreadable boundary does not hide the rest.
+    func fetch() async throws -> [Farm] {
+        let farms: [FetchedFarm] =
+            try await client
+            .from("farms")
+            .select("id, name, farmer_name, created_at")
+            .execute()
+            .value
+        let plots: [FetchedPlot] =
+            try await client
+            .from("plots")
+            .select("id, farm_id, plot_number, boundary")
+            .order("plot_number")
+            .execute()
+            .value
+
+        let byFarm = Dictionary(grouping: plots, by: \.farmID)
+        return farms.map { farm in
+            Farm(
+                id: farm.id,
+                name: farm.name,
+                farmerName: farm.farmerName,
+                plots: (byFarm[farm.id] ?? []).compactMap(\.plot),
+                createdAt: farm.createdAt ?? .now
+            )
+        }
+    }
+
+    /// Takes a farm and its plots out of the records.
+    ///
+    /// The plots go first: a records setup that does not cascade would otherwise keep the
+    /// farm by refusing to let go of the land hanging off it.
+    func delete(_ farm: Farm) async throws {
+        try await client.from("plots").delete().eq("farm_id", value: farm.id).execute()
+        try await client.from("farms").delete().eq("id", value: farm.id).execute()
+    }
+
+    /// Takes one plot out of the records, for a farm that is staying.
+    func delete(_ plot: Plot) async throws {
+        try await client.from("plots").delete().eq("id", value: plot.id).execute()
+    }
+}
+
+/// One `farms` row as it comes back.
+struct FetchedFarm: Decodable {
+    var id: UUID
+    var name: String
+    var farmerName: String
+    var createdAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case id, name
+        case farmerName = "farmer_name"
+        case createdAt = "created_at"
+    }
+}
+
+/// One `plots` row as it comes back, its boundary still in the hex PostGIS hands over.
+struct FetchedPlot: Decodable {
+    var id: UUID
+    var farmID: UUID
+    var plotNumber: Int?
+    var boundary: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, boundary
+        case farmID = "farm_id"
+        case plotNumber = "plot_number"
+    }
+
+    /// nil where the boundary is missing or is not a polygon this phone can draw.
+    var plot: Plot? {
+        guard let boundary, let corners = PlotBoundary.corners(fromHexBinary: boundary) else {
+            return nil
+        }
+        return Plot(id: id, corners: corners)
     }
 }
 
@@ -57,17 +147,22 @@ struct FarmRow: Encodable, Equatable {
     var id: UUID
     var name: String
     var farmerName: String
+    /// Whoever is signed in on this phone. Left out of the row when nobody is, so the column
+    /// keeps whatever default the records give it.
+    var createdBy: UUID?
 
     enum CodingKeys: String, CodingKey {
         case id
         case name
         case farmerName = "farmer_name"
+        case createdBy = "created_by"
     }
 
-    init(farm: Farm) {
+    init(farm: Farm, writer: UUID? = nil) {
         self.id = farm.id
         self.name = farm.name
         self.farmerName = farm.farmerName
+        self.createdBy = writer
     }
 }
 
@@ -79,15 +174,16 @@ struct PlotRow: Encodable, Equatable {
     var farmID: UUID
     var plotNumber: Int
     /// Well-known text, which PostGIS reads into the geography column.
+    ///
+    /// The area is not sent with it: `plots.area_ha` is generated from this boundary by the
+    /// records themselves, and a generated column refuses any value, even the right one.
     var boundary: String
-    var areaHa: Double?
 
     enum CodingKeys: String, CodingKey {
         case id
         case farmID = "farm_id"
         case plotNumber = "plot_number"
         case boundary
-        case areaHa = "area_ha"
     }
 
     init(plot: Plot, farmID: UUID, number: Int, boundary: String) {
@@ -95,6 +191,5 @@ struct PlotRow: Encodable, Equatable {
         self.farmID = farmID
         self.plotNumber = number
         self.boundary = boundary
-        self.areaHa = PlotBoundary.hectares(of: plot.corners)
     }
 }

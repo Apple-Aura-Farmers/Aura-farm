@@ -33,6 +33,15 @@ enum UserRole: String, CaseIterable, Identifiable {
         }
     }
 
+    /// The label `profiles.role` holds, which is snake_case where this enum is camel. A
+    /// label the `user_role` enum does not have is refused by Postgres rather than stored.
+    var recordValue: String {
+        switch self {
+        case .fieldHelper: return "field_helper"
+        case .microscopeOperator: return "microscope_operator"
+        }
+    }
+
     var systemImage: String {
         switch self {
         case .fieldHelper: return "leaf.fill"

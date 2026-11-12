@@ -23,8 +23,8 @@ final class FarmUploaderTests: XCTestCase {
         let json = try encode(
             PlotRow(plot: plot, farmID: farm.id, number: 1, boundary: boundary))
 
-        XCTAssertEqual(
-            Set(json.keys), ["id", "farm_id", "plot_number", "boundary", "area_ha"])
+        // No area_ha: the records generate it from the boundary and reject a value for it.
+        XCTAssertEqual(Set(json.keys), ["id", "farm_id", "plot_number", "boundary"])
     }
 
     func testThePlotKeepsItsOwnIdSoPublishingTwiceDoesNotMakeASecondPlot() {
@@ -35,6 +35,16 @@ final class FarmUploaderTests: XCTestCase {
         XCTAssertEqual(row.id, plot.id)
         XCTAssertEqual(row.farmID, farm.id)
         XCTAssertEqual(row.plotNumber, 2)
+    }
+
+    func testTheWriterIsSentOnlyWhenSomeoneIsSignedIn() throws {
+        let writer = UUID()
+
+        XCTAssertEqual(
+            try encode(FarmRow(farm: farm, writer: writer))["created_by"] as? String,
+            writer.uuidString)
+        // Left out rather than sent as null, so the column keeps its own default.
+        XCTAssertNil(try encode(FarmRow(farm: farm))["created_by"])
     }
 
     func testTheFarmsOwnNameIsSentNowTheFormAsksForOne() {

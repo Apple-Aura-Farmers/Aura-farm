@@ -9,6 +9,10 @@ struct FarmListSheet: View {
     let onAdd: () -> Void
     /// Marking a piece of land before saying which farm it belongs to.
     let onMarkPlot: () -> Void
+    /// Pulling the list down: reads the farms back out of the records.
+    let onRefresh: () async -> Void
+    /// Deleting a farm here and in the records. Called with what went wrong, if anything.
+    let onDelete: (Farm) async -> String?
 
     @Environment(FarmStore.self) private var store
     /// The farm waiting on a yes to being deleted.
@@ -41,10 +45,10 @@ struct FarmListSheet: View {
             presenting: farmToDelete
         ) { farm in
             Button("Delete \(farm.name)", role: .destructive) {
-                store.delete(farm)
+                Task { store.report(await onDelete(farm)) }
             }
         } message: { _ in
-            Text("The farm and its plots will be removed from this phone.")
+            Text("The farm and its plots will be removed from this phone and the records.")
         }
     }
 
@@ -109,6 +113,7 @@ struct FarmListSheet: View {
                 }
             }
         }
+        .refreshable { await onRefresh() }
         .padding()
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
@@ -167,7 +172,9 @@ struct FarmListSheet: View {
         ],
         onOpen: { _ in },
         onAdd: {},
-        onMarkPlot: {}
+        onMarkPlot: {},
+        onRefresh: {},
+        onDelete: { _ in nil }
     )
     .environment(FarmStore(fileURL: nil))
 }

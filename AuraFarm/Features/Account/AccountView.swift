@@ -77,6 +77,17 @@ struct AccountView: View {
             }
             .disabled(isWorking)
         }
+        if let roleProblem = session.roleProblem {
+            Section {
+                Text("The records did not take this phone's role.")
+                Text(roleProblem)
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+            } footer: {
+                Text("Whoever looks after the records can set it for this account instead.")
+            }
+        }
+
         Section {
             Text("Tests you finish can be sent to the farm's records.")
                 .font(.footnote)
@@ -138,6 +149,18 @@ struct AccountView: View {
                 .frame(maxWidth: .infinity)
             }
             .disabled(!canSubmit)
+        }
+
+        Section {
+            Button("Carry on without an account") {
+                run { try await session.signInAnonymously() }
+            }
+            .disabled(isWorking)
+        } footer: {
+            Text(
+                "The records will know this phone but not who is holding it, and the account "
+                    + "cannot be reached from another phone. Only where the project allows it."
+            )
         }
     }
 

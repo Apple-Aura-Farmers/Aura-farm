@@ -26,6 +26,9 @@ final class SupabaseSession {
     }
 
     private(set) var state: State
+    /// Why the last attempt to file this phone's role against the profile was turned away,
+    /// shown on the Account screen because nothing else would say so.
+    private(set) var roleProblem: String?
     private let client: SupabaseClient?
 
     init(client: SupabaseClient? = Cloud.client) {
@@ -71,6 +74,52 @@ final class SupabaseSession {
             email: email.trimmingCharacters(in: .whitespacesAndNewlines),
             password: password
         )
+    }
+
+    /// Signs in without an account, for a phone that has to file something before anyone has
+    /// been given one.
+    ///
+    /// The records see an ordinary signed-in user: Supabase gives an anonymous sign-in the
+    /// `authenticated` role and its own user id, so the policies and the `created_by` default
+    /// work as they do for anybody else. It only works where the project has anonymous
+    /// sign-ins switched on, and the account is tied to this phone alone — there is no way
+    /// back into it from another one.
+    func signInAnonymously() async throws {
+        guard let client else { throw Failure.unavailable }
+        try await client.auth.signInAnonymously()
+    }
+
+    /// Files the role picked on this phone against the signed-in account's profile.
+    ///
+    /// The records decide what a role lets anyone do, and they take this as a claim, not an
+    /// order: a project whose `profiles` policies do not let an account set its own role
+    /// turns it away, and the refusal is kept here rather than thrown, because picking a role
+    /// is not the moment to stop someone who may have no signal.
+    func claimRole(_ role: UserRole) async {
+        guard let client, case .signedIn(let userID, _) = state else { return }
+        do {
+            // Asking for the changed rows back, because a row-level security policy that
+            // turns this away does not fail: it simply matches nothing, and a silent refusal
+            // would be found much later, as a farm that cannot be published.
+            let changed: [ProfileRow] =
+                try await client
+                .from("profiles")
+                .update(["role": role.recordValue])
+                .eq("id", value: userID)
+                .select("id")
+                .execute()
+                .value
+            roleProblem =
+                changed.isEmpty
+                ? "This account is not allowed to set its own role." : nil
+        } catch {
+            roleProblem = error.localizedDescription
+        }
+    }
+
+    /// Just enough of `profiles` to tell a row that changed from one that was refused.
+    private struct ProfileRow: Decodable {
+        var id: UUID
     }
 
     func signOut() async throws {

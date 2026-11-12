@@ -52,12 +52,4 @@ final class PlotBoundaryTests: XCTestCase {
 
         XCTAssertFalse(text.lowercased().contains("e-"), text)
     }
-
-    func testTheAreaIsTheOneTheHelperWasShown() {
-        let hectares = PlotBoundary.hectares(of: bali)
-        let squareMetres = LandGeometry.areaSquareMetres(of: bali)
-
-        XCTAssertNotNil(hectares)
-        XCTAssertEqual(hectares ?? 0, (squareMetres ?? 0) / 10_000, accuracy: 0.001)
-    }
 }

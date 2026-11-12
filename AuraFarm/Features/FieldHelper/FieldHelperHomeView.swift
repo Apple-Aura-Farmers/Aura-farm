@@ -98,6 +98,8 @@ struct FieldHelperHomeView: View {
         // A new map when farms are added, deleted or reshaped, so it refits to them.
         .id(store.farms.flatMap(\.allCorners))
         .ignoresSafeArea()
+        // Reads the records once when the map appears; after that it is the pull on the list.
+        .task { await refresh() }
         // Runs on first showing, whenever a pushed page is popped back, and again whenever the
         // map is rebuilt for a change to the farms. Only the first two should raise the sheet:
         // editing a plot changes the farms while the farm's page is still open, and the sheet
@@ -110,7 +112,9 @@ struct FieldHelperHomeView: View {
                 farms: sortedFarms,
                 onOpen: { request(.open($0.id)) },
                 onAdd: { request(.add) },
-                onMarkPlot: { request(.markPlot) }
+                onMarkPlot: { request(.markPlot) },
+                onRefresh: refresh,
+                onDelete: delete
             )
             .presentationDetents([Self.collapsed, .medium, .large], selection: $listDetent)
             // The map stays tappable until the sheet is pulled past half height.
@@ -164,6 +168,33 @@ struct FieldHelperHomeView: View {
                 .padding(.horizontal, 72)
                 .padding(.top, 8)
         }
+    }
+
+    // MARK: The records
+
+    /// Reads the farms back, for the pull on the list and for opening the screen.
+    private func refresh() async {
+        guard let uploader = FarmUploader() else { return }
+        do {
+            store.merge(try await uploader.fetch())
+            store.report(nil)
+        } catch {
+            store.report(error.localizedDescription)
+        }
+    }
+
+    /// Takes a farm out of the records first, and off this phone only once that has gone
+    /// through: a farm deleted here but left there would come back with the next pull.
+    private func delete(_ farm: Farm) async -> String? {
+        if let uploader = FarmUploader() {
+            do {
+                try await uploader.delete(farm)
+            } catch {
+                return error.localizedDescription
+            }
+        }
+        store.delete(farm)
+        return nil
     }
 
     // MARK: Closing the sheet before doing something else

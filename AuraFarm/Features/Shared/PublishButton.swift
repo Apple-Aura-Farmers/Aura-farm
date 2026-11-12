@@ -1,9 +1,11 @@
 import SwiftUI
 
-/// Sends something to the farm's records, and asks for the sign-in that needs first.
+/// Sends something to the farm's records, and offers the sign-in that usually needs.
 ///
-/// Every row the app writes is filed under whoever wrote it, so nothing can be published by
-/// a phone nobody is signed in on. Rather than hide the button, it offers the sign-in.
+/// Every row the app writes is filed under whoever wrote it, so a signed-out phone normally
+/// has nothing to file under. It may still try: whether a row is taken is the table's own
+/// policies to decide, and their refusal is worth reading rather than guessing at. So the
+/// send is offered either way and the sign-in sits beside it.
 struct PublishButton: View {
     var title: String
     /// What to send. Anything thrown is shown under the button, and the send can be tried
@@ -30,9 +32,9 @@ struct PublishButton: View {
             case .loading:
                 ProgressView()
             case .signedOut:
-                tap("Sign in to publish", systemImage: "person.crop.circle") {
-                    isShowingAccount = true
-                }
+                publish
+                Button("Sign in first") { isShowingAccount = true }
+                    .font(.footnote)
             case .signedIn:
                 publish
             }
