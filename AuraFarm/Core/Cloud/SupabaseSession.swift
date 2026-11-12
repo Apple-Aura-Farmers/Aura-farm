@@ -26,6 +26,9 @@ final class SupabaseSession {
     }
 
     private(set) var state: State
+    /// Why the last attempt to file this phone's role against the profile was turned away,
+    /// shown on the Account screen because nothing else would say so.
+    private(set) var roleProblem: String?
     private let client: SupabaseClient?
 
     init(client: SupabaseClient? = Cloud.client) {
@@ -71,6 +74,66 @@ final class SupabaseSession {
             email: email.trimmingCharacters(in: .whitespacesAndNewlines),
             password: password
         )
+    }
+
+    /// Signs in without an account, under the name the person gave and the job they picked.
+    ///
+    /// The records see an ordinary signed-in user: Supabase gives an anonymous sign-in the
+    /// `authenticated` role and its own user id, so the policies and the `created_by` default
+    /// work as they do for anybody else. The name and role travel as metadata, which is where
+    /// the `create_profile_for_new_user` trigger reads them to make the profile every policy
+    /// then asks about.
+    ///
+    /// It only works where the project has anonymous sign-ins switched on, and the account is
+    /// tied to this phone alone — there is no way back into it from another one.
+    func signInAnonymously(name: String = "", role: UserRole? = nil) async throws {
+        guard let client else { throw Failure.unavailable }
+        var metadata: [String: AnyJSON] = [:]
+        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !name.isEmpty { metadata["full_name"] = .string(name) }
+        if let role { metadata["role"] = .string(role.recordValue) }
+        try await client.auth.signInAnonymously(data: metadata.isEmpty ? nil : metadata)
+    }
+
+    /// Files the name and role this phone goes by against the signed-in account's profile.
+    ///
+    /// The records decide what a role lets anyone do, and they take this as a claim, not an
+    /// order: a project whose `profiles` policies do not let an account set its own role
+    /// turns it away, and the refusal is kept here rather than thrown, because picking a role
+    /// is not the moment to stop someone who may have no signal.
+    func claim(_ role: UserRole, name: String = "") async {
+        guard let client, case .signedIn(let userID, _) = state else { return }
+        var fields: [String: AnyJSON] = ["role": .string(role.recordValue)]
+        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !name.isEmpty { fields["full_name"] = .string(name) }
+        do {
+            // Asking for the changed rows back, because a row-level security policy that
+            // turns this away does not fail: it simply matches nothing, and a silent refusal
+            // would be found much later, as a farm that cannot be published.
+            let changed: [ProfileRow] =
+                try await client
+                .from("profiles")
+                .update(fields)
+                .eq("id", value: userID)
+                .select("id")
+                .execute()
+                .value
+            // Nothing changed means either there is no profile row to change, which is what
+            // an account made before the records' trigger existed looks like, or there is one
+            // and this account may not write to it. The row is the likelier of the two and
+            // the one somebody can act on, so it is named first.
+            roleProblem =
+                changed.isEmpty
+                ? "This account has no profile in the records, or may not set its own role."
+                : nil
+        } catch {
+            roleProblem = error.localizedDescription
+        }
+    }
+
+    /// Just enough of `profiles` to tell a row that changed from one that was refused.
+    private struct ProfileRow: Decodable {
+        var id: UUID
     }
 
     func signOut() async throws {
