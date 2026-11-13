@@ -32,6 +32,7 @@ private struct HomeTab: View {
     @State private var isRecording = false
     @State private var sweeps: [SavedSweep] = []
     @State private var isReadingNotices = false
+    @State private var isShowingAccount = false
     /// The sweep the camera just saved, to show its result.
     @State private var finishedSweep: SavedSweep?
 
@@ -64,6 +65,13 @@ private struct HomeTab: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     NoticesButton(notices: notices) { isReadingNotices = true }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        isShowingAccount = true
+                    } label: {
+                        Label("Account", systemImage: "person.crop.circle")
+                    }
                 }
                 if let onSwitchRole {
                     ToolbarItem(placement: .topBarLeading) {
@@ -109,6 +117,9 @@ private struct HomeTab: View {
             }
             .sheet(isPresented: $isReadingNotices) {
                 NoticesView(notices: notices)
+            }
+            .sheet(isPresented: $isShowingAccount) {
+                AccountView()
             }
             .sheet(isPresented: $isNaming) {
                 NewTestView(details: $details) {
@@ -191,4 +202,5 @@ extension SampleDetails {
 #Preview {
     HomeView()
         .environment(FarmStore(fileURL: nil))
+        .environment(SupabaseSession(client: nil))
 }

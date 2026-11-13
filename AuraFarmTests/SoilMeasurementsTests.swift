@@ -63,7 +63,7 @@ final class SoilMeasurementsTests: XCTestCase {
     }
 
     func testFarmWithSoilSurvivesSavingAndLoading() throws {
-        var farm = Farm(farmerName: "Pak Wayan", corners: [])
+        var farm = Farm(name: "Subak Jatiluwih", farmerName: "Pak Wayan")
         farm.soil = SoilMeasurements(nitrogen: 100, ph: 6.5, fertilizerProduct: "Compost")
         let data = try JSONEncoder().encode(farm)
         let loaded = try JSONDecoder().decode(Farm.self, from: data)

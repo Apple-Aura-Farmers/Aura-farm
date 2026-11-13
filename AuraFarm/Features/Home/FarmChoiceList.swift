@@ -22,7 +22,9 @@ struct FarmChoiceList: View {
                 ContentUnavailableView(
                     "No farms yet",
                     systemImage: "leaf",
-                    description: Text("Farms are added on the Field Helper side. Once one has been added, it shows up here.")
+                    description: Text(
+                        "Farms are added on the Field Helper side. Once one has been added, it shows up here."
+                    )
                 )
             } else {
                 List(matching) { farm in
@@ -46,16 +48,24 @@ struct FarmChoiceList: View {
 
     private var matching: [Farm] {
         store.farms
-            .filter { search.isEmpty || $0.farmerName.localizedStandardContains(search) }
-            .sorted { $0.farmerName.localizedStandardCompare($1.farmerName) == .orderedAscending }
+            .filter {
+                search.isEmpty
+                    || $0.name.localizedStandardContains(search)
+                    || $0.farmerName.localizedStandardContains(search)
+            }
+            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
 
     private func row(for farm: Farm) -> some View {
         HStack(spacing: 14) {
-            FarmOutlineThumbnail(corners: farm.corners)
+            // The first plot stands for the farm, the way the farm list draws it.
+            FarmOutlineThumbnail(corners: farm.plots.first?.corners ?? [])
             VStack(alignment: .leading, spacing: 2) {
-                Text(farm.farmerName)
+                Text(farm.name)
                     .font(.headline)
+                Text(farm.farmerName)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
                 if let area = farm.areaSquareMetres {
                     Text(LandGeometry.hectaresDescription(squareMetres: area))
                         .font(.subheadline)
@@ -83,11 +93,14 @@ struct FarmChoiceList: View {
             fileURL: nil,
             farms: [
                 Farm(
+                    name: "Subak Jatiluwih",
                     farmerName: "Pak Wayan",
-                    corners: [
-                        GeoPoint(latitude: -8.4095, longitude: 115.1889),
-                        GeoPoint(latitude: -8.4095, longitude: 115.1900),
-                        GeoPoint(latitude: -8.4105, longitude: 115.1896),
+                    plots: [
+                        Plot(corners: [
+                            GeoPoint(latitude: -8.4095, longitude: 115.1889),
+                            GeoPoint(latitude: -8.4095, longitude: 115.1900),
+                            GeoPoint(latitude: -8.4105, longitude: 115.1896),
+                        ])
                     ])
             ]))
 }

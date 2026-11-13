@@ -35,6 +35,7 @@ struct CaptureView: View {
                 Spacer(minLength: 0)
                 caption
                 if showNumbers { numbersReadout }
+                edgeButton
                 focusSlider
                 captureButton
             }
@@ -126,9 +127,7 @@ struct CaptureView: View {
                 if model.recorder.isSweeping {
                     SweepGuide(
                         progress: model.sweepProgress,
-                        direction: FrameSweep.direction(
-                            afterKeeping: model.sweepProgress.kept,
-                            framesPerRow: model.sweepProgress.framesPerRow)
+                        direction: sweepDirection
                     )
                     .offset(y: diameter / 2 + 44)
                 }
@@ -138,6 +137,12 @@ struct CaptureView: View {
         .ignoresSafeArea()
         .accessibilityElement(children: .combine)
         .accessibilityLabel(ringLabel)
+    }
+
+    /// Which way the prompt is sending the slide, for the arrow on the guide bar.
+    private var sweepDirection: SweepDirection {
+        if case .move(let direction, _, _) = model.sweepPrompt { return direction }
+        return .right
     }
 
     private var ringLabel: String {
@@ -200,7 +205,7 @@ struct CaptureView: View {
             } else if model.recorder.isSweeping {
                 let progress = model.sweepProgress
                 Text(
-                    "\(progress.kept) of \(progress.total) frames saved · row \(progress.row) of \(progress.rowCount)"
+                    "\(progress.kept) of \(progress.total) frames saved · row \(progress.row)"
                 )
                 .font(.footnote)
                 .foregroundStyle(.secondary)
@@ -279,6 +284,24 @@ struct CaptureView: View {
             .accessibilityLabel("Focus")
         }
         .foregroundStyle(.secondary)
+    }
+
+    /// Tapped when the straight line of the cover slip's edge comes into view. The app
+    /// cannot find that line itself, and the helper is looking right at it.
+    @ViewBuilder
+    private var edgeButton: some View {
+        if model.recorder.isSweeping {
+            Button {
+                model.reachedTheEdge()
+            } label: {
+                Label("At the edge", systemImage: "arrow.turn.down.left")
+                    .font(.subheadline.bold())
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(Capsule().fill(.thinMaterial))
+            }
+            .foregroundStyle(.white)
+        }
     }
 
     /// The shutter: a red circle to start the sweep, a square to stop it, the way a camera

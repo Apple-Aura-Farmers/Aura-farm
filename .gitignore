@@ -43,7 +43,9 @@ DerivedData/
 .build/
 .swiftpm/
 Packages/
-Package.resolved
+# Package.resolved is tracked on purpose. The Supabase client brings seven more packages with
+# it, and the version range in the project file would otherwise resolve differently on CI and
+# on a teammate's machine.
 
 # Claude Code local settings
 .claude/

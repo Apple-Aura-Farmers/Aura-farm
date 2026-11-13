@@ -41,6 +41,24 @@ final class FarmStore {
         save()
     }
 
+    /// Takes in what the records hold.
+    ///
+    /// A farm in both is replaced by the records' copy, which is the one every other phone
+    /// can see. A farm only this phone has is left alone rather than swept away, because it
+    /// is one nobody has published yet, not one somebody deleted.
+    func merge(_ records: [Farm]) {
+        var byID: [UUID: Farm] = [:]
+        for farm in farms { byID[farm.id] = farm }
+        for farm in records { byID[farm.id] = farm }
+        farms = byID.values.sorted { $0.createdAt < $1.createdAt }
+        save()
+    }
+
+    /// Says what went wrong somewhere else, so the one banner on the map can show it.
+    func report(_ problem: String?) {
+        self.problem = problem
+    }
+
     private func load() {
         guard let fileURL, FileManager.default.fileExists(atPath: fileURL.path) else { return }
         do {

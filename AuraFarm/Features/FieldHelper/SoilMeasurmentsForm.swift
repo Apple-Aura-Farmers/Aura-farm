@@ -145,11 +145,14 @@ struct SoilMeasurementsForm: View {
 #Preview {
     SoilMeasurementsForm(
         farm: Farm(
+            name: "Subak Jatiluwih",
             farmerName: "Pak Wayan",
-            corners: [
-                GeoPoint(latitude: -8.4095, longitude: 115.1889),
-                GeoPoint(latitude: -8.4095, longitude: 115.1900),
-                GeoPoint(latitude: -8.4105, longitude: 115.1896),
+            plots: [
+                Plot(corners: [
+                    GeoPoint(latitude: -8.4095, longitude: 115.1889),
+                    GeoPoint(latitude: -8.4095, longitude: 115.1900),
+                    GeoPoint(latitude: -8.4105, longitude: 115.1896),
+                ])
             ])
     )
     .environment(FarmStore(fileURL: nil))

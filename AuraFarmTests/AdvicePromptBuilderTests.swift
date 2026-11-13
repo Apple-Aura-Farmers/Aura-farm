@@ -255,7 +255,8 @@ final class AdvicePromptBuilderTests: XCTestCase {
         fertilizerKilogramsPerHectare: 50)
 
     func testSoilMeasurementsAreOneBackgroundLineAfterTheSampleLines() {
-        let prompt = AdvicePromptBuilder.prompt(for: context(["paramecium": 9, "euglena": 6], soil: fullSoil))
+        let prompt = AdvicePromptBuilder.prompt(
+            for: context(["paramecium": 9, "euglena": 6], soil: fullSoil))
         let lines = prompt.split(separator: "\n")
 
         XCTAssertEqual(
@@ -268,7 +269,8 @@ final class AdvicePromptBuilderTests: XCTestCase {
     }
 
     func testTheStandardsGuidanceAndTheFertilizerNeverReachThePrompt() {
-        let prompt = AdvicePromptBuilder.prompt(for: context(["paramecium": 9, "euglena": 6], soil: fullSoil))
+        let prompt = AdvicePromptBuilder.prompt(
+            for: context(["paramecium": 9, "euglena": 6], soil: fullSoil))
 
         XCTAssertFalse(prompt.contains("Urea"))
         XCTAssertFalse(prompt.contains("kg per"))

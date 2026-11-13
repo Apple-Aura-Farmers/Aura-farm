@@ -42,7 +42,8 @@ struct SoilInputs: Codable, Equatable, Hashable {
     /// The filled-in measurements, in a fixed order.
     var readings: [Reading] {
         var readings: [Reading] = []
-        func add(_ name: String, _ short: String, _ value: Double?, _ unit: String, _ standard: SoilStandard) {
+        func add(_ name: String, _ short: String, _ value: Double?, _ unit: String, _ standard: SoilStandard)
+        {
             guard let value else { return }
             readings.append(
                 Reading(

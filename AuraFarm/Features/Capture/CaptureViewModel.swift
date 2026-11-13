@@ -96,6 +96,16 @@ final class CaptureViewModel: NSObject {
     }
 
     /// Ends the sweep early. The frames already written are kept and their manifest is saved.
+    /// The helper can see the edge of the cover slip, so the row ends here and the next
+    /// frame starts the row below.
+    func reachedTheEdge() {
+        analysisQueue.async { [weak self] in
+            guard let self, self.sweepActive else { return }
+            self.sweep.reachedTheEdge()
+            self.publishPrompt(self.sweep.prompt, self.sweep.progress)
+        }
+    }
+
     func endSweep() {
         analysisQueue.async { [weak self] in
             guard let self, self.sweepActive else { return }

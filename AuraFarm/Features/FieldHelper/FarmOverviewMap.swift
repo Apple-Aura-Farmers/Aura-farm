@@ -8,8 +8,9 @@
 import MapKit
 import SwiftUI
 
-/// Every saved farm on one satellite map. Tapping a farm's land, or its name, opens that farm.
-/// Plain imagery with no road or place labels, so the farms are the only thing drawn on it.
+/// Every saved farm on one satellite map, a shape for each of its plots. Tapping a farm's land,
+/// or its name, opens that farm. Plain imagery with no road or place labels, so the farms are
+/// the only thing drawn on it.
 struct FarmsOverviewMap: View {
     let farms: [Farm]
     /// Called with the farm the helper tapped.
@@ -19,15 +20,17 @@ struct FarmsOverviewMap: View {
         MapReader { proxy in
             Map(initialPosition: initialPosition) {
                 ForEach(farms) { farm in
-                    MapPolygon(coordinates: farm.corners.map(\.coordinate))
-                        .foregroundStyle(.green.opacity(0.35))
-                        .stroke(.white, lineWidth: 2)
-                    if let middle = LandGeometry.centre(of: farm.corners) {
-                        Annotation(farm.farmerName, coordinate: middle.coordinate, anchor: .center) {
+                    ForEach(farm.plots) { plot in
+                        MapPolygon(coordinates: plot.corners.map(\.coordinate))
+                            .foregroundStyle(.green.opacity(0.35))
+                            .stroke(.white, lineWidth: 2)
+                    }
+                    if let middle = LandGeometry.centre(of: farm.allCorners) {
+                        Annotation(farm.name, coordinate: middle.coordinate, anchor: .center) {
                             Button {
                                 onOpen(farm)
                             } label: {
-                                Text(farm.farmerName)
+                                Text(farm.name)
                                     .font(.caption2.bold())
                                     .foregroundStyle(.white)
                                     .padding(.horizontal, 8)
@@ -53,17 +56,22 @@ struct FarmsOverviewMap: View {
         }
     }
 
-    /// The farm whose land contains the spot. Where outlines overlap, the smaller farm wins,
-    /// so a small plot inside a big one can still be reached.
+    /// The farm with a plot containing the spot. Where plots overlap, the smaller one wins, so
+    /// a small plot inside a big one can still be reached.
     private func farm(at spot: GeoPoint) -> Farm? {
         farms
-            .filter { LandGeometry.contains(spot, in: $0.corners) }
-            .min { ($0.areaSquareMetres ?? 0) < ($1.areaSquareMetres ?? 0) }
+            .flatMap { farm in
+                farm.plots
+                    .filter { LandGeometry.contains(spot, in: $0.corners) }
+                    .map { (farm: farm, area: $0.areaSquareMetres ?? 0) }
+            }
+            .min { $0.area < $1.area }?
+            .farm
     }
 
     /// Opens with every farm in view.
     private var initialPosition: MapCameraPosition {
-        guard let region = LandGeometry.region(fitting: farms.flatMap(\.corners)) else {
+        guard let region = LandGeometry.region(fitting: farms.flatMap(\.allCorners)) else {
             return .automatic
         }
         return .region(region)
@@ -74,20 +82,26 @@ struct FarmsOverviewMap: View {
     FarmsOverviewMap(
         farms: [
             Farm(
+                name: "Subak Jatiluwih",
                 farmerName: "Pak Wayan",
-                corners: [
-                    GeoPoint(latitude: -8.4095, longitude: 115.1889),
-                    GeoPoint(latitude: -8.4095, longitude: 115.1900),
-                    GeoPoint(latitude: -8.4105, longitude: 115.1900),
-                    GeoPoint(latitude: -8.4105, longitude: 115.1889),
+                plots: [
+                    Plot(corners: [
+                        GeoPoint(latitude: -8.4095, longitude: 115.1889),
+                        GeoPoint(latitude: -8.4095, longitude: 115.1900),
+                        GeoPoint(latitude: -8.4105, longitude: 115.1900),
+                        GeoPoint(latitude: -8.4105, longitude: 115.1889),
+                    ])
                 ]),
             Farm(
+                name: "Carik Kaja",
                 farmerName: "Ibu Made",
-                corners: [
-                    GeoPoint(latitude: -8.4095, longitude: 115.1905),
-                    GeoPoint(latitude: -8.4095, longitude: 115.1920),
-                    GeoPoint(latitude: -8.4108, longitude: 115.1920),
-                    GeoPoint(latitude: -8.4108, longitude: 115.1905),
+                plots: [
+                    Plot(corners: [
+                        GeoPoint(latitude: -8.4095, longitude: 115.1905),
+                        GeoPoint(latitude: -8.4095, longitude: 115.1920),
+                        GeoPoint(latitude: -8.4108, longitude: 115.1920),
+                        GeoPoint(latitude: -8.4108, longitude: 115.1905),
+                    ])
                 ]),
         ],
         onOpen: { _ in }
