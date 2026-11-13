@@ -34,6 +34,12 @@ struct ViewClassifierThresholds {
 
 /// Says what the registration box shows: sample, thin sample, blank glass, blur or too dark.
 ///
+/// Blank and blurry are told apart by brightness alone, and that only works when the glass
+/// outside the sample is brighter than the sample. On soil slides it is not: the sample
+/// background and the area outside the cover slip were equally bright (211 vs 211 in E1), so
+/// low detail outside the cover slip reads as blurry. That is why `SlideRoute` treats every
+/// low-detail class (blank, blurry, dark) as the edge and does not rely on this one.
+///
 /// Contrast is accepted and logged by callers but NOT used here: whole-frame contrast was
 /// meaningless because of the eyepiece ring, and box contrast is unproven.
 struct ViewClassifier {

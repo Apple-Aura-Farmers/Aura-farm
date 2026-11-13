@@ -18,8 +18,11 @@ struct SpotAlignmentThresholds {
     var wrongWayFields: Double = 0.3
     /// The same as `MovementIndicatorThresholds.tooFastSpeedFraction`.
     var tooFastSpeedFraction: Double = 0.18
-    /// Blurry readings in a row before asking for a refocus.
-    var readingsForRefocus: Int = 3
+    /// How long the view must read blurry, without a break, before asking for a refocus. Keep
+    /// above `GuidedSweepThresholds.edgeSeconds`: low detail is first of all the sample's edge,
+    /// and the route must get to say so before this says refocus. PLACEHOLDER: not calibrated;
+    /// the E1 soil run flickered in and out of low detail for 0.3 to 1.6 s at the edge.
+    var refocusSeconds: Double = 1.0
 }
 
 /// Judges one target against the readings: how far, which way, whether the helper is holding
@@ -38,7 +41,8 @@ struct SpotAlignment {
     private var leastDistance = Double.infinity
     private var holdStartedAt: Double?
     private var hasCaptured = false
-    private var blurryStreak = 0
+    /// When the current unbroken run of blurry readings began.
+    private var blurrySince: Double?
 
     init(thresholds: SpotAlignmentThresholds = SpotAlignmentThresholds()) {
         self.thresholds = thresholds
@@ -64,6 +68,7 @@ struct SpotAlignment {
         distance = .infinity
         holdStartedAt = nil
         hasCaptured = false
+        blurrySince = nil
     }
 
     mutating func clearTarget() {
@@ -72,11 +77,21 @@ struct SpotAlignment {
         holdStartedAt = nil
     }
 
-    /// Refocus or slow down, when either applies. Also keeps the blur streak, so call it on
+    /// Refocus or slow down, when either applies. Also keeps the blur stretch, so call it on
     /// every reading.
-    mutating func warning(_ reading: GuideReading) -> GuideInstruction? {
-        blurryStreak = reading.viewClass == .blurry ? blurryStreak + 1 : 0
-        if blurryStreak >= thresholds.readingsForRefocus { return .refocus }
+    /// - Parameter allowsRefocus: false while travelling to an edge or looking for the sample,
+    ///   where low detail means the edge, not a focus problem; then only slow down is returned.
+    mutating func warning(_ reading: GuideReading, allowsRefocus: Bool = true) -> GuideInstruction? {
+        if reading.viewClass == .blurry {
+            blurrySince = blurrySince ?? reading.seconds
+        } else {
+            blurrySince = nil
+        }
+        if allowsRefocus, let blurrySince,
+            reading.seconds - blurrySince >= thresholds.refocusSeconds - 1e-9
+        {
+            return .refocus
+        }
         if reading.speedFraction >= thresholds.tooFastSpeedFraction || reading.tracking == .lost {
             return .slowDown
         }

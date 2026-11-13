@@ -7,9 +7,20 @@ struct GuidedSweepThresholds {
     var spotSpacingFields: Double = 0.8
     /// Between columns, in fields.
     var columnSpacingFields: Double = 0.8
-    /// Consecutive readings of blank, or of tracking paused, while heading toward an edge
-    /// before calling it the edge.
-    var edgeReadings: Int = 3
+    /// How long the view must show low detail, without a break, before it counts as the edge.
+    /// PLACEHOLDER, from E1 (soil, cover slip edge): the edge zone flickered in and out of low
+    /// detail for 0.6 s and 1.6 s before the solid stretch, and the interior flickered once for
+    /// 0.3 s. 0.8 s ignores the interior flicker and the first edge flicker.
+    var edgeSeconds: Double = 0.8
+    /// How long detail must hold before a low-detail stretch counts as over, so a single
+    /// reading of detail between two short low stretches (crossing a hole, a flickering edge)
+    /// does not restart the timer. About the tracker's 3 readings to see detail again.
+    /// PLACEHOLDER: not calibrated; E1's edge flicker had 0.4 s of detail between stretches.
+    var edgeRecoverySeconds: Double = 0.2
+    /// After the edge was found, how long low detail may last on the way back before the
+    /// guide says "still no detail" (and refocus becomes a fair suggestion). PLACEHOLDER: a
+    /// 1 mm trip back over blank glass at the slow speed (about 0.5 mm/s) takes about 2 s.
+    var refocusAfterSeconds: Double = 6.0
     /// A spot within this of an existing capture is passed without stopping.
     var duplicateSpotFields: Double = 0.4
     /// Spots to move inward along the previous column after a failed step right.
@@ -86,7 +97,10 @@ struct SlideRoute {
     private var columns: [Column] = []
     private var current: Column?
     private var lastSample: CGPoint?
-    private var edgeStreak = 0
+    /// When the current unbroken run of low-detail readings began.
+    private var lowDetailSince: Double?
+    /// When the run of detail readings that may end the stretch began.
+    private var detailSince: Double?
     private var heading = CGPoint(x: -1, y: 0)
     private var leftEdgeY = 0.0
     private var isRecheckRun = false
@@ -141,14 +155,23 @@ struct SlideRoute {
                 current = column
             }
         }
-        let blankNow = reading.viewClass == .blank || reading.tracking == .paused
-        edgeStreak = blankNow ? edgeStreak + 1 : 0
+        if Self.isLowDetail(reading) {
+            lowDetailSince = lowDetailSince ?? reading.seconds
+            detailSince = nil
+        } else if lowDetailSince != nil {
+            detailSince = detailSince ?? reading.seconds
+            if reading.seconds - (detailSince ?? reading.seconds) >= thresholds.edgeRecoverySeconds - 1e-9 {
+                lowDetailSince = nil
+                detailSince = nil
+            }
+        }
 
         switch phase {
         case .finished:
             return Output(instruction: .finished, target: nil, capture: nil)
         case .findSample:
-            if let warning = alignment.warning(reading) { return plain(warning) }
+            let warning = alignment.warning(reading, allowsRefocus: false)
+            if !Self.isLowDetail(reading), let warning { return plain(warning) }
             guard onSample else { return plain(.findSample) }
             phase = .runToLeftEdge
             heading = CGPoint(x: -1, y: 0)
@@ -158,7 +181,7 @@ struct SlideRoute {
         case .runToLeftEdge:
             return runToLeftEdge(reading)
         case .returning(let purpose):
-            guard onSample else { return plain(goBack(reading)) }
+            guard onSample else { return plain(returning(reading)) }
             return completeReturn(purpose, reading)
         case .spot(let kind):
             return spot(kind, reading)
@@ -169,6 +192,19 @@ struct SlideRoute {
         reading.tracking == .tracking && (reading.viewClass == .sample || reading.viewClass == .thin)
     }
 
+    /// Too little detail to follow, whatever the class: blank glass, blur, dark, or the tracker
+    /// paused (NO DETAIL). On soil the sample background is as bright as the glass outside the
+    /// cover slip, so outside reads as blurry, not blank; all of these mean the edge.
+    private static func isLowDetail(_ reading: GuideReading) -> Bool {
+        reading.tracking == .paused || [.blank, .blurry, .dark].contains(reading.viewClass)
+    }
+
+    /// Low detail has lasted `edgeSeconds`: this is the edge.
+    private func edgeReached(_ reading: GuideReading) -> Bool {
+        guard Self.isLowDetail(reading), let lowDetailSince else { return false }
+        return reading.seconds - lowDetailSince >= thresholds.edgeSeconds - 1e-9
+    }
+
     private func plain(_ instruction: GuideInstruction) -> Output {
         Output(instruction: instruction, target: nil, capture: nil)
     }
@@ -176,11 +212,11 @@ struct SlideRoute {
     // MARK: Left edge
 
     private mutating func runToLeftEdge(_ reading: GuideReading) -> Output {
-        if let warning = alignment.warning(reading) { return plain(warning) }
-        if edgeStreak >= thresholds.edgeReadings {
+        if edgeReached(reading) {
             beginReturn(.leftEdge)
             return plain(goBack(reading))
         }
+        if let warning = alignment.warning(reading, allowsRefocus: false) { return plain(warning) }
         return plain(.travel(direction: CGPoint(x: -1, y: 0)))
     }
 
@@ -188,7 +224,19 @@ struct SlideRoute {
 
     private mutating func beginReturn(_ purpose: Purpose) {
         phase = .returning(purpose)
-        edgeStreak = 0
+        lowDetailSince = nil
+        detailSince = nil
+    }
+
+    /// While going back: the same as `goBack`, until low detail has lasted `refocusAfterSeconds`.
+    private func returning(_ reading: GuideReading) -> GuideInstruction {
+        let back = goBack(reading)
+        if let lowDetailSince, case .edgeGoBack(let toward) = back,
+            reading.seconds - lowDetailSince > thresholds.refocusAfterSeconds
+        {
+            return .stillNoDetail(toward: toward)
+        }
+        return back
     }
 
     /// Toward the last spot with sample. The position is frozen while the tracker is paused,
@@ -244,6 +292,9 @@ struct SlideRoute {
     private mutating func aim(at point: CGPoint, from start: CGPoint, kind: SpotKind, holds: Bool) {
         alignment.setTarget(point, from: start, holds: holds)
         phase = .spot(kind)
+        // A low-detail stretch from the last spot says nothing about the way to this one.
+        lowDetailSince = nil
+        detailSince = nil
         travelRetries = 0
         let dx = Double(point.x - start.x)
         let dy = Double(point.y - start.y)
@@ -270,7 +321,7 @@ struct SlideRoute {
     private mutating func spot(_ kind: SpotKind, _ reading: GuideReading) -> Output {
         guard let target = alignment.target else { return plain(.aligned) }
 
-        if edgeStreak >= thresholds.edgeReadings {
+        if edgeReached(reading) {
             switch kind {
             case .leg, .edgeSpot:
                 beginReturn(.legEnd)
@@ -337,7 +388,8 @@ struct SlideRoute {
             isRecheckRun = true
             heading = CGPoint(x: -1, y: 0)
             leftEdgeY = Double(reading.position.y)
-            edgeStreak = 0
+            lowDetailSince = nil
+            detailSince = nil
             return plain(.travel(direction: CGPoint(x: -1, y: 0)))
         }
     }

@@ -76,12 +76,24 @@ final class SpotAlignmentTests: XCTestCase {
 
     func testPriorityRefocusThenSlowDownThenTheRest() {
         var alignment = aimed()
-        for _ in 0..<2 { _ = alignment.update(reading(2.6, viewClass: .blurry)) }
-        // Blurry for 3 readings beats slow down, too far and holding.
-        XCTAssertEqual(alignment.update(reading(2.6, speed: 0.5, viewClass: .blurry)), .refocus)
+        for index in 0..<2 {
+            _ = alignment.update(reading(2.6, at: Double(index) * 0.4, viewClass: .blurry))
+        }
+        // Blurry for `refocusSeconds` beats slow down, too far and holding.
+        XCTAssertEqual(
+            alignment.update(reading(2.6, at: 1.0, speed: 0.5, viewClass: .blurry)), .refocus)
         XCTAssertEqual(alignment.update(reading(2.6, speed: 0.5)), .slowDown)
         XCTAssertEqual(alignment.update(reading(2.6, tracking: .lost)), .slowDown)
         XCTAssertEqual(alignment.update(reading(2.6)), .tooFar)
+    }
+
+    func testABlurryStretchShorterThanTheRefocusTimeIsNotRefocus() {
+        var alignment = aimed()
+        for index in 0..<8 {
+            let instruction = alignment.update(reading(1.0, at: Double(index) * 0.1, viewClass: .blurry))
+            XCTAssertNotEqual(instruction, .refocus)
+        }
+        XCTAssertNil(alignment.warning(reading(1.0, at: 0.9, viewClass: .blurry), allowsRefocus: false))
     }
 
     func testATargetToPassThroughIsNeverCaptured() {

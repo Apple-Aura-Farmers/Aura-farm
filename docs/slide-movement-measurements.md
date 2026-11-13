@@ -188,7 +188,7 @@ empty when not available:
 | `blank_return` | `matched` or `unmatched` on the frame where it was decided |
 | `view_class` | Guide dry run: `sample`, `thin`, `blank`, `blurry` or `dark` |
 | `guide_state` | Guide dry run: the route step, for example `column 3 down` |
-| `guide_instruction` | Guide dry run: `move`, `holding`, `captured`, `edge_go_back` and so on |
+| `guide_instruction` | Guide dry run: `move`, `holding`, `captured`, `edge_go_back`, `still_no_detail` and so on |
 | `guide_target_dx`, `guide_target_dy` | Guide dry run: the vector to the target in fields, screen axes |
 | `guide_captures` | Guide dry run: frames it would have captured so far |
 
@@ -346,3 +346,27 @@ two analyzed frames is larger: move more slowly, close other apps and let the ph
 you need the `hop_agreement` column. The lab reads sharpness from a coarser sample (every 4th
 pixel) than the capture screen (every 2nd), so its sharpness numbers are not on the same scale
 as the capture screen's thresholds.
+
+## Soil slide, cover slip edge (E1)
+
+A 22 x 22 mm cover slip filled with soil, guide dry run: left across the edge, about 1 mm past
+it, a wait, and back. The tracker did its job; the guide never said "Edge found, go back".
+
+- **Brightness does not tell blank from blur on soil.** Box brightness had a median of 211
+  inside the sample and 211 outside, so low detail outside the cover slip read as blurry, not
+  blank (`ViewClassifier` calls it blank only at 1.15 times the sample baseline).
+- **The edge zone flickers.** NO DETAIL for 0.6 s, detail, NO DETAIL for 1.6 s, then solid for
+  12.7 s (box sharpness 79 at the 90th percentile, 125 at most). Inside the sample there was one
+  0.3 s flicker.
+- **Soil has less detail than the stem the thresholds came from.** Inside sharpness: median
+  489, 10th percentile 194.
+
+The rules that follow:
+
+- Low detail of any class (blank, blurry, dark) or tracking paused is the edge.
+- It must last `edgeSeconds` = 0.8 s (ignores the 0.3 s interior flicker and the first edge
+  flicker, triggers on the 1.6 s one). Detail ends a stretch only after `edgeRecoverySeconds`
+  = 0.2 s of it, so one reading of detail between two short stretches does not restart it.
+- Refocus never blocks the edge. While travelling to an edge or finding the sample the guide
+  says slow down at most. On the way back it says `still_no_detail` once low detail has lasted
+  `refocusAfterSeconds` = 6 s.

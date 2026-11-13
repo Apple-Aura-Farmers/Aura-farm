@@ -7,21 +7,44 @@ import Foundation
 struct SimulatedDrop {
     var circles: [(centre: CGPoint, radius: Double)]
     var holes: [(centre: CGPoint, radius: Double)] = []
+    /// Square or rectangular sample, like a cover slip filled with sample.
+    var rects: [CGRect] = []
+
+    /// A sample that fills a rectangle.
+    static func square(from origin: CGPoint, side: Double) -> SimulatedDrop {
+        SimulatedDrop(circles: [], rects: [CGRect(x: origin.x, y: origin.y, width: side, height: side)])
+    }
 
     func contains(_ point: CGPoint) -> Bool {
-        let inside = circles.contains {
-            hypot(Double(point.x - $0.centre.x), Double(point.y - $0.centre.y)) <= $0.radius
-        }
+        let inside =
+            circles.contains {
+                hypot(Double(point.x - $0.centre.x), Double(point.y - $0.centre.y)) <= $0.radius
+            } || rects.contains { $0.contains(point) }
         let hole = holes.contains {
             hypot(Double(point.x - $0.centre.x), Double(point.y - $0.centre.y)) <= $0.radius
         }
         return inside && !hole
     }
 
+    /// Whether the point is in the sample but within `width` of its edge (probed in 8 directions).
+    func isInEdgeBand(_ point: CGPoint, width: Double) -> Bool {
+        guard contains(point) else { return false }
+        return (0..<8).contains { index in
+            let angle = Double(index) * .pi / 4
+            return !contains(
+                CGPoint(
+                    x: point.x + CGFloat(cos(angle) * width), y: point.y + CGFloat(sin(angle) * width)))
+        }
+    }
+
     /// Points on a 0.2 field grid inside the drop.
     func gridPoints(step: Double = 0.2) -> [CGPoint] {
-        let xs = circles.flatMap { [$0.centre.x - $0.radius, $0.centre.x + $0.radius] }
-        let ys = circles.flatMap { [$0.centre.y - $0.radius, $0.centre.y + $0.radius] }
+        let xs =
+            circles.flatMap { [Double($0.centre.x) - $0.radius, Double($0.centre.x) + $0.radius] }
+            + rects.flatMap { [Double($0.minX), Double($0.maxX)] }
+        let ys =
+            circles.flatMap { [Double($0.centre.y) - $0.radius, Double($0.centre.y) + $0.radius] }
+            + rects.flatMap { [Double($0.minY), Double($0.maxY)] }
         guard let minX = xs.min(), let maxX = xs.max(), let minY = ys.min(), let maxY = ys.max() else {
             return []
         }
@@ -84,6 +107,19 @@ final class GuideSimulator {
     /// Readings (by index) at which the tracker reports `.lost` for 5 readings.
     var lostAtReading: Int?
     var lostRaisesGap = false
+    /// Soil slide: the glass outside the sample is as bright as the sample, so it reads blurry
+    /// (not blank) with tracking paused, and an edge band flickers (see `edgeBandFields`).
+    var soil = false
+    /// The width of the flickering band just inside the edge, in fields (soil only).
+    var edgeBandFields = 0.3
+    /// In the band: low detail for this long, then detail for `bandDetailSeconds`, repeating.
+    var bandLowSeconds = 0.6
+    var bandDetailSeconds = 0.4
+    /// Soil only: a flicker of low detail of 0.3 s starts at random about this often inside
+    /// the sample (readings between flickers on average); nil for none. Seeded, so repeatable.
+    var interiorFlickerEveryReadings: Int?
+    private var randomState: UInt64 = 7
+    private var interiorLowLeft = 0
     /// Where a helper who starts on blank heads to.
     var searchTarget = CGPoint.zero
     private var wrongWayLeft = 0.0
@@ -133,7 +169,7 @@ final class GuideSimulator {
     private func makeReading(index: Int) -> GuideReading {
         var tracking = TrackingState.tracking
         var viewClass = ViewClass.sample
-        if drop.contains(truePosition) {
+        if isDetailed() {
             if paused {
                 paused = false
                 if let origin = pauseTruth,
@@ -157,7 +193,7 @@ final class GuideSimulator {
                 pauseTruth = lastSampleTruth
             }
             tracking = .paused
-            viewClass = .blank
+            viewClass = soil ? .blurry : .blank
         }
         if let lost = lostAtReading, index >= lost, index < lost + 5 {
             tracking = .lost
@@ -166,6 +202,29 @@ final class GuideSimulator {
         return GuideReading(
             seconds: seconds, position: frozen, tracking: tracking, unconfirmedGaps: unconfirmed,
             viewClass: viewClass, speedFraction: lastMove / 1.0, isStill: lastMove == 0)
+    }
+
+    /// Whether the view shows enough detail to follow. Over blank glass never; on a soil slide
+    /// also not during the low part of an edge-band flicker or an interior flicker.
+    private func isDetailed() -> Bool {
+        guard drop.contains(truePosition) else { return false }
+        guard soil else { return true }
+        if drop.isInEdgeBand(truePosition, width: edgeBandFields) {
+            let cycle = bandLowSeconds + bandDetailSeconds
+            if seconds.truncatingRemainder(dividingBy: cycle) < bandLowSeconds - 1e-9 { return false }
+        }
+        if interiorLowLeft > 0 {
+            interiorLowLeft -= 1
+            return false
+        }
+        if let every = interiorFlickerEveryReadings {
+            randomState = randomState &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
+            if Int((randomState >> 33) % UInt64(every)) == 0 {
+                interiorLowLeft = 2
+                return false
+            }
+        }
+        return true
     }
 
     private func move(_ vector: CGPoint) {
@@ -209,7 +268,7 @@ final class GuideSimulator {
                 pending = toward
             }
             move(toward)
-        case .edgeGoBack(let toward):
+        case .edgeGoBack(let toward), .stillNoDetail(let toward):
             move(toward)
         case .tooFar, .otherWay:
             if let target = output.target {

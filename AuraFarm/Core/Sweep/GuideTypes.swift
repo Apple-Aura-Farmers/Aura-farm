@@ -45,6 +45,9 @@ enum GuideInstruction: Equatable {
     case captured
     /// The sample ended here: go back to the last spot with sample.
     case edgeGoBack(toward: CGPoint)
+    /// Going back did not bring detail back for a while: keep going back, or refocus if it
+    /// looks blurry. Same direction as `edgeGoBack`.
+    case stillNoDetail(toward: CGPoint)
     case tooFar
     case otherWay
     case refocus
@@ -54,7 +57,7 @@ enum GuideInstruction: Equatable {
     /// One short line in plain words, for the lab.
     var debugText: String {
         switch self {
-        case .findSample: "Find the sample"
+        case .findSample: "Find the sample and focus on it"
         case .travel: "Keep turning until the sample ends"
         case .move: "Turn so the cross reaches the centre"
         case .farAway: "Target is far, follow the arrow"
@@ -62,6 +65,7 @@ enum GuideInstruction: Equatable {
         case .holding: "Hold still"
         case .captured: "Captured"
         case .edgeGoBack: "Edge found, go back"
+        case .stillNoDetail: "Still no detail: go back, or refocus if it looks blurry"
         case .tooFar: "Too far, come back a little"
         case .otherWay: "Other way"
         case .refocus: "Refocus"
@@ -81,6 +85,7 @@ enum GuideInstruction: Equatable {
         case .holding: "holding"
         case .captured: "captured"
         case .edgeGoBack: "edge_go_back"
+        case .stillNoDetail: "still_no_detail"
         case .tooFar: "too_far"
         case .otherWay: "other_way"
         case .refocus: "refocus"
