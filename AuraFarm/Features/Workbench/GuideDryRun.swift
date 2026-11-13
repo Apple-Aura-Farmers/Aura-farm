@@ -34,24 +34,11 @@
                 brightness: step.boxStats.brightness, sharpness: step.boxStats.sharpness,
                 contrast: step.boxStats.contrast)
 
-            let tracking: TrackingState
-            if !step.hasDetail {
-                tracking = .paused
-            } else if step.reading == "matching" {
-                tracking = .matching
-            } else if step.isLost {
-                tracking = .lost
-            } else {
-                tracking = .tracking
-            }
-
-            let onScreen = mapping.onScreen(step.position, mirrored: mirrored)
-            let side = max(step.boxSide, 1)
-            let position = CGPoint(x: onScreen.x / side, y: onScreen.y / side)
+            let position = step.tracking.screenFields(mapping: mapping, mirrored: mirrored)
             let result = guide.update(
                 GuideReading(
-                    seconds: seconds, position: position, tracking: tracking,
-                    unconfirmedGaps: step.blankReturnsUnmatched + step.gaps, viewClass: viewClass,
+                    seconds: seconds, position: position, tracking: step.tracking.trackingState,
+                    unconfirmedGaps: step.tracking.unconfirmedGaps, viewClass: viewClass,
                     speedFraction: indicators.speedFraction, isStill: indicators.stillSeconds > 0))
 
             if result.capture != nil { captureCount += 1 }

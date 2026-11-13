@@ -200,6 +200,12 @@ row, so a false jump stays visible there; the position uses the predicted value.
 
 ## What the lab can and can't track
 
+Tracking now lives in `SlideTracker` and eyepiece field learning in `FieldRegionLearner`, both in
+`Core/Imaging`, so the capture screen can use the same code. The lab's `SlideMovementPipeline` is a
+thin wrapper around them. Box stats are always sampled at step 4 (`SlideTracker.statsStep`),
+because the detail and view thresholds were measured at it; the capture screen's own quality
+stats use step 2 and are on a different scale.
+
 - **It can't measure movement over empty glass.** Registration needs detail to lock onto. Over
   blank glass it reads about 0, which looks like "not moving" and silently loses distance. The
   lab now checks the sharpness inside the box; when it stays low the banner says NO DETAIL, the
