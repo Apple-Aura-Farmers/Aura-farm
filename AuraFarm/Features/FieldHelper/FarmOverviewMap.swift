@@ -17,6 +17,8 @@ struct FarmsOverviewMap: View {
     let farms: [Farm]
     /// Called with the plot the helper tapped, and the farm it belongs to.
     let onOpen: (Farm, Plot) -> Void
+    
+    var onDeselect: () -> Void
     /// Drawn thicker and brighter than the rest.
     var selected: Plot.ID?
 
@@ -53,7 +55,10 @@ struct FarmsOverviewMap: View {
             .onTapGesture { point in
                 guard let coordinate = proxy.convert(point, from: .local),
                     let hit = plot(at: GeoPoint(coordinate))
-                else { return }
+                else {
+                    onDeselect()
+                    return
+                }
                 onOpen(hit.farm, hit.plot)
             }
         }
@@ -128,7 +133,7 @@ struct FarmsOverviewMap: View {
                         ])
                 ]),
         ],
-        onOpen: { _, _ in }
+        onOpen: { _, _ in }, onDeselect: {}
     )
     .ignoresSafeArea()
 }

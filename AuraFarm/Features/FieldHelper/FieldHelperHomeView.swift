@@ -71,7 +71,7 @@ struct FieldHelperHomeView: View {
             }
             .overlay(alignment: .topLeading) { switchRoleButton }
             .overlay(alignment: .top) { problemBanner }
-            .overlay(alignment: .bottomTrailing) { addPlotButton }
+//            .overlay(alignment: .bottomTrailing) { addPlotButton }
             .overlay(alignment: .bottom) { plotCard }
             .toolbar(.hidden, for: .navigationBar)
             .onChange(of: store.farms.isEmpty) { _, isEmpty in
@@ -106,7 +106,7 @@ struct FieldHelperHomeView: View {
     // MARK: Screens
 
     private var mapScreen: some View {
-        FarmsOverviewMap(farms: store.farms, onOpen: show, selected: selection?.plot.id)
+        FarmsOverviewMap(farms: store.farms, onOpen: show, onDeselect: deselect, selected: selection?.plot.id)
             // A new map when farms are added, deleted or reshaped, so it refits to them.
             .id(store.farms.flatMap(\.allCorners))
             .ignoresSafeArea()
@@ -159,6 +159,13 @@ struct FieldHelperHomeView: View {
     private func show(_ farm: Farm, _ plot: Plot) {
         showFarmList = false
         selection = Selection(farm: farm, plot: plot)
+    }
+    
+    /// Tapping empty map puts the card away and brings the list back.
+    private func deselect() {
+        guard selection != nil else { return }
+        withAnimation { selection = nil }
+        showFarmList = true
     }
 
     @ViewBuilder
