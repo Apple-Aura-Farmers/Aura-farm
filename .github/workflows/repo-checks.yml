@@ -23,7 +23,7 @@ jobs:
           while IFS= read -r f; do
             echo "::error file=$f::outside every target folder, so it is never compiled"
             stray=1
-          done < <(git ls-files '*.swift' | grep -vE '^(AuraFarm|AuraFarmTests|AuraFarmKit)/')
+          done < <(git ls-files '*.swift' | grep -vE '^(AuraFarm|AuraFarmTests|AuraFarmKit|AuraFarmManager|AuraFarmManagerTests)/')
           exit $stray
 
   no-raw-footage:
