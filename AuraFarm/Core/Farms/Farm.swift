@@ -24,6 +24,9 @@ struct GeoPoint: Codable, Equatable, Hashable {
 /// round the edge. A farm is one or more of these.
 struct Plot: Codable, Identifiable, Equatable {
     var id = UUID()
+    /// What the helper calls this piece of land, which is usually where it is rather than
+    /// what it grows. Empty on a plot marked before the form asked for one.
+    var name = ""
     var corners: [GeoPoint]
 
     /// nil until there are at least three corners.
@@ -55,9 +58,23 @@ struct Farm: Codable, Identifiable, Equatable {
         return areas.isEmpty ? nil : areas.reduce(0, +)
     }
 
-    /// Where a plot sits in the farm, counted from 1, which is what `plots.plot_number` holds.
+    /// Where a plot sits in the farm, counted from 1, which is what `plots.plot_number` holds
+    /// and what the map draws on the land.
     func number(of plot: Plot) -> Int {
         (plots.firstIndex(where: { $0.id == plot.id }) ?? 0) + 1
+    }
+
+    /// What a plot is called on screen: its number, which is always there, and the name the
+    /// helper gave it underneath.
+    func title(of plot: Plot) -> String { "Plot \(number(of: plot))" }
+
+    /// Whether this farmer already has a plot by this name, ignoring case and surrounding
+    /// spaces. Two farmers may both have a "Tabanan": a plot name only has to tell one
+    /// farmer's land apart.
+    func hasPlot(named name: String) -> Bool {
+        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return false }
+        return plots.contains { $0.name.caseInsensitiveCompare(name) == .orderedSame }
     }
 }
 

@@ -27,6 +27,14 @@ struct FieldHelperHomeView: View {
     /// Something to do as soon as the list sheet has finished closing.
     @State private var pending: Pending?
     @State private var listDetent = FieldHelperHomeView.collapsed
+    /// The plot whose card is showing over the map, if any.
+    @State private var selection: Selection?
+
+    /// A plot the helper tapped, kept with its farm so the card can name the farmer.
+    private struct Selection: Equatable {
+        var farm: Farm
+        var plot: Plot
+    }
 
     /// What the form sheet is showing.
     private enum FormSheet: Identifiable {
@@ -63,6 +71,8 @@ struct FieldHelperHomeView: View {
             }
             .overlay(alignment: .topLeading) { switchRoleButton }
             .overlay(alignment: .top) { problemBanner }
+            .overlay(alignment: .bottomTrailing) { addPlotButton }
+            .overlay(alignment: .bottom) { plotCard }
             .toolbar(.hidden, for: .navigationBar)
             .onChange(of: store.farms.isEmpty) { _, isEmpty in
                 // Deleting the last farm removes the map this sheet hangs from.
@@ -73,7 +83,11 @@ struct FieldHelperHomeView: View {
                 case .addFarm:
                     FarmFormView()
                 case .filePlot(let plot):
-                    PlotFarmPickerSheet(plot: plot)
+                    NewPlotFormView(corners: plot.corners) {
+                        // Back to the map with these corners, rather than starting again.
+                        formSheet = nil
+                        markingPlot = true
+                    }
                 }
             }
             .navigationDestination(item: $openedFarmID) { id in
@@ -92,39 +106,37 @@ struct FieldHelperHomeView: View {
     // MARK: Screens
 
     private var mapScreen: some View {
-        FarmsOverviewMap(farms: store.farms) { farm in
-            request(.open(farm.id))
-        }
-        // A new map when farms are added, deleted or reshaped, so it refits to them.
-        .id(store.farms.flatMap(\.allCorners))
-        .ignoresSafeArea()
-        // Reads the records once when the map appears; after that it is the pull on the list.
-        .task { await refresh() }
-        // Runs on first showing, whenever a pushed page is popped back, and again whenever the
-        // map is rebuilt for a change to the farms. Only the first two should raise the sheet:
-        // editing a plot changes the farms while the farm's page is still open, and the sheet
-        // must not slide up over it.
-        .onAppear {
-            if openedFarmID == nil && !markingPlot && formSheet == nil { showFarmList = true }
-        }
-        .sheet(isPresented: $showFarmList, onDismiss: runPending) {
-            FarmListSheet(
-                farms: sortedFarms,
-                onOpen: { request(.open($0.id)) },
-                onAdd: { request(.add) },
-                onMarkPlot: { request(.markPlot) },
-                onRefresh: refresh,
-                onDelete: delete
-            )
-            .presentationDetents([Self.collapsed, .medium, .large], selection: $listDetent)
-            // The map stays tappable until the sheet is pulled past half height.
-            .presentationBackgroundInteraction(.enabled(upThrough: .medium))
-            .presentationDragIndicator(.visible)
-            // At half height, dragging the list scrolls it instead of resizing the sheet. The
-            // sheet is still resized by dragging its title row or the handle.
-            .presentationContentInteraction(.scrolls)
-            .interactiveDismissDisabled()
-        }
+        FarmsOverviewMap(farms: store.farms, onOpen: show, selected: selection?.plot.id)
+            // A new map when farms are added, deleted or reshaped, so it refits to them.
+            .id(store.farms.flatMap(\.allCorners))
+            .ignoresSafeArea()
+            // Reads the records once when the map appears; after that it is the pull on the list.
+            .task { await refresh() }
+            // Runs on first showing, whenever a pushed page is popped back, and again whenever the
+            // map is rebuilt for a change to the farms. Only the first two should raise the sheet:
+            // editing a plot changes the farms while the farm's page is still open, and the sheet
+            // must not slide up over it.
+            .onAppear {
+                if openedFarmID == nil && !markingPlot && formSheet == nil { showFarmList = true }
+            }
+            .sheet(isPresented: $showFarmList, onDismiss: runPending) {
+                FarmListSheet(
+                    farms: sortedFarms,
+                    onOpen: { request(.open($0.id)) },
+                    onAdd: { request(.add) },
+                    onMarkPlot: { request(.markPlot) },
+                    onRefresh: refresh,
+                    onDelete: delete
+                )
+                .presentationDetents([Self.collapsed, .medium, .large], selection: $listDetent)
+                // The map stays tappable until the sheet is pulled past half height.
+                .presentationBackgroundInteraction(.enabled(upThrough: .medium))
+                .presentationDragIndicator(.visible)
+                // At half height, dragging the list scrolls it instead of resizing the sheet. The
+                // sheet is still resized by dragging its title row or the handle.
+                .presentationContentInteraction(.scrolls)
+                .interactiveDismissDisabled()
+            }
     }
 
     private var emptyState: some View {
@@ -141,7 +153,74 @@ struct FieldHelperHomeView: View {
         }
     }
 
+    // MARK: The plot the helper tapped
+
+    /// Opens the card for a plot, and gets the list out of the way so the card can be seen.
+    private func show(_ farm: Farm, _ plot: Plot) {
+        showFarmList = false
+        selection = Selection(farm: farm, plot: plot)
+    }
+
+    @ViewBuilder
+    private var plotCard: some View {
+        if let selection {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("\(selection.farm.farmerName) · \(selection.farm.title(of: selection.plot))")
+                    .font(.title3.bold())
+                if !selection.plot.name.isEmpty {
+                    Text(selection.plot.name)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                if let area = selection.plot.areaSquareMetres {
+                    Text(LandGeometry.areaDescription(squareMetres: area))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                Button {
+                    let id = selection.farm.id
+                    self.selection = nil
+                    openedFarmID = id
+                } label: {
+                    Text("View Test Results")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(
+                    FarmerColour.colour(
+                        for: selection.farm.farmerName, among: store.farms.map(\.farmerName)))
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(20)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20))
+            .padding(.horizontal, 12)
+            .padding(.bottom, 12)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+            // Tapping the land again puts the card away.
+            .onTapGesture {}
+        }
+    }
+
     // MARK: Floating controls
+
+    /// Starts a plot the way the map does: walk the edge first, name it afterwards.
+    private var addPlotButton: some View {
+        Button {
+            selection = nil
+            request(.markPlot)
+        } label: {
+            Image(systemName: "plus")
+                .font(.title2.weight(.semibold))
+                .frame(width: 56, height: 56)
+                .glassCircle()
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Mark a plot on the map")
+        .padding(.trailing, 16)
+        .padding(.bottom, 108)
+    }
 
     private var switchRoleButton: some View {
         Button(action: onSwitchRole) {

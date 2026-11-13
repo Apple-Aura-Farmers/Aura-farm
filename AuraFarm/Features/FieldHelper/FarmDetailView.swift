@@ -199,8 +199,13 @@ struct FarmDetailView: View {
         HStack(spacing: 14) {
             FarmOutlineThumbnail(corners: plot.corners)
             VStack(alignment: .leading, spacing: 2) {
-                Text("Plot \(farm.number(of: plot))")
+                Text(farm.title(of: plot))
                     .font(.headline)
+                if !plot.name.isEmpty {
+                    Text(plot.name)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
                 if let area = plot.areaSquareMetres {
                     Text(LandGeometry.areaDescription(squareMetres: area))
                         .font(.subheadline)
