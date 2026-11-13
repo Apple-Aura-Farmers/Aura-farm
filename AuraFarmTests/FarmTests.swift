@@ -82,6 +82,37 @@ final class FarmTests: XCTestCase {
         XCTAssertEqual(farms.neighbours().first?.label, "Subak")
     }
 
+    func testAPlotNameIsTakenWhateverTheCaseOrSpacing() {
+        let farm = Farm(
+            name: "Subak", farmerName: "Pak Wayan",
+            plots: [Plot(name: "Tabanan", corners: square)])
+
+        XCTAssertTrue(farm.hasPlot(named: "  tabanan "))
+        XCTAssertFalse(farm.hasPlot(named: "Tabanan I"))
+        // Nothing typed yet is not a clash.
+        XCTAssertFalse(farm.hasPlot(named: "   "))
+    }
+
+    func testAPlotIsNamedByItsNumberOnScreen() {
+        let first = Plot(name: "Tabanan", corners: square)
+        let second = Plot(corners: square)
+        let farm = Farm(name: "Subak", farmerName: "Pak Wayan", plots: [first, second])
+
+        XCTAssertEqual(farm.title(of: first), "Plot 1")
+        XCTAssertEqual(farm.title(of: second), "Plot 2")
+    }
+
+    func testAPlotNameSurvivesSavingAndLoading() throws {
+        let farm = Farm(
+            name: "Subak", farmerName: "Pak Wayan",
+            plots: [Plot(name: "Tabanan", corners: square)])
+
+        let data = try JSONEncoder().encode(farm)
+        let loaded = try JSONDecoder().decode(Farm.self, from: data)
+
+        XCTAssertEqual(loaded.plots.first?.name, "Tabanan")
+    }
+
     private func decode(_ json: String) throws -> Farm {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
