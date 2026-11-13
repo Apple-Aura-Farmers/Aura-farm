@@ -61,6 +61,8 @@ enum AdvicePromptBuilder {
             )
         }
 
+        if let soil = SoilInputs(result.soil) { lines.append(soilLine(soil)) }
+
         if !context.cautions.isEmpty { lines.append("Cautions: \(context.cautions.joined(separator: " "))") }
 
         if !context.interpreted.isEmpty {
@@ -161,6 +163,26 @@ enum AdvicePromptBuilder {
             break
         }
         return line
+    }
+
+    /// The measurements the helper recorded, as background. They are not from the microscope, and
+    /// nothing in the rules reads them yet, so the model is told not to build advice on them.
+    /// Only the number, its unit and its band go in: never the standards' guidance.
+    private static func soilLine(_ soil: SoilInputs) -> String {
+        let readings = soil.readings.map { reading in
+            let amount = number(reading.value)
+            let value = reading.unit.isEmpty ? amount : "\(amount) \(reading.unit)"
+            return "\(reading.name) \(value) (\(reading.band.label.lowercased()))"
+        }
+        return "Soil measurements the helper recorded (not from the microscope; background only, do not "
+            + "give advice from them): \(readings.joined(separator: ", "))."
+    }
+
+    /// "6.5" or "100", the same on every phone.
+    private static func number(_ value: Double) -> String {
+        value.formatted(
+            .number.precision(.fractionLength(0...2)).grouping(.never)
+                .locale(Locale(identifier: "en_US_POSIX")))
     }
 
     private static func historyLine(_ past: PastResult) -> String {

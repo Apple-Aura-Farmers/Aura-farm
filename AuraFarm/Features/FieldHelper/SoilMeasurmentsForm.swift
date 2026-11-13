@@ -46,15 +46,28 @@ struct SoilMeasurementsForm: View {
                 } header: {
                     Text("NPK")
                 } footer: {
-                    Text("Milligrams per kilogram of soil, as a lab report gives them.")
+                    Text(
+                        "Milligrams per kilogram of soil, as the probe or lab report gives them. "
+                            + "Standard: N \(SoilStandards.nitrogen.description), "
+                            + "P \(SoilStandards.phosphorus.description), "
+                            + "K \(SoilStandards.potassium.description)."
+                    )
                 }
 
-                Section("Acidity") {
+                Section {
                     numberRow("pH", value: $ph, unit: "0 to 14")
+                } header: {
+                    Text("Acidity")
+                } footer: {
+                    Text("Standard: \(SoilStandards.ph.description).")
                 }
 
-                Section("Organic carbon") {
+                Section {
                     numberRow("Soil organic carbon", value: $organicCarbon, unit: "%")
+                } header: {
+                    Text("Organic carbon")
+                } footer: {
+                    Text("Standard: \(SoilStandards.organicCarbon.description), as a percentage.")
                 }
 
                 Section {

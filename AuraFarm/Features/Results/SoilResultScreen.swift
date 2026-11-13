@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// What one sweep came to: an estimate of the soil life seen, the counts, and sending it on to
-/// the Mac. The advice on what to do next is on the farm's page on the Field Helper side.
+/// What one sweep came to: an estimate of the soil life seen, and the counts. The advice on what
+/// to do next is on the farm's page on the Field Helper side.
 ///
 /// PLACEHOLDER layout: there is no final design yet. The screen only arranges the section
 /// components in `Components/`, each of which takes plain values, so a new design replaces
@@ -140,7 +140,7 @@ private struct SoilResultContent: View {
     }
 }
 
-/// Which sample this was, for the helper to check before sending it on.
+/// Which sample this was.
 private struct SampleSummarySection: View {
     let result: SoilResult
 

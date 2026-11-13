@@ -11,15 +11,13 @@ import SwiftUI
 /// useful and a way to write it again.
 ///
 /// It takes the view model rather than making one, so whoever shows it decides which test the
-/// advice is for and keeps it alive across redraws. It asks for the advice when its card
-/// appears, and again on Try again or Write again.
+/// advice is for and keeps it alive across redraws. It starts the advice when it first appears;
+/// the view model keeps the load running, so scrolling away from it cannot cut it off. Try again
+/// and Write again start it over.
 struct WhatToDoNextSection: View {
     let viewModel: SoilResultViewModel
     /// A line under the advice, for what it was and was not based on.
     var footer: String?
-
-    /// Bumped by Try again and Write again, to restart the recommendation task.
-    @State private var attempt = 0
 
     var body: some View {
         Section {
@@ -28,21 +26,19 @@ struct WhatToDoNextSection: View {
                 modelUnavailableReason: viewModel.modelUnavailableReason,
                 progress: viewModel.progress,
                 basis: viewModel.adviceBasis,
+                updateNote: viewModel.updateNote,
                 savedAt: viewModel.savedAt,
                 savedFromOlderRules: viewModel.savedFromOlderRules,
                 rating: viewModel.feedback?.rating,
                 onRate: { rating, reasons in
                     Task { await viewModel.rate(rating, reasons: reasons) }
                 },
-                onRetry: { attempt += 1 }
+                onRetry: { viewModel.restart(freshWording: viewModel.wantsFreshWording) }
             )
-            .task(id: attempt) {
-                await viewModel.loadRecommendation(freshWording: viewModel.wantsFreshWording)
-            }
+            .onAppear { viewModel.startIfNeeded() }
             if viewModel.canWriteAgain {
                 Button("Write again", systemImage: "arrow.clockwise") {
-                    viewModel.requestFreshWording()
-                    attempt += 1
+                    viewModel.restart(freshWording: true)
                 }
             }
         } header: {

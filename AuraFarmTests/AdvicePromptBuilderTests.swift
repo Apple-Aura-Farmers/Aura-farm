@@ -11,11 +11,12 @@ final class AdvicePromptBuilderTests: XCTestCase {
         stage: SampleDetails.CropStage? = nil,
         recent: [SampleDetails.RecentAction] = [],
         stoppedEarly: Bool = false,
-        history: [PastResult] = []
+        history: [PastResult] = [],
+        soil: SoilMeasurements? = nil
     ) -> AdviceContext {
         let result = SoilResult(
             sampleID: "A12", recordedAt: .now, framesKept: frames, moisture: moisture, countsByClass: counts,
-            sweep: nil, cropStage: stage, recentActions: recent, stoppedEarly: stoppedEarly)
+            sweep: nil, cropStage: stage, recentActions: recent, stoppedEarly: stoppedEarly, soil: soil)
         let estimate = SoilHealthEstimate(
             level: level, score: nil, confidence: .low, reasons: [], followUp: "Test again.")
         return AdviceContextBuilder().context(for: result, estimate: estimate, history: history)
@@ -245,6 +246,83 @@ final class AdvicePromptBuilderTests: XCTestCase {
         XCTAssertGreaterThan(context.patterns.count, 5)
         XCTAssertLessThan(total, 7_000, "Instructions plus prompt are \(total) characters")
         XCTAssertFalse(prompt.lowercased().contains("healthy"))
+    }
+
+    // MARK: Soil measurements
+
+    private let fullSoil = SoilMeasurements(
+        nitrogen: 100, ph: 7.9, organicCarbonPercent: 2.5, fertilizerProduct: "Urea",
+        fertilizerKilogramsPerHectare: 50)
+
+    func testSoilMeasurementsAreOneBackgroundLineAfterTheSampleLines() {
+        let prompt = AdvicePromptBuilder.prompt(for: context(["paramecium": 9, "euglena": 6], soil: fullSoil))
+        let lines = prompt.split(separator: "\n")
+
+        XCTAssertEqual(
+            lines[3],
+            "Soil measurements the helper recorded (not from the microscope; background only, do not "
+                + "give advice from them): nitrogen 100 mg/kg (standard), pH 7.9 (excessive), "
+                + "organic carbon 2.5 % (standard).")
+        XCTAssertTrue(lines[2].hasPrefix("This sample:"))
+        XCTAssertEqual(prompt.components(separatedBy: "Soil measurements").count, 2)
+    }
+
+    func testTheStandardsGuidanceAndTheFertilizerNeverReachThePrompt() {
+        let prompt = AdvicePromptBuilder.prompt(for: context(["paramecium": 9, "euglena": 6], soil: fullSoil))
+
+        XCTAssertFalse(prompt.contains("Urea"))
+        XCTAssertFalse(prompt.contains("kg per"))
+        XCTAssertFalse(prompt.contains("Maintain it"))
+        XCTAssertFalse(prompt.contains("zinc"))
+    }
+
+    func testWithoutReadableMeasurementsThePromptIsExactlyWhatItWas() {
+        let counts = ["paramecium": 9, "euglena": 6]
+        let plain = AdvicePromptBuilder.prompt(for: context(counts))
+
+        XCTAssertFalse(plain.contains("Soil measurements"))
+        XCTAssertEqual(plain, AdvicePromptBuilder.prompt(for: context(counts, soil: nil)))
+        XCTAssertEqual(plain, AdvicePromptBuilder.prompt(for: context(counts, soil: SoilMeasurements())))
+        XCTAssertEqual(
+            plain,
+            AdvicePromptBuilder.prompt(
+                for: context(
+                    counts,
+                    soil: SoilMeasurements(fertilizerProduct: "Urea", fertilizerKilogramsPerHectare: 50))))
+    }
+
+    func testMeasurementsDoNotChangeTheEstimatePatternsOrActions() {
+        let counts = ["euglena": 30, "phacus": 8, "paramecium": 3]
+        let without = context(counts, level: .poor, stage: .tillering)
+        let with = context(counts, level: .poor, stage: .tillering, soil: fullSoil)
+
+        XCTAssertEqual(with.estimate, without.estimate)
+        XCTAssertEqual(with.patterns, without.patterns)
+        XCTAssertEqual(with.actions, without.actions)
+        XCTAssertEqual(with.cautions, without.cautions)
+        XCTAssertEqual(
+            AdvicePromptBuilder.offeredActions(for: with).map(\.action.id),
+            AdvicePromptBuilder.offeredActions(for: without).map(\.action.id))
+    }
+
+    func testTheSoilLineIsSmallEnoughNotToThreatenTheBudget() {
+        let all = SoilMeasurements(
+            nitrogen: 100.55, phosphorus: 20.25, potassium: 150.75, ph: 6.55, organicCarbonPercent: 2.55)
+        let counts = ["paramecium": 9, "euglena": 6]
+
+        let extra =
+            AdvicePromptBuilder.prompt(for: context(counts, soil: all)).count
+            - AdvicePromptBuilder.prompt(for: context(counts)).count
+
+        XCTAssertLessThan(extra, 400, "The soil line adds \(extra) characters")
+    }
+
+    func testNumbersAreWrittenTheSameOnEveryPhone() {
+        let soil = SoilMeasurements(nitrogen: 1_000, ph: 6.55)
+        let prompt = AdvicePromptBuilder.prompt(for: context(["paramecium": 9], soil: soil))
+
+        XCTAssertTrue(prompt.contains("nitrogen 1000 mg/kg"))
+        XCTAssertTrue(prompt.contains("pH 6.55 (standard)"))
     }
 
     func testInstructionsCarryTheNeverSayRules() {

@@ -55,8 +55,8 @@ struct SweepNotice: Identifiable, Equatable {
                     title: "The store is nearly full",
                     detail:
                         "\(used.formatted(.byteCount(style: .file))) of "
-                        + "\(limit.formatted(.byteCount(style: .file))) used. Send the tests you "
-                        + "have finished with, or a sweep will stop part-way through.",
+                        + "\(limit.formatted(.byteCount(style: .file))) used. Copy the tests you "
+                        + "have finished with off the phone, or a sweep will stop part-way through.",
                     sweep: nil
                 ))
         }

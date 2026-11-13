@@ -25,6 +25,9 @@ final class SoilResultViewModel {
     private(set) var feedback: AdviceFeedback?
     /// The last requested mode, so Try again after Write again asks for fresh wording too.
     private(set) var wantsFreshWording = false
+    /// One line saying why the advice on screen was just written again, such as "Updated with the
+    /// new pH reading." nil when it was not.
+    private(set) var updateNote: String?
 
     var selectedTaxonomy: OrganismTaxonomy = .modelClass
     var isBreakdownExpanded = false
@@ -98,6 +101,28 @@ final class SoilResultViewModel {
         wantsFreshWording = true
     }
 
+    /// The load that is running, or that has run. Kept here, not in a SwiftUI `.task`, because a
+    /// task on a list row is cancelled when the row scrolls away or the list reloads, and a load
+    /// cut off part-way leaves the card on its spinner with nothing left to start it again.
+    @ObservationIgnored private var loadTask: Task<Void, Never>?
+
+    /// Starts writing the advice the first time it is called, and does nothing after that, so a
+    /// screen can call it each time it appears.
+    func startIfNeeded() {
+        guard loadTask == nil else { return }
+        start(freshWording: false)
+    }
+
+    /// Starts again, replacing a load that is running. For Try again and Write again.
+    func restart(freshWording: Bool) {
+        start(freshWording: freshWording)
+    }
+
+    private func start(freshWording: Bool) {
+        loadTask?.cancel()
+        loadTask = Task { await loadRecommendation(freshWording: freshWording) }
+    }
+
     /// Asks the model for new wording. On success it replaces the saved advice. On failure the
     /// saved advice stays on disk and on screen, with a note; without saved advice the screen
     /// shows the failure with Try again.
@@ -117,21 +142,29 @@ final class SoilResultViewModel {
         wantsFreshWording = freshWording
         recommendationState = .generating
         modelUnavailableReason = nil
+        updateNote = nil
         progress = nil
         savedAt = nil
         savedFromOlderRules = false
         feedback = nil
 
         let needsModel = [SoilHealthEstimate.Level.good, .fair, .poor].contains(estimate.level)
+        let currentSoil = SoilInputs(result.soil)
+        // Saved advice that was written with other soil measurements than there are now. It is not
+        // shown as it is: the advice is written again, and this is what the new one is compared with.
+        var outOfDate: SavedAdvice?
 
         if !freshWording, needsModel, let saved = await savedAdvice() {
             guard !Task.isCancelled else { return }
-            savedAt = saved.writtenAt
-            savedFromOlderRules = saved.isFromOlderRules
-            recommendationState = .ready(saved.recommendation)
-            feedback = await matchingFeedback(for: saved.recommendation)
-            adviceContext = await buildContext()
-            return
+            if saved.snapshot?.soil == currentSoil {
+                savedAt = saved.writtenAt
+                savedFromOlderRules = saved.isFromOlderRules
+                recommendationState = .ready(saved.recommendation)
+                feedback = await matchingFeedback(for: saved.recommendation)
+                adviceContext = await buildContext()
+                return
+            }
+            outOfDate = saved
         }
 
         var provider = fallback
@@ -141,6 +174,16 @@ final class SoilResultViewModel {
                 provider = recommender
                 recommender.prewarm()
             case .unavailable(let reason):
+                if let outOfDate {
+                    // The model can't write it again, so the earlier advice stays, with a note.
+                    await show(
+                        outOfDate,
+                        note: "The soil measurements changed, but Apple Intelligence can't write new "
+                            + "advice now, so the earlier advice is shown. \(reason)")
+                    guard !Task.isCancelled else { return }
+                    adviceContext = await buildContext()
+                    return
+                }
                 modelUnavailableReason = reason
             }
         }
@@ -156,11 +199,18 @@ final class SoilResultViewModel {
             guard !Task.isCancelled else { return }
             progress = nil
             recommendationState = .ready(recommendation)
-            await saveIfModelAdvice(recommendation)
+            if let outOfDate, recommendation.source == .foundationModel {
+                updateNote = AdviceUpdateNote.text(from: outOfDate.snapshot?.soil, to: currentSoil)
+            }
+            await saveIfModelAdvice(recommendation, context: context)
         } catch {
             guard !Task.isCancelled else { return }
             progress = nil
-            if freshWording, await showSavedAdviceAfterFailure(error) { return }
+            if freshWording || outOfDate != nil,
+                await showSavedAdviceAfterFailure(error, measurementsChanged: outOfDate != nil)
+            {
+                return
+            }
             switch error as? AdviceFailure {
             case .useStandardAdvice(let note)?:
                 await showStandardAdvice(note: note, context: context)
@@ -173,13 +223,15 @@ final class SoilResultViewModel {
     }
 
     /// After a failed Write again the saved advice stays on screen, with a note. The file is not
-    /// touched. False when this sample has no saved advice.
-    private func showSavedAdviceAfterFailure(_ error: Error) async -> Bool {
+    /// touched. The same when advice that is behind the soil measurements could not be written
+    /// again. False when this sample has no saved advice.
+    private func showSavedAdviceAfterFailure(_ error: Error, measurementsChanged: Bool) async -> Bool {
         guard let saved = await savedAdvice() else { return false }
         guard !Task.isCancelled else { return true }
-        savedAt = saved.writtenAt
-        savedFromOlderRules = saved.isFromOlderRules
-        var note = "New advice couldn't be written, so the saved advice is shown."
+        var note =
+            measurementsChanged
+            ? "The soil measurements changed, but new advice couldn't be written, so the earlier advice is shown."
+            : "New advice couldn't be written, so the saved advice is shown."
         #if DEBUG
             let detail: String
             switch error as? AdviceFailure {
@@ -189,10 +241,17 @@ final class SoilResultViewModel {
             }
             note += "\n(Debug: \(detail))"
         #endif
+        await show(saved, note: note)
+        return true
+    }
+
+    /// Puts saved advice on screen with a note under it.
+    private func show(_ saved: SavedAdvice, note: String) async {
+        savedAt = saved.writtenAt
+        savedFromOlderRules = saved.isFromOlderRules
         modelUnavailableReason = note
         recommendationState = .ready(saved.recommendation)
         feedback = await matchingFeedback(for: saved.recommendation)
-        return true
     }
 
     /// Rates the advice on screen. The same entry is updated while the same advice is shown, so
@@ -241,14 +300,15 @@ final class SoilResultViewModel {
     /// Keeps the model's advice with the sample. Standard advice is never saved, so Apple
     /// Intelligence gets another chance the next time the sample is opened. A failed save leaves
     /// the screen as it is.
-    private func saveIfModelAdvice(_ recommendation: Recommendation) async {
+    private func saveIfModelAdvice(_ recommendation: Recommendation, context: AdviceContext) async {
         guard recommendation.source == .foundationModel, let sweep = result.sweep, let store = adviceStore
         else { return }
         let advice = SavedAdvice(
             recommendation: recommendation,
             writtenAt: clock(),
             contentVersion: AdviceContentVersion.current,
-            appVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String)
+            appVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String,
+            snapshot: AdviceSnapshot(context: context))
         let saved = await Task.detached(priority: .utility) {
             do {
                 try store.save(advice, for: sweep)
@@ -279,7 +339,8 @@ final class SoilResultViewModel {
         }
     }
 
-    /// Races the provider against the timeout, and cancels whichever is still running.
+    /// Races the provider against the timeout. The loser is cancelled but not waited for, so a
+    /// model request that ignores cancellation cannot keep the screen on its spinner.
     private func recommendation(
         from provider: any RecommendationProviding, context: AdviceContext, freshWording: Bool
     ) async throws -> Recommendation {
@@ -291,17 +352,10 @@ final class SoilResultViewModel {
                 self.progress = progress
             }
         }
-        return try await withThrowingTaskGroup(of: Recommendation.self) { group in
-            group.addTask {
-                try await provider.recommend(for: context, freshWording: freshWording, onProgress: onProgress)
-            }
-            group.addTask {
-                try await Task.sleep(for: timeout)
-                throw AdviceFailure.retry(message: AdviceFailure.timeoutMessage)
-            }
-            defer { group.cancelAll() }
-            guard let first = try await group.next() else { throw CancellationError() }
-            return first
+        return try await FirstResult<Recommendation>().run(
+            timeout: timeout, timeoutError: AdviceFailure.retry(message: AdviceFailure.timeoutMessage)
+        ) {
+            try await provider.recommend(for: context, freshWording: freshWording, onProgress: onProgress)
         }
     }
 

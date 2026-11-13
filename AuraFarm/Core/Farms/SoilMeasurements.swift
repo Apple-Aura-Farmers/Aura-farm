@@ -55,22 +55,32 @@ struct SoilMeasurements: Codable, Equatable {
     struct Row: Identifiable {
         let label: String
         let value: String
+        /// Where the value sits against its standard. nil when there is no standard for it.
+        let band: SoilBand?
+        /// What that band means and what to do. nil with no standard.
+        let note: SoilBandNote?
         var id: String { label }
     }
 
     /// The values that have been filled in, in a fixed order. Empty ones are left out.
     var rows: [Row] {
         var rows: [Row] = []
-        func add(_ label: String, _ value: Double?, unit: String) {
+        func add(_ label: String, _ value: Double?, unit: String, standard: SoilStandard?) {
             guard let value else { return }
             let number = value.formatted(.number.precision(.fractionLength(0...2)))
-            rows.append(Row(label: label, value: unit.isEmpty ? number : "\(number) \(unit)"))
+            let band = standard?.band(for: value)
+            rows.append(
+                Row(
+                    label: label, value: unit.isEmpty ? number : "\(number) \(unit)",
+                    band: band, note: band.flatMap { standard?.note(for: $0) }))
         }
-        add("Nitrogen (N)", nitrogen, unit: "mg/kg")
-        add("Phosphorus (P)", phosphorus, unit: "mg/kg")
-        add("Potassium (K)", potassium, unit: "mg/kg")
-        add("pH", ph, unit: "")
-        add("Organic carbon", organicCarbonPercent, unit: "%")
+        add("Nitrogen (N)", nitrogen, unit: "mg/kg", standard: SoilStandards.nitrogen)
+        add("Phosphorus (P)", phosphorus, unit: "mg/kg", standard: SoilStandards.phosphorus)
+        add("Potassium (K)", potassium, unit: "mg/kg", standard: SoilStandards.potassium)
+        add("pH", ph, unit: "", standard: SoilStandards.ph)
+        add(
+            "Organic carbon", organicCarbonPercent, unit: "%",
+            standard: SoilStandards.organicCarbon)
         if fertilizerProduct != nil || fertilizerKilogramsPerHectare != nil {
             var parts: [String] = []
             if let fertilizerProduct { parts.append(fertilizerProduct) }
@@ -78,7 +88,11 @@ struct SoilMeasurements: Codable, Equatable {
                 parts.append(
                     "\(amount.formatted(.number.precision(.fractionLength(0...2)))) kg/ha")
             }
-            rows.append(Row(label: "Fertilizer", value: parts.joined(separator: " · ")))
+            // No standard for fertilizer yet, so no band.
+            rows.append(
+                Row(
+                    label: "Fertilizer", value: parts.joined(separator: " · "), band: nil,
+                    note: nil))
         }
         return rows
     }

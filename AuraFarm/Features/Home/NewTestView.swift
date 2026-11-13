@@ -64,7 +64,7 @@ struct NewTestView: View {
                             .lineLimit(4...)
                     }
 
-                    // The guide fixes the amounts the report records, so it stays one tap
+                    // The guide fixes the amounts the sample records, so it stays one tap
                     // from the only screen that opens a test.
                     NavigationLink {
                         SamplePrepView()

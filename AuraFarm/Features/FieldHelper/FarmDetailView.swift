@@ -78,7 +78,7 @@ struct FarmDetailView: View {
 
             labResultsSection
 
-            adviceSection
+            adviceSection(for: farm)
         }
         .task(id: farm.id) {
             let id = farm.id
@@ -95,7 +95,7 @@ struct FarmDetailView: View {
         Section {
             if let soil = farm.soil, !soil.isEmpty {
                 ForEach(soil.rows) { row in
-                    LabeledContent(row.label, value: row.value)
+                    SoilMeasurementRow(row: row)
                 }
             } else {
                 Text("Nothing recorded yet.")
@@ -111,7 +111,10 @@ struct FarmDetailView: View {
             Text("Soil measurements")
         } footer: {
             if let soil = farm.soil, !soil.isEmpty {
-                Text("Updated \(soil.updatedAt.formatted(date: .abbreviated, time: .omitted)).")
+                Text(
+                    "Updated \(soil.updatedAt.formatted(date: .abbreviated, time: .omitted)). "
+                        + "Tap a value for what it means. The standards and guidance are placeholders and have not been reviewed by an agronomist."
+                )
             }
         }
     }
@@ -180,13 +183,15 @@ struct FarmDetailView: View {
 
     // MARK: What to do next
 
-    /// Advice for the farm's most recent counted test.
+    /// Advice for the farm's most recent counted test, written with the farm's soil measurements.
     @ViewBuilder
-    private var adviceSection: some View {
+    private func adviceSection(for farm: Farm) -> some View {
         if let latest = tests?.first {
-            FarmAdvice(test: latest)
-                // A new test is a new piece of advice, so a fresh view model for it.
-                .id(latest.id)
+            FarmAdvice(test: latest, soil: farm.soil)
+                // A new test, or different soil measurements, is new advice, so a fresh view model
+                // for it. It then shows the saved advice if that still fits, and writes it again
+                // if it doesn't.
+                .id(AdviceKey(test: latest.id, soil: SoilInputs(farm.soil)))
         } else if tests?.isEmpty == true {
             Section {
                 Text("Advice shows here once the microscope operator has tested this farm.")
@@ -198,22 +203,34 @@ struct FarmDetailView: View {
     }
 }
 
+/// What the advice on a farm's page is for. When it changes, the advice is looked at afresh.
+private struct AdviceKey: Hashable {
+    let test: URL
+    let soil: SoilInputs?
+}
+
 /// "What to do next" for one test. Owns the view model so it survives redraws.
 private struct FarmAdvice: View {
     @State private var viewModel: SoilResultViewModel
     private let testedOn: Date
+    private let usesSoil: Bool
 
-    init(test: FarmTest) {
+    init(test: FarmTest, soil: SoilMeasurements?) {
         testedOn = test.result.recordedAt
-        _viewModel = State(wrappedValue: SoilResultViewModel(result: test.result))
+        usesSoil = SoilInputs(soil) != nil
+        var result = test.result
+        result.soil = soil
+        _viewModel = State(wrappedValue: SoilResultViewModel(result: result))
     }
 
     var body: some View {
         WhatToDoNextSection(
             viewModel: viewModel,
             footer: "From the microscope test on "
-                + "\(testedOn.formatted(date: .abbreviated, time: .omitted)) only. "
-                + "The soil measurements above are not used in this advice yet."
+                + "\(testedOn.formatted(date: .abbreviated, time: .omitted))"
+                + (usesSoil
+                    ? ", with the soil measurements above. They don't change which steps are suggested yet."
+                    : " only.")
         )
     }
 }

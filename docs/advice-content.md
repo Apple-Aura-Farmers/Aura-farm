@@ -22,7 +22,6 @@
 | Reading level | Short everyday words; one idea per sentence | Proposed |
 | Length | Summary of 1–2 sentences (up to ~30 words); 2–3 actions of one sentence each (up to ~20 words) | Proposed |
 | Crop stage at sample setup | Optional input, used in later phases | Provisional |
-| Advice included in the Mac report | No: iPhone only for now (decided 9 November 2026) | Decided |
 | Changes to the soil health estimator | Handled separately, not part of this work | Agreed |
 
 ### Rules for the model
@@ -43,6 +42,8 @@
 - "Sample again in 2 to 4 weeks" is always offered for a fair or poor result, and "Talk to your local extension officer" whenever a Must action is offered or the result is poor; trimming never removes them.
 - When "Talk to your local extension officer" has to be added to three steps, it goes last, and the least relevant other step is dropped, never a resample and never the last Must action.
 - Apple Intelligence advice is saved with the sample and shown again when the sample is reopened; "Write again" asks for new wording. Standard advice isn't saved. Saved advice written with older rules says so.
+- The farm's soil measurements (nitrogen, phosphorus, potassium, pH, organic carbon) reach the prompt as one background line: each value, its unit and its band. The model is told not to give advice from them, and no rule reads them yet, so the estimate, patterns and actions offered are the same with or without them. Fertilizer and the standards' guidance text are never sent. Rules that combine the microscope counts with the measurements (starting with the pH liming check) wait for an agronomist to review the placeholder standards.
+- Each saved piece of advice keeps a copy of the measurements it was written with. When the farm's measurements differ from that copy, the advice is written again automatically, with a line such as "Updated with the new pH reading." If Apple Intelligence can't write it, the earlier advice stays on screen with a note. The "Based on" line names the measurements used.
 
 ---
 

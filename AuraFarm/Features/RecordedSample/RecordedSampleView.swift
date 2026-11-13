@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Runs a recorded microscope video as if the camera were seeing it: the quality check, the
 /// guided sweep, the detector and the tally all run as they do live, and the result is an
-/// ordinary saved sweep with its counts, ready to send to the Mac.
+/// ordinary saved sweep with its counts.
 ///
 /// A prototype path, for seeing the whole flow without a microscope to hand.
 struct RecordedSampleView: View {
