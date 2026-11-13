@@ -9,6 +9,8 @@ struct RecommendationCard: View {
     var progress: AdviceProgress?
     /// What the advice used, in one line.
     var basis: String?
+    /// Why the advice was just written again, such as "Updated with the new pH reading."
+    var updateNote: String?
     /// When the advice on screen was saved with the sample, if it was.
     var savedAt: Date?
     /// True when the saved advice was written with older advice rules.
@@ -72,6 +74,12 @@ struct RecommendationCard: View {
                 SourceTag(source: recommendation.source)
                 if let basis {
                     Text(basis)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if let updateNote {
+                    Label(updateNote, systemImage: "arrow.triangle.2.circlepath")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -211,6 +219,11 @@ private struct SourceTag: View {
             basis:
                 "Based on 41 organisms (3 kinds) in 12 frames, flooded, tillering. 10 others weren't used.",
             onRate: { _, _ in }
+        ) {}
+        RecommendationCard(
+            state: .ready(model), modelUnavailableReason: nil,
+            basis: "Based on 41 organisms (3 kinds) in 12 frames, flooded, and soil measurements (N, pH).",
+            updateNote: "Updated with the new pH reading."
         ) {}
         RecommendationCard(
             state: .ready(model), modelUnavailableReason: nil,

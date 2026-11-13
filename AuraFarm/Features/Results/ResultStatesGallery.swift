@@ -70,7 +70,10 @@
                 if let result = scenario.result {
                     SoilResultScreen(
                         result: result, recommender: scenario.recommender(useLiveModel: useLiveModel),
-                        historyProvider: scenario.historyProvider, adviceStore: scenario.adviceStore)
+                        historyProvider: scenario.historyProvider, adviceStore: scenario.adviceStore
+                    )
+                    // The app keeps advice on the farm's page; the gallery is for looking at it.
+                    .showingAdvice()
                 } else {
                     SoilResultScreen(failure: SoilResult.Failure.noSampleDetails.localizedDescription)
                 }

@@ -1,7 +1,7 @@
 # Aura Farm
 
-An iOS app that turns an iPhone and a microscope into an on-site soil test, and a Mac
-app that keeps the results by farm and field.
+An iOS app that turns an iPhone and a microscope into an on-site soil test, and keeps the
+results by farm.
 
 A field helper mounts the phone on a microscope, prepares a soil sample with the
 in-app guide, records the sample, and the app looks for the microbes that indicate
@@ -58,8 +58,9 @@ helper visiting farms, not a lab technician.
 - **Result screen** — when a sweep ends: a rough estimate of the soil life seen, with its
   confidence, its reasons and when to test again; the number of microbes found, which opens
   out to each kind, named either by the model's classes or by organism group; a note that
-  none of it is scientifically tested; and what to do next, written on the phone by Apple
-  Intelligence, or standard advice when that cannot run. The estimate is a placeholder
+  none of it is scientifically tested. What to do next is on the farm's page on the Field
+  Helper side, written on the phone by Apple Intelligence, or standard advice when that
+  cannot run. The estimate is a placeholder
   (`PlaceholderSoilHealthEstimator`, every limit a guess) and the layout is a placeholder
   until there is a design: each section is its own view in `Features/Results/Components`.
   The model's classes are matched to organism groups by `ProvisionalTaxonMapping`, which
@@ -77,29 +78,21 @@ helper visiting farms, not a lab technician.
   the checks. Apple Intelligence advice is saved with the sample (`advice.json` in the sweep
   folder) and shown again when the sample is reopened; Write again asks for new wording.
   While the model writes, the card shows its progress, and a "Based on" line says what the
-  advice used. The advice is not part of the report sent to the Mac. Helpers can mark the
+  advice used. Helpers can mark the
   advice as useful or not, and say why; feedback is saved with the sample
   (`advice-feedback.json`).
+
+  The soil measurements a field helper records for a farm (nitrogen, phosphorus, potassium, pH,
+  organic carbon) are passed to the advice as background: the model is told them and told not
+  to build advice on them, and no rule reads them yet. Each saved piece of advice keeps a copy
+  of what it was based on, and is written again on its own when the measurements change, with
+  a line such as "Updated with the new pH reading." The "Based on" line names the measurements
+  used. Advice for a farm with no measurements is exactly what it was before.
+
   `docs/advice-content.md` is the human-readable source of that content, with its sources
   and open review items. Sample setup has optional field notes (farm plot, crop stage, what
   was done recently), so the advice can compare with earlier samples of the same plot.
-- **Send to Mac** — a saved sweep with counts shares a `.aurafarm` soil report by
-  AirDrop, Files or Mail, for the farm manager.
 - **Export** — frames can be copied off the phone with the Files app.
-
-**Farm manager (Mac)**
-
-- **Farms and fields** — each farm with its farmer, village and notes, and the fields
-  (paddies) it is split into.
-- **Inbox** — soil reports from the iPhone land here. Open a `.aurafarm` file, drag it
-  onto the window, or use File › Import Soil Reports. The same sweep sent twice is
-  recognised and skipped.
-- **Soil tests** — file each test under its field, then see what was counted, as a chart
-  and a table, with the sample details, how it was counted, the slide and notes.
-- **Trends** — organisms counted per field over time, on each farm's page.
-
-The Mac app shows raw counts only. It gives no soil rating, because a rating needs the
-recommended actions behind it, and those are not built yet.
 
 ### Why frames, not video
 
@@ -116,8 +109,7 @@ now and the same rule applies to them: nothing in the app edits or deletes one.
 - Recommended actions with every result
 - History of past tests, and PDF export of a single record
 
-Nothing in the result or recommendation list is started. Neither app scores soil yet,
-and neither claims any accuracy.
+The soil estimate and the advice are placeholders, and the app claims no accuracy.
 
 ## How the quality check works
 
@@ -199,8 +191,7 @@ it in your `Local.xcconfig` if it is already registered to another team.
 
 Requires Xcode 26 or later. The field app runs on iOS 26 or later, iPhone, portrait only;
 its written advice needs an iPhone with Apple Intelligence turned on, and falls back to
-standard advice without it. The farm manager runs on macOS 14 or later. No third-party
-dependencies.
+standard advice without it. No third-party dependencies.
 
 ### Seeing every result state
 
@@ -223,14 +214,11 @@ the feedback helpers gave. It checks rule-following, not whether advice is right
 | Scheme | Builds |
 |---|---|
 | `AuraFarm` | The iOS field app and its tests |
-| `AuraFarmManager` | The Mac farm manager and its tests |
 
 Run the unit tests:
 
 ```bash
 xcodebuild test -scheme AuraFarm -destination 'platform=iOS Simulator,name=iPhone 17'
-xcodebuild test -scheme AuraFarmManager -destination 'platform=macOS'
-swift test --package-path AuraFarmKit
 ```
 
 The simulator name has to match a runtime installed on your machine;
@@ -239,24 +227,21 @@ The simulator name has to match a runtime installed on your machine;
 The camera does not work in the Simulator. Test the capture screen on a real iPhone,
 mounted on the microscope.
 
-### Try the whole flow, iPhone to Mac
+### Try the whole flow
 
 No microscope needed: a recorded microscope video goes through exactly the pipeline the
 camera does.
 
-1. **Mac:** run the `AuraFarmManager` scheme on My Mac once, so the Mac knows it opens
-   `.aurafarm` files. Leave it open.
-2. **iPhone:** run the `AuraFarm` scheme on your iPhone. Put a microscope recording in
+1. **iPhone:** run the `AuraFarm` scheme on your iPhone. Put a microscope recording in
    Photos first.
-3. **Prepare:** on the first screen, Step 1 opens the preparation guide: the mix, making
-   the slide, mounting the phone, and the path to walk the slide along.
-4. **Sample:** type a sample ID, then tap **Use a recorded video**. Choose the video, set
+2. **Farm:** as a Field Helper, add a farm and mark out its land on the map.
+3. **Prepare:** as a Microscope Operator, open Step 1 for the preparation guide: the mix,
+   making the slide, mounting the phone, and the path to walk the slide along.
+4. **Sample:** choose the farm, then tap **Use a recorded video**. Choose the video, set
    where the slide starts moving steadily, and tap **Run sample**. With a microscope, tap
    **Start** instead and follow the arrows.
 5. **Result:** when the sweep finishes, the result shows what was counted per organism
-   group. Tap **Send to Mac** and AirDrop it to your Mac.
-6. **Mac:** the report opens in Aura Farm Manager's Inbox. Add a farm and a field in the
-   sidebar, then file the test under the field.
+   group. The advice on what to do next is on the farm's page on the Field Helper side.
 
 ## Repository layout
 
@@ -274,14 +259,8 @@ AuraFarm/               iOS field app
     SampleSetup/  Capture/  Results/  SweepLibrary/  Workbench/
   Resources/            Core ML model
 AuraFarmTests/          Unit tests for the iOS app
-AuraFarmManager/        macOS farm manager
-  App/                  App entry point, file opening, menu commands
-  Models/               SwiftData records: Farm, Field, SoilTest, OrganismCount
-  Services/             Importing soil reports
-  Features/             SwiftUI screens: Navigation/  Farms/  SoilTests/
-AuraFarmManagerTests/   Unit tests for the Mac app
-AuraFarmKit/            Swift package both apps share: the .aurafarm soil report format
-Config/                 Shared xcconfig, Info.plist additions, your gitignored Local.xcconfig
+AuraFarmKit/            Swift package with the organism group names
+Config/                 Shared xcconfig and your gitignored Local.xcconfig
 ```
 
 ## Contributing
@@ -296,8 +275,6 @@ Every pull request into `main` runs:
 | Check | Does |
 |---|---|
 | `Build and test` | Builds the iOS app and runs its unit tests on an iOS Simulator |
-| `Mac build and test` | Builds the Mac app and runs its unit tests |
-| `AuraFarmKit tests` | Runs the shared package's unit tests |
 | `Format check` | `swift-format lint`, settings in `.swift-format` |
 | `Repo checks` | Every Swift file is inside a target folder; no video or file over 5 MB |
 | `Conflict check` | Labels the pull request `has-conflicts` when it stops merging cleanly |

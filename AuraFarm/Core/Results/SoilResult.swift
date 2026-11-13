@@ -16,7 +16,7 @@ struct SoilResult: Equatable {
     /// What the detector counted, by its class label. Empty when it ran and found nothing;
     /// nil when it did not run, so a sweep that was never counted is not read as empty.
     var countsByClass: [String: Int]?
-    /// The saved sweep this came from, for sending it on and looking through its frames.
+    /// The saved sweep this came from, for looking through its frames.
     /// nil for a result made up for testing.
     var sweep: SavedSweep?
     /// The farm plot the helper named, if any. Not the microscope field.
@@ -26,6 +26,10 @@ struct SoilResult: Equatable {
     var recentActions: [SampleDetails.RecentAction] = []
     /// True when the sweep stopped on its size ceiling instead of finishing.
     var stoppedEarly: Bool = false
+    /// What the field helper recorded about this farm's soil, when the result is shown with it.
+    /// Background for the advice only: it does not change the estimate, the patterns or the
+    /// actions offered. nil when there are none, and for results shown away from a farm.
+    var soil: SoilMeasurements? = nil
 
     enum Failure: Error, Equatable, LocalizedError {
         case noSampleDetails

@@ -41,6 +41,10 @@ struct Farm: Codable, Identifiable, Equatable {
     var farmerName: String
     var plots: [Plot] = []
     var createdAt = Date()
+    /// What the field helper has recorded about the soil, apart from the microscope tests.
+    /// nil until they record something. It belongs to the farm rather than a plot, because
+    /// that is where the helper takes the readings.
+    var soil: SoilMeasurements? = nil
 
     /// Every corner of every plot, for fitting a map around the whole farm.
     var allCorners: [GeoPoint] { plots.flatMap(\.corners) }
@@ -60,7 +64,7 @@ struct Farm: Codable, Identifiable, Equatable {
 extension Farm {
     /// Keys as they were written before a farm had a name of its own or more than one plot.
     private enum StoredKey: String, CodingKey {
-        case id, name, farmerName, corners, plots, createdAt
+        case id, name, farmerName, corners, plots, createdAt, soil
     }
 
     /// Reads farms saved by an earlier version too, rather than letting the store give up on
@@ -72,6 +76,7 @@ extension Farm {
         farmerName = try stored.decode(String.self, forKey: .farmerName)
         createdAt = try stored.decode(Date.self, forKey: .createdAt)
         name = try stored.decodeIfPresent(String.self, forKey: .name) ?? farmerName
+        soil = try stored.decodeIfPresent(SoilMeasurements.self, forKey: .soil)
         if let plots = try stored.decodeIfPresent([Plot].self, forKey: .plots) {
             self.plots = plots
         } else {

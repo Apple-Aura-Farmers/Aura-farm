@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// What one sweep came to: an estimate of the soil life seen, the counts, advice on what to
-/// do, and sending it on to the Mac.
+/// What one sweep came to: an estimate of the soil life seen, and the counts. The advice on what
+/// to do next is on the farm's page on the Field Helper side.
 ///
 /// PLACEHOLDER layout: there is no final design yet. The screen only arranges the section
 /// components in `Components/`, each of which takes plain values, so a new design replaces
@@ -16,6 +16,16 @@ struct SoilResultScreen: View {
     private let recommender: any RecommendationProviding
     private let historyProvider: @Sendable (SoilResult) async -> [PastResult]
     private let adviceStore: (any AdviceStore)?
+    /// Whether "What to do next" is on this screen. Off in the app, where the advice is on the
+    /// farm's page; the debug scenarios turn it on to look at each advice state.
+    private var showsAdvice = false
+
+    /// This screen with the advice section on.
+    func showingAdvice() -> SoilResultScreen {
+        var copy = self
+        copy.showsAdvice = true
+        return copy
+    }
 
     /// The result of a saved sweep, with advice from the on-device model.
     init(sweep: SavedSweep, recommender: any RecommendationProviding = FoundationModelRecommender()) {
@@ -60,7 +70,7 @@ struct SoilResultScreen: View {
             case .result(let result):
                 SoilResultContent(
                     result: result, recommender: recommender, historyProvider: historyProvider,
-                    adviceStore: adviceStore)
+                    adviceStore: adviceStore, showsAdvice: showsAdvice)
             case .failure(let message):
                 ContentUnavailableView(
                     "No result to show",
@@ -82,15 +92,16 @@ struct SoilResultScreen: View {
 /// The result itself, once there is one. Owns the view model so it survives redraws.
 private struct SoilResultContent: View {
     @State private var viewModel: SoilResultViewModel
-    /// Bumped by Try again, to restart the recommendation task.
-    @State private var attempt = 0
+    let showsAdvice: Bool
 
     init(
         result: SoilResult,
         recommender: any RecommendationProviding,
         historyProvider: @escaping @Sendable (SoilResult) async -> [PastResult],
-        adviceStore: (any AdviceStore)?
+        adviceStore: (any AdviceStore)?,
+        showsAdvice: Bool
     ) {
+        self.showsAdvice = showsAdvice
         _viewModel = State(
             wrappedValue: SoilResultViewModel(
                 result: result, recommender: recommender, historyProvider: historyProvider,
@@ -116,28 +127,8 @@ private struct SoilResultContent: View {
                 isExpanded: $viewModel.isBreakdownExpanded
             )
 
-            Section {
-                RecommendationCard(
-                    state: viewModel.recommendationState,
-                    modelUnavailableReason: viewModel.modelUnavailableReason,
-                    progress: viewModel.progress,
-                    basis: viewModel.adviceBasis,
-                    savedAt: viewModel.savedAt,
-                    savedFromOlderRules: viewModel.savedFromOlderRules,
-                    rating: viewModel.feedback?.rating,
-                    onRate: { rating, reasons in
-                        Task { await viewModel.rate(rating, reasons: reasons) }
-                    },
-                    onRetry: { attempt += 1 }
-                )
-                if viewModel.canWriteAgain {
-                    Button("Write again", systemImage: "arrow.clockwise") {
-                        viewModel.requestFreshWording()
-                        attempt += 1
-                    }
-                }
-            } header: {
-                Text("What to do next")
+            if showsAdvice {
+                WhatToDoNextSection(viewModel: viewModel)
             }
 
             SampleSummarySection(result: viewModel.result)
@@ -146,13 +137,10 @@ private struct SoilResultContent: View {
                 ResultActions(sweep: sweep)
             }
         }
-        .task(id: attempt) {
-            await viewModel.loadRecommendation(freshWording: viewModel.wantsFreshWording)
-        }
     }
 }
 
-/// Which sample this was, for the helper to check before sending it on.
+/// Which sample this was.
 private struct SampleSummarySection: View {
     let result: SoilResult
 

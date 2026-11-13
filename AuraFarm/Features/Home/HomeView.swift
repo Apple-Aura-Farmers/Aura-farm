@@ -201,5 +201,6 @@ extension SampleDetails {
 
 #Preview {
     HomeView()
+        .environment(FarmStore(fileURL: nil))
         .environment(SupabaseSession(client: nil))
 }
