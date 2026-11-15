@@ -17,7 +17,7 @@ struct FarmsOverviewMap: View {
     let farms: [Farm]
     /// Called with the plot the helper tapped, and the farm it belongs to.
     let onOpen: (Farm, Plot) -> Void
-    
+
     var onDeselect: () -> Void
     /// Drawn thicker and brighter than the rest.
     var selected: Plot.ID?
@@ -39,7 +39,9 @@ struct FarmsOverviewMap: View {
                                 Button {
                                     onOpen(farm, plot)
                                 } label: {
-                                    number(farm.number(of: plot), in: colour)
+                                    number(
+                                        farm.number(of: plot), in: colour,
+                                        isSelected: plot.id == selected)
                                 }
                                 .buttonStyle(.plain)
                             }
@@ -71,7 +73,7 @@ struct FarmsOverviewMap: View {
 
     /// The plot's number on its own land. Big enough to tap, and in the farmer's colour so it
     /// reads as part of the shape under it rather than as a pin dropped on top.
-    private func number(_ value: Int, in colour: Color) -> some View {
+    private func number(_ value: Int, in colour: Color, isSelected: Bool) -> some View {
         Text(value, format: .number)
             .font(.headline)
             .foregroundStyle(.white)
@@ -79,6 +81,8 @@ struct FarmsOverviewMap: View {
             .background(colour, in: Circle())
             .overlay(Circle().stroke(.white.opacity(0.9), lineWidth: 2))
             .shadow(radius: 2)
+            .scaleEffect(isSelected ? 1.2 : 1)
+            .animation(.snappy, value: isSelected)
     }
 
     /// The plot containing the spot. Where plots overlap, the smaller one wins, so a small

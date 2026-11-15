@@ -60,6 +60,9 @@ struct FarmListSheet: View {
                 Text("^[\(farms.count) farm](inflect: true)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    // The digit rolls rather than cutting when a farm is added or deleted.
+                    .contentTransition(.numericText())
+                    .animation(.snappy, value: farms.count)
             }
             Spacer()
             Menu {

@@ -51,57 +51,38 @@ struct NewPlotFormView: View {
     // MARK: The farmer
 
     private var farmerField: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                TextField("Farmer's name", text: $farmerName)
-                    .textContentType(.name)
-                    .textInputAutocapitalization(.words)
-                    .autocorrectionDisabled()
-                    .focused($focus, equals: .farmer)
-                    .submitLabel(.next)
-                    .onSubmit { focus = .plot }
-                Image(systemName: "chevron.down.circle")
-                    .foregroundStyle(.secondary)
-                    .accessibilityHidden(true)
-            }
-            .padding(16)
-            .background(.fill.tertiary, in: RoundedRectangle(cornerRadius: 14))
+        HStack {
+            TextField("Farmer's name", text: $farmerName)
+                .textContentType(.name)
+                .textInputAutocapitalization(.words)
+                .autocorrectionDisabled()
+                .focused($focus, equals: .farmer)
+                .submitLabel(.next)
+                .onSubmit { focus = .plot }
 
-            // Only while the field is being typed in, so the suggestions do not sit over the
-            // plot name once the farmer has been chosen.
-            if focus == .farmer, !suggestions.isEmpty {
-                VStack(alignment: .leading, spacing: 0) {
-                    ForEach(Array(suggestions.enumerated()), id: \.element) { index, name in
-                        if index > 0 { Divider() }
-                        Button {
-                            farmerName = name
-                            focus = .plot
-                        } label: {
-                            Text(name)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 12)
-                                .contentShape(Rectangle())
+            // A menu rather than a list under the field: it is the control iOS already has for
+            // picking one of a few things, so it dims, scrolls and dismisses by itself.
+            if !known.isEmpty {
+                Menu {
+                    Picker("Farmer", selection: $farmerName) {
+                        ForEach(known, id: \.self) { name in
+                            Text(name).tag(name)
                         }
-                        .buttonStyle(.plain)
                     }
+                } label: {
+                    Image(systemName: "chevron.down.circle")
+                        .foregroundStyle(.secondary)
                 }
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
-                .padding(.top, 4)
-                .transition(.opacity)
+                .accessibilityLabel("Farmers already on this phone")
             }
         }
-        .animation(.easeOut(duration: 0.15), value: suggestions)
+        .padding(16)
+        .background(.fill.tertiary, in: RoundedRectangle(cornerRadius: 14))
     }
 
-    /// Farmers already on the phone whose name contains what has been typed. Everything, while
-    /// nothing has been.
-    private var suggestions: [String] {
-        let typed = trimmed(farmerName)
-        let names = Set(store.farms.map(\.farmerName))
-        return
-            names
-            .filter { typed.isEmpty || ($0.localizedStandardContains(typed) && $0 != typed) }
+    /// Every farmer the phone knows, for the menu.
+    private var known: [String] {
+        Set(store.farms.map(\.farmerName))
             .sorted { $0.localizedStandardCompare($1) == .orderedAscending }
     }
 
