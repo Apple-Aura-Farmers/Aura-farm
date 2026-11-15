@@ -20,11 +20,14 @@
         var mapping: ScreenMapping
         var mirrored: Bool
         var previewLayer: AVCaptureVideoPreviewLayer?
+        /// How the picture is shown (the field centred); every mark anchored to the picture is
+        /// drawn through it. The text and the trail are not.
+        var display = CGAffineTransform.identity
         var onTapTrail: () -> Void = {}
 
         var body: some View {
             ZStack {
-                LiveFieldOutlines(model: model, previewLayer: previewLayer)
+                LiveFieldOutlines(model: model, previewLayer: previewLayer, display: display)
                 LiveFieldCard(model: model)
                 if model.fieldInfo.awaitingReview {
                     FieldReview(
@@ -35,7 +38,7 @@
                         onAdjust: { model.adjustField(to: $0) })
                 } else {
                     if model.guideDryRun {
-                        GuideGeometryHost(model: model, previewLayer: previewLayer)
+                        GuideGeometryHost(model: model, previewLayer: previewLayer, display: display)
                         LiveGuideOverlay(state: model.overlayState)
                     }
                     VStack {
@@ -109,11 +112,12 @@
     struct LiveFieldOutlines: View {
         var model: SlideMovementLabModel
         var previewLayer: AVCaptureVideoPreviewLayer?
+        var display = CGAffineTransform.identity
         var body: some View {
             FieldOutlines(
                 info: model.fieldInfo,
                 converter: FramePreviewConverter(
-                    layer: previewLayer, frameSize: model.fieldInfo.frameSize))
+                    layer: previewLayer, frameSize: model.fieldInfo.frameSize, display: display))
         }
     }
 
@@ -147,6 +151,9 @@
     struct GuideGeometryHost: View {
         var model: SlideMovementLabModel
         var previewLayer: AVCaptureVideoPreviewLayer?
+        /// The centring transform: the axes, the centre and the size of a field are measured in
+        /// the displayed space, the one the marks are drawn in.
+        var display = CGAffineTransform.identity
 
         private struct Key: Equatable {
             var box: CGRect?
@@ -154,6 +161,7 @@
             var viewSize: CGSize
             var hasLayer: Bool
             var openShare: Double?
+            var display: CGAffineTransform
         }
 
         /// The length, in frame pixels, of the two probe vectors the axes are measured with.
@@ -167,7 +175,7 @@
                         id: Key(
                             box: info.registrationRect, frameSize: info.frameSize,
                             viewSize: proxy.size, hasLayer: previewLayer != nil,
-                            openShare: info.state?.openShare)
+                            openShare: info.state?.openShare, display: display)
                     ) {
                         model.setGuideGeometry(geometry(for: info))
                     }
@@ -176,7 +184,9 @@
         }
 
         private func geometry(for info: SlideMovementInfo.Field) -> GuideScreenGeometry? {
-            guard let converter = FramePreviewConverter(layer: previewLayer, frameSize: info.frameSize)
+            guard
+                let converter = FramePreviewConverter(
+                    layer: previewLayer, frameSize: info.frameSize, display: display)
             else { return nil }
             let box = info.registrationRect ?? CGRect(origin: .zero, size: info.frameSize)
             let middle = CGPoint(x: box.midX, y: box.midY)

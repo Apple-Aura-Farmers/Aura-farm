@@ -317,15 +317,20 @@
         }
 
         /// The preview's own axes and sizes for the guide overlay (nil without a preview).
-        /// Changing the axes or the size of a field starts the dry run afresh.
+        /// Changing the direction of the axes or the size of a field in frame pixels starts the dry
+        /// run afresh; showing the picture larger or shifted (centring) does not.
         func setGuideGeometry(_ geometry: GuideScreenGeometry?) {
             analysisQueue.async { [weak self] in
                 guard let self else { return }
                 let old = self.dryRun.geometry
                 self.dryRun.geometry = geometry
-                if old?.axes != geometry?.axes || old?.pointsPerField != geometry?.pointsPerField {
-                    self.resetGuide()
+                let same: Bool
+                switch (old, geometry) {
+                case (nil, nil): same = true
+                case (let old?, let geometry?): same = old.givesSamePositions(as: geometry)
+                default: same = false
                 }
+                if !same { self.resetGuide() }
             }
         }
 
@@ -490,7 +495,10 @@
                 focusLeft: step.tracking.halfFocusRatio?.left,
                 focusRight: step.tracking.halfFocusRatio?.right,
                 focusTop: step.tracking.halfFocusRatio?.top,
-                focusBottom: step.tracking.halfFocusRatio?.bottom)
+                focusBottom: step.tracking.halfFocusRatio?.bottom,
+                edgeCandidate: guide?.edgeCandidate ?? "", edgeVerdict: guide?.edgeVerdict ?? "",
+                edgeReason: guide?.edgeReason ?? "", boxSharpSideA: guide?.sideSharpA,
+                boxSharpSideB: guide?.sideSharpB)
         }
 
         private static func write(_ rows: [MovementLogRow], test: SlideLabTest) -> URL? {

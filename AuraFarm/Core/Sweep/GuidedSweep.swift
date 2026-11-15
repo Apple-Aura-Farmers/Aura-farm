@@ -12,6 +12,8 @@ struct GuideStep: Equatable {
     var column: Int
     var isFinished: Bool
     var finishReason: SweepFinishReason?
+    /// What the edge conditions made of this reading, for the CSV.
+    var edge = EdgeDiagnostics()
 }
 
 /// Tells a person moving a slide by hand where to go next, so the whole sample is covered
@@ -56,7 +58,8 @@ struct GuidedSweep {
         return GuideStep(
             instruction: route.isFinished ? .finished : output.instruction, target: output.target,
             capture: output.capture, stateName: route.stateName, column: route.columnNumber,
-            isFinished: route.isFinished, finishReason: route.finishReason)
+            isFinished: route.isFinished, finishReason: route.finishReason,
+            edge: route.diagnostics)
     }
 
     /// Ends the route at once, whatever it was doing. The instruction is then always

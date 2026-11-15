@@ -99,7 +99,12 @@ final class GuidedSweepTests: XCTestCase {
     }
 
     func testOvershootIsToldTooFar() {
-        let result = run(round3, from: .zero) { $0.overshootFields = 0.5 }
+        // The overshoot is made at a spot approached after 14 captures: with column 1 inside the
+        // left edge the 12th falls at a leg end, where the edge check shows first.
+        let result = run(round3, from: .zero) {
+            $0.overshootFields = 0.5
+            $0.overshootAfterCaptures = 14
+        }
         report("overshoot", result)
         XCTAssertTrue(result.instructions.contains(.tooFar))
         XCTAssertEqual(result.finishReason, .sampleFinished)
@@ -115,8 +120,8 @@ final class GuidedSweepTests: XCTestCase {
 
     func testPlacementsAfterAGapAreUncertainWithinThatColumn() {
         let result = run(round3, from: .zero) {
-            // Mid-column: reading 400 now falls between two columns, where nothing is uncertain.
-            $0.lostAtReading = 450
+            // Mid-column: reading 450 now falls between two columns, where nothing is uncertain.
+            $0.lostAtReading = 400
             $0.lostRaisesGap = true
         }
         report("lost, gap", result)

@@ -20,11 +20,10 @@ struct EdgeConfirmationThresholds {
     /// The same as `MovementIndicatorThresholds.tooFastSpeedFraction`; a spike restarts the
     /// candidate.
     var tooFastSpeedFraction: Double = 0.18
-    /// Low detail of the whole box that has lasted this long, whatever the verdict so far, is
-    /// not a blur that will pass: it is confirmed, so a missing arrival or missing focus
-    /// history cannot ask for a refocus for ever. The same as
-    /// `GuidedSweepThresholds.refocusAfterSeconds`.
-    var blurGiveUpSeconds: Double = 6.0
+    /// A half-edge candidate that began within this long before the helper reached a spot's
+    /// target (or after) is not built up by the stillness of holding on that spot: holding is
+    /// not resting at an edge. PLACEHOLDER: about half the capture hold (`holdSeconds`, 1 s).
+    var spotHoldSeconds: Double = 0.5
 }
 
 /// What the route's raw conditions make of the current reading.
@@ -34,6 +33,15 @@ enum EdgeCandidate: Equatable {
     case halfEdge
     /// The whole box has low detail (or the tracker is paused): the overshoot fallback.
     case wholeBoxLowDetail
+
+    /// The CSV word.
+    var csvName: String {
+        switch self {
+        case .none: "none"
+        case .halfEdge: "half_edge"
+        case .wholeBoxLowDetail: "whole_box"
+        }
+    }
 }
 
 enum EdgeVerdict: Equatable {
@@ -43,6 +51,16 @@ enum EdgeVerdict: Equatable {
     case confirmed
     /// The same content blurred, not new blank content: refocus.
     case blur
+
+    /// The CSV word.
+    var csvName: String {
+        switch self {
+        case .none: "none"
+        case .checking: "checking"
+        case .confirmed: "confirmed"
+        case .blur: "blur"
+        }
+    }
 }
 
 /// Tells a real edge from an image that went soft for a moment (a knock, a flick, a focus
@@ -60,6 +78,9 @@ struct EdgeConfirmation {
     /// How long the candidate has held, with the helper still (half edge) or in all (whole
     /// box), in seconds.
     private(set) var heldSeconds = 0.0
+    /// Why the last `update` said what it said, for the CSV: arrived, not_arrived, vouched,
+    /// behind_blurred, speed_spike or spot_hold; empty when there is nothing to say.
+    private(set) var reason = ""
 
     private var history: [(seconds: Double, position: CGPoint)] = []
     private var activeKind = EdgeCandidate.none
@@ -82,10 +103,14 @@ struct EdgeConfirmation {
     ///   - candidate: what the route's raw conditions make of this reading.
     ///   - since: when that condition began (half-box rule) or when the low-detail stretch
     ///     began (whole box). Arrival is measured over the window before it.
+    ///   - spotReachedAt: when the helper got onto the current spot's target and is holding
+    ///     there, nil when not. See `EdgeConfirmationThresholds.spotHoldSeconds`.
     mutating func update(
-        reading: GuideReading, heading: CGPoint?, candidate: EdgeCandidate, since: Double?
+        reading: GuideReading, heading: CGPoint?, candidate: EdgeCandidate, since: Double?,
+        spotReachedAt: Double? = nil
     ) -> EdgeVerdict {
         let now = reading.seconds
+        reason = ""
         defer { lastSeconds = now }
         history.append((now, reading.position))
         history.removeAll { now - $0.seconds > thresholds.arriveWindowSeconds + 3 }
@@ -134,9 +159,13 @@ struct EdgeConfirmation {
             // behind as sharp as in the last sharp frame is the same sample, so an edge that
             // the helper started at (or came to from the side) can still be checked.
             let vouched = (reading.behindFocusRatio ?? 0) >= thresholds.behindFocusRatioMin
-            guard arrived || vouched else { return .blur }
+            guard arrived || vouched else {
+                reason = "not_arrived"
+                return .blur
+            }
             if let ratio = reading.behindFocusRatio, ratio < thresholds.blurFocusRatioMax {
                 heldSeconds = 0
+                reason = "behind_blurred"
                 return .blur
             }
             guard let ratio = reading.behindFocusRatio, ratio >= thresholds.behindFocusRatioMin
@@ -147,8 +176,18 @@ struct EdgeConfirmation {
             if reading.speedFraction >= thresholds.tooFastSpeedFraction {
                 restartAt = now
                 clearCandidate()
+                reason = "speed_spike"
                 return .none
             }
+            // Holding on a spot's target is not resting at an edge: a candidate that began as
+            // the helper got there builds nothing from the stillness. A real edge reached on
+            // the way to a spot began earlier and is still confirmed.
+            if let reached = spotReachedAt, since > reached - thresholds.spotHoldSeconds + 1e-9 {
+                heldSeconds = 0
+                reason = "spot_hold"
+                return .none
+            }
+            reason = arrived ? "arrived" : "vouched"
             if reading.isStill { heldSeconds += step }
             if heldSeconds >= thresholds.confirmSeconds - 1e-9 { return .confirmed }
             return .checking(progress: heldSeconds / thresholds.confirmSeconds)
@@ -158,13 +197,19 @@ struct EdgeConfirmation {
             // who set off just before the glass began shows no travel).
             let vouched = (lastTrackedBehind ?? 0) >= thresholds.behindFocusRatioMin
             heldSeconds = now - firstSeen
-            if heldSeconds >= thresholds.blurGiveUpSeconds { return .confirmed }
-            guard arrived || vouched else { return .blur }
+            // Never confirmed on a timer: a long blur is decided when detail returns (the
+            // route does that), not by waiting.
+            guard arrived || vouched else {
+                reason = "not_arrived"
+                return .blur
+            }
             if let ahead = lastTrackedAhead, let behind = lastTrackedBehind,
                 ahead < thresholds.blurFocusRatioMax, behind < thresholds.blurFocusRatioMax
             {
+                reason = "behind_blurred"
                 return .blur
             }
+            reason = arrived ? "arrived" : "vouched"
             if heldSeconds >= thresholds.confirmSeconds - 1e-9 { return .confirmed }
             return .checking(progress: heldSeconds / thresholds.confirmSeconds)
         }

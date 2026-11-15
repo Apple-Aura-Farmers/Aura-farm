@@ -398,7 +398,23 @@ A detail drop alone cannot tell new blank content from the same content out of f
 - **Arrival.** The view must have travelled at least 0.10 field along the heading in the second before the candidate began. A blur leaves the content where it was.
 - **Focus comparison.** The tracker compares each half of the box with the same content in the anchor frame (the half's rectangle moved by minus the offset): `halfFocusRatio`, about 1 when unchanged, well below 1 when blurred. The half behind must be at least 0.6 of its sharpness in the last sharp frame. With no arrival, a candidate whose half behind is vouched for this way is still checked, and the ratios of the last tracked reading stand in while the tracker is paused.
 - **Confirm while still.** The candidate holds for 1.0 s with the helper still (progress builds only while still; a speed spike of 0.18 or more restarts it). The route says "Checking edge… hold still", then "Edge reached". The whole-box fallback confirms by time alone, after the 0.8 s of low detail.
-- **Blur means refocus.** No arrival without vouching, or the half behind (or, in the fallback, both halves of the last tracked reading) under 0.6, is blur: the route says "Refocus" and carries on where it was when detail returns. Low detail of the whole box that lasts 6 s is confirmed anyway.
+- **Blur means refocus.** No arrival without vouching, or the half behind (or, in the fallback, both halves of the last tracked reading) under 0.6, is blur: the route says "Refocus" and carries on where it was when detail returns. Blur is never confirmed by a timer: see "Columns edge to edge, and long blur" below.
 - **CSV columns**, appended last: `focus_left`, `focus_right`, `focus_top`, `focus_bottom`.
-- Every number here (0.10 field, 1 s window, 1.0 s confirm, 0.6 ratios, 0.18 speed, 6 s) is a PLACEHOLDER to calibrate from the `focus_*` and `box_sharp_*` columns.
+- Every number here (0.10 field, 1 s window, 1.0 s confirm, 0.6 ratios, 0.18 speed) is a PLACEHOLDER to calibrate from the `focus_*` and `box_sharp_*` columns.
 
+## Columns edge to edge, and long blur
+
+On the microscope column 1 turned back after one spot: it started exactly at the left edge, so half the box was over glass for the whole column and a hovering half read as the top edge.
+
+- **Column inset.** When the left edge is found with the edge at the centre cross, column 1 is `columnInsetFields` (0.6) inside it, toward the sample: the first spot is at edge x + 0.6 on the current row. The same for a recheck run. A whole-box overshoot keeps the old rule (the first on-sample position back), and leg ends are not inset.
+- **Only an edge ahead ends a leg.** The half ahead must be under 120, the half behind not, and the half ahead at most `halfContrastRatioMax` (0.5) of the half behind (`halves_too_close`). In column legs the two halves across the heading must not clearly differ: the lower is at least `sideBalanceMin` (0.5) of the higher, otherwise the cover slip's side is drifting in (a skewed stage) and the leg carries on (`side_imbalance`).
+- **Holding is not resting.** A candidate that began within 0.5 s before the helper reached a spot's target (or after) builds no confirm progress from the hold (`spot_hold`). One that began on the way there is still confirmed.
+- **Long blur is decided when detail returns.** After 6 s of whole-box low detail that is blur or undecided the instruction is "still no detail" and nothing is decided. When detail returns: matched within `sameSpotFields` (0.3) of where the stretch began is blur (`same_spot`), and the route carries on exactly where it was. Unmatched, or moved more than that, is an edge reached on the way back (`moved`): the leg or the left edge return completes at the first on-sample position. There is no confirming timer.
+- **CSV columns**, appended last: `edge_candidate` (`none`, `half_edge`, `whole_box`), `edge_verdict` (`none`, `checking`, `confirmed`, `blur`), `edge_reason` (empty, or `arrived`, `not_arrived`, `vouched`, `behind_blurred`, `side_imbalance`, `halves_too_close`, `spot_hold`, `speed_spike`, `same_spot`, `moved`, `timeout_no_detail`), then `box_sharp_side_a`, `box_sharp_side_b` (the two halves across the heading that the route used; left and right on an up or down leg).
+- Every number here is a PLACEHOLDER to calibrate from those columns.
+
+## Centred field
+
+With **Centre the field** on (the default), once the field is learned and confirmed the preview is cropped to the largest rectangle centred on the field circle (`FieldCentring.cropRect`), scaled to fit and centred in the preview. It trims the red ring area on the side with more room.
+It is display only: the box outline, the tint and the guide's marks are drawn in the displayed space, tracking still registers in the learned box in full-frame pixels. Off, or while the field is being learned, reviewed or adjusted, the picture is uncropped.
+Phase 3b will crop saved frames with this same rectangle, so what the helper sees is what is kept.

@@ -9,6 +9,44 @@ struct SimulatedDrop {
     var holes: [(centre: CGPoint, radius: Double)] = []
     /// Square or rectangular sample, like a cover slip filled with sample.
     var rects: [CGRect] = []
+    /// The rectangles are turned by this angle (radians) about the middle of the first one: a
+    /// cover slip whose edges are not parallel to the stage's axes.
+    var rotation = 0.0
+
+    /// A square cover slip turned by `degrees` against the stage axes.
+    static func skewedSquare(from origin: CGPoint, side: Double, degrees: Double) -> SimulatedDrop {
+        var drop = square(from: origin, side: side)
+        drop.rotation = degrees * .pi / 180
+        return drop
+    }
+
+    private var pivot: CGPoint {
+        rects.first.map { CGPoint(x: $0.midX, y: $0.midY) } ?? .zero
+    }
+
+    /// `point` in the rectangles' own, unturned axes.
+    private func unturned(_ point: CGPoint) -> CGPoint {
+        guard rotation != 0 else { return point }
+        let dx = Double(point.x - pivot.x)
+        let dy = Double(point.y - pivot.y)
+        return CGPoint(
+            x: Double(pivot.x) + cos(rotation) * dx + sin(rotation) * dy,
+            y: Double(pivot.y) - sin(rotation) * dx + cos(rotation) * dy)
+    }
+
+    /// The rectangle's corners as the stage sees them (turned).
+    private func corners(of rect: CGRect) -> [CGPoint] {
+        [
+            CGPoint(x: rect.minX, y: rect.minY), CGPoint(x: rect.maxX, y: rect.minY),
+            CGPoint(x: rect.maxX, y: rect.maxY), CGPoint(x: rect.minX, y: rect.maxY),
+        ].map { corner in
+            let dx = Double(corner.x - pivot.x)
+            let dy = Double(corner.y - pivot.y)
+            return CGPoint(
+                x: Double(pivot.x) + cos(rotation) * dx - sin(rotation) * dy,
+                y: Double(pivot.y) + sin(rotation) * dx + cos(rotation) * dy)
+        }
+    }
 
     /// A sample that fills a rectangle.
     static func square(from origin: CGPoint, side: Double) -> SimulatedDrop {
@@ -19,7 +57,7 @@ struct SimulatedDrop {
         let inside =
             circles.contains {
                 hypot(Double(point.x - $0.centre.x), Double(point.y - $0.centre.y)) <= $0.radius
-            } || rects.contains { $0.contains(point) }
+            } || rects.contains { $0.contains(unturned(point)) }
         let hole = holes.contains {
             hypot(Double(point.x - $0.centre.x), Double(point.y - $0.centre.y)) <= $0.radius
         }
@@ -52,10 +90,10 @@ struct SimulatedDrop {
     func gridPoints(step: Double = 0.2) -> [CGPoint] {
         let xs =
             circles.flatMap { [Double($0.centre.x) - $0.radius, Double($0.centre.x) + $0.radius] }
-            + rects.flatMap { [Double($0.minX), Double($0.maxX)] }
+            + rects.flatMap { rect in corners(of: rect).map { Double($0.x) } }
         let ys =
             circles.flatMap { [Double($0.centre.y) - $0.radius, Double($0.centre.y) + $0.radius] }
-            + rects.flatMap { [Double($0.minY), Double($0.maxY)] }
+            + rects.flatMap { rect in corners(of: rect).map { Double($0.y) } }
         guard let minX = xs.min(), let maxX = xs.max(), let minY = ys.min(), let maxY = ys.max() else {
             return []
         }
@@ -112,6 +150,8 @@ final class GuideSimulator {
     private var pauseTruth: CGPoint?
     private var lastSampleTruth: CGPoint?
     private var unconfirmed = 0
+    private var returnCount = 0
+    private var lastReturn = BlankReturnOutcome.none
     private var seconds = 0.0
     private var lastMove = 0.0
     private var pending: CGPoint = .zero
@@ -123,6 +163,8 @@ final class GuideSimulator {
     var wrongWayFields = 0.0
     /// Go on this far past a spot the first time one is reached.
     var overshootFields = 0.0
+    /// The overshoot is made at the first spot approached after this many captures.
+    var overshootAfterCaptures = 12
     /// Readings (by index) at which the tracker reports `.lost` for 5 readings.
     var lostAtReading: Int?
     var lostRaisesGap = false
@@ -157,6 +199,7 @@ final class GuideSimulator {
     private var edgeAtCentre = false
     private var lastTracking = TrackingState.tracking
     private var goBackReadings = 0
+    private var stoppedAtEdge = 0
     /// The sharpness the simulated halves read with and without sample.
     private let sharpOnSample = 400.0
     private let sharpOnGlass = 50.0
@@ -251,12 +294,19 @@ final class GuideSimulator {
                     let error = unmatchedError
                 {
                     unconfirmed += 1
+                    returnCount += 1
+                    lastReturn = .unmatched
                     bias = CGPoint(
                         x: frozen.x + error.x - truePosition.x, y: frozen.y + error.y - truePosition.y)
                 } else if pauseTruth == nil {
                     // Nothing was ever tracked: the position carries on from where it froze.
                     unconfirmed += 1
+                    returnCount += 1
+                    lastReturn = .unmatched
                     bias = CGPoint(x: frozen.x - truePosition.x, y: frozen.y - truePosition.y)
+                } else {
+                    returnCount += 1
+                    lastReturn = .matched
                 }
             }
             lastSampleTruth = truePosition
@@ -276,8 +326,28 @@ final class GuideSimulator {
         // The halves of the box: half a field from the centre along the heading, and behind it.
         var ahead: Double?
         var behind: Double?
+        var sideA: Double?
+        var sideB: Double?
         edgeAtCentre = false
         if tracking == .tracking, let heading {
+            // The halves across the heading, each as the share of its area over sample (a 4 x 4
+            // grid): a stage that is skewed makes one side drift over the cover slip's edge.
+            func sideSharpness(_ sign: Double) -> Double {
+                var inside = 0
+                for along in 0..<4 {
+                    for across in 0..<4 {
+                        let u = (Double(along) + 0.5) / 4 - 0.5
+                        let v = sign * (Double(across) + 0.5) / 8
+                        let point = CGPoint(
+                            x: truePosition.x + CGFloat(u * Double(heading.x) - v * Double(heading.y)),
+                            y: truePosition.y + CGFloat(u * Double(heading.y) + v * Double(heading.x)))
+                        if drop.contains(point) { inside += 1 }
+                    }
+                }
+                return sharpOnGlass + (sharpOnSample - sharpOnGlass) * Double(inside) / 16
+            }
+            sideA = sideSharpness(1)
+            sideB = sideSharpness(-1)
             func sharpness(_ sign: Double) -> Double {
                 let point = CGPoint(
                     x: truePosition.x + CGFloat(sign * 0.5) * heading.x,
@@ -324,6 +394,7 @@ final class GuideSimulator {
                     if blurShown > 3 { tracking = .paused }
                     viewClass = .blurry
                     (ahead, behind) = (sharpOnBlur, sharpOnBlur)
+                    (sideA, sideB) = (sharpOnBlur, sharpOnBlur)
                     (aheadFocus, behindFocus) = (0.3, 0.3)
                 }
                 if blurLeft == 0 { slipActive = false }
@@ -334,7 +405,8 @@ final class GuideSimulator {
             seconds: seconds, position: frozen, tracking: tracking, unconfirmedGaps: unconfirmed,
             viewClass: viewClass, speedFraction: speed, isStill: lastMove == 0,
             aheadSharpness: ahead, behindSharpness: behind, aheadFocusRatio: aheadFocus,
-            behindFocusRatio: behindFocus)
+            behindFocusRatio: behindFocus, sideSharpnessA: sideA, sideSharpnessB: sideB,
+            lastBlankReturn: lastReturn, blankReturnCount: returnCount)
     }
 
     /// Whether the view shows enough detail to follow. Over blank glass never; on a soil slide
@@ -407,11 +479,18 @@ final class GuideSimulator {
         if stopsAtEdge, edgeAtCentre, Self.isEdgeBound(output.stateName) {
             switch output.instruction {
             case .travel, .move, .farAway:
-                lastMove = 0
-                return
+                // A person who stopped at what looks like the edge but is still told to carry
+                // on does so after 2 s.
+                stoppedAtEdge += 1
+                if stoppedAtEdge <= 20 {
+                    lastMove = 0
+                    return
+                }
             default:
                 break
             }
+        } else {
+            stoppedAtEdge = 0
         }
         switch output.instruction {
         case .findSample:
@@ -420,7 +499,9 @@ final class GuideSimulator {
             move(direction)
         case .move(let toward):
             let remaining = hypot(Double(toward.x), Double(toward.y))
-            if overshootFields > 0, !overshotAlready, capturesSoFar >= 12, remaining <= 0.25 {
+            if overshootFields > 0, !overshotAlready, capturesSoFar >= overshootAfterCaptures,
+                remaining <= 0.25
+            {
                 overshotAlready = true
                 overshootLeft = remaining + overshootFields
                 pending = toward

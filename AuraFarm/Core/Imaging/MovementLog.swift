@@ -109,6 +109,14 @@ struct MovementLogRow: Equatable {
     var focusRight: Double?
     var focusTop: Double?
     var focusBottom: Double?
+    /// What the guide's edge conditions made of this frame; empty when the guide is off. See
+    /// `EdgeDiagnostics`.
+    var edgeCandidate = ""
+    var edgeVerdict = ""
+    var edgeReason = ""
+    /// The sharpness of the two halves across the guide's heading that the route used.
+    var boxSharpSideA: Double?
+    var boxSharpSideB: Double?
 }
 
 enum MovementLog {
@@ -129,6 +137,7 @@ enum MovementLog {
         "guide_captures", "guide_axes_mapping",
         "box_sharp_left", "box_sharp_right", "box_sharp_top", "box_sharp_bottom",
         "focus_left", "focus_right", "focus_top", "focus_bottom",
+        "edge_candidate", "edge_verdict", "edge_reason", "box_sharp_side_a", "box_sharp_side_b",
     ]
 
     static func csv(_ rows: [MovementLogRow]) -> String {
@@ -167,6 +176,8 @@ enum MovementLog {
             number(row.boxSharpTop, 3), number(row.boxSharpBottom, 3),
             number(row.focusLeft, 3), number(row.focusRight, 3), number(row.focusTop, 3),
             number(row.focusBottom, 3),
+            row.edgeCandidate, row.edgeVerdict, row.edgeReason,
+            number(row.boxSharpSideA, 3), number(row.boxSharpSideB, 3),
         ]
     }
 

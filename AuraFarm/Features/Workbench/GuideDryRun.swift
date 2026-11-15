@@ -12,6 +12,13 @@
         var captures: Int
         /// The manual mapping the axes in use are nearest to: "rotateLeft", "asIs-mirrored", ...
         var axesMapping = ""
+        /// What the route made of the edge conditions: see `EdgeDiagnostics`.
+        var edgeCandidate = "none"
+        var edgeVerdict = "none"
+        var edgeReason = ""
+        /// The sharpness of the two halves across the heading that the route used.
+        var sideSharpA: Double?
+        var sideSharpB: Double?
     }
 
     /// How the preview shows the box, measured from the live preview layer on the main thread.
@@ -23,6 +30,18 @@
         var pointsPerField: Double
         /// The radius of the field on screen, in points; arrows are pinned just inside it.
         var fieldRadius: Double
+
+        /// Whether `other` gives the dry run the same positions in fields: the axes in points per
+        /// frame pixel, over points per field, are the same. Showing the picture larger or shifted
+        /// (centring the field) scales the axes and the field together and changes nothing; a
+        /// turned preview, a new box or a new frame size does.
+        func givesSamePositions(as other: GuideScreenGeometry) -> Bool {
+            let own = [axes.a, axes.b, axes.c, axes.d].map { $0 / pointsPerField }
+            let theirs = [other.axes.a, other.axes.b, other.axes.c, other.axes.d].map {
+                $0 / other.pointsPerField
+            }
+            return zip(own, theirs).allSatisfy { abs($0 - $1) <= 0.01 * max(abs($0), abs($1), 1e-6) }
+        }
     }
 
     /// What one guide update gives the lab.
@@ -60,6 +79,10 @@
         /// Where the guide last sent the view (a screen unit vector), to work out which half of
         /// the box the next content comes into.
         private var lastHeading: CGPoint?
+        /// The tracker's blank return totals at the last update, to see a new return and which
+        /// way it went.
+        private var previousReturns = (matched: 0, unmatched: 0)
+        private var lastReturn = BlankReturnOutcome.none
 
         /// Feeds one lab step; returns the CSV fields and the info for the screen.
         func update(
@@ -102,13 +125,32 @@
             {
                 (aheadFocus, behindFocus) = (pair.ahead, pair.behind)
             }
+            var sideA: Double?
+            var sideB: Double?
+            if let heading = lastHeading, let halves = step.tracking.halfSharpness,
+                let frameDirection = axes.frameVector(ofScreenVector: heading),
+                let sides = halves.sideSharpness(forFrameDirection: frameDirection)
+            {
+                (sideA, sideB) = sides
+            }
+            let returns = (
+                matched: step.tracking.blankReturnsMatched,
+                unmatched: step.tracking.blankReturnsUnmatched
+            )
+            if returns.matched > previousReturns.matched {
+                lastReturn = .matched
+            } else if returns.unmatched > previousReturns.unmatched {
+                lastReturn = .unmatched
+            }
+            previousReturns = returns
             let result = guide.update(
                 GuideReading(
                     seconds: seconds, position: position, tracking: tracking,
                     unconfirmedGaps: step.tracking.unconfirmedGaps, viewClass: viewClass,
                     speedFraction: indicators.speedFraction, isStill: indicators.stillSeconds > 0,
                     aheadSharpness: ahead, behindSharpness: behind, aheadFocusRatio: aheadFocus,
-                    behindFocusRatio: behindFocus))
+                    behindFocusRatio: behindFocus, sideSharpnessA: sideA, sideSharpnessB: sideB,
+                    lastBlankReturn: lastReturn, blankReturnCount: returns.matched + returns.unmatched))
             lastHeading = guide.heading
             if case .edgeReached = result.instruction { edgeReachedCount += 1 }
 
@@ -160,7 +202,9 @@
                 fields: GuideRowFields(
                     viewClass: viewClass.rawValue, state: result.stateName,
                     instruction: result.instruction.csvName, targetDx: dx, targetDy: dy,
-                    captures: captures, axesMapping: axesMapping),
+                    captures: captures, axesMapping: axesMapping,
+                    edgeCandidate: result.edge.candidate, edgeVerdict: result.edge.verdict,
+                    edgeReason: result.edge.reason, sideSharpA: sideA, sideSharpB: sideB),
                 info: SlideMovementInfo.Guide(
                     isOn: true, instruction: result.instruction.debugText, state: result.stateName,
                     targetDx: dx, targetDy: dy, viewClass: viewClass.rawValue, captures: captures,

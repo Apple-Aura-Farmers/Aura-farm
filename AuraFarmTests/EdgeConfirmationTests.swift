@@ -261,9 +261,12 @@ final class EdgeConfirmationTests: XCTestCase {
     // MARK: Simulator with knocks
 
     func testKnocksCauseNoFalseEdgesAndMostEdgesAreReachedAtTheCentre() {
-        for (name, drop) in [
-            ("round r=3", SimulatedDrop(circles: [(.zero, 3)])),
-            ("square 8x8", SimulatedDrop.square(from: CGPoint(x: -4, y: -4), side: 8)),
+        // A round drop's curved flanks put one side half over glass as a leg ends, which the
+        // side balance rule (Phase 2f) rejects as a drifting side; those ends are found by the
+        // whole-box fallback instead, so fewer are reached at the centre.
+        for (name, drop, minShare) in [
+            ("round r=3", SimulatedDrop(circles: [(.zero, 3)]), 0.5),
+            ("square 8x8", SimulatedDrop.square(from: CGPoint(x: -4, y: -4), side: 8), 0.8),
         ] {
             for knocks in [false, true] {
                 let simulator = GuideSimulator(drop: drop, start: .zero)
@@ -283,7 +286,7 @@ final class EdgeConfirmationTests: XCTestCase {
                 XCTAssertTrue(result.finished, label)
                 XCTAssertGreaterThanOrEqual(result.coverage, 0.95, label)
                 XCTAssertEqual(result.falseEdgesNearKnocks, 0, label)
-                XCTAssertGreaterThanOrEqual(share, 0.8, label)
+                XCTAssertGreaterThanOrEqual(share, minShare, label)
             }
         }
     }

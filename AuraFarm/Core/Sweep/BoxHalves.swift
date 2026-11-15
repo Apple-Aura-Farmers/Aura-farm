@@ -69,6 +69,22 @@ struct BoxHalves: Equatable {
         return y >= 0 ? .bottom : .top
     }
 
+    /// The two halves ACROSS a view travelling toward `direction`: top and bottom for a
+    /// horizontal heading, left and right for a vertical one. nil for no direction.
+    static func sides(forFrameDirection direction: CGPoint) -> (Side, Side)? {
+        guard let side = ahead(forFrameDirection: direction) else { return nil }
+        switch side {
+        case .left, .right: return (.top, .bottom)
+        case .top, .bottom: return (.left, .right)
+        }
+    }
+
+    /// The sharpness of the two side halves (see `sides`), in that order.
+    func sideSharpness(forFrameDirection direction: CGPoint) -> (a: Double, b: Double)? {
+        guard let pair = Self.sides(forFrameDirection: direction) else { return nil }
+        return (sharpness(pair.0), sharpness(pair.1))
+    }
+
     /// The sharpness ahead of and behind a view travelling toward `direction`.
     func aheadAndBehind(forFrameDirection direction: CGPoint) -> (ahead: Double, behind: Double)? {
         guard let side = Self.ahead(forFrameDirection: direction) else { return nil }

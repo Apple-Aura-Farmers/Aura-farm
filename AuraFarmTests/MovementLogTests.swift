@@ -22,7 +22,8 @@ final class MovementLogTests: XCTestCase {
             guideTargetDx: 0.5, guideTargetDy: -0.8, guideCaptures: 7,
             guideAxesMapping: "rotateLeft-mirrored", boxSharpLeft: 301.2346, boxSharpRight: 98.7654,
             boxSharpTop: 250, boxSharpBottom: 120.5, focusLeft: 0.9512, focusRight: 0.31,
-            focusTop: 1.2, focusBottom: nil)
+            focusTop: 1.2, focusBottom: nil, edgeCandidate: "half_edge", edgeVerdict: "checking",
+            edgeReason: "side_imbalance", boxSharpSideA: 40.5, boxSharpSideB: 400)
     }
 
     func testHeaderAndEveryRowHaveTheSameColumnCount() {
@@ -48,13 +49,13 @@ final class MovementLogTests: XCTestCase {
         XCTAssertEqual(fields[index("position_x_frames")], "0.014")
         XCTAssertEqual(fields[index("frame_width")], "1280")
         XCTAssertEqual(
-            MovementLog.header.suffix(29).prefix(7),
+            MovementLog.header.suffix(34).prefix(7),
             [
                 "box_brightness", "box_sharpness", "box_contrast", "reading", "predicted_streak",
                 "no_detail", "blind_stretches",
             ])
         XCTAssertEqual(
-            MovementLog.header.suffix(22),
+            MovementLog.header.suffix(27),
             [
                 "start_match_x_px", "start_match_y_px", "true_off_start_fields",
                 "tracker_error_fields", "blank_returns_matched", "blank_returns_unmatched",
@@ -62,6 +63,8 @@ final class MovementLogTests: XCTestCase {
                 "guide_target_dx", "guide_target_dy", "guide_captures", "guide_axes_mapping",
                 "box_sharp_left", "box_sharp_right", "box_sharp_top", "box_sharp_bottom",
                 "focus_left", "focus_right", "focus_top", "focus_bottom",
+                "edge_candidate", "edge_verdict", "edge_reason", "box_sharp_side_a",
+                "box_sharp_side_b",
             ])
         XCTAssertEqual(fields[index("start_match_x_px")], "41.23")
         XCTAssertEqual(fields[index("true_off_start_fields")], "0.120")
@@ -78,9 +81,14 @@ final class MovementLogTests: XCTestCase {
         XCTAssertEqual(fields[index("box_sharp_left")], "301.235")
         XCTAssertEqual(fields[index("box_sharp_bottom")], "120.500")
         XCTAssertEqual(fields[index("focus_left")], "0.951")
+        XCTAssertEqual(fields[index("edge_candidate")], "half_edge")
+        XCTAssertEqual(fields[index("edge_verdict")], "checking")
+        XCTAssertEqual(fields[index("edge_reason")], "side_imbalance")
+        XCTAssertEqual(fields[index("box_sharp_side_a")], "40.500")
+        XCTAssertEqual(fields[index("box_sharp_side_b")], "400.000")
         XCTAssertEqual(fields[index("focus_top")], "1.200")
         XCTAssertEqual(fields[index("focus_bottom")], "", "a half with no ratio is empty")
-        XCTAssertEqual(MovementLog.header.last, "focus_bottom", "appended after every column")
+        XCTAssertEqual(MovementLog.header.last, "box_sharp_side_b", "appended after every column")
         XCTAssertEqual(fields[index("box_brightness")], "63.457")
         XCTAssertEqual(fields[index("box_sharpness")], "412.346")
         XCTAssertEqual(fields[index("box_contrast")], "18.250")

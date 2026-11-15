@@ -33,6 +33,37 @@ struct GuideReading: Equatable {
     /// content's in the anchor frame (about 1 when unchanged). See `SlideTrackerReading`.
     var aheadFocusRatio: Double?
     var behindFocusRatio: Double?
+    /// The sharpness of the two halves ACROSS the heading (left and right on an up or down
+    /// leg), in no fixed order; nil when not known. A clear difference means the cover slip's
+    /// side is drifting into view, not the end of the leg arriving. See `BoxHalves.sides`.
+    var sideSharpnessA: Double?
+    var sideSharpnessB: Double?
+    /// How the tracker's latest blank return came out, and how many returns it has decided so
+    /// far (matched plus unmatched): a rise in the count is a new return.
+    var lastBlankReturn = BlankReturnOutcome.none
+    var blankReturnCount = 0
+}
+
+/// How the tracker took the picture back after a stretch with nothing to follow.
+enum BlankReturnOutcome: Equatable {
+    case none
+    /// The held picture was found again: the position is trustworthy.
+    case matched
+    /// It was not: the position carries on from the frozen one and may be off.
+    case unmatched
+}
+
+/// What the route made of the edge conditions on one reading, for the CSV. Names, not enums,
+/// because that is all the CSV needs.
+struct EdgeDiagnostics: Equatable {
+    /// "none", "half_edge" or "whole_box".
+    var candidate = "none"
+    /// "none", "checking", "confirmed" or "blur".
+    var verdict = "none"
+    /// A short word when something was decided or rejected, else empty: arrived, not_arrived,
+    /// vouched, behind_blurred, side_imbalance, halves_too_close, spot_hold, speed_spike,
+    /// same_spot, moved, timeout_no_detail.
+    var reason = ""
 }
 
 /// What the guide asks the person to do next.

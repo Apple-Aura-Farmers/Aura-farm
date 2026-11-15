@@ -24,6 +24,7 @@
         @AppStorage("slideLab.fieldRegion") private var fieldRegionName = FieldRegionMode.auto.rawValue
         @AppStorage("slideLab.hopAgreement") private var hopAgreement = false
         @AppStorage("slideLab.guideDryRun") private var guideDryRun = false
+        @AppStorage("slideLab.centreField") private var centresField = true
         @State private var noteText = ""
 
         // Recorded video.
@@ -87,15 +88,29 @@
             ScrollView {
                 VStack(spacing: 0) {
                     testPicker
-                    ZStack {
-                        CameraPreview(session: model.session, onLayer: { previewLayer = $0 })
-                        if model.isAnalyzing {
-                            SlideMovementOverlays(
-                                model: model, mapping: mapping, mirrored: mirrored,
-                                previewLayer: previewLayer, onTapTrail: { isShowingTrail = true })
-                        } else {
-                            setupCard
+                    GeometryReader { proxy in
+                        // The picture with the field centred: one transform for the preview and
+                        // the converter every frame-anchored mark goes through. Uncropped until
+                        // the field is learned and confirmed, and when the toggle is off.
+                        let display =
+                            centresField && model.isAnalyzing
+                            ? FramePreviewConverter.centringTransform(
+                                for: model.fieldInfo, layer: previewLayer, viewSize: proxy.size)
+                            : .identity
+                        ZStack {
+                            CameraPreview(session: model.session, onLayer: { previewLayer = $0 })
+                                .scaleEffect(display.a, anchor: .topLeading)
+                                .offset(x: display.tx, y: display.ty)
+                            if model.isAnalyzing {
+                                SlideMovementOverlays(
+                                    model: model, mapping: mapping, mirrored: mirrored,
+                                    previewLayer: previewLayer, display: display,
+                                    onTapTrail: { isShowingTrail = true })
+                            } else {
+                                setupCard
+                            }
                         }
+                        .frame(width: proxy.size.width, height: proxy.size.height)
                     }
                     .frame(height: 440)
                     .clipped()
@@ -280,6 +295,7 @@
                 Toggle("Show what the app sees", isOn: $showsSees)
                 Toggle("Measure hop agreement", isOn: $hopAgreement)
                 Toggle("Guide dry run", isOn: $guideDryRun)
+                Toggle("Centre the field", isOn: $centresField)
                 Text("Red tint: treated as the eyepiece. Yellow box: where movement is measured.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
