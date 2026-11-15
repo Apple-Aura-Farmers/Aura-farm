@@ -40,26 +40,27 @@ private struct HomeTab: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
+            List {
+                Section {
                     Button {
                         details = .blank
                         isNaming = true
                     } label: {
                         Label("New Test", systemImage: "plus")
-                            .font(.headline)
+                            // A list tints a label's icon with the accent colour, which
+                            // would sink it into the filled button.
+                            .foregroundStyle(.white)
                             .frame(maxWidth: .infinity)
-                            .padding(.vertical, 14)
                     }
-                    .buttonStyle(InvertedButtonStyle())
-
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Overview")
-                            .font(.title3.bold())
-                        overview
-                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
                 }
-                .padding()
+
+                Section("Overview") {
+                    overview
+                }
             }
             .navigationTitle("Home")
             .toolbar {
@@ -148,38 +149,19 @@ private struct HomeTab: View {
     private var overview: some View {
         if sweeps.isEmpty {
             Text("Tests you take will be summed up here.")
-                .font(.subheadline)
                 .foregroundStyle(.secondary)
         } else {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("\(sweeps.count) \(sweeps.count == 1 ? "test" : "tests")")
-                    .font(.headline)
-                if let latest = sweeps.first {
-                    Text("Latest: \(latest.manifest?.details.sampleID ?? latest.name)")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                    Text(latest.recordedAt.formatted(date: .abbreviated, time: .shortened))
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+            LabeledContent("Tests", value: sweeps.count.formatted())
+            if let latest = sweeps.first {
+                LabeledContent("Latest") {
+                    VStack(alignment: .trailing) {
+                        Text(latest.manifest?.details.sampleID ?? latest.name)
+                        Text(latest.recordedAt.formatted(date: .abbreviated, time: .shortened))
+                            .font(.footnote)
+                    }
                 }
             }
         }
-    }
-}
-
-/// A filled button the other way round from the system's: the page's own colour on the
-/// text's, so it reads as the one thing to do on the screen in either light or dark.
-struct InvertedButtonStyle: ButtonStyle {
-    @Environment(\.isEnabled) private var isEnabled
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .foregroundStyle(isEnabled ? Color(uiColor: .systemBackground) : .secondary)
-            .background(
-                RoundedRectangle(cornerRadius: 14)
-                    .fill(isEnabled ? Color.primary : Color(uiColor: .secondarySystemFill))
-            )
-            .opacity(configuration.isPressed ? 0.8 : 1)
     }
 }
 

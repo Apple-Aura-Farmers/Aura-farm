@@ -165,9 +165,6 @@ struct FieldHelperHomeView: View {
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
-            .tint(
-                FarmerColour.colour(
-                    for: selection.farm.farmerName, among: store.farms.map(\.farmerName)))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 20)
@@ -221,12 +218,12 @@ struct FieldHelperHomeView: View {
     @ViewBuilder
     private var problemBanner: some View {
         if let problem = store.problem {
-            Text(problem)
+            Label(problem, systemImage: "exclamationmark.triangle.fill")
                 .font(.footnote)
                 .foregroundStyle(.orange)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+                .background(.regularMaterial, in: .capsule)
                 .padding(.horizontal, 72)
                 .padding(.top, 8)
         }

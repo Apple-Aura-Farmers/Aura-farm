@@ -254,7 +254,8 @@ struct SweepDetailView: View {
                     isPlaying.toggle()
                 } label: {
                     Image(systemName: isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                        .font(.system(size: 44))
+                        .font(.largeTitle)
+                        .imageScale(.large)
                 }
                 .accessibilityLabel(isPlaying ? "Pause" : "Play")
 
