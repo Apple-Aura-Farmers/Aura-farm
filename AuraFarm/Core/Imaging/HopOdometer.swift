@@ -28,10 +28,11 @@ struct HopOdometerThresholds {
 /// it is added to a running position (a "hop") and the caller re-anchors on the current
 /// frame. Hops overlap, so each is measured on ground both frames can see.
 ///
-/// Sign convention: `position` is where the VIEW has travelled across the slide, in the
-/// frame's own pixel axes, x to the right and y down (top-down, as `ShakeEstimator`
-/// reports). It is in the same direction as the registered shift; content on the slide
-/// appears to move the OPPOSITE way, see `CaptureViewModel.pictureMoved`.
+/// Sign convention: `position` follows the registered shift, in the frame's own pixel axes,
+/// x to the right and y down (top-down, as `ShakeEstimator` reports). Registration reads the
+/// way the CONTENT moves on the frame (content moving right by 40 px reads +40, see
+/// `TravelOffsetTests`), so `position` is the content's displacement; the VIEW travels the
+/// opposite way. Callers that need where the view is (the guide) negate it.
 ///
 /// There is no anchor before the first good frame. Anchoring on it is the caller's job: it
 /// holds that frame and only then starts passing offsets. A nil offset means "measured, and

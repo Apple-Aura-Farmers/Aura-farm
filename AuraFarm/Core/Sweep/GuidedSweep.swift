@@ -43,6 +43,13 @@ struct GuidedSweep {
     /// the lab and the tests.
     var rechecks: Int { route.rechecks }
     var failedProbes: Int { route.failedProbes }
+    /// Edges found with the edge at the centre of the view, and by going past it and back
+    /// (left edge and leg ends only). For the lab and the tests.
+    var edgesReached: Int { route.edgesReached }
+    var edgesGoneBack: Int { route.edgesGoneBack }
+    /// The direction the VIEW is being sent, as a screen unit vector, while travelling to the
+    /// left edge, sweeping a column leg or stepping right; nil in the other phases.
+    var heading: CGPoint? { route.guideHeading }
 
     mutating func update(_ reading: GuideReading) -> GuideStep {
         let output = route.update(reading)

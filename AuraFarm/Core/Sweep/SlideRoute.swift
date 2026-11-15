@@ -21,6 +21,13 @@ struct GuidedSweepThresholds {
     /// guide says "still no detail" (and refocus becomes a fair suggestion). PLACEHOLDER: a
     /// 1 mm trip back over blank glass at the slow speed (about 0.5 mm/s) takes about 2 s.
     var refocusAfterSeconds: Double = 6.0
+    /// A half of the box with less sharpness than this has no detail. PLACEHOLDER: the same cut
+    /// as the whole box (`DetailThresholds.minBoxSharpness`); calibrate from the `box_sharp_*`
+    /// CSV columns.
+    var halfLowDetailBelowSharpness: Double = 120
+    /// What a candidate edge must pass before it counts: arrival, the half behind still sharp
+    /// against the last sharp frame, and holding still. See `EdgeConfirmation`.
+    var confirmation = EdgeConfirmationThresholds()
     /// A spot within this of an existing capture is passed without stopping.
     var duplicateSpotFields: Double = 0.4
     /// Spots to move inward along the previous column after a failed step right.
@@ -92,8 +99,14 @@ struct SlideRoute {
     private(set) var rechecks = 0
     private(set) var probeIndex = 0
     private(set) var failedProbes = 0
+    private(set) var edgesReached = 0
+    private(set) var edgesGoneBack = 0
 
     private var alignment: SpotAlignment
+    /// Tells a real edge from a blur. Called once per reading; see `confirm`.
+    private var confirmation: EdgeConfirmation
+    private var verdict = EdgeVerdict.none
+    private var candidateNow = EdgeCandidate.none
     private var columns: [Column] = []
     private var current: Column?
     private var lastSample: CGPoint?
@@ -101,6 +114,8 @@ struct SlideRoute {
     private var lowDetailSince: Double?
     /// When the run of detail readings that may end the stretch began.
     private var detailSince: Double?
+    /// When the half ahead began to lack detail while the half behind still had it.
+    private var halfEdgeSince: Double?
     private var heading = CGPoint(x: -1, y: 0)
     private var leftEdgeY = 0.0
     private var isRecheckRun = false
@@ -112,6 +127,8 @@ struct SlideRoute {
     init(thresholds: GuidedSweepThresholds = GuidedSweepThresholds()) {
         self.thresholds = thresholds
         alignment = SpotAlignment(thresholds: thresholds.alignment)
+        confirmation = EdgeConfirmation(
+            thresholds: thresholds.confirmation, halfCut: thresholds.halfLowDetailBelowSharpness)
     }
 
     var isFinished: Bool { phase == .finished }
@@ -166,6 +183,18 @@ struct SlideRoute {
             }
         }
 
+        if let ahead = reading.aheadSharpness, let behind = reading.behindSharpness,
+            reading.tracking == .tracking,
+            ahead < thresholds.halfLowDetailBelowSharpness,
+            behind >= thresholds.halfLowDetailBelowSharpness
+        {
+            halfEdgeSince = halfEdgeSince ?? reading.seconds
+        } else {
+            halfEdgeSince = nil
+        }
+
+        confirm(reading)
+
         switch phase {
         case .finished:
             return Output(instruction: .finished, target: nil, capture: nil)
@@ -199,6 +228,53 @@ struct SlideRoute {
         reading.tracking == .paused || [.blank, .blurry, .dark].contains(reading.viewClass)
     }
 
+    /// Asks `EdgeConfirmation` what the raw conditions come to. The half-box condition (the
+    /// half ahead without detail, the half behind with it) applies to the left edge runs and
+    /// column legs; the whole-box one (low detail for `edgeSeconds`) to every travel. Steps
+    /// right and probes keep only the whole-box one: a landing spot half over the sample is
+    /// still a valid column.
+    private mutating func confirm(_ reading: GuideReading) {
+        var allowsHalf = false
+        var allowsWhole = false
+        switch phase {
+        case .runToLeftEdge:
+            allowsHalf = true
+            allowsWhole = true
+        case .spot(let kind):
+            allowsHalf = kind == .leg
+            allowsWhole = true
+        default:
+            break
+        }
+        var candidate = EdgeCandidate.none
+        var since: Double?
+        if allowsHalf, let halfEdgeSince {
+            candidate = .halfEdge
+            since = halfEdgeSince
+        } else if allowsWhole, edgeReached(reading) {
+            candidate = .wholeBoxLowDetail
+            since = lowDetailSince
+        }
+        candidateNow = candidate
+        verdict = confirmation.update(
+            reading: reading, heading: heading, candidate: candidate, since: since)
+    }
+
+    /// Takes the confirmed verdict, once.
+    private mutating func consumeConfirmation() {
+        verdict = .none
+        confirmation.cancel()
+    }
+
+    /// The direction the view is being sent, for the phases that have one.
+    var guideHeading: CGPoint? {
+        switch phase {
+        case .runToLeftEdge: return heading
+        case .spot(.leg), .spot(.edgeSpot), .spot(.step): return heading
+        default: return nil
+        }
+    }
+
     /// Low detail has lasted `edgeSeconds`: this is the edge.
     private func edgeReached(_ reading: GuideReading) -> Bool {
         guard Self.isLowDetail(reading), let lowDetailSince else { return false }
@@ -212,9 +288,28 @@ struct SlideRoute {
     // MARK: Left edge
 
     private mutating func runToLeftEdge(_ reading: GuideReading) -> Output {
-        if edgeReached(reading) {
+        switch verdict {
+        case .confirmed:
+            let half = candidateNow == .halfEdge
+            consumeConfirmation()
+            if half {
+                // The edge is at the centre: as if the way back had just been completed here.
+                edgesReached += 1
+                halfEdgeSince = nil
+                var output = completeReturn(.leftEdge, reading)
+                output.instruction = .edgeReached
+                return output
+            }
+            edgesGoneBack += 1
             beginReturn(.leftEdge)
             return plain(goBack(reading))
+        case .checking(let progress):
+            return plain(.checkingEdge(progress: progress))
+        case .blur:
+            // The same content out of focus, not an edge: carry on from where it was.
+            return plain(.refocus)
+        case .none:
+            break
         }
         if let warning = alignment.warning(reading, allowsRefocus: false) { return plain(warning) }
         return plain(.travel(direction: CGPoint(x: -1, y: 0)))
@@ -226,6 +321,8 @@ struct SlideRoute {
         phase = .returning(purpose)
         lowDetailSince = nil
         detailSince = nil
+        halfEdgeSince = nil
+        confirmation.cancel()
     }
 
     /// While going back: the same as `goBack`, until low detail has lasted `refocusAfterSeconds`.
@@ -270,9 +367,13 @@ struct SlideRoute {
             return failProbe(reading)
         case .resume:
             guard let resumeTarget else { return plain(.aligned) }
+            // `aim` starts the retries afresh; a resume is the same attempt, or a target that
+            // always runs into the edge would be retried for ever.
+            let retries = travelRetries
             aim(
                 at: resumeTarget.point, from: reading.position, kind: resumeTarget.kind,
                 holds: resumeTarget.holds)
+            travelRetries = retries
             return spot(resumeTarget.kind, reading)
         }
     }
@@ -286,6 +387,8 @@ struct SlideRoute {
             minY: Double(reading.position.y), maxY: Double(reading.position.y),
             legDirection: firstLeg, gapsAtStart: reading.unconfirmedGaps)
         aim(at: reading.position, from: reading.position, kind: .leg, holds: true)
+        // The first spot is here, so `aim` found no direction: the view is sent along the leg.
+        heading = CGPoint(x: 0, y: firstLeg)
         return spot(.leg, reading)
     }
 
@@ -295,6 +398,8 @@ struct SlideRoute {
         // A low-detail stretch from the last spot says nothing about the way to this one.
         lowDetailSince = nil
         detailSince = nil
+        halfEdgeSince = nil
+        confirmation.cancel()
         travelRetries = 0
         let dx = Double(point.x - start.x)
         let dy = Double(point.y - start.y)
@@ -321,9 +426,31 @@ struct SlideRoute {
     private mutating func spot(_ kind: SpotKind, _ reading: GuideReading) -> Output {
         guard let target = alignment.target else { return plain(.aligned) }
 
-        if edgeReached(reading) {
+        // A candidate edge must pass `EdgeConfirmation`; a blur is not an edge and the leg
+        // carries on where it was.
+        switch verdict {
+        case .checking(let progress):
+            return Output(instruction: .checkingEdge(progress: progress), target: target, capture: nil)
+        case .blur:
+            return Output(instruction: .refocus, target: target, capture: nil)
+        case .none, .confirmed:
+            break
+        }
+
+        if verdict == .confirmed, candidateNow == .halfEdge {
+            consumeConfirmation()
+            edgesReached += 1
+            halfEdgeSince = nil
+            var output = endLeg(reading)
+            output.instruction = .edgeReached
+            return output
+        }
+
+        if verdict == .confirmed {
+            consumeConfirmation()
             switch kind {
             case .leg, .edgeSpot:
+                if kind == .leg { edgesGoneBack += 1 }
                 beginReturn(.legEnd)
             case .step:
                 beginReturn(.stepRight)

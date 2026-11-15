@@ -70,6 +70,11 @@
                     Text("Target: -")
                 }
                 Text("View: \(info.viewClass.isEmpty ? "-" : info.viewClass) · Captured: \(info.captures)")
+                if !info.axesLine.isEmpty {
+                    Text(info.axesLine)
+                        + Text(info.axesDiffer ? " · differs from the picker" : "")
+                        .foregroundStyle(.orange)
+                }
             }
             .font(.footnote.monospaced())
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -195,6 +200,8 @@
                 .sensoryFeedback(.warning, trigger: model.readouts.lostCount)
                 .sensoryFeedback(.impact(weight: .light), trigger: model.guideInfo.captureCount)
                 .sensoryFeedback(.impact(weight: .light), trigger: model.guideInfo.edgeCount)
+                .sensoryFeedback(.warning, trigger: model.guideInfo.wrongWayCount)
+                .sensoryFeedback(.success, trigger: model.guideInfo.edgeReachedCount)
                 .sensoryFeedback(.success, trigger: stopReached) { _, reached in reached }
         }
     }

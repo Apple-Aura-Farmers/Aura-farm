@@ -6,6 +6,16 @@ struct SlideTrackerReading: Equatable {
     /// Brightness, sharpness and contrast inside the box (the whole frame's with no box),
     /// sampled at `SlideTracker.statsStep`.
     var boxStats: FrameStats
+    /// The sharpness of the four halves of the box, sampled at `SlideTracker.statsStep` like
+    /// `boxStats`; nil when there was no box or the frame was not tracked.
+    var halfSharpness: BoxHalves?
+    /// The sharpness of each half of the box now, over its sharpness in the anchor frame at the
+    /// place showing the same content (the half's rectangle moved by minus the offset).
+    /// About 1: the same patch is as sharp as it was. Well below 1: the same content is now
+    /// blurred. For the half ahead after real travel the anchor may not hold the new content,
+    /// so that ratio means little; only the half behind is used to decide. nil without a box,
+    /// an anchor or detail; a half is nil when the anchor covers less than half of it.
+    var halfFocusRatio: HalfFocus?
     /// This frame's shift from the last, px. nil when this frame was not tracked or gave nothing.
     var frameShift: CGPoint?
     /// The live offset from the anchor as registration returned it, px.
@@ -13,7 +23,8 @@ struct SlideTrackerReading: Equatable {
     /// The offset the odometer was given: measured, or predicted when the measurement
     /// disagreed with the frame-to-frame movement.
     var usedOffset: CGPoint?
-    /// Where the view has travelled, px, in the frame's axes.
+    /// How far the content has moved on the frame, px, in the frame's axes (`HopOdometer`'s
+    /// convention). The view travelled the opposite way.
     var position: CGPoint = .zero
     /// The position in fields: one field is `boxSide`.
     var positionFields: CGPoint = .zero
@@ -59,7 +70,9 @@ struct SlideTrackerReading: Equatable {
     /// Stretches where the position may be off: unmatched blank returns plus lost-then-regained.
     var unconfirmedGaps: Int { blankReturnsUnmatched + gaps }
 
-    /// The position as the person sees it on screen, in fields.
+    /// The position as the lab's picker shows it on screen, in fields. The picker already
+    /// describes how the VIEW's travel appears on screen for the content displacement, so no
+    /// negation here (the guide uses `GuideScreenAxes.guideFields` instead).
     func screenFields(mapping: ScreenMapping, mirrored: Bool) -> CGPoint {
         let onScreen = mapping.onScreen(position, mirrored: mirrored)
         let side = max(boxSide, 1)

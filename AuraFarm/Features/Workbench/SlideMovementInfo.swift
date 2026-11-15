@@ -63,6 +63,9 @@
             var hopCount = 0
             /// Parallel to `trail`: true where the box held nothing to follow, drawn dashed.
             var blind: [Bool] = []
+            /// The guide's captured spots and its current target, in the same space as `trail`.
+            var guideCaptured: [CGPoint] = []
+            var guideTarget: CGPoint?
         }
 
         /// The guide dry run's block. Counters drive haptics, like `Readouts`.
@@ -78,6 +81,14 @@
             var captureCount = 0
             var edgeCount = 0
             var isFinished = false
+            /// Entries into too far / other way, for the haptic warning.
+            var wrongWayCount = 0
+            /// Edges found with the edge at the centre of the view, for the success haptic.
+            var edgeReachedCount = 0
+            /// "Axes from preview match: Rotate 90° left"; empty without preview axes.
+            var axesLine = ""
+            /// True when the preview's axes are nearest to a different mapping than the picker's.
+            var axesDiffer = false
         }
 
         /// For the cards and outlines drawn on the camera preview, in frame pixels.

@@ -115,7 +115,8 @@ final class GuidedSweepTests: XCTestCase {
 
     func testPlacementsAfterAGapAreUncertainWithinThatColumn() {
         let result = run(round3, from: .zero) {
-            $0.lostAtReading = 400
+            // Mid-column: reading 400 now falls between two columns, where nothing is uncertain.
+            $0.lostAtReading = 450
             $0.lostRaisesGap = true
         }
         report("lost, gap", result)

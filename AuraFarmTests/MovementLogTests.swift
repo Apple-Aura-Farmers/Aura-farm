@@ -19,7 +19,10 @@ final class MovementLogTests: XCTestCase {
             startMatchY: -3.5, trueOffStartFields: 0.12, trackerErrorFields: 0.183,
             blankReturnsMatched: 2, blankReturnsUnmatched: 1, blankReturn: "matched",
             viewClass: "sample", guideState: "column 2 up", guideInstruction: "move",
-            guideTargetDx: 0.5, guideTargetDy: -0.8, guideCaptures: 7)
+            guideTargetDx: 0.5, guideTargetDy: -0.8, guideCaptures: 7,
+            guideAxesMapping: "rotateLeft-mirrored", boxSharpLeft: 301.2346, boxSharpRight: 98.7654,
+            boxSharpTop: 250, boxSharpBottom: 120.5, focusLeft: 0.9512, focusRight: 0.31,
+            focusTop: 1.2, focusBottom: nil)
     }
 
     func testHeaderAndEveryRowHaveTheSameColumnCount() {
@@ -45,18 +48,20 @@ final class MovementLogTests: XCTestCase {
         XCTAssertEqual(fields[index("position_x_frames")], "0.014")
         XCTAssertEqual(fields[index("frame_width")], "1280")
         XCTAssertEqual(
-            MovementLog.header.suffix(20).prefix(7),
+            MovementLog.header.suffix(29).prefix(7),
             [
                 "box_brightness", "box_sharpness", "box_contrast", "reading", "predicted_streak",
                 "no_detail", "blind_stretches",
             ])
         XCTAssertEqual(
-            MovementLog.header.suffix(13),
+            MovementLog.header.suffix(22),
             [
                 "start_match_x_px", "start_match_y_px", "true_off_start_fields",
                 "tracker_error_fields", "blank_returns_matched", "blank_returns_unmatched",
                 "blank_return", "view_class", "guide_state", "guide_instruction",
-                "guide_target_dx", "guide_target_dy", "guide_captures",
+                "guide_target_dx", "guide_target_dy", "guide_captures", "guide_axes_mapping",
+                "box_sharp_left", "box_sharp_right", "box_sharp_top", "box_sharp_bottom",
+                "focus_left", "focus_right", "focus_top", "focus_bottom",
             ])
         XCTAssertEqual(fields[index("start_match_x_px")], "41.23")
         XCTAssertEqual(fields[index("true_off_start_fields")], "0.120")
@@ -69,6 +74,13 @@ final class MovementLogTests: XCTestCase {
         XCTAssertEqual(fields[index("guide_instruction")], "move")
         XCTAssertEqual(fields[index("guide_target_dx")], "0.50")
         XCTAssertEqual(fields[index("guide_captures")], "7")
+        XCTAssertEqual(fields[index("guide_axes_mapping")], "rotateLeft-mirrored")
+        XCTAssertEqual(fields[index("box_sharp_left")], "301.235")
+        XCTAssertEqual(fields[index("box_sharp_bottom")], "120.500")
+        XCTAssertEqual(fields[index("focus_left")], "0.951")
+        XCTAssertEqual(fields[index("focus_top")], "1.200")
+        XCTAssertEqual(fields[index("focus_bottom")], "", "a half with no ratio is empty")
+        XCTAssertEqual(MovementLog.header.last, "focus_bottom", "appended after every column")
         XCTAssertEqual(fields[index("box_brightness")], "63.457")
         XCTAssertEqual(fields[index("box_sharpness")], "412.346")
         XCTAssertEqual(fields[index("box_contrast")], "18.250")
@@ -131,12 +143,23 @@ final class MovementLogTests: XCTestCase {
         plain.guideTargetDx = nil
         plain.guideTargetDy = nil
         plain.guideCaptures = nil
+        plain.guideAxesMapping = ""
+        plain.boxSharpLeft = nil
+        plain.boxSharpRight = nil
+        plain.boxSharpTop = nil
+        plain.boxSharpBottom = nil
+        plain.focusLeft = nil
+        plain.focusRight = nil
+        plain.focusTop = nil
+        plain.focusBottom = nil
         let line = MovementLog.csv([plain]).split(separator: "\n")[1]
         let fields = line.split(separator: ",", omittingEmptySubsequences: false).map(String.init)
         for name in [
             "start_match_x_px", "start_match_y_px", "true_off_start_fields", "tracker_error_fields",
             "view_class", "guide_state", "guide_instruction", "guide_target_dx", "guide_target_dy",
-            "guide_captures",
+            "guide_captures", "guide_axes_mapping", "box_sharp_left", "box_sharp_right",
+            "box_sharp_top", "box_sharp_bottom", "focus_left", "focus_right", "focus_top",
+            "focus_bottom",
         ] {
             let column = MovementLog.header.firstIndex(of: name) ?? -1
             XCTAssertEqual(fields[column], "", name)

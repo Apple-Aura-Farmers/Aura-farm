@@ -12,7 +12,9 @@ final class SlideRouteEdgeTests: XCTestCase {
     private var steps: [(index: Int, step: GuideStep)] = []
 
     private func feed(
-        _ viewClass: ViewClass, _ tracking: TrackingState, dx: Double = 0, times: Int = 1
+        _ viewClass: ViewClass, _ tracking: TrackingState, dx: Double = 0, times: Int = 1,
+        ahead: Double? = nil, behind: Double? = nil, aheadFocus: Double? = nil,
+        behindFocus: Double? = nil
     ) {
         for _ in 0..<times {
             seconds += 0.1
@@ -21,7 +23,9 @@ final class SlideRouteEdgeTests: XCTestCase {
             let step = guide.update(
                 GuideReading(
                     seconds: seconds, position: position, tracking: tracking, unconfirmedGaps: 0,
-                    viewClass: viewClass, speedFraction: 0.05, isStill: false))
+                    viewClass: viewClass, speedFraction: 0.05, isStill: false,
+                    aheadSharpness: ahead, behindSharpness: behind, aheadFocusRatio: aheadFocus,
+                    behindFocusRatio: behindFocus))
             steps.append((index, step))
         }
     }
@@ -37,7 +41,7 @@ final class SlideRouteEdgeTests: XCTestCase {
     }
 
     func testE1ShapedEdgeFlickerThenSolidLowDetail() throws {
-        feed(.sample, .tracking, dx: -0.1, times: 10)
+        feed(.sample, .tracking, dx: -0.1, times: 10, aheadFocus: 1, behindFocus: 0.95)
         let flicker1 = index + 1
         feed(.blurry, .paused, times: 6)  // 0.6 s
         feed(.thin, .matching, times: 4)  // 0.4 s
@@ -47,8 +51,10 @@ final class SlideRouteEdgeTests: XCTestCase {
 
         XCTAssertFalse(steps.contains { $0.step.instruction == .refocus }, "refocus never shows")
         let edge = try XCTUnwrap(steps.first { $0.step.stateName == "edge: go back" }).index
-        XCTAssertGreaterThanOrEqual(edge, flicker2 + 8, "not during the 0.6 s flicker")
-        XCTAssertLessThan(edge, flicker2 + 16, "during the 1.6 s one")
+        // The 1.6 s stretch runs on into the solid one: low detail for 0.8 s makes the
+        // candidate and one more second of it confirms it (the edge no longer fires at once).
+        XCTAssertGreaterThanOrEqual(edge, flicker2 + 16, "not during the 0.6 s flicker")
+        XCTAssertLessThan(edge, flicker2 + 24, "once the 1.6 s one has run on")
         XCTAssertGreaterThan(edge, flicker1 + 6)
         let still = try XCTUnwrap(steps.first { isStillNoDetail($0.step.instruction) }).index
         print("E1 SCRIPT: edge fired at reading \(edge), stillNoDetail at reading \(still)")
@@ -64,8 +70,8 @@ final class SlideRouteEdgeTests: XCTestCase {
     }
 
     func testALowDetailFlickerInsideAColumnLegDoesNotEndTheLeg() {
-        feed(.sample, .tracking, dx: -0.1, times: 5)
-        feed(.blurry, .paused, times: 12)
+        feed(.sample, .tracking, dx: -0.1, times: 5, aheadFocus: 1, behindFocus: 0.95)
+        feed(.blurry, .paused, times: 22)  // 0.8 s to make the candidate, 1 s to confirm it
         feed(.sample, .tracking, times: 2)
         XCTAssertTrue(guide.update(readingNow(.sample)).stateName.hasPrefix("column 1"))
         feed(.blurry, .paused, times: 3)  // 0.3 s

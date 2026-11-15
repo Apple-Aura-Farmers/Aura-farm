@@ -26,12 +26,23 @@ struct SimulatedDrop {
         return inside && !hole
     }
 
-    /// Whether the point is in the sample but within `width` of its edge (probed in 8 directions).
-    func isInEdgeBand(_ point: CGPoint, width: Double) -> Bool {
-        guard contains(point) else { return false }
+    /// The middle of the sample: the mean of its circles' centres and rectangles' middles.
+    var centre: CGPoint? {
+        let points =
+            circles.map(\.centre) + rects.map { CGPoint(x: $0.midX, y: $0.midY) }
+        guard !points.isEmpty else { return nil }
+        let count = CGFloat(points.count)
+        return CGPoint(
+            x: points.reduce(0) { $0 + $1.x } / count, y: points.reduce(0) { $0 + $1.y } / count)
+    }
+
+    /// Whether the point is just outside the sample, within `width` of its edge (probed in 8
+    /// directions): where half the box is over sample and half over glass.
+    func isJustOutside(_ point: CGPoint, width: Double) -> Bool {
+        guard !contains(point) else { return false }
         return (0..<8).contains { index in
             let angle = Double(index) * .pi / 4
-            return !contains(
+            return contains(
                 CGPoint(
                     x: point.x + CGFloat(cos(angle) * width), y: point.y + CGFloat(sin(angle) * width)))
         }
@@ -81,6 +92,14 @@ final class GuideSimulator {
         var coverage: Double
         var rechecks: Int
         var failedProbes: Int
+        /// Left edge and leg-end edges found with the edge at the centre, and by going back.
+        var edgesReached: Int
+        var edgesGoneBack: Int
+        /// Edges fired with no edge near the true position, and those within 3 s of an injected
+        /// knock: false edges.
+        var falseEdges = 0
+        var falseEdgesNearKnocks = 0
+        var knocks = 0
     }
 
     let drop: SimulatedDrop
@@ -110,7 +129,7 @@ final class GuideSimulator {
     /// Soil slide: the glass outside the sample is as bright as the sample, so it reads blurry
     /// (not blank) with tracking paused, and an edge band flickers (see `edgeBandFields`).
     var soil = false
-    /// The width of the flickering band just inside the edge, in fields (soil only).
+    /// The width of the flickering band just outside the edge, in fields (soil only).
     var edgeBandFields = 0.3
     /// In the band: low detail for this long, then detail for `bandDetailSeconds`, repeating.
     var bandLowSeconds = 0.6
@@ -120,6 +139,27 @@ final class GuideSimulator {
     var interiorFlickerEveryReadings: Int?
     private var randomState: UInt64 = 7
     private var interiorLowLeft = 0
+    /// A helper who stops as soon as the edge reaches the centre of the view (the half ahead
+    /// has no detail, the half behind does) while heading for an edge or along a column leg,
+    /// as a person watching the picture would.
+    var stopsAtEdge = true
+    /// Random knocks about every 20 s: a flick (a speed spike, then 3 to 5 blurred readings) or
+    /// a focus slip (2 s of blur while the helper holds still). Seeded, so repeatable.
+    var knocks = false
+    private var knockState: UInt64 = 99
+    private var blurLeft = 0
+    private var blurShown = 0
+    private var slipActive = false
+    private var spikeNext = false
+    private var knockStarts: [Int] = []
+    private let sharpOnBlur = 50.0
+    private var heading: CGPoint?
+    private var edgeAtCentre = false
+    private var lastTracking = TrackingState.tracking
+    private var goBackReadings = 0
+    /// The sharpness the simulated halves read with and without sample.
+    private let sharpOnSample = 400.0
+    private let sharpOnGlass = 50.0
     /// Where a helper who starts on blank heads to.
     var searchTarget = CGPoint.zero
     private var wrongWayLeft = 0.0
@@ -135,17 +175,38 @@ final class GuideSimulator {
         frozen = start
     }
 
-    func run(maxReadings: Int = 40000) -> Result {
+    /// Where the guide thinks the view is, and the time of the last reading, to carry on by hand.
+    var guidePosition: CGPoint { frozen }
+    var guideSeconds: Double { seconds }
+
+    /// - Parameter until: stops the run after the first reading whose answer satisfies it.
+    func run(maxReadings: Int = 40000, until: ((GuideStep) -> Bool)? = nil) -> Result {
         var instructions: [GuideInstruction] = []
         var states: [String] = []
         var truths: [CGPoint] = []
         var count = 0
+        var falseEdges = 0
+        var falseNearKnocks = 0
+        var wasGoingBack = false
         wrongWayLeft = wrongWayFields
         while count < maxReadings, !guide.isFinished {
             count += 1
             seconds += 0.1
             let reading = makeReading(index: count)
+            let previousHeading = heading
             let output = guide.update(reading)
+            heading = guide.heading
+            let goingBack = output.stateName == "edge: go back"
+            var isEdge = false
+            if case .edgeReached = output.instruction { isEdge = true }
+            if goingBack, !wasGoingBack { isEdge = true }
+            wasGoingBack = goingBack
+            if isEdge, !edgeIsNear(previousHeading) {
+                falseEdges += 1
+                if knockStarts.contains(where: { count - $0 >= 0 && count - $0 <= 30 }) {
+                    falseNearKnocks += 1
+                }
+            }
             instructions.append(output.instruction)
             if states.last != output.stateName { states.append(output.stateName) }
             if output.capture != nil {
@@ -153,6 +214,7 @@ final class GuideSimulator {
                 capturesSoFar += 1
             }
             if output.isFinished { break }
+            if let until, until(output) { break }
             act(on: output)
         }
         let points = drop.gridPoints()
@@ -163,7 +225,19 @@ final class GuideSimulator {
             readings: count, finished: guide.isFinished, finishReason: guide.finishReason,
             placements: guide.placements, capturedTruth: truths, instructions: instructions,
             states: states, coverage: points.isEmpty ? 1 : Double(covered) / Double(points.count),
-            rechecks: guide.rechecks, failedProbes: guide.failedProbes)
+            rechecks: guide.rechecks, failedProbes: guide.failedProbes,
+            edgesReached: guide.edgesReached, edgesGoneBack: guide.edgesGoneBack,
+            falseEdges: falseEdges, falseEdgesNearKnocks: falseNearKnocks, knocks: knockStarts.count)
+    }
+
+    /// Whether the true position is at, past or within 0.6 field ahead of the sample's edge:
+    /// an edge fired there is a real one.
+    private func edgeIsNear(_ heading: CGPoint?) -> Bool {
+        guard drop.contains(truePosition) else { return true }
+        let direction = heading ?? CGPoint(x: -1, y: 0)
+        let ahead = CGPoint(
+            x: truePosition.x + 0.6 * direction.x, y: truePosition.y + 0.6 * direction.y)
+        return !drop.contains(ahead)
     }
 
     private func makeReading(index: Int) -> GuideReading {
@@ -199,20 +273,81 @@ final class GuideSimulator {
             tracking = .lost
             if lostRaisesGap, index == lost { unconfirmed += 1 }
         }
+        // The halves of the box: half a field from the centre along the heading, and behind it.
+        var ahead: Double?
+        var behind: Double?
+        edgeAtCentre = false
+        if tracking == .tracking, let heading {
+            func sharpness(_ sign: Double) -> Double {
+                let point = CGPoint(
+                    x: truePosition.x + CGFloat(sign * 0.5) * heading.x,
+                    y: truePosition.y + CGFloat(sign * 0.5) * heading.y)
+                return drop.contains(point) ? sharpOnSample : sharpOnGlass
+            }
+            ahead = sharpness(1)
+            behind = sharpness(-1)
+            // The person stops when the edge itself is at the cross, not when it first shows.
+            let edge = CGPoint(
+                x: truePosition.x + 0.1 * heading.x, y: truePosition.y + 0.1 * heading.y)
+            edgeAtCentre = (ahead ?? 0) < 120 && (behind ?? 0) >= 120 && !drop.contains(edge)
+        }
+        // How sharp each half is against the same content before: 1 when it is the sample.
+        var aheadFocus: Double?
+        var behindFocus: Double?
+        if let ahead, let behind {
+            aheadFocus = ahead >= 120 ? 1.0 : 0.2
+            // The same patch of content as in the anchor, as sharp as before unless blurred.
+            behindFocus = 0.95
+        }
+        var speed = lastMove / 1.0
+        if knocks {
+            if blurLeft == 0 {
+                knockState = knockState &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
+                if Int((knockState >> 33) % 200) == 0 {
+                    let flick = (knockState >> 20) % 2 == 0
+                    blurLeft = flick ? 3 + Int((knockState >> 40) % 3) : 20
+                    slipActive = !flick
+                    spikeNext = flick
+                    blurShown = 0
+                    knockStarts.append(index)
+                }
+            }
+            if blurLeft > 0 {
+                blurLeft -= 1
+                if spikeNext {
+                    speed = 0.3
+                    spikeNext = false
+                }
+                blurShown += 1
+                if tracking == .tracking {
+                    // The tracker takes 3 blurred readings to pause, like `DetailCheck`.
+                    if blurShown > 3 { tracking = .paused }
+                    viewClass = .blurry
+                    (ahead, behind) = (sharpOnBlur, sharpOnBlur)
+                    (aheadFocus, behindFocus) = (0.3, 0.3)
+                }
+                if blurLeft == 0 { slipActive = false }
+            }
+        }
+        lastTracking = tracking
         return GuideReading(
             seconds: seconds, position: frozen, tracking: tracking, unconfirmedGaps: unconfirmed,
-            viewClass: viewClass, speedFraction: lastMove / 1.0, isStill: lastMove == 0)
+            viewClass: viewClass, speedFraction: speed, isStill: lastMove == 0,
+            aheadSharpness: ahead, behindSharpness: behind, aheadFocusRatio: aheadFocus,
+            behindFocusRatio: behindFocus)
     }
 
     /// Whether the view shows enough detail to follow. Over blank glass never; on a soil slide
     /// also not during the low part of an edge-band flicker or an interior flicker.
     private func isDetailed() -> Bool {
-        guard drop.contains(truePosition) else { return false }
-        guard soil else { return true }
-        if drop.isInEdgeBand(truePosition, width: edgeBandFields) {
+        guard drop.contains(truePosition) else {
+            // Soil: with the centre just past the edge the box straddles it, and its sharpness
+            // hovers about the cut: low for `bandLowSeconds`, detail for `bandDetailSeconds`.
+            guard soil, drop.isJustOutside(truePosition, width: edgeBandFields) else { return false }
             let cycle = bandLowSeconds + bandDetailSeconds
-            if seconds.truncatingRemainder(dividingBy: cycle) < bandLowSeconds - 1e-9 { return false }
+            return seconds.truncatingRemainder(dividingBy: cycle) >= bandLowSeconds - 1e-9
         }
+        guard soil else { return true }
         if interiorLowLeft > 0 {
             interiorLowLeft -= 1
             return false
@@ -225,6 +360,12 @@ final class GuideSimulator {
             }
         }
         return true
+    }
+
+    /// The states where a person heads for an edge: the left edge runs and column legs.
+    private static func isEdgeBound(_ state: String) -> Bool {
+        state == "find left edge" || state == "recheck left edge"
+            || (state.hasPrefix("column") && (state.hasSuffix("up") || state.hasSuffix("down")))
     }
 
     private func move(_ vector: CGPoint) {
@@ -241,6 +382,10 @@ final class GuideSimulator {
     }
 
     private func act(on output: GuideStep) {
+        switch output.instruction {
+        case .edgeGoBack, .stillNoDetail: break
+        default: goBackReadings = 0
+        }
         // The helper's own mistakes come first.
         if overshootLeft > 0 {
             overshootLeft -= step
@@ -254,6 +399,19 @@ final class GuideSimulator {
             let away = CGPoint(x: frozen.x - target.x, y: frozen.y - target.y)
             move(away)
             return
+        }
+        if slipActive {
+            lastMove = 0
+            return
+        }
+        if stopsAtEdge, edgeAtCentre, Self.isEdgeBound(output.stateName) {
+            switch output.instruction {
+            case .travel, .move, .farAway:
+                lastMove = 0
+                return
+            default:
+                break
+            }
         }
         switch output.instruction {
         case .findSample:
@@ -269,14 +427,31 @@ final class GuideSimulator {
             }
             move(toward)
         case .edgeGoBack(let toward), .stillNoDetail(let toward):
-            move(toward)
+            // A person who has not found the sample after 3 s of going back turns toward it.
+            goBackReadings += 1
+            if goBackReadings > 30, let centre = drop.centre {
+                move(CGPoint(x: centre.x - truePosition.x, y: centre.y - truePosition.y))
+            } else {
+                move(toward)
+            }
         case .tooFar, .otherWay:
             if let target = output.target {
                 move(CGPoint(x: target.x - frozen.x, y: target.y - frozen.y))
             } else {
                 lastMove = 0
             }
-        case .aligned, .holding, .captured, .refocus, .slowDown, .finished:
+        case .checkingEdge:
+            // The person stops when the edge itself is at the cross; before that the checking
+            // starts while the helper is still on the way there.
+            // While the tracker is paused (the whole box is blank) there is nothing to approach.
+            if stopsAtEdge, lastTracking == .tracking, !edgeAtCentre, let target = output.target {
+                move(CGPoint(x: target.x - frozen.x, y: target.y - frozen.y))
+            } else if stopsAtEdge, lastTracking == .tracking, !edgeAtCentre, let heading {
+                move(heading)
+            } else {
+                lastMove = 0
+            }
+        case .aligned, .holding, .captured, .edgeReached, .refocus, .slowDown, .finished:
             lastMove = 0
         }
     }

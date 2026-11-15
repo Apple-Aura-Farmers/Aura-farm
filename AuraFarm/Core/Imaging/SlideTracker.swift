@@ -132,11 +132,72 @@ final class SlideTracker {
     ) -> SlideTrackerReading {
         self.box = box
         let stats = boxStats(buffer, wholeFrameStats)
+        let halfSharpness = box.map { measureHalves(of: $0, in: buffer, fallback: stats.sharpness) }
+        // The anchor the offset below is measured against, before this frame may replace it.
+        let heldAnchor = anchor
         let outcome = trackFrame(buffer, seconds: seconds, frameSize: frameSize, boxStats: stats)
         let boxSide = Self.side(of: box, frameSize: frameSize)
         let start = updateReference(
             buffer, frameShift: outcome.frameShift, boxSide: boxSide, frameSize: frameSize)
-        return reading(outcome, boxStats: stats, frameSize: frameSize, start: start)
+        var result = reading(outcome, boxStats: stats, frameSize: frameSize, start: start)
+        result.halfSharpness = halfSharpness
+        if let box, let heldAnchor, let halfSharpness, detail.hasDetail {
+            let offset = outcome.usedOffset ?? outcome.offset ?? odometer.live
+            result.halfFocusRatio = focusRatios(
+                of: box, current: halfSharpness, anchor: heldAnchor, offset: offset)
+        }
+        return result
+    }
+
+    /// The four halves of the box in whole pixels: left, right, top, bottom.
+    private func halfRects(of box: CGRect) -> [CGRect] {
+        let halfWidth = (box.width / 2).rounded(.down)
+        let halfHeight = (box.height / 2).rounded(.down)
+        return [
+            CGRect(x: box.minX, y: box.minY, width: halfWidth, height: box.height),
+            CGRect(x: box.minX + halfWidth, y: box.minY, width: box.width - halfWidth, height: box.height),
+            CGRect(x: box.minX, y: box.minY, width: box.width, height: halfHeight),
+            CGRect(x: box.minX, y: box.minY + halfHeight, width: box.width, height: box.height - halfHeight),
+        ]
+    }
+
+    /// Each half's sharpness now over the sharpness of the same content in the anchor: the
+    /// half's rectangle moved by minus the offset, kept inside the frame. A half whose moved
+    /// rectangle is less than half inside the frame has no ratio.
+    private func focusRatios(
+        of box: CGRect, current: BoxHalves, anchor: CVPixelBuffer, offset: CGPoint
+    ) -> HalfFocus {
+        let bounds = CGRect(
+            x: 0, y: 0, width: CVPixelBufferGetWidth(anchor), height: CVPixelBufferGetHeight(anchor))
+        func ratio(_ rect: CGRect, _ now: Double) -> Double? {
+            let moved = rect.offsetBy(dx: -offset.x, dy: -offset.y).intersection(bounds)
+            guard !moved.isNull else { return nil }
+            let region = CGRect(
+                x: moved.minX.rounded(.up), y: moved.minY.rounded(.up),
+                width: moved.maxX.rounded(.down) - moved.minX.rounded(.up),
+                height: moved.maxY.rounded(.down) - moved.minY.rounded(.up))
+            guard region.width > 0, region.height > 0,
+                region.width * region.height >= 0.5 * rect.width * rect.height,
+                let reference = FrameAnalyzer.stats(of: anchor, in: region, step: Self.statsStep)
+            else { return nil }
+            return now / max(reference.sharpness, 1)
+        }
+        let rects = halfRects(of: box)
+        return HalfFocus(
+            left: ratio(rects[0], current.left), right: ratio(rects[1], current.right),
+            top: ratio(rects[2], current.top), bottom: ratio(rects[3], current.bottom))
+    }
+
+    /// The sharpness of each half of the box, at `statsStep`, in whole pixels. A half that
+    /// could not be measured reads as the whole box's.
+    private func measureHalves(of box: CGRect, in buffer: CVPixelBuffer, fallback: Double) -> BoxHalves {
+        func sharpness(_ rect: CGRect) -> Double {
+            FrameAnalyzer.stats(of: buffer, in: rect, step: Self.statsStep)?.sharpness ?? fallback
+        }
+        let rects = halfRects(of: box)
+        return BoxHalves(
+            left: sharpness(rects[0]), right: sharpness(rects[1]), top: sharpness(rects[2]),
+            bottom: sharpness(rects[3]))
     }
 
     // MARK: Reading

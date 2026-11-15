@@ -370,3 +370,35 @@ The rules that follow:
 - Refocus never blocks the edge. While travelling to an edge or finding the sample the guide
   says slow down at most. On the way back it says `still_no_detail` once low detail has lasted
   `refocusAfterSeconds` = 6 s.
+
+## Guide dry run: how to read it
+
+With the guide dry run on, the picture is clear of the status banner (the speed meter stays), and
+the guide draws on it like the iPhone's Night mode.
+
+- The white cross in the middle is fixed; the thin circle around it is the zone where a target counts as reached. The yellow cross is the next spot, drawn on the picture: turn the knobs until it sits in the circle.
+- When the spot is out of view, an arrow pinned inside the edge of the field points to it, with the distance in fields.
+- Yellow means move, green on target, orange wrong way or slow down. Hold still and a green ring fills clockwise, then the frame is captured (a white flash, a light tap, the count at the top).
+- Over blank glass or with NO DETAIL the position is frozen while the picture still moves, so a cross would sit still on a moving picture. Only an arrow is shown then.
+- The line "Axes from preview match: ..." says which manual mapping the preview's own axes are nearest to. It turns orange with "differs from the picker" when that is not the one picked. The guide uses the preview's axes, not the picker's. Sign fix: the tracker's position is the CONTENT's displacement, so the guide negates it to get where the VIEW is; the axes line compares the picker with the preview axes negated (the view-travel map), and `guide_axes_mapping` logs that map's closest mapping.
+- The CSV has a new last column, `guide_axes_mapping` (for example `rotateLeft-mirrored`).
+
+## Edge at the centre cross
+
+The whole-box rule missed the cover slip edge when the user stopped as soon as it reached the middle: the centre box still read sharpness 175-212 and dipped under 120 only once, for 0.3 s. The tracker now also measures the sharpness of the four halves of the box (frame axes, same step 4). The route compares the half the view is heading toward (ahead) with the one it is leaving (behind).
+
+- The edge is a candidate when the half ahead is under `halfLowDetailBelowSharpness` (120), the half behind is not, and tracking is on. A candidate must then be confirmed (see "Telling an edge from blur"); only then does the route move on with no trip back, saying "Edge reached" once (a flash and a success tap). It applies to the left edge runs and column legs; steps right and inward probes keep the whole-box rule, since a landing half over the sample is still a valid column.
+- The whole-box rule stays as the fallback for overshooting the edge (low detail of any class, or paused, for 0.8 s, then go back).
+- New CSV columns, appended last: `box_sharp_left`, `box_sharp_right`, `box_sharp_top`, `box_sharp_bottom`. The 120 cut-off for the halves is a PLACEHOLDER: calibrate it from them.
+
+## Telling an edge from blur
+
+A detail drop alone cannot tell new blank content from the same content out of focus: a flick, a knock or a focus slip fired the edge. An edge must now pass `EdgeConfirmation`.
+
+- **Arrival.** The view must have travelled at least 0.10 field along the heading in the second before the candidate began. A blur leaves the content where it was.
+- **Focus comparison.** The tracker compares each half of the box with the same content in the anchor frame (the half's rectangle moved by minus the offset): `halfFocusRatio`, about 1 when unchanged, well below 1 when blurred. The half behind must be at least 0.6 of its sharpness in the last sharp frame. With no arrival, a candidate whose half behind is vouched for this way is still checked, and the ratios of the last tracked reading stand in while the tracker is paused.
+- **Confirm while still.** The candidate holds for 1.0 s with the helper still (progress builds only while still; a speed spike of 0.18 or more restarts it). The route says "Checking edge… hold still", then "Edge reached". The whole-box fallback confirms by time alone, after the 0.8 s of low detail.
+- **Blur means refocus.** No arrival without vouching, or the half behind (or, in the fallback, both halves of the last tracked reading) under 0.6, is blur: the route says "Refocus" and carries on where it was when detail returns. Low detail of the whole box that lasts 6 s is confirmed anyway.
+- **CSV columns**, appended last: `focus_left`, `focus_right`, `focus_top`, `focus_bottom`.
+- Every number here (0.10 field, 1 s window, 1.0 s confirm, 0.6 ratios, 0.18 speed, 6 s) is a PLACEHOLDER to calibrate from the `focus_*` and `box_sharp_*` columns.
+

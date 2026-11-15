@@ -34,14 +34,20 @@
                         onConfirm: { model.confirmField() },
                         onAdjust: { model.adjustField(to: $0) })
                 } else {
+                    if model.guideDryRun {
+                        GuideGeometryHost(model: model, previewLayer: previewLayer)
+                        LiveGuideOverlay(state: model.overlayState)
+                    }
                     VStack {
                         HStack(alignment: .top) {
-                            LiveStatusBanner(model: model)
+                            // The picture stays clear while the guide is drawing on it.
+                            if !model.guideDryRun { LiveStatusBanner(model: model) }
                             Spacer()
                             LiveRecBadge(model: model)
                         }
                         Spacer()
                         HStack(alignment: .bottom) {
+                            // Stays on with the guide: it says whether the speed is right.
                             LiveSpeedMeter(model: model)
                                 .frame(width: 140)
                             Spacer()
@@ -49,6 +55,8 @@
                                 .frame(width: 140, height: 140)
                                 .onTapGesture(perform: onTapTrail)
                         }
+                        // Leaves room for the guide's line along the bottom.
+                        .padding(.bottom, model.guideDryRun ? 56 : 0)
                     }
                     .padding(8)
                 }
@@ -131,6 +139,65 @@
                 }
             }
             .allowsHitTesting(false)
+        }
+    }
+
+    /// Measures the preview's axes and sizes for the guide overlay and hands them to the model.
+    /// Draws nothing. Rebuilds when the box, the frame size or the view size changes.
+    struct GuideGeometryHost: View {
+        var model: SlideMovementLabModel
+        var previewLayer: AVCaptureVideoPreviewLayer?
+
+        private struct Key: Equatable {
+            var box: CGRect?
+            var frameSize: CGSize
+            var viewSize: CGSize
+            var hasLayer: Bool
+            var openShare: Double?
+        }
+
+        /// The length, in frame pixels, of the two probe vectors the axes are measured with.
+        private static let probePixels = 100.0
+
+        var body: some View {
+            GeometryReader { proxy in
+                let info = model.fieldInfo
+                Color.clear
+                    .task(
+                        id: Key(
+                            box: info.registrationRect, frameSize: info.frameSize,
+                            viewSize: proxy.size, hasLayer: previewLayer != nil,
+                            openShare: info.state?.openShare)
+                    ) {
+                        model.setGuideGeometry(geometry(for: info))
+                    }
+            }
+            .allowsHitTesting(false)
+        }
+
+        private func geometry(for info: SlideMovementInfo.Field) -> GuideScreenGeometry? {
+            guard let converter = FramePreviewConverter(layer: previewLayer, frameSize: info.frameSize)
+            else { return nil }
+            let box = info.registrationRect ?? CGRect(origin: .zero, size: info.frameSize)
+            let middle = CGPoint(x: box.midX, y: box.midY)
+            let probe = Self.probePixels
+            let origin = converter.viewPoint(of: middle)
+            guard
+                let axes = GuideScreenAxes(
+                    origin: origin,
+                    xUnit: converter.viewPoint(of: CGPoint(x: middle.x + probe, y: middle.y)),
+                    yUnit: converter.viewPoint(of: CGPoint(x: middle.x, y: middle.y + probe)),
+                    framePixels: probe)
+            else { return nil }
+            let onScreen = converter.viewRect(of: box)
+            let side = Double(min(onScreen.width, onScreen.height))
+            guard side > 0 else { return nil }
+            var radius = side / 2
+            if case .ready(let mask)? = info.state, let circle = FieldCircle(fitting: mask) {
+                radius = converter.viewRadius(of: circle)
+            }
+            return GuideScreenGeometry(
+                axes: axes, centre: origin, pointsPerField: side, fieldRadius: radius)
         }
     }
 
@@ -369,6 +436,20 @@
             context.draw(
                 Text("grid = 1 field").font(.system(size: 9, weight: .bold)).foregroundColor(.white),
                 at: CGPoint(x: size.width - 38, y: 10))
+
+            // The guide's captured spots (green dots) and its current target (yellow ring).
+            for point in info.guideCaptured {
+                let spot = place(point)
+                context.fill(
+                    Path(ellipseIn: CGRect(x: spot.x - 3.5, y: spot.y - 3.5, width: 7, height: 7)),
+                    with: .color(.green))
+            }
+            if let target = info.guideTarget {
+                let spot = place(target)
+                context.stroke(
+                    Path(ellipseIn: CGRect(x: spot.x - 6, y: spot.y - 6, width: 12, height: 12)),
+                    with: .color(.yellow), lineWidth: 2)
+            }
 
             if let start = info.startPoint {
                 let home = place(start)

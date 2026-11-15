@@ -96,6 +96,19 @@ struct MovementLogRow: Equatable {
     var guideTargetDx: Double?
     var guideTargetDy: Double?
     var guideCaptures: Int?
+    /// The mapping the guide's screen axes are nearest to; empty when the guide is off.
+    var guideAxesMapping = ""
+    /// The sharpness of each half of the box, in frame axes; nil when there was no box.
+    var boxSharpLeft: Double?
+    var boxSharpRight: Double?
+    var boxSharpTop: Double?
+    var boxSharpBottom: Double?
+    /// Each half's sharpness over the same content's in the anchor frame; see
+    /// `SlideTrackerReading.halfFocusRatio`.
+    var focusLeft: Double?
+    var focusRight: Double?
+    var focusTop: Double?
+    var focusBottom: Double?
 }
 
 enum MovementLog {
@@ -113,7 +126,9 @@ enum MovementLog {
         "start_match_x_px", "start_match_y_px", "true_off_start_fields", "tracker_error_fields",
         "blank_returns_matched", "blank_returns_unmatched", "blank_return",
         "view_class", "guide_state", "guide_instruction", "guide_target_dx", "guide_target_dy",
-        "guide_captures",
+        "guide_captures", "guide_axes_mapping",
+        "box_sharp_left", "box_sharp_right", "box_sharp_top", "box_sharp_bottom",
+        "focus_left", "focus_right", "focus_top", "focus_bottom",
     ]
 
     static func csv(_ rows: [MovementLogRow]) -> String {
@@ -147,7 +162,11 @@ enum MovementLog {
             String(row.blankReturnsMatched), String(row.blankReturnsUnmatched), row.blankReturn,
             row.viewClass, row.guideState, row.guideInstruction,
             number(row.guideTargetDx, 2), number(row.guideTargetDy, 2),
-            row.guideCaptures.map(String.init) ?? "",
+            row.guideCaptures.map(String.init) ?? "", row.guideAxesMapping,
+            number(row.boxSharpLeft, 3), number(row.boxSharpRight, 3),
+            number(row.boxSharpTop, 3), number(row.boxSharpBottom, 3),
+            number(row.focusLeft, 3), number(row.focusRight, 3), number(row.focusTop, 3),
+            number(row.focusBottom, 3),
         ]
     }
 

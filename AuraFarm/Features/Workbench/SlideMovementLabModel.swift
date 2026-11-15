@@ -23,6 +23,9 @@
         /// The guide dry run's block (see `GuideDryRun`).
         private(set) var guideInfo = SlideMovementInfo.Guide()
         private(set) var guideDryRun = false
+        /// What the guide overlay draws, published on every analyzed frame; a value of its own
+        /// so nothing else redraws that often.
+        let overlayState = GuideOverlayState()
         /// The "What the app sees" picture, when it is switched on.
         private(set) var thumbnailImage: CGImage?
         private(set) var showsThumbnail = false
@@ -73,6 +76,8 @@
         @ObservationIgnored private var guideEnabled = false
         @ObservationIgnored private var latestGuide: GuideRowFields?
         @ObservationIgnored private var latestGuideInfo = SlideMovementInfo.Guide()
+        @ObservationIgnored private var guideCaptured: [CGPoint] = []
+        @ObservationIgnored private var guideTarget: CGPoint?
         @ObservationIgnored private var frameCount = 0
         @ObservationIgnored private var analyzing = false
         /// Analyze every Nth frame: about 10 fps at 30 fps capture.
@@ -292,13 +297,35 @@
         /// Switches the guide dry run on or off; either way it starts afresh.
         func setGuideDryRun(_ enabled: Bool) {
             guideDryRun = enabled
-            if !enabled { guideInfo = SlideMovementInfo.Guide() }
+            if !enabled {
+                guideInfo = SlideMovementInfo.Guide()
+                overlayState.model = nil
+            }
             analysisQueue.async { [weak self] in
                 guard let self else { return }
                 self.guideEnabled = enabled
-                self.dryRun.reset()
-                self.latestGuide = nil
-                self.latestGuideInfo = SlideMovementInfo.Guide()
+                self.resetGuide()
+            }
+        }
+
+        private func resetGuide() {
+            dryRun.reset()
+            latestGuide = nil
+            latestGuideInfo = SlideMovementInfo.Guide()
+            guideCaptured = []
+            guideTarget = nil
+        }
+
+        /// The preview's own axes and sizes for the guide overlay (nil without a preview).
+        /// Changing the axes or the size of a field starts the dry run afresh.
+        func setGuideGeometry(_ geometry: GuideScreenGeometry?) {
+            analysisQueue.async { [weak self] in
+                guard let self else { return }
+                let old = self.dryRun.geometry
+                self.dryRun.geometry = geometry
+                if old?.axes != geometry?.axes || old?.pointsPerField != geometry?.pointsPerField {
+                    self.resetGuide()
+                }
             }
         }
 
@@ -455,7 +482,15 @@
                 blankReturn: step.blankReturnEvent, viewClass: guide?.viewClass ?? "",
                 guideState: guide?.state ?? "", guideInstruction: guide?.instruction ?? "",
                 guideTargetDx: guide?.targetDx, guideTargetDy: guide?.targetDy,
-                guideCaptures: guide?.captures)
+                guideCaptures: guide?.captures, guideAxesMapping: guide?.axesMapping ?? "",
+                boxSharpLeft: step.tracking.halfSharpness?.left,
+                boxSharpRight: step.tracking.halfSharpness?.right,
+                boxSharpTop: step.tracking.halfSharpness?.top,
+                boxSharpBottom: step.tracking.halfSharpness?.bottom,
+                focusLeft: step.tracking.halfFocusRatio?.left,
+                focusRight: step.tracking.halfFocusRatio?.right,
+                focusTop: step.tracking.halfFocusRatio?.top,
+                focusBottom: step.tracking.halfFocusRatio?.bottom)
         }
 
         private static func write(_ rows: [MovementLogRow], test: SlideLabTest) -> URL? {
@@ -619,6 +654,13 @@
                 let result = dryRun.update(step: step, indicators: indicators, seconds: time)
                 latestGuide = result.fields
                 latestGuideInfo = result.info
+                if let point = result.captureTrailPoint { guideCaptured.append(point) }
+                guideTarget = result.targetTrailPoint
+                let overlay = result.overlay
+                let captureCount = result.info.captureCount
+                DispatchQueue.main.async { [weak self] in
+                    self?.overlayState.update(model: overlay, captureCount: captureCount)
+                }
             }
             if step.event == .hop {
                 hopCount += 1
@@ -694,7 +736,9 @@
             let trailInfo = SlideMovementInfo.Trail(
                 trail: trail, hopPoints: hopPoints, lostPoints: lostPoints,
                 startPoint: startTrailPoint, hopProgress: indicators.hopProgress,
-                hopCount: hopCount, blind: trailBlind)
+                hopCount: hopCount, blind: trailBlind,
+                guideCaptured: guideEnabled ? guideCaptured : [],
+                guideTarget: guideEnabled ? guideTarget : nil)
             let circle =
                 step.awaitingReview ? step.fieldState?.mask.flatMap { FieldCircle(fitting: $0) } : nil
             let fieldInfo = SlideMovementInfo.Field(

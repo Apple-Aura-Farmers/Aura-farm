@@ -25,6 +25,14 @@ struct GuideReading: Equatable {
     /// Frame-to-frame movement under `MovementIndicatorThresholds.stillPixels` for the last
     /// few readings.
     var isStill: Bool
+    /// The sharpness of the half of the box the view is travelling toward, and of the half it
+    /// is leaving; nil when not known (no heading, no box). See `BoxHalves`.
+    var aheadSharpness: Double?
+    var behindSharpness: Double?
+    /// The focus ratio of the half ahead and of the half behind: its sharpness over the same
+    /// content's in the anchor frame (about 1 when unchanged). See `SlideTrackerReading`.
+    var aheadFocusRatio: Double?
+    var behindFocusRatio: Double?
 }
 
 /// What the guide asks the person to do next.
@@ -45,6 +53,11 @@ enum GuideInstruction: Equatable {
     case captured
     /// The sample ended here: go back to the last spot with sample.
     case edgeGoBack(toward: CGPoint)
+    /// One reading: the edge of the sample is at the centre of the view, so the route moves on
+    /// without a trip back.
+    case edgeReached
+    /// The edge looks reached: checking it is not a blur while the helper holds still.
+    case checkingEdge(progress: Double)
     /// Going back did not bring detail back for a while: keep going back, or refocus if it
     /// looks blurry. Same direction as `edgeGoBack`.
     case stillNoDetail(toward: CGPoint)
@@ -65,9 +78,31 @@ enum GuideInstruction: Equatable {
         case .holding: "Hold still"
         case .captured: "Captured"
         case .edgeGoBack: "Edge found, go back"
+        case .edgeReached: "Edge reached"
+        case .checkingEdge: "Checking edge"
         case .stillNoDetail: "Still no detail: go back, or refocus if it looks blurry"
         case .tooFar: "Too far, come back a little"
         case .otherWay: "Other way"
+        case .refocus: "Refocus"
+        case .slowDown: "Slow down"
+        case .finished: "Sample finished"
+        }
+    }
+
+    /// What the helper reads on screen: short, and only about what is drawn (the cross, the
+    /// arrow). Unlike `debugText` it may be reworded freely; the CSV uses `csvName`.
+    var helperText: String {
+        switch self {
+        case .findSample: "Move onto the sample and focus"
+        case .travel: "Follow the arrow until the edge reaches the centre cross"
+        case .move, .farAway: "Bring the cross to the centre"
+        case .aligned, .holding: "Hold still"
+        case .captured: "Captured"
+        case .edgeReached: "Edge reached"
+        case .checkingEdge: "Checking edge… hold still"
+        case .edgeGoBack: "Edge of the sample. Follow the arrow back"
+        case .stillNoDetail: "No detail. Follow the arrow back, or refocus if it's blurry"
+        case .tooFar, .otherWay: "Turn back toward the cross"
         case .refocus: "Refocus"
         case .slowDown: "Slow down"
         case .finished: "Sample finished"
@@ -85,6 +120,8 @@ enum GuideInstruction: Equatable {
         case .holding: "holding"
         case .captured: "captured"
         case .edgeGoBack: "edge_go_back"
+        case .edgeReached: "edge_reached"
+        case .checkingEdge: "checking_edge"
         case .stillNoDetail: "still_no_detail"
         case .tooFar: "too_far"
         case .otherWay: "other_way"
