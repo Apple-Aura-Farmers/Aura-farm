@@ -29,7 +29,7 @@ struct RootView: View {
             case .none:
                 RoleSelectionView { role = $0 }
             case .fieldHelper:
-                FieldHelperHomeView(onSwitchRole: { role = nil })
+                FieldHelperTabs(onSwitchRole: { role = nil })
             case .microscopeOperator:
                 HomeView(onSwitchRole: { role = nil })
             }
