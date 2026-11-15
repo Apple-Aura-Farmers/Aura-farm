@@ -25,6 +25,7 @@
         @AppStorage("slideLab.hopAgreement") private var hopAgreement = false
         @AppStorage("slideLab.guideDryRun") private var guideDryRun = false
         @AppStorage("slideLab.centreField") private var centresField = true
+        @AppStorage("slideLab.skipAlignFocus") private var skipsAlignFocus = false
         @State private var noteText = ""
 
         // Recorded video.
@@ -49,6 +50,7 @@
             .navigationTitle("Slide movement lab")
             .navigationBarTitleDisplayMode(.inline)
             .onAppear {
+                model.setSkipsAlignAndFocus(skipsAlignFocus)
                 model.setFieldRegion(FieldRegionMode(rawValue: fieldRegionName) ?? .auto)
                 model.setMeasuresHopAgreement(hopAgreement)
                 model.setShowsThumbnail(showsSees)
@@ -62,6 +64,7 @@
             .onChange(of: hopAgreement) { _, enabled in model.setMeasuresHopAgreement(enabled) }
             .onChange(of: showsSees) { _, shown in model.setShowsThumbnail(shown) }
             .onChange(of: guideDryRun) { _, enabled in model.setGuideDryRun(enabled) }
+            .onChange(of: skipsAlignFocus) { _, skips in model.setSkipsAlignAndFocus(skips) }
             .onChange(of: mappingName) { model.setScreenMapping(mapping, mirrored: mirrored) }
             .onChange(of: mirrored) { model.setScreenMapping(mapping, mirrored: mirrored) }
             .onDisappear { model.stop() }
@@ -93,7 +96,7 @@
                         // the converter every frame-anchored mark goes through. Uncropped until
                         // the field is learned and confirmed, and when the toggle is off.
                         let display =
-                            centresField && model.isAnalyzing
+                            centresField && model.isAnalyzing && model.setupInfo.step == .done
                             ? FramePreviewConverter.centringTransform(
                                 for: model.fieldInfo, layer: previewLayer, viewSize: proxy.size)
                             : .identity
@@ -107,7 +110,7 @@
                                     previewLayer: previewLayer, display: display,
                                     onTapTrail: { isShowingTrail = true })
                             } else {
-                                setupCard
+                                startingCard
                             }
                         }
                         .frame(width: proxy.size.width, height: proxy.size.height)
@@ -115,7 +118,9 @@
                     .frame(height: 440)
                     .clipped()
 
-                    if model.isAnalyzing {
+                    if model.isAnalyzing, isSettingUp {
+                        alignFocusControls
+                    } else if model.isAnalyzing {
                         if showsSees { seesThumbnail }
                         BigReadouts(model: model)
                         if model.guideDryRun { GuideReadout(model: model) }
@@ -152,27 +157,53 @@
             .padding(.top, 4)
         }
 
-        /// Shown over the camera until Start: nothing is measured while the phone is set up.
-        private var setupCard: some View {
-            VStack(spacing: 10) {
-                Text("Set up the phone").font(.headline)
-                Text("Position it over the eyepiece and focus with the slider below.")
-                    .font(.caption)
-                    .multilineTextAlignment(.center)
-                Button {
-                    model.beginAnalysis()
-                } label: {
-                    Text("Start")
-                        .font(.title3.bold())
-                        .padding(.horizontal, 32)
-                        .padding(.vertical, 6)
-                }
-                .buttonStyle(.borderedProminent)
+        /// Align and focus: nothing is learned or tracked, so only the setup's own controls.
+        private var isSettingUp: Bool {
+            model.setupInfo.step == .align || model.setupInfo.step == .focus
+        }
+
+        /// Shown over the camera for the moment before the session's setup begins.
+        private var startingCard: some View {
+            ProgressView("Starting the camera…")
+                .tint(.white)
+                .foregroundStyle(.white)
+                .padding(16)
+                .background(.black.opacity(0.7), in: RoundedRectangle(cornerRadius: 14))
+        }
+
+        /// While aligning and focusing: the phone's own Focus slider stays hidden, so it cannot
+        /// be mistaken for the microscope's focus knob (the lens stays locked).
+        private var alignFocusControls: some View {
+            VStack(alignment: .leading, spacing: 16) {
+                cameraProblem
+                Text(
+                    model.setupInfo.step == .align
+                        ? "1. Align the phone: the whole microscope circle in view, round, evenly lit, no glare."
+                        : "2. Focus with the microscope's focus knob (the stage's Z), not the phone's."
+                )
+                .font(.callout)
+                setupButtons
+                footer
             }
-            .foregroundStyle(.white)
-            .padding(16)
-            .frame(maxWidth: 280)
-            .background(.black.opacity(0.7), in: RoundedRectangle(cornerRadius: 14))
+            .padding()
+        }
+
+        /// Redo setup, the skip option and the setup log.
+        private var setupButtons: some View {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Button("Redo setup") { model.redoSetup() }
+                    Button("Export setup log") { model.exportSetupLog() }
+                    if let url = model.setupLogURL {
+                        ShareLink("Share setup log", item: url)
+                    }
+                }
+                .buttonStyle(.bordered)
+                Toggle("Skip align and focus", isOn: $skipsAlignFocus)
+                Text("Skipping starts the next session at the field step.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
 
         /// Before Start: only what is needed to place and focus the phone.
@@ -196,6 +227,7 @@
                 mappingControls
                 TextReadout(model: model)
                 settingsControls
+                // The phone's own focus is for the field step on; the microscope's comes first.
                 focusSlider
                 labelButtons
                 actionButtons
@@ -289,9 +321,9 @@
                 HStack {
                     Button("Re-detect field") { model.redetectField() }
                         .disabled(!(FieldRegionMode(rawValue: fieldRegionName)?.learnsMask ?? true))
-                    Button("Back to setup") { model.endAnalysis() }
                 }
                 .buttonStyle(.bordered)
+                setupButtons
                 Toggle("Show what the app sees", isOn: $showsSees)
                 Toggle("Measure hop agreement", isOn: $hopAgreement)
                 Toggle("Guide dry run", isOn: $guideDryRun)

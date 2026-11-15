@@ -203,6 +203,10 @@
                 .sensoryFeedback(.warning, trigger: model.guideInfo.wrongWayCount)
                 .sensoryFeedback(.success, trigger: model.guideInfo.edgeReachedCount)
                 .sensoryFeedback(.success, trigger: stopReached) { _, reached in reached }
+                // Align passed, focus found, field confirmed: a step forward.
+                .sensoryFeedback(.success, trigger: model.setupInfo.step) { old, new in
+                    new.order > old.order
+                }
         }
     }
 #endif

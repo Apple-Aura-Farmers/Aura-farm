@@ -29,13 +29,20 @@
             ZStack {
                 LiveFieldOutlines(model: model, previewLayer: previewLayer, display: display)
                 LiveFieldCard(model: model)
-                if model.fieldInfo.awaitingReview {
+                if model.setupInfo.step == .align || model.setupInfo.step == .focus {
+                    // Steps 1 and 2: nothing is learned or tracked yet.
+                    LiveSetupOverlay(model: model, previewLayer: previewLayer)
+                } else if model.fieldInfo.awaitingReview {
                     FieldReview(
                         info: model.fieldInfo,
                         converter: FramePreviewConverter(
                             layer: previewLayer, frameSize: model.fieldInfo.frameSize),
                         onConfirm: { model.confirmField() },
                         onAdjust: { model.adjustField(to: $0) })
+                    VStack {
+                        SetupStepIndicator(step: .field).padding(8)
+                        Spacer()
+                    }
                 } else {
                     if model.guideDryRun {
                         GuideGeometryHost(model: model, previewLayer: previewLayer, display: display)
@@ -62,6 +69,12 @@
                         .padding(.bottom, model.guideDryRun ? 56 : 0)
                     }
                     .padding(8)
+                    if model.setupInfo.step == .field {
+                        VStack {
+                            SetupStepIndicator(step: .field).padding(8)
+                            Spacer()
+                        }
+                    }
                 }
                 if let toast = model.markToast {
                     Text(toast)

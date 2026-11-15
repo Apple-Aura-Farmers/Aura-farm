@@ -23,6 +23,14 @@
         /// The guide dry run's block (see `GuideDryRun`).
         private(set) var guideInfo = SlideMovementInfo.Guide()
         private(set) var guideDryRun = false
+        /// The setup's state: align, focus, field, done. See `LabSetupSession`.
+        private(set) var setupInfo = LabSetupInfo()
+        /// The focus meter's value, on every analyzed frame.
+        let focusMeter = FocusMeterState()
+        /// The CSV of the setup log, once exported.
+        private(set) var setupLogURL: URL?
+        /// Whether the next session starts at the field step, skipping align and focus.
+        private(set) var skipsAlignAndFocus = false
         /// What the guide overlay draws, published on every analyzed frame; a value of its own
         /// so nothing else redraws that often.
         let overlayState = GuideOverlayState()
@@ -74,6 +82,8 @@
         }()
         @ObservationIgnored private let dryRun = GuideDryRun()
         @ObservationIgnored private var guideEnabled = false
+        @ObservationIgnored private var setup = LabSetupSession()
+        @ObservationIgnored private var lastPublishedStep = LabSetupStep.align
         @ObservationIgnored private var latestGuide: GuideRowFields?
         @ObservationIgnored private var latestGuideInfo = SlideMovementInfo.Guide()
         @ObservationIgnored private var guideCaptured: [CGPoint] = []
@@ -132,15 +142,56 @@
             }
         }
 
-        /// Leaves set-up: clears the old tracking, and starts learning the eyepiece mask afresh
-        /// from the next frame.
-        func beginAnalysis() {
+        /// Whether a session starts at the field step: "Skip align and focus".
+        func setSkipsAlignAndFocus(_ skips: Bool) {
+            skipsAlignAndFocus = skips
+        }
+
+        /// Starts the setup of a session, on the analysis queue: at align, or at field when
+        /// skipping, which learns the eyepiece mask afresh from the next frame.
+        private func beginSetup() {
+            let skips = skipsAlignAndFocus
+            setup = LabSetupSession(skippingAlignAndFocus: skips)
+            pipeline.resetPosition()
+            if skips { pipeline.redetectField() }
+            clearTrackingDisplay()
+            resetGuide()
+            lastPublishedStep = setup.step
+            analyzing = true
+            let info = setup.info
+            DispatchQueue.main.async {
+                self.setupInfo = info
+                self.focusMeter.update(nil)
+                self.fieldInfo = SlideMovementInfo.Field()
+                self.isAnalyzing = true
+            }
+        }
+
+        /// All of the setup again, from align: any log is ended and the field is forgotten.
+        func redoSetup() {
+            stopLog()
             analysisQueue.async { [weak self] in
                 guard let self else { return }
+                self.setup.redo()
                 self.pipeline.redetectField()
                 self.clearTrackingDisplay()
-                self.analyzing = true
-                DispatchQueue.main.async { self.isAnalyzing = true }
+                self.resetGuide()
+                self.lastPublishedStep = .align
+                let info = self.setup.info
+                DispatchQueue.main.async {
+                    self.setupInfo = info
+                    self.focusMeter.update(nil)
+                    self.fieldInfo = SlideMovementInfo.Field()
+                }
+            }
+        }
+
+        /// Writes the setup log (at most the last 2 minutes) to a CSV for sharing.
+        func exportSetupLog() {
+            analysisQueue.async { [weak self] in
+                guard let self, !self.setup.log.isEmpty else { return }
+                let url = Self.writeSetupLog(self.setup.log)
+                DispatchQueue.main.async { self.setupLogURL = url }
             }
         }
 
@@ -188,13 +239,16 @@
             }
         }
 
-        /// Forgets the learned eyepiece mask and learns it again. Use after moving the phone
-        /// or changing the light.
+        /// Back to the field step: forgets the learned eyepiece mask and learns it again. Use
+        /// after moving the phone or changing the light.
         func redetectField() {
             analysisQueue.async { [weak self] in
                 guard let self else { return }
-                self.pipeline.redetectField()
+                self.setup.redoField(pipeline: self.pipeline)
                 self.clearTrackingDisplay()
+                self.lastPublishedStep = .field
+                let info = self.setup.info
+                DispatchQueue.main.async { self.setupInfo = info }
             }
         }
 
@@ -390,11 +444,10 @@
                 guard let self else { return }
                 if !self.isConfigured { self.configureSession() }
                 guard self.isConfigured else { return }
-                // Every visit starts at set-up; tapping Start learns the eyepiece mask afresh.
+                // Every visit starts the setup: align, focus, then the field.
                 self.analysisQueue.async {
-                    self.analyzing = false
                     self.frameCount = 0
-                    DispatchQueue.main.async { self.isAnalyzing = false }
+                    self.beginSetup()
                 }
                 if !self.session.isRunning { self.session.startRunning() }
             }
@@ -499,6 +552,20 @@
                 edgeCandidate: guide?.edgeCandidate ?? "", edgeVerdict: guide?.edgeVerdict ?? "",
                 edgeReason: guide?.edgeReason ?? "", boxSharpSideA: guide?.sideSharpA,
                 boxSharpSideB: guide?.sideSharpB)
+        }
+
+        private static func writeSetupLog(_ rows: [SetupLogRow]) -> URL? {
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.dateFormat = "yyyyMMdd-HHmmss"
+            let url = FileManager.default.temporaryDirectory
+                .appending(path: "slide-movement-setup-\(formatter.string(from: .now)).csv")
+            do {
+                try SetupLog.csv(rows).write(to: url, atomically: true, encoding: .utf8)
+                return url
+            } catch {
+                return nil
+            }
         }
 
         private static func write(_ rows: [MovementLogRow], test: SlideLabTest) -> URL? {
@@ -642,9 +709,28 @@
             else { return }
             let time = CMSampleBufferGetPresentationTimeStamp(sampleBuffer).seconds
             guard
-                let step = pipeline.process(
-                    buffer, seconds: time, measureAgreement: logging && measureAgreementEnabled)
+                let output = setup.process(
+                    buffer, seconds: time, pipeline: pipeline,
+                    measureAgreement: logging && measureAgreementEnabled)
             else { return }
+            let stepChanged = setup.step != lastPublishedStep
+            if stepChanged {
+                // Reaching field starts learning, which needs a clean display.
+                lastPublishedStep = setup.step
+                clearTrackingDisplay()
+            }
+            let step: SlideMovementStep
+            switch output {
+            case .setup(let info):
+                publishSetup(info, time: time, force: stepChanged)
+                return
+            case .tracked(let tracked):
+                step = tracked
+                if stepChanged {
+                    let info = setup.info
+                    DispatchQueue.main.async { [weak self] in self?.setupInfo = info }
+                }
+            }
 
             if let image = step.thumbnail {
                 DispatchQueue.main.async { [weak self] in
@@ -706,6 +792,22 @@
             guard time - lastPublishAt >= publishEverySeconds else { return }
             lastPublishAt = time
             publish(step, time: time)
+        }
+
+        /// Hands the screen the setup's state at the normal throttle (at once on a change of
+        /// step), and the focus meter's value on every frame.
+        private func publishSetup(_ info: LabSetupInfo, time: Double, force: Bool) {
+            let focus = info.focus
+            DispatchQueue.main.async { [weak self] in self?.focusMeter.update(focus) }
+            guard force || time - lastPublishAt >= publishEverySeconds else { return }
+            lastPublishAt = time
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                if self.setupInfo != info { self.setupInfo = info }
+                if self.fieldInfo != SlideMovementInfo.Field() {
+                    self.fieldInfo = SlideMovementInfo.Field()
+                }
+            }
         }
 
         /// Computes the label statistics off the analysis queue, from a copy of the labelled
