@@ -174,6 +174,9 @@ enum GuideInstruction: Equatable {
     /// Full-cover-slip mode: the line is attached and at the cross. Stay still: the rule confirms it
     /// after `confirmSeconds`, or the helper is asked.
     case edgeDetected
+    /// Full-cover-slip mode: a line that passes the rule is just behind the cross (the helper went
+    /// past it): come back along the leg until it is on the cross; unit vector or the way back.
+    case edgeBehind(toward: CGPoint)
     /// The helper said the line is not an edge: keep going (shown for a moment).
     case notAnEdge
     /// Full-cover-slip mode: the box has no detail, which says nothing about an edge.
@@ -201,6 +204,7 @@ enum GuideInstruction: Equatable {
         case .checkEdge: "Check edge: step back"
         case .lineAhead: "Edge line ahead"
         case .edgeDetected: "Stay still, edge detected"
+        case .edgeBehind: "Edge just behind, come back"
         case .notAnEdge: "Not an edge, keep going"
         case .nothingToFollow: "Nothing to follow here"
         case .stageLimit: "Stage limit, turning"
@@ -229,6 +233,7 @@ enum GuideInstruction: Equatable {
         case .checkEdge: "Step back a little, then come forward again"
         case .lineAhead: "Edge line ahead. Keep going until it reaches the centre cross"
         case .edgeDetected: "Stay still, edge detected"
+        case .edgeBehind: "Edge just behind you. Come back until it's on the cross"
         case .notAnEdge: "Not an edge. Keep going"
         case .nothingToFollow:
             "Nothing to follow here. Turn back, or move to a patch with more particles"
@@ -266,6 +271,7 @@ enum GuideInstruction: Equatable {
         case .checkEdge: "check_edge"
         case .lineAhead: "line_ahead"
         case .edgeDetected: "edge_detected"
+        case .edgeBehind: "edge_behind"
         case .notAnEdge: "not_an_edge"
         case .nothingToFollow: "nothing_to_follow"
         case .stageLimit: "stage_limit"

@@ -112,7 +112,8 @@ struct GuideOverlayModel: Equatable {
                 y: direction.y * thresholds.travelArrowFields)
             forcesArrow = true
             hasDistance = false
-        case .edgeGoBack(let toward), .stillNoDetail(let toward), .checkEdge(let toward):
+        case .edgeGoBack(let toward), .stillNoDetail(let toward), .checkEdge(let toward),
+            .edgeBehind(let toward):
             vector = toward
             hasDistance = false
         case .checkingEdge, .refocus, .lineAhead:

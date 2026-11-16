@@ -200,7 +200,7 @@ enum MovementLog {
         "corner_box_share", "chain_x_px", "chain_y_px", "anchor_chain_gap_px",
         "ghost_frames", "ghost_fallbacks", "line_state", "line_attached_count", "edge_mode",
         "sparse_skips", "line_before_energy", "line_beyond_energy",
-        "edge_feedback",
+        "edge_feedback", "line_attach_source",
     ]
 
     static func csv(_ rows: [MovementLogRow]) -> String {
@@ -260,6 +260,7 @@ enum MovementLog {
             row.lineState.isEmpty ? "" : String(row.lineAttachedCount), row.edgeMode,
             String(row.sparseSkips), number(row.edgeLine?.beforeEnergy, 2),
             number(row.edgeLine?.beyondEnergy, 2), row.edgeFeedback,
+            row.edgeLine?.attachSource ?? "",
         ]
     }
 

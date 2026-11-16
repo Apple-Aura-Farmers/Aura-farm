@@ -7,10 +7,11 @@ import Foundation
 /// `edge_line_strength`, `edge_line_coverage` and `edge_line_slide_residual` columns.
 struct EdgeLineThresholds {
     /// Lines up to this far from perpendicular to the normal are tried, in steps. PLACEHOLDER:
-    /// 45 because the corner band of 16 Nov 2026 ran at about 45 to 50 degrees (it read at the
-    /// old 12 and 30 degree limits before). 4.5 degree steps keep it at 21 angles, the cost of
-    /// the 30 degrees at 3.
-    var maxAngleDegrees = 45.0
+    /// 60 because the 16 Nov 2026 22:56 wavy top edge read -40.5 to -45 (strength 9 to 11,
+    /// coverage 1.0) and was dropped at the old 45 (the 15:32 corner band ran at 45 to 50).
+    /// 4.5 degree steps make it 27 angles (13 steps a side); a line within one step of the limit
+    /// is a side edge the search could not place, not a candidate.
+    var maxAngleDegrees = 60.0
     var angleStepDegrees = 4.5
     /// The gradient is taken on the luma minus its box blur of this share of the box's side, so
     /// the eyepiece's illumination falloff (a smooth ramp) is gone. PLACEHOLDER.
@@ -37,9 +38,10 @@ struct EdgeLineThresholds {
     /// PLACEHOLDER: calibrate from `edge_line_*`.
     var candidateCoverage = 0.75
     var candidateRun = 5
-    /// PLACEHOLDER: 20. The 16 Nov 2026 15:32 run read the real cover-slip edge at 26 to 53 and
-    /// every other candidate at 6.1 to 7.0.
-    var candidateStrength = 20.0
+    /// PLACEHOLDER: 8. Real edges read 8.8 to 12.1 in the 16 Nov 2026 22:04 dark lighting and 26
+    /// to 53 in the 15:32 bright field; non-edge lines read at most 4.4 (dark) and 7.03 (bright).
+    /// Strength alone no longer decides: `LineEdgeThresholds.beyondShareMax` is the second factor.
+    var candidateStrength = 8.0
     /// The bands either side of the path where the texture is compared (see `EdgeLine.beforeEnergy`)
     /// run from `beyondGapFields` to `beyondGapFields + bandFields` away from it. PLACEHOLDER.
     var beyondGapFields = 0.06
@@ -111,6 +113,9 @@ struct EdgeLine: Equatable {
     /// nil when not measured.
     var beforeEnergy: Double?
     var beyondEnergy: Double?
+    /// Where `slideResidualFields` came from: "tracker" (the live position), "chain" (the sum of
+    /// the frame-to-frame shifts, for when the position is frozen), or empty (neither).
+    var attachSource = ""
 }
 
 /// Finds a line across the box where the brightness steps along the expected normal. Soil

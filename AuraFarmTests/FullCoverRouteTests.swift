@@ -25,9 +25,28 @@ final class FullCoverRouteTests: XCTestCase {
         XCTAssertEqual(
             columns,
             [
-                "column 1 up", "column 1 down", "column 2 down", "column 2 up", "column 3 up",
-                "column 3 down",
+                "column 1 up", "column 1 down", "column 2 up", "column 3 down",
             ])
+    }
+
+    /// Phase 2r part A: after column 1 ends on the bottom edge the step right lands and column 2
+    /// goes UP (away from the edge just confirmed), column 3 DOWN, one leg each; no target is
+    /// below the bottom edge or above the top one.
+    func testAfterTheBottomEdgeColumnTwoGoesUpAndColumnThreeDownWithinTheEdges() {
+        let result = simulate()
+        let byColumn = Dictionary(grouping: result.placements, by: \.column)
+        let ys = { (column: Int) in
+            (byColumn[column] ?? []).sorted { $0.order < $1.order }.map { Double($0.position.y) }
+        }
+        let two = ys(2)
+        XCTAssertGreaterThanOrEqual(two.count, 2)
+        XCTAssertLessThan(two[1], two[0], "column 2's first target after the landing is above it")
+        XCTAssertTrue(zip(two, two.dropFirst()).allSatisfy { $0.1 < $0.0 }, "up only: \(two)")
+        let three = ys(3)
+        XCTAssertTrue(zip(three, three.dropFirst()).allSatisfy { $0.1 > $0.0 }, "down only: \(three)")
+        let all = result.placements.map { Double($0.position.y) }
+        XCTAssertGreaterThan(all.min() ?? 0, -0.4)
+        XCTAssertLessThan(all.max() ?? 0, 2.4 + 0.4)
     }
 
     func testNoRecheckTravelAndNoInwardProbe() {

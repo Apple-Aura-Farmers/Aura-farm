@@ -17,6 +17,10 @@ struct GhostFrameThresholds {
     /// 15:32, the position jumped). PLACEHOLDER. Source: the junk frames had 0 to 11 feature cells
     /// and sharpness 15 to 60, the good ones 22 to 34.
     var minFeatureCellsToRegister = 12
+    /// ...and only if the box is also this blurry or flat (box sharpness under this). PLACEHOLDER.
+    /// Source: the 15:32 junk frames read sharpness 15 to 60; the 22:04 dark-lighting frames
+    /// wrongly skipped (feature cells read low) had a median of 370.
+    var maxSharpnessForSparseSkip = 150.0
     /// This many such frames in a row go to the no-detail pause.
     var maxSparseSkipsInARow = 5
 }

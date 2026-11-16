@@ -114,11 +114,11 @@ final class LineEdgeTests: XCTestCase {
         }
     }
 
-    func testALineSixtyDegreesFromPerpendicularIsIgnored() {
+    func testALineSeventyDegreesFromPerpendicularIsIgnored() {
         columnOne()
         let first = route.steps.count
-        approach(from: 1.5, to: 0.1, move: up, angle: 60)
-        rest(0.1, readings: 30, angle: 60)
+        approach(from: 1.5, to: 0.1, move: up, angle: 70)
+        rest(0.1, readings: 30, angle: 70)
         XCTAssertEqual(route.last.edge.lineState, "none")
         XCTAssertEqual(route.guide.edgesReached, 1)
         XCTAssertFalse(route.steps[first...].contains { $0.instruction == .lineAhead })

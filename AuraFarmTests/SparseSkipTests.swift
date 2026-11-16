@@ -19,12 +19,14 @@ final class SparseSkipTests: XCTestCase {
         }
     }
 
-    /// A few strong dots on bright glass: the sharpness is high (detail is "on") but only about
-    /// four feature cells.
-    private func junk() -> CVPixelBuffer {
+    /// A few dots on bright glass: detail is "on" (sharpness about 137, over the 120 limit and
+    /// under the 150 sparse-skip limit) but only about four feature cells. Phase 2q: the dots
+    /// used to be 120 (sharpness about 453), which the new rule no longer skips; `dots` 120 is
+    /// the sharp variant.
+    private func junk(dots value: UInt8 = 165) -> CVPixelBuffer {
         let dots = [(70, 70), (150, 80), (90, 160), (160, 170)]
         return SyntheticFrame.make(width: size, height: size) { x, y in
-            for (cx, cy) in dots where abs(x - cx) <= 2 && abs(y - cy) <= 2 { return 120 }
+            for (cx, cy) in dots where abs(x - cx) <= 2 && abs(y - cy) <= 2 { return value }
             return 220
         }
     }
@@ -89,5 +91,36 @@ final class SparseSkipTests: XCTestCase {
         for _ in 0..<10 { last = track(tracker, good()) }
         XCTAssertEqual(last.sparseSkips, 0)
         XCTAssertNotEqual(last.reading, "sparse_skip")
+    }
+
+    // MARK: Phase 2q part A: skip only when the box is also blurry or flat
+
+    func testFewCellsButASharpBoxIsRegisteredNormally() throws {
+        // 22:04 dark lighting: the cells read low on a sharp box (median sharpness 370).
+        let sharp = junk(dots: 120)
+        let cells = try XCTUnwrap(FrameAnalyzer.featureCells(of: sharp, in: box, featureContrast: 40))
+        XCTAssertLessThan(cells.cells, GhostFrameThresholds().minFeatureCellsToRegister)
+        let sharpness = try XCTUnwrap(FrameAnalyzer.stats(of: sharp, in: box, step: 4)).sharpness
+        XCTAssertGreaterThan(sharpness, GhostFrameThresholds().maxSharpnessForSparseSkip)
+        let tracker = SlideTracker()
+        for _ in 0..<4 { _ = track(tracker, good()) }
+        let readings = (0..<3).map { _ in track(tracker, sharp) }
+        XCTAssertTrue(readings.allSatisfy { $0.reading != "sparse_skip" })
+        XCTAssertEqual(readings.last?.sparseSkips, 0)
+    }
+
+    func testFewCellsAndABlurryBoxIsStillSkipped() throws {
+        let sharpness = try XCTUnwrap(FrameAnalyzer.stats(of: junk(), in: box, step: 4)).sharpness
+        XCTAssertLessThan(sharpness, GhostFrameThresholds().maxSharpnessForSparseSkip)
+        let tracker = SlideTracker()
+        for _ in 0..<4 { _ = track(tracker, good()) }
+        let readings = (0..<3).map { _ in track(tracker, junk()) }
+        XCTAssertTrue(readings.allSatisfy { $0.reading == "sparse_skip" })
+    }
+
+    func testTheDefaultLimitIsBetweenTheJunkAndTheDarkLightingFrames() {
+        let limit = GhostFrameThresholds().maxSharpnessForSparseSkip
+        XCTAssertGreaterThan(limit, 60, "15:32 junk read 15 to 60")
+        XCTAssertLessThan(limit, 370, "22:04 wrongly skipped frames had a median of 370")
     }
 }

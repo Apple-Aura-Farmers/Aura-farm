@@ -215,6 +215,14 @@ struct SlideRoute {
     private var notAnEdgeUntil: Double?
     /// Where the view was after the last reading: `edgeHeading` is decided from it.
     private var lastPosition = CGPoint.zero
+    /// Whether the view has been on the current column's x since it began: until then it is on
+    /// the trip in from the edge, and no line is looked for. After that, drifting off the column
+    /// does not stop the looking (22:04 run: no readings for 19 s with the helper off the x).
+    private var reachedColumn = false
+    /// When a valid line was last seen (any line state but none) and whether it was behind the
+    /// cross: for `lineMemoryInstruction`.
+    private var lineSeenAt: Double?
+    private var lineSeenBehind = false
 
     init(thresholds: GuidedSweepThresholds = GuidedSweepThresholds()) {
         self.thresholds = thresholds
@@ -277,6 +285,11 @@ struct SlideRoute {
     mutating func update(_ reading: GuideReading) -> Output {
         lastOutput = advance(reading)
         lastPosition = reading.position
+        if case .spot(.leg) = phase, let column = current,
+            abs(Double(reading.position.x) - column.x) <= thresholds.alignment.alignToleranceFields
+        {
+            reachedColumn = true
+        }
         return lastOutput
     }
 
@@ -293,21 +306,19 @@ struct SlideRoute {
     }
 
     /// The direction an edge line is looked for along (screen unit vector), or nil: screen left on
-    /// the left-edge run, the leg's direction on a column leg, screen right on a step right. nil
-    /// on returns, the trip to a column's start (the view is not yet on the column), edge spots,
-    /// while holding on a spot's target, and on travel. The lab measures the line along it.
+    /// the left-edge run, the leg's direction on a column leg (once the view has reached the
+    /// column), screen right on a step right. It holds for the whole leg whatever the
+    /// instruction (moving, holding, captured, too far, other way, nothing to follow, refocus).
+    /// nil on returns, the trip in to a column's start, edge spots and travel.
     var edgeHeading: CGPoint? {
-        let holding = alignment.holdsTarget && alignment.isAtTarget
         switch phase {
         case .runToLeftEdge:
             return CGPoint(x: -1, y: 0)
         case .spot(.leg):
-            guard let column = current, !holding,
-                abs(Double(lastPosition.x) - column.x) <= thresholds.alignment.alignToleranceFields
-            else { return nil }
+            guard let column = current, reachedColumn else { return nil }
             return CGPoint(x: 0, y: column.legDirection)
         case .spot(.step):
-            return holding ? nil : CGPoint(x: 1, y: 0)
+            return CGPoint(x: 1, y: 0)
         default:
             return nil
         }
@@ -708,7 +719,9 @@ struct SlideRoute {
             return plain(instruction)
         }
         if let warning = alignment.warning(reading, allowsRefocus: false) { return plain(warning) }
-        if lineEdge.state == .ahead || lineEdge.state == .attached { return plain(.lineAhead) }
+        if let remembered = lineMemoryInstruction(reading, backward: CGPoint(x: 1, y: 0)) {
+            return plain(remembered)
+        }
         if Self.isLowDetail(reading) { return plain(.nothingToFollow) }
         return plain(.travel(direction: CGPoint(x: -1, y: 0)))
     }
@@ -720,7 +733,20 @@ struct SlideRoute {
         if let until = notAnEdgeUntil, reading.seconds < until { return .notAnEdge }
         if lineEdge.needsProof(reading) { return .checkEdge(toward: backward) }
         if lineEdge.atCross { return .edgeDetected }
+        if lineEdge.state == .behind { return .edgeBehind(toward: backward) }
         return nil
+    }
+
+    /// While a valid line was seen within `lineMemorySeconds`, its own words ("edge just behind"
+    /// or "edge line ahead") stand in for "refocus" and "nothing to follow": the box is blank
+    /// because the helper went past the line, not because the picture is wrong. nil otherwise.
+    private func lineMemoryInstruction(
+        _ reading: GuideReading, backward: CGPoint
+    ) -> GuideInstruction? {
+        guard thresholds.fullCoverSlip, let seen = lineSeenAt,
+            reading.seconds - seen <= thresholds.lineEdge.lineMemorySeconds
+        else { return nil }
+        return lineSeenBehind ? .edgeBehind(toward: backward) : .lineAhead
     }
 
     /// Feeds the line tracker on the phases that look for an edge (the left-edge run, a column
@@ -729,6 +755,7 @@ struct SlideRoute {
         guard thresholds.fullCoverSlip else { return }
         guard let heading = edgeHeading else {
             lineEdge.reset()
+            lineSeenAt = nil
             return
         }
         var seen = reading
@@ -748,6 +775,10 @@ struct SlideRoute {
         }
         lineEdge.confirmsAutomatically = !thresholds.asksEdges
         lineEdge.update(seen)
+        if lineEdge.state != .none {
+            lineSeenAt = reading.seconds
+            lineSeenBehind = lineEdge.state == .behind
+        }
     }
 
     /// Takes the line at the cross as the edge (the rule's, or the helper's): remembers it so it is
@@ -763,6 +794,7 @@ struct SlideRoute {
                 angleDegrees: angleDegrees))
         edgeMemory.clearRejected()
         lineEdge.consume()
+        lineSeenAt = nil
         halfEdgeSince = nil
         switch phase {
         case .runToLeftEdge:
@@ -810,6 +842,7 @@ struct SlideRoute {
                     normal: heading, position: reading.position, offsetFields: offset,
                     angleDegrees: lineEdge.angleDegrees ?? 0))
             lineEdge.reset()
+            lineSeenAt = nil
             notAnEdgeUntil = reading.seconds + thresholds.lineEdge.notAnEdgeSeconds
             lastOutput.instruction = .notAnEdge
         }
@@ -980,6 +1013,7 @@ struct SlideRoute {
         at reading: GuideReading, firstLeg: Double, inset: Double = 0
     ) -> Output {
         let x = Double(reading.position.x) + inset
+        reachedColumn = false
         current = Column(
             number: columns.count + 1, x: x,
             minY: Double(reading.position.y), maxY: Double(reading.position.y),
@@ -1070,6 +1104,15 @@ struct SlideRoute {
         }
 
         var instruction = alignment.update(reading)
+        if thresholds.fullCoverSlip, kind == .leg || kind == .step, let heading = edgeHeading {
+            let back = CGPoint(x: -heading.x, y: -heading.y)
+            if lineEdge.state == .behind, instruction != .captured {
+                return Output(instruction: .edgeBehind(toward: back), target: target, capture: nil)
+            }
+            if instruction == .refocus, let remembered = lineMemoryInstruction(reading, backward: back) {
+                return Output(instruction: remembered, target: target, capture: nil)
+            }
+        }
         switch instruction {
         case .refocus, .slowDown, .tooFar, .otherWay:
             return Output(instruction: instruction, target: target, capture: nil)
@@ -1083,10 +1126,11 @@ struct SlideRoute {
                     instruction = .notAnEdge
                 } else if lineEdge.atCross {
                     instruction = .edgeDetected
-                } else if instruction != .aligned,
-                    lineEdge.state == .ahead || lineEdge.state == .attached
+                } else if instruction != .aligned, let heading = edgeHeading,
+                    let remembered = lineMemoryInstruction(
+                        reading, backward: CGPoint(x: -heading.x, y: -heading.y))
                 {
-                    instruction = .lineAhead
+                    instruction = remembered
                 } else if instruction != .aligned, Self.isLowDetail(reading) {
                     instruction = .nothingToFollow
                 }
@@ -1118,9 +1162,13 @@ struct SlideRoute {
         case .step:
             let base = stepBase.map { columns[$0] }
             let direction = base?.endDirection ?? 1
+            // Full-cover slip: a true zig-zag. The new column goes away from the edge the last one
+            // ended on, and is ONE leg (it starts at an edge), so it ends at the opposite edge.
+            let zigZag = thresholds.fullCoverSlip
             current = Column(
                 number: columns.count + 1, x: Double(target.x), minY: Double(target.y),
-                maxY: Double(target.y), legDirection: direction, gapsAtStart: reading.unconfirmedGaps)
+                maxY: Double(target.y), legDirection: zigZag ? -direction : direction,
+                legsDone: zigZag ? 1 : 0, gapsAtStart: reading.unconfirmedGaps)
             probeIndex = 0
             let placement = alignment.holdsTarget ? capture(reading) : nil
             if let column = current {
