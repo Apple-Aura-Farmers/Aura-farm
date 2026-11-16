@@ -47,6 +47,13 @@ final class SlideTracker {
     private var anchor: CVPixelBuffer?
     private lazy var context = CIContext(options: [.useSoftwareRenderer: false])
     private var lastAgreementAt = -Double.infinity
+    /// How long the last feature-cell count took, in milliseconds.
+    private(set) var featureMilliseconds = 0.0
+    /// Whether a box with little variance but distinct features still counts as having detail.
+    var tracksSparse: Bool {
+        get { detail.thresholds.tracksSparse }
+        set { detail.thresholds.tracksSparse = newValue }
+    }
     /// The box of the frame being tracked, in frame pixels; nil for the whole frame.
     private var box: CGRect?
 
@@ -135,12 +142,25 @@ final class SlideTracker {
         let halfSharpness = box.map { measureHalves(of: $0, in: buffer, fallback: stats.sharpness) }
         // The anchor the offset below is measured against, before this frame may replace it.
         let heldAnchor = anchor
-        let outcome = trackFrame(buffer, seconds: seconds, frameSize: frameSize, boxStats: stats)
+        var features: FeatureCells?
+        if let box {
+            let started = ContinuousClock.now
+            features = FrameAnalyzer.featureCells(
+                of: buffer, in: box, featureContrast: detail.thresholds.featureContrast)
+            let taken = ContinuousClock.now - started
+            featureMilliseconds =
+                Double(taken.components.seconds) * 1000 + Double(taken.components.attoseconds) / 1e15
+        }
+        let outcome = trackFrame(
+            buffer, seconds: seconds, frameSize: frameSize, boxStats: stats, features: features)
         let boxSide = Self.side(of: box, frameSize: frameSize)
         let start = updateReference(
             buffer, frameShift: outcome.frameShift, boxSide: boxSide, frameSize: frameSize)
         var result = reading(outcome, boxStats: stats, frameSize: frameSize, start: start)
         result.halfSharpness = halfSharpness
+        result.featureCells = features?.cells ?? 0
+        result.featureQuarters = features?.quarters ?? 0
+        result.sparse = detail.hasDetail && detail.isSparse
         if let box, let heldAnchor, let halfSharpness, detail.hasDetail {
             let offset = outcome.usedOffset ?? outcome.offset ?? odometer.live
             result.halfFocusRatio = focusRatios(
@@ -256,12 +276,13 @@ final class SlideTracker {
     /// One tracked frame: the frame-to-frame shift, the detail check, and the reading against
     /// the anchor (or, after a stretch with nothing to track, the match of the held picture).
     private func trackFrame(
-        _ buffer: CVPixelBuffer, seconds: Double, frameSize: CGSize, boxStats: FrameStats
+        _ buffer: CVPixelBuffer, seconds: Double, frameSize: CGSize, boxStats: FrameStats,
+        features: FeatureCells?
     ) -> Outcome {
         var outcome = Outcome()
         outcome.frameShift = measureFrameShift(buffer)
         let hadDetail = detail.hasDetail
-        detail.update(boxSharpness: boxStats.sharpness)
+        detail.update(boxSharpness: boxStats.sharpness, features: features)
         if hadDetail && !detail.hasDetail {
             blindStretches += 1
             resumeAfterBlind = true

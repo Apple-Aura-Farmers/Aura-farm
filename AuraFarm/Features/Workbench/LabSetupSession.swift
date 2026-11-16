@@ -19,6 +19,8 @@
         var focusLow = false
         /// Detail was lost while still (see `RunMonitor.isStillOnset`).
         var focusStillOnset = false
+        /// While paused for focus with a baseline: the two-sided dial (value: the focus index).
+        var dial: FocusDialReading?
     }
 
     /// What the setup screens draw, published by the lab at its normal throttle.
@@ -29,6 +31,8 @@
         var trend = AlignmentTrend.steady
         var isAlignmentPassed = false
         var focus: FocusReading?
+        /// The two-sided dial, once the focus peak has been passed.
+        var focusDial: FocusDialReading?
         /// The square the focus is measured in, frame pixels.
         var focusSquare: CGRect?
         /// Where setup goes after align passes again, when alignment was lost; nil otherwise.
@@ -45,9 +49,11 @@
     @Observable
     final class FocusMeterState {
         private(set) var reading: FocusReading?
+        private(set) var dial: FocusDialReading?
 
-        func update(_ reading: FocusReading?) {
+        func update(_ reading: FocusReading?, dial: FocusDialReading? = nil) {
             if self.reading != reading { self.reading = reading }
+            if self.dial != dial { self.dial = dial }
         }
     }
 
@@ -80,6 +86,8 @@
 
         private var alignment = AlignmentCheck()
         private var focus = FocusGuide()
+        private var focusDial = LabSetupSession.newSetupDial()
+        private var runDial: FocusDial?
         private var calibration = StageAxesCalibration()
         private var monitor = RunMonitor()
         private var lastPassingCircle: FieldCircle?
@@ -117,7 +125,7 @@
         func redo() {
             flow.redo()
             alignment.reset()
-            focus.reset()
+            resetFocus()
             calibration.reset()
             monitor.reset()
             monitor.setFocusBaseline(nil)
@@ -189,6 +197,7 @@
             if reading.passes { lastPassingCircle = reading.circle }
 
             var focusReading: FocusReading?
+            var dialReading: FocusDialReading?
             var square: CGRect?
             if flow.step == .focus, let circle = lastPassingCircle {
                 let box = Self.focusSquare(for: circle, frameSize: frameSize)
@@ -196,6 +205,14 @@
                 if let sharpness = FrameAnalyzer.stats(of: buffer, in: box, step: 4)?.sharpness {
                     focusReading = focus.update(sharpness: sharpness, seconds: seconds)
                     focusWasFocused = focusReading?.state == .focused
+                    // The dial follows from the start, so it knows the side once it shows: after
+                    // the peak has been passed once.
+                    if let current = focusReading?.current {
+                        let dial = focusDial.update(value: current, seconds: seconds)
+                        if let state = focusReading?.state, state != .turnOneWay, state != .needsSample {
+                            dialReading = dial
+                        }
+                    }
                 }
                 if let index = FrameAnalyzer.focusIndex(of: buffer, in: box) {
                     focusIndexes.append((seconds, index))
@@ -207,7 +224,8 @@
             origin = start
             appendLog(
                 SetupLogRow(
-                    seconds: seconds - start, step: atStep, alignment: reading, focus: focusReading))
+                    seconds: seconds - start, step: atStep, alignment: reading, focus: focusReading,
+                    focusDial: dialReading))
 
             if atStep == .align {
                 let resuming = flow.resumeStep
@@ -216,8 +234,8 @@
                     case .field: enterField(pipeline: pipeline)
                     case .focus where resuming == .focus:
                         // The knob did not move: a focus already found stays found.
-                        if !focusWasFocused { focus.reset() }
-                    default: focus.reset()
+                        if !focusWasFocused { resetFocus() }
+                    default: resetFocus()
                     }
                 }
             } else if alignment.isLost {
@@ -230,9 +248,20 @@
             }
             info = LabSetupInfo(
                 step: flow.step, frameSize: frameSize, alignment: reading, trend: alignment.trend,
-                isAlignmentPassed: alignment.isPassed, focus: focusReading, focusSquare: square,
+                isAlignmentPassed: alignment.isPassed, focus: focusReading, focusDial: dialReading,
+                focusSquare: square,
                 resumeStep: flow.resumeStep)
             return info
+        }
+
+        private static func newSetupDial() -> FocusDial {
+            FocusDial(
+                target: nil, goodShare: FocusThresholds().nearFraction, raisesTarget: true)
+        }
+
+        private func resetFocus() {
+            focus.reset()
+            focusDial = Self.newSetupDial()
         }
 
         /// Reaching field (from focus, or back to it) learns the mask afresh, with review.
@@ -310,7 +339,8 @@
                         tracker: SetupTrackerSample(
                             tracking: tracking, position: guidePosition(step),
                             boxSharpness: step.boxStats.sharpness, viewClass: viewClass,
-                            stillSeconds: stillSeconds)))
+                            stillSeconds: stillSeconds,
+                            featureCells: step.tracking.featureCells)))
             }
             info.step = flow.step
             info.frameSize = step.frameSize
@@ -349,17 +379,31 @@
                 alignment: reading, confirmedCircle: referenceCircle, focusIndex: index,
                 boxSharpness: step.boxStats.sharpness, viewClass: viewClass, tracking: tracking,
                 isStill: isStill, seconds: seconds)
+            var dial: FocusDialReading?
+            if state == .pausedFocus, let index {
+                // Paused for focus: from the first reading, a dial against the baseline (words
+                // only without one). The Z knob does not move the slide, so still or not.
+                if runDial == nil, let baseline = monitor.focusBaseline, baseline > 0 {
+                    runDial = FocusDial(
+                        target: baseline, goodShare: RunMonitorThresholds().resumeAtShareOfBaseline,
+                        startsUnknown: true)
+                }
+                dial = runDial?.update(value: index, seconds: seconds)
+            } else {
+                runDial = nil
+            }
             info.monitor = RunMonitorInfo(
                 state: state, focusIndex: index, focusBaseline: monitor.focusBaseline,
                 circleShift: monitor.circleShift, circleRadiusChange: monitor.circleRadiusChange,
                 circle: referenceCircle, focusLow: monitor.isFocusLow,
-                focusStillOnset: monitor.isStillOnset)
+                focusStillOnset: monitor.isStillOnset, dial: dial)
         }
 
         /// Starts afresh when the person marks the start of a run: counts cleared, and with no
         /// setup baseline the focus baseline is collected from the next readings.
         func rearmMonitor() {
             monitor.reset()
+            runDial = nil
             info.monitor.state = .ok
         }
 

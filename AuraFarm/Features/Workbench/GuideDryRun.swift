@@ -157,11 +157,20 @@
             }
             var sideA: Double?
             var sideB: Double?
+            var sideADirection: CGPoint?
             if let heading = lastHeading, let halves = step.tracking.halfSharpness,
                 let frameDirection = axes.frameVector(ofScreenVector: heading),
                 let sides = halves.sideSharpness(forFrameDirection: frameDirection)
             {
                 (sideA, sideB) = sides
+                // Where side A's picture lies on screen (the content axes map a frame vector).
+                if let pair = BoxHalves.sides(forFrameDirection: frameDirection) {
+                    let screen = axes.screenVector(ofFrameVector: BoxHalves.frameVector(of: pair.0))
+                    let length = hypot(Double(screen.x), Double(screen.y))
+                    if length > 1e-9 {
+                        sideADirection = CGPoint(x: Double(screen.x) / length, y: Double(screen.y) / length)
+                    }
+                }
             }
             let returns = (
                 matched: step.tracking.blankReturnsMatched,
@@ -183,7 +192,7 @@
                 aheadSharpness: ahead, behindSharpness: behind, aheadFocusRatio: aheadFocus,
                 behindFocusRatio: behindFocus, sideSharpnessA: sideA, sideSharpnessB: sideB,
                 lastBlankReturn: lastReturn, blankReturnCount: returns.matched + returns.unmatched,
-                focusLow: focusLow)
+                focusLow: focusLow, sideADirection: sideADirection)
             let result: GuideStep
             if stageLimitPressed {
                 stageLimitPressed = false

@@ -20,16 +20,19 @@ final class SetupLogTests: XCTestCase {
         let rows = [
             SetupLogRow(
                 seconds: 1.234, step: .focus, alignment: alignment, focus: focus,
+                focusDial: FocusDialReading(
+                    offset: 0.3, side: .past, greenHalfWidth: 0.1, isGreen: false, isWrongWay: false,
+                    message: "Too far"),
                 tracker: SetupTrackerSample(
                     tracking: .paused, position: CGPoint(x: 0.3, y: -1.23456), boxSharpness: 17.04,
-                    viewClass: .blank, stillSeconds: 2.5)),
+                    viewClass: .blank, stillSeconds: 2.5, featureCells: 7)),
             SetupLogRow(seconds: 2, step: .align, alignment: AlignmentReading(), focus: nil),
         ]
         let lines = SetupLog.csv(rows).split(separator: "\n").map(String.init)
         XCTAssertEqual(lines.count, 3)
         XCTAssertEqual(
             lines[0],
-            "seconds,step,found,circle_x,circle_y,circle_r,clipped_sides,roundness,evenness,darkest_sector,brightest_sector,saturated_share,glare_ratio,score,problems,focus_state,focus_current,focus_peak,focus_level,stage_step,stage_travel_fields,stage_tilt_deg,stage_skew_deg,tracking,position_x_fields,position_y_fields,box_sharpness,view_class,still_seconds"
+            "seconds,step,found,circle_x,circle_y,circle_r,clipped_sides,roundness,evenness,darkest_sector,brightest_sector,saturated_share,glare_ratio,score,problems,focus_state,focus_current,focus_peak,focus_level,stage_step,stage_travel_fields,stage_tilt_deg,stage_skew_deg,tracking,position_x_fields,position_y_fields,box_sharpness,view_class,still_seconds,feature_cells,focus_dial_offset,focus_dial_side"
         )
         let first = lines[1].split(separator: ",", omittingEmptySubsequences: false).map(String.init)
         XCTAssertEqual(first.count, SetupLog.header.count)
@@ -53,6 +56,9 @@ final class SetupLogTests: XCTestCase {
         XCTAssertEqual(first[index("box_sharpness")], "17.0")
         XCTAssertEqual(first[index("view_class")], "blank")
         XCTAssertEqual(first[index("still_seconds")], "2.50")
+        XCTAssertEqual(first[index("feature_cells")], "7")
+        XCTAssertEqual(first[index("focus_dial_offset")], "0.300")
+        XCTAssertEqual(first[index("focus_dial_side")], "past")
         let empty = lines[2].split(separator: ",", omittingEmptySubsequences: false).map(String.init)
         XCTAssertEqual(empty.count, SetupLog.header.count)
         XCTAssertEqual(empty[index("step")], "align")

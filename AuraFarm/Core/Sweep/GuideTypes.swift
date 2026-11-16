@@ -44,6 +44,9 @@ struct GuideReading: Equatable {
     var blankReturnCount = 0
     /// The run monitor says focus is clearly low: a spot is not captured yet. See `RunMonitor`.
     var focusLow = false
+    /// The screen direction (guide axes) the picture of side A lies in; side B is the opposite.
+    /// nil when not known, which keeps a side imbalance a rejection. See `SlideRoute`.
+    var sideADirection: CGPoint?
 }
 
 /// How the tracker took the picture back after a stretch with nothing to follow.

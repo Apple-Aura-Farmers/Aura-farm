@@ -20,7 +20,7 @@ final class EdgeLineDetectorTests: XCTestCase {
     /// Bright where `signedDistance` (cells, along the normal, from the centre) is positive,
     /// with sparse dark dots on both sides at the same density.
     private func grid(
-        dots: Bool = true, edge: ((Double, Double) -> Double)? = nil,
+        dots: Bool = true, ramp: Double = 0, edge: ((Double, Double) -> Double)? = nil,
         extra: ((Int, Int) -> Float?)? = nil
     ) -> EdgeLineGrid {
         var random = Dots()
@@ -29,7 +29,7 @@ final class EdgeLineDetectorTests: XCTestCase {
             for x in 0..<cells {
                 let dx = Double(x) + 0.5 - Double(cells) / 2
                 let dy = Double(y) + 0.5 - Double(cells) / 2
-                var value: Float = 100
+                var value: Float = 100 + Float(ramp * dx)
                 if let edge, edge(dx, dy) > 0 { value = 200 }
                 if dots, random.next() < 0.03 { value -= 40 }
                 if let extra, let override = extra(x, y) { value = override }
@@ -116,6 +116,27 @@ final class EdgeLineDetectorTests: XCTestCase {
                 previous: first, trackedChangeFields: 0.05))
         XCTAssertEqual(try XCTUnwrap(same.slideResidualFields), 0.05, accuracy: 0.02)
         XCTAssertNil(first.slideResidualFields, "no previous result, no residual")
+    }
+
+    func testASmoothIlluminationRampWithDotsIsNotACandidate() throws {
+        // The eyepiece's falloff: a smooth ramp of 0.4 level a cell, same sign everywhere. The
+        // 16 Nov 2026 plain sample read coverage 1.0 and strength 6 on it.
+        let line = try XCTUnwrap(
+            EdgeLineDetector.detect(grid: grid(ramp: 0.4), box: box, normal: normal))
+        XCTAssertFalse(line.isCandidate, "coverage \(line.coverage) strength \(line.strength)")
+    }
+
+    func testAnEdgeAcrossOnlyFiveEighthsOfTheBoxIsACandidateThroughTheLongestRun() throws {
+        // The step exists only below y = -25 cells from the centre: parts 3 to 7 of 8.
+        let corner: (Double, Double) -> Double = { dx, dy in dy > -25 ? dx - 20 : -1 }
+        // The coverage route is switched off, so only the run can make it a candidate.
+        var thresholds = EdgeLineThresholds()
+        thresholds.candidateCoverage = 1.1
+        let line = try XCTUnwrap(
+            EdgeLineDetector.detect(
+                grid: grid(edge: corner), box: box, normal: normal, thresholds: thresholds))
+        XCTAssertGreaterThanOrEqual(line.longestRun, 5)
+        XCTAssertTrue(line.isCandidate, "run \(line.longestRun) strength \(line.strength)")
     }
 
     func testTimePerCallOnAFullBox() throws {

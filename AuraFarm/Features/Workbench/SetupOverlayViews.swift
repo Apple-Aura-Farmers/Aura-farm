@@ -199,6 +199,8 @@
     struct FocusOverlay: View {
         var info: LabSetupInfo
         var reading: FocusReading?
+        /// The two-sided dial, once the peak has been passed: it replaces the one-sided meter.
+        var dial: FocusDialReading?
         var mapper: (any FrameToView)?
 
         static func text(for state: FocusGuideState?) -> String {
@@ -233,8 +235,13 @@
                 VStack(spacing: 8) {
                     SetupStepIndicator(step: .focus)
                     Spacer()
-                    FocusMeter(reading: reading, tone: tone(reading?.state))
-                    SetupLine(text: Self.text(for: reading?.state), tone: tone(reading?.state))
+                    if let dial {
+                        FocusDialView(reading: dial)
+                        SetupLine(text: dial.message, tone: dial.isGreen ? .green : .orange)
+                    } else {
+                        FocusMeter(reading: reading, tone: tone(reading?.state))
+                        SetupLine(text: Self.text(for: reading?.state), tone: tone(reading?.state))
+                    }
                 }
                 .padding(8)
             }
@@ -357,7 +364,12 @@
                             .padding(.vertical, 4)
                             .background(.orange, in: Capsule())
                             .foregroundStyle(.black)
-                        SetupLine(text: GuideInstruction.paused(reason).helperText, tone: .orange)
+                        if reason == .focus, let dial = monitor.dial {
+                            FocusDialView(reading: dial)
+                            SetupLine(text: dial.message, tone: dial.isGreen ? .green : .orange)
+                        } else {
+                            SetupLine(text: GuideInstruction.paused(reason).helperText, tone: .orange)
+                        }
                         Spacer()
                     }
                     .padding(8)
@@ -402,7 +414,10 @@
             let mapper = FramePreviewConverter(layer: previewLayer, frameSize: info.frameSize)
             switch info.step {
             case .align: AlignOverlay(info: info, mapper: mapper)
-            case .focus: FocusOverlay(info: info, reading: model.focusMeter.reading, mapper: mapper)
+            case .focus:
+                FocusOverlay(
+                    info: info, reading: model.focusMeter.reading, dial: model.focusMeter.dial,
+                    mapper: mapper)
             case .stage:
                 StageOverlay(progress: info.stage, onSkip: { model.skipStage() })
             case .field, .done: EmptyView()

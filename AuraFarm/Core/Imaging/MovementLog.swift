@@ -132,6 +132,17 @@ struct MovementLogRow: Equatable {
     var focusStillOnset = false
     /// The edge-line detector's result on frames it ran on; nil elsewhere. Logged only.
     var edgeLine: EdgeLine?
+    /// Distinct features in the box (see `FeatureCells`) and whether the tracker followed this
+    /// frame only because of the sparse rule.
+    var featureCells = 0
+    var featureQuarters = 0
+    var sparseTracking = false
+    /// While paused for focus with a baseline: the dial's offset (-1 not far enough, +1 too far)
+    /// and side ("approaching", "past", "unknown" or "wrong_way").
+    var focusDialOffset: Double?
+    var focusDialSide = ""
+    /// The file name of the frame saved on this row (lab only), else empty.
+    var snapshot = ""
 }
 
 enum MovementLog {
@@ -157,7 +168,8 @@ enum MovementLog {
         "focus_low", "focus_still_onset",
         "edge_line_strength", "edge_line_coverage", "edge_line_angle_deg",
         "edge_line_offset_fields", "edge_line_sign", "edge_line_slide_residual",
-        "edge_line_candidate",
+        "edge_line_candidate", "feature_cells", "feature_quarters", "sparse_tracking",
+        "focus_dial_offset", "focus_dial_side", "edge_line_longest_run", "snapshot",
     ]
 
     static func csv(_ rows: [MovementLogRow]) -> String {
@@ -206,6 +218,9 @@ enum MovementLog {
             row.edgeLine.map { String($0.sign) } ?? "",
             number(row.edgeLine?.slideResidualFields, 3),
             row.edgeLine.map { $0.isCandidate ? "1" : "0" } ?? "",
+            String(row.featureCells), String(row.featureQuarters), row.sparseTracking ? "1" : "0",
+            number(row.focusDialOffset, 3), row.focusDialSide,
+            row.edgeLine.map { String($0.longestRun) } ?? "", row.snapshot,
         ]
     }
 

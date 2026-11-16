@@ -12,6 +12,19 @@ struct DetailThresholds {
     /// before detail counts as back. PLACEHOLDER: not calibrated.
     var readingsToRaise: Int = 3
     var readingsToClear: Int = 3
+
+    // Sparse sample: a few distinct particles on bright glass average to a low variance, yet the
+    // picture has plenty to follow. Source: failed_edge_detection.csv and the 16 Nov 2026 stage
+    // step, where coarse structure stayed while the fine variance fell. All PLACEHOLDER.
+    /// Whether the sparse rule is used at all (the lab's "Track sparse sample").
+    var tracksSparse = true
+    /// A pixel is a feature when its |Laplacian| is at least this, in luma units.
+    var featureContrast: Double = 40
+    /// The sparse rule still needs this much box sharpness (blank glass is about 17).
+    var sparseFloorSharpness: Double = 30
+    var minFeatureCells = 4
+    /// ... spread over at least this many of the box's 4 quarters.
+    var minFeatureQuarters = 2
 }
 
 /// Whether the registration box holds enough detail to follow. Over empty glass registration
@@ -20,6 +33,8 @@ struct DetailThresholds {
 struct DetailCheck {
     var thresholds: DetailThresholds
     private(set) var hasDetail = true
+    /// This reading was followed only because of the sparse rule (variance under the limit).
+    private(set) var isSparse = false
     private var lowStreak = 0
     private var highStreak = 0
 
@@ -27,8 +42,15 @@ struct DetailCheck {
         self.thresholds = thresholds
     }
 
-    mutating func update(boxSharpness: Double) {
-        let detailed = boxSharpness >= thresholds.minBoxSharpness
+    /// - Parameter features: the box's feature cells; nil leaves only the sharpness rule.
+    mutating func update(boxSharpness: Double, features: FeatureCells? = nil) {
+        let plain = boxSharpness >= thresholds.minBoxSharpness
+        let sparse =
+            thresholds.tracksSparse && !plain && boxSharpness >= thresholds.sparseFloorSharpness
+            && (features?.cells ?? 0) >= thresholds.minFeatureCells
+            && (features?.quarters ?? 0) >= thresholds.minFeatureQuarters
+        isSparse = sparse
+        let detailed = plain || sparse
         if hasDetail {
             lowStreak = detailed ? 0 : lowStreak + 1
             if lowStreak >= thresholds.readingsToRaise {

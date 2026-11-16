@@ -17,6 +17,8 @@ final class ScriptedRoute {
         var sideB: Double? = 400
         var still = false
         var speed = 0.05
+        /// The screen direction side A's picture lies in; nil keeps a side imbalance a rejection.
+        var sideDirection: CGPoint?
 
         /// Nothing to follow: the tracker is paused over blank glass.
         static let blank = Frame(
@@ -47,7 +49,7 @@ final class ScriptedRoute {
             aheadSharpness: frame.ahead, behindSharpness: frame.behind,
             aheadFocusRatio: frame.aheadFocus, behindFocusRatio: frame.behindFocus,
             sideSharpnessA: frame.sideA, sideSharpnessB: frame.sideB, lastBlankReturn: lastReturn,
-            blankReturnCount: returnCount)
+            blankReturnCount: returnCount, sideADirection: frame.sideDirection)
     }
 
     func feed(_ frame: Frame = Frame(), move: CGPoint = .zero, times: Int = 1) {

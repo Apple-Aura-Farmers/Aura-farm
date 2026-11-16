@@ -49,6 +49,16 @@ struct BoxHalves: Equatable {
         }
     }
 
+    /// The side's outward direction in frame axes (x right, y down).
+    static func frameVector(of side: Side) -> CGPoint {
+        switch side {
+        case .left: CGPoint(x: -1, y: 0)
+        case .right: CGPoint(x: 1, y: 0)
+        case .top: CGPoint(x: 0, y: -1)
+        case .bottom: CGPoint(x: 0, y: 1)
+        }
+    }
+
     static func opposite(of side: Side) -> Side {
         switch side {
         case .left: .right

@@ -44,6 +44,11 @@ struct SlideTrackerReading: Equatable {
     /// False while the box holds too little detail to follow.
     var hasDetail = true
     var blindStretches = 0
+    /// The box's feature cells and how many quarters hold one (see `FeatureCells`).
+    var featureCells = 0
+    var featureQuarters = 0
+    /// Followed only because of the sparse rule: the box's variance is under the detail limit.
+    var sparse = false
     /// Detail returns recovered by matching the held picture, and those that could not be.
     var blankReturnsMatched = 0
     var blankReturnsUnmatched = 0

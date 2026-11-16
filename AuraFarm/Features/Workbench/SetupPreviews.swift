@@ -98,6 +98,12 @@
             case .focusTurnOneWay, .focusPassedPeak, .focusFocused, .focusNeedsSample:
                 info.step = .focus
                 info.focusSquare = FieldCentring.focusSquareForPreview(circle: centred)
+                // After the peak was passed once, the two-sided dial replaces the meter.
+                if scene == .focusPassedPeak {
+                    info.focusDial = FocusDialPreviewPanel.reading(.past)
+                } else if scene == .focusFocused {
+                    info.focusDial = FocusDialPreviewPanel.reading(.green)
+                }
             case .stageWaitX:
                 info.step = .stage
                 info.stage = StageAxesProgress(
@@ -134,7 +140,8 @@
             case .pausedFocus:
                 info.step = .done
                 info.monitor = RunMonitorInfo(
-                    state: .pausedFocus, focusIndex: 0.9, focusBaseline: 2.1, circle: centred)
+                    state: .pausedFocus, focusIndex: 0.9, focusBaseline: 2.1, circle: centred,
+                    dial: FocusDialPreviewPanel.reading(.wrongWay))
             }
             info.alignment = reading
             let meter: FocusReading?
@@ -166,7 +173,9 @@
                     case .done:
                         PausedOverlay(monitor: values.info.monitor, mapper: Mapper())
                     default:
-                        FocusOverlay(info: values.info, reading: values.meter, mapper: Mapper())
+                        FocusOverlay(
+                            info: values.info, reading: values.meter, dial: values.info.focusDial,
+                            mapper: Mapper())
                     }
                 }
                 .frame(width: Self.panel.width, height: Self.panel.height)
@@ -259,6 +268,62 @@
         }
     }
 
+    /// The focus dial in each of its states.
+    struct FocusDialPreviewPanel: View {
+        enum State: CaseIterable {
+            case approaching, near, past, green, wrongWay
+
+            var title: String {
+                switch self {
+                case .approaching: "Approaching (not far enough)"
+                case .near: "Near (almost there)"
+                case .past: "Past (too far)"
+                case .green: "Green zone (sharp)"
+                case .wrongWay: "Wrong way (run pause)"
+                }
+            }
+        }
+
+        /// A reading for the state: target 1, goodShare 0.8.
+        static func reading(_ state: State) -> FocusDialReading {
+            var dial = FocusDial(
+                target: 1, goodShare: 0.8, startsUnknown: state == .wrongWay)
+            switch state {
+            case .approaching:
+                _ = dial.update(value: 0.3, seconds: 0)
+                return dial.update(value: 0.4, seconds: 0.1)
+            case .near:
+                _ = dial.update(value: 0.5, seconds: 0)
+                return dial.update(value: 0.7, seconds: 0.1)
+            case .past:
+                _ = dial.update(value: 0.9, seconds: 0)
+                return dial.update(value: 0.6, seconds: 0.1)
+            case .green:
+                _ = dial.update(value: 0.5, seconds: 0)
+                return dial.update(value: 0.9, seconds: 0.1)
+            case .wrongWay:
+                _ = dial.update(value: 0.6, seconds: 0)
+                return dial.update(value: 0.45, seconds: 0.1)
+            }
+        }
+
+        var body: some View {
+            VStack(spacing: 10) {
+                ForEach(State.allCases, id: \.self) { state in
+                    let shown = Self.reading(state)
+                    VStack(spacing: 2) {
+                        FocusDialView(reading: shown)
+                        SetupLine(text: shown.message, tone: shown.isGreen ? .green : .orange)
+                        Text(state.title).font(.caption2).foregroundStyle(.white.opacity(0.7))
+                    }
+                }
+            }
+            .padding(.vertical, 12)
+            .frame(width: 400)
+            .background(Color(white: 0.2))
+        }
+    }
+
     /// The cyan edge line the detector finds on a synthetic edge (bright to the right, a slight
     /// tilt, dots on both sides), drawn over the box.
     struct EdgeLinePreviewPanel: View {
@@ -330,6 +395,7 @@
     #Preview("Stage done") { SetupPreviewPanel(scene: .stageDone) }
     #Preview("Paused alignment") { SetupPreviewPanel(scene: .pausedAlignment) }
     #Preview("Paused focus") { SetupPreviewPanel(scene: .pausedFocus) }
+    #Preview("Focus dial states") { FocusDialPreviewPanel() }
     #Preview("Edge line") { EdgeLinePreviewPanel() }
     #Preview("Guide extras") { GuideExtrasPanel() }
 #endif

@@ -28,6 +28,7 @@
         @AppStorage("slideLab.straighten") private var straightens = true
         @AppStorage("slideLab.pauseOnMonitor") private var pausesOnMonitor = true
         @AppStorage("slideLab.showEdgeLine") private var showsEdgeLine = true
+        @AppStorage("slideLab.trackSparse") private var tracksSparse = true
         @AppStorage("slideLab.skipAlignFocus") private var skipsAlignFocus = false
         @State private var noteText = ""
 
@@ -55,6 +56,7 @@
             .onAppear {
                 model.setSkipsAlignAndFocus(skipsAlignFocus)
                 model.setPausesOnMonitor(pausesOnMonitor)
+                model.setTracksSparse(tracksSparse)
                 model.setFieldRegion(FieldRegionMode(rawValue: fieldRegionName) ?? .auto)
                 model.setMeasuresHopAgreement(hopAgreement)
                 model.setShowsThumbnail(showsSees)
@@ -70,6 +72,7 @@
             .onChange(of: guideDryRun) { _, enabled in model.setGuideDryRun(enabled) }
             .onChange(of: skipsAlignFocus) { _, skips in model.setSkipsAlignAndFocus(skips) }
             .onChange(of: pausesOnMonitor) { _, pauses in model.setPausesOnMonitor(pauses) }
+            .onChange(of: tracksSparse) { _, tracks in model.setTracksSparse(tracks) }
             .onChange(of: mappingName) { model.setScreenMapping(mapping, mirrored: mirrored) }
             .onChange(of: mirrored) { model.setScreenMapping(mapping, mirrored: mirrored) }
             .onDisappear { model.stop() }
@@ -350,6 +353,7 @@
                 Toggle("Straighten picture", isOn: $straightens)
                 Toggle("Pause when out of focus or alignment", isOn: $pausesOnMonitor)
                 Toggle("Show edge line", isOn: $showsEdgeLine)
+                Toggle("Track sparse sample", isOn: $tracksSparse)
                 Text("Red tint: treated as the eyepiece. Yellow box: where movement is measured.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -403,6 +407,10 @@
                 }
                 .buttonStyle(.bordered)
 
+                Button("Save frame") { model.saveFrame() }
+                    .buttonStyle(.bordered)
+                    .disabled(!model.isLogging)
+
                 HStack {
                     if model.isLogging {
                         Button("Stop log", role: .destructive) { model.stopLog() }
@@ -412,8 +420,11 @@
                     Text("\(model.rowCount) rows")
                         .font(.footnote.monospaced())
                     Spacer()
-                    if let url = model.exportURL {
-                        ShareLink("Export CSV", item: url)
+                    if model.exportURL != nil {
+                        ShareLink(
+                            model.exportItems.count > 1
+                                ? "Export CSV + \(model.exportItems.count - 1) frames" : "Export CSV",
+                            items: model.exportItems)
                     } else {
                         Text("Export CSV").foregroundStyle(.secondary)
                     }

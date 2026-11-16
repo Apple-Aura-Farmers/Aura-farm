@@ -34,6 +34,11 @@ struct GuidedSweepThresholds {
     /// drifting into view (a stage that is skewed), not the end of the leg arriving.
     /// PLACEHOLDER: not calibrated.
     var sideBalanceMin: Double = 0.5
+    /// A side imbalance is accepted as a CORNER of the cover slip when the low side faces a known
+    /// edge x within this many fields of the column. PLACEHOLDER: the column inset 0.6 plus the
+    /// box's half width 0.5. Source: failed_edge_detection.csv (16 Nov 2026, soil): at the top-left
+    /// corner the halves across the heading read 600 against 90, with column 1 at the inset.
+    var sideEdgeReachFields: Double = 1.1
     /// How far column 1 sits inside the left edge, toward the sample, when the edge was found
     /// at the centre cross. The box is 1 field wide, so 0.5 puts its edge on the cover slip's
     /// edge; 0.6 leaves a little margin for a skewed stage. PLACEHOLDER: not calibrated.
@@ -321,10 +326,34 @@ struct SlideRoute {
         if phase == .spot(.leg), let a = reading.sideSharpnessA, let b = reading.sideSharpnessB,
             min(a, b) < thresholds.sideBalanceMin * max(a, b)
         {
-            rawReason = "side_imbalance"
-            return false
+            // A clear difference is the cover slip's side drifting into view, unless the low
+            // side faces a known edge close by: then it is the corner and the end of the leg.
+            guard lowSideFacesKnownEdge(reading, lowIsA: a < b) else {
+                rawReason = "side_imbalance"
+                return false
+            }
+            rawReason = "corner"
         }
         return true
+    }
+
+    /// The x positions the route knows an edge at: the left edge column 1 was set inside, and
+    /// the recorded stage limits.
+    var knownEdgeXs: [Double] {
+        var edges = [limits.minX, limits.maxX].compactMap { $0 }
+        if let first = columns.first ?? current { edges.append(first.x - thresholds.columnInsetFields) }
+        return edges
+    }
+
+    /// Whether the side half with less detail lies toward a known edge within reach of the column.
+    /// False without the side's screen direction.
+    private func lowSideFacesKnownEdge(_ reading: GuideReading, lowIsA: Bool) -> Bool {
+        guard let direction = reading.sideADirection else { return false }
+        let towardLow = lowIsA ? Double(direction.x) : -Double(direction.x)
+        let x = current?.x ?? Double(reading.position.x)
+        return knownEdgeXs.contains {
+            abs(x - $0) <= thresholds.sideEdgeReachFields && ($0 - x) * towardLow > 0
+        }
     }
 
     /// After a stretch of blur that ran past `refocusAfterSeconds` without being decided, decides

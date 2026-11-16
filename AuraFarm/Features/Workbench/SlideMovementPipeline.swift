@@ -152,6 +152,15 @@
                 odometer: thresholds, consistency: consistencyThresholds, detail: detailThresholds)
         }
 
+        /// Whether a sparse but distinct sample still counts as having detail.
+        var tracksSparse: Bool {
+            get { tracker.tracksSparse }
+            set { tracker.tracksSparse = newValue }
+        }
+
+        /// How long the last feature-cell count took, in milliseconds.
+        var featureMilliseconds: Double { tracker.featureMilliseconds }
+
         /// Whether the eyepiece mask is still being learned.
         var isLearning: Bool { learner.isLearning }
 

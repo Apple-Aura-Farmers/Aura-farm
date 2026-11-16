@@ -11,6 +11,7 @@
         var boxSharpness: Double
         var viewClass: ViewClass
         var stillSeconds: Double
+        var featureCells = 0
     }
 
     /// One analyzed frame of the setup (align or focus): what the checks said. Kept in memory
@@ -21,6 +22,8 @@
         var step: LabSetupStep
         var alignment: AlignmentReading
         var focus: FocusReading?
+        /// The two-sided dial, once it shows.
+        var focusDial: FocusDialReading?
         /// The stage step's progress and, once known, the measured axes.
         var stage: StageAxesProgress?
         var stageAxes: StageAxes?
@@ -37,7 +40,7 @@
             "glare_ratio", "score", "problems", "focus_state", "focus_current", "focus_peak",
             "focus_level", "stage_step", "stage_travel_fields", "stage_tilt_deg", "stage_skew_deg",
             "tracking", "position_x_fields", "position_y_fields", "box_sharpness", "view_class",
-            "still_seconds",
+            "still_seconds", "feature_cells", "focus_dial_offset", "focus_dial_side",
         ]
 
         static func csv(_ rows: [SetupLogRow]) -> String {
@@ -66,6 +69,8 @@
                 number(row.tracker.map { Double($0.position.y) }, 3),
                 number(row.tracker?.boxSharpness, 1), row.tracker?.viewClass.rawValue ?? "",
                 number(row.tracker?.stillSeconds, 2),
+                row.tracker.map { String($0.featureCells) } ?? "",
+                number(row.focusDial?.offset, 3), row.focusDial?.csvSide ?? "",
             ]
         }
 

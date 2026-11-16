@@ -60,6 +60,8 @@
         private(set) var rowCount = 0
         /// The CSV of the last log that was stopped with rows in it.
         private(set) var exportURL: URL?
+        /// The CSV and the frames saved while logging, shared together.
+        private(set) var exportItems: [URL] = []
 
         // Recorded-video mode.
         private(set) var isRunningVideo = false
@@ -87,6 +89,9 @@
         }()
         @ObservationIgnored private let dryRun = GuideDryRun()
         @ObservationIgnored private let edgeProbe = EdgeLineProbe()
+        @ObservationIgnored private let snapshots = FrameSnapshotWriter()
+        @ObservationIgnored private var snapshotTrigger = SnapshotTrigger()
+        @ObservationIgnored private var snapshotRequested = false
         @ObservationIgnored private var guideEnabled = false
         @ObservationIgnored private var setup = LabSetupSession()
         @ObservationIgnored private var lastPublishedStep = LabSetupStep.align
@@ -159,6 +164,11 @@
         func setPausesOnMonitor(_ pauses: Bool) {
             pausesOnMonitor = pauses
             analysisQueue.async { [weak self] in self?.pausesOnMonitorFlag = pauses }
+        }
+
+        /// Whether the tracker follows a sparse but distinct sample ("Track sparse sample").
+        func setTracksSparse(_ tracks: Bool) {
+            analysisQueue.async { [weak self] in self?.pipeline.tracksSparse = tracks }
         }
 
         /// The helper says the stage cannot go further: the guide turns and remembers the limit.
@@ -324,7 +334,11 @@
                 self.labelledRows = []
                 self.lastSummaryAt = -Double.infinity
                 self.logging = true
+                self.snapshots.begin()
+                self.snapshotTrigger.reset()
+                self.snapshotRequested = false
                 DispatchQueue.main.async {
+                    self.exportItems = []
                     self.labelSummaries = []
                     self.isLogging = true
                     self.rowCount = 0
@@ -339,6 +353,7 @@
                 guard let self, self.logging else { return }
                 self.logging = false
                 let url = Self.write(self.rows, test: self.currentTest)
+                let items = (url.map { [$0] } ?? []) + self.snapshots.urls
                 let count = self.rows.count
                 let labelled = self.labelledRows
                 self.statsQueue.async {
@@ -349,8 +364,14 @@
                     self.isLogging = false
                     self.rowCount = count
                     self.exportURL = url
+                    self.exportItems = items
                 }
             }
+        }
+
+        /// Saves the current frame into the log's frame folder (the "Save frame" button).
+        func saveFrame() {
+            analysisQueue.async { [weak self] in self?.snapshotRequested = true }
         }
 
         /// "sample", "blank", "blurry", or "" for none. Written into each logged row.
@@ -615,6 +636,11 @@
             logged.circleShiftR = monitor?.circleShift
             logged.circleRadiusChange = monitor?.circleRadiusChange
             logged.focusLow = monitor.map { $0.focusLow } ?? false
+            logged.focusDialOffset = monitor?.dial?.offset
+            logged.focusDialSide = monitor?.dial?.csvSide ?? ""
+            logged.featureCells = step.tracking.featureCells
+            logged.featureQuarters = step.tracking.featureQuarters
+            logged.sparseTracking = step.tracking.sparse
             logged.focusStillOnset = monitor.map { $0.focusStillOnset } ?? false
             return logged
         }
@@ -871,6 +897,18 @@
                     guide: guideEnabled ? latestGuide : nil,
                     monitor: setup.step == .done ? setup.info.monitor : nil)
                 logged.edgeLine = edgeLine
+                var automatic = false
+                if guideEnabled {
+                    automatic = snapshotTrigger.update(
+                        edgeReason: logged.edgeReason, edgeVerdict: logged.edgeVerdict,
+                        instruction: logged.guideInstruction, lineCandidate: edgeLine?.isCandidate)
+                }
+                if automatic || snapshotRequested {
+                    logged.snapshot =
+                        snapshots.save(buffer, csvSeconds: time - origin, automatic: !snapshotRequested)
+                        ?? ""
+                }
+                snapshotRequested = false
                 if !pendingEventName.isEmpty { logged.event = pendingEventName }
                 rows.append(logged)
                 if !currentLabel.isEmpty { labelledRows.append(logged) }
@@ -887,7 +925,8 @@
         /// step), and the focus meter's value on every frame.
         private func publishSetup(_ info: LabSetupInfo, time: Double, force: Bool) {
             let focus = info.focus
-            DispatchQueue.main.async { [weak self] in self?.focusMeter.update(focus) }
+            let dial = info.focusDial
+            DispatchQueue.main.async { [weak self] in self?.focusMeter.update(focus, dial: dial) }
             guard force || time - lastPublishAt >= publishEverySeconds else { return }
             lastPublishAt = time
             DispatchQueue.main.async { [weak self] in
