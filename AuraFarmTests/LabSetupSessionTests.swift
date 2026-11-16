@@ -99,6 +99,40 @@ final class LabSetupSessionTests: XCTestCase {
         XCTAssertEqual(session.info.stageAxes, .identity)
     }
 
+    /// Phase 2l: redoing the field after the stage was calibrated (or skipped) forgets the
+    /// straightening, so the new stage step measures in the unstraightened axes. The display's
+    /// straightening is `setupInfo.stageAxes ?? .identity`, which is nil here until the new
+    /// calibration is done.
+    func testRedoingTheFieldForgetsTheStraighteningSoTheNextStageStepIsUnstraightened() {
+        let pipeline = makePipeline()
+        let session = LabSetupSession(skippingAlignAndFocus: true)
+        let frame = discFrame()
+        var seconds = 0.0
+        func feed(_ count: Int) {
+            for _ in 0..<count {
+                seconds += 0.1
+                _ = session.process(frame, seconds: seconds, pipeline: pipeline, measureAgreement: false)
+            }
+        }
+        feed(31)
+        pipeline.confirmField()
+        feed(1)
+        XCTAssertEqual(session.step, .stage)
+        session.skipStage()
+        XCTAssertEqual(session.info.stageAxes, .identity)
+
+        session.redoField(pipeline: pipeline)
+        feed(2)
+        XCTAssertEqual(session.step, .field)
+        XCTAssertNil(session.stageAxes)
+        XCTAssertNil(session.info.stageAxes)
+        feed(31)
+        pipeline.confirmField()
+        feed(1)
+        XCTAssertEqual(session.step, .stage)
+        XCTAssertNil(session.info.stageAxes, "measured unstraightened")
+    }
+
     // MARK: Losing alignment
 
     private func darkFrame() -> CVPixelBuffer {

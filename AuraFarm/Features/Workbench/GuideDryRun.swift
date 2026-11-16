@@ -19,6 +19,12 @@
         /// The sharpness of the two halves across the heading that the route used.
         var sideSharpA: Double?
         var sideSharpB: Double?
+        /// The quarters in heading terms (see `BoxHalves.quarters`) and the corner rule's box share.
+        var quadAheadAway: Double?
+        var quadAheadToward: Double?
+        var quadBehindAway: Double?
+        var quadBehindToward: Double?
+        var cornerBoxShare: Double?
     }
 
     /// How the preview shows the box, measured from the live preview layer on the main thread.
@@ -158,6 +164,7 @@
             var sideA: Double?
             var sideB: Double?
             var sideADirection: CGPoint?
+            var quads: (aheadAway: Double, aheadToward: Double, behindAway: Double, behindToward: Double)?
             if let heading = lastHeading, let halves = step.tracking.halfSharpness,
                 let frameDirection = axes.frameVector(ofScreenVector: heading),
                 let sides = halves.sideSharpness(forFrameDirection: frameDirection)
@@ -165,6 +172,8 @@
                 (sideA, sideB) = sides
                 // Where side A's picture lies on screen (the content axes map a frame vector).
                 if let pair = BoxHalves.sides(forFrameDirection: frameDirection) {
+                    quads = halves.quarters(
+                        forFrameDirection: frameDirection, lowSide: sides.a < sides.b ? pair.0 : pair.1)
                     let screen = axes.screenVector(ofFrameVector: BoxHalves.frameVector(of: pair.0))
                     let length = hypot(Double(screen.x), Double(screen.y))
                     if length > 1e-9 {
@@ -192,7 +201,10 @@
                 aheadSharpness: ahead, behindSharpness: behind, aheadFocusRatio: aheadFocus,
                 behindFocusRatio: behindFocus, sideSharpnessA: sideA, sideSharpnessB: sideB,
                 lastBlankReturn: lastReturn, blankReturnCount: returns.matched + returns.unmatched,
-                focusLow: focusLow, sideADirection: sideADirection)
+                focusLow: focusLow, sideADirection: sideADirection,
+                boxSharpness: step.boxStats.sharpness, quadAheadAway: quads?.aheadAway,
+                quadAheadToward: quads?.aheadToward, quadBehindAway: quads?.behindAway,
+                quadBehindToward: quads?.behindToward)
             let result: GuideStep
             if stageLimitPressed {
                 stageLimitPressed = false
@@ -259,7 +271,10 @@
                     instruction: result.instruction.csvName, targetDx: dx, targetDy: dy,
                     captures: captures, axesMapping: axesMapping,
                     edgeCandidate: result.edge.candidate, edgeVerdict: result.edge.verdict,
-                    edgeReason: result.edge.reason, sideSharpA: sideA, sideSharpB: sideB),
+                    edgeReason: result.edge.reason, sideSharpA: sideA, sideSharpB: sideB,
+                    quadAheadAway: quads?.aheadAway, quadAheadToward: quads?.aheadToward,
+                    quadBehindAway: quads?.behindAway, quadBehindToward: quads?.behindToward,
+                    cornerBoxShare: result.edge.cornerBoxShare),
                 info: SlideMovementInfo.Guide(
                     isOn: true, instruction: result.instruction.debugText, state: result.stateName,
                     targetDx: dx, targetDy: dy, viewClass: viewClass.rawValue, captures: captures,

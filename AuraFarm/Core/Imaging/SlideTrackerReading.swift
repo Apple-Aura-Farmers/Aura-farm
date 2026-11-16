@@ -41,6 +41,10 @@ struct SlideTrackerReading: Equatable {
     /// "measured", "predicted", "missing" or "matching".
     var reading = "missing"
     var predictedStreak = 0
+    /// The sum of the frame-to-frame shifts since the anchor and how far the anchor reading was
+    /// from it, px; nil when not available (see `ReadingConsistency`).
+    var chain: CGPoint?
+    var anchorChainGap: Double?
     /// False while the box holds too little detail to follow.
     var hasDetail = true
     var blindStretches = 0

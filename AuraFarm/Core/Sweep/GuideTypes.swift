@@ -47,6 +47,14 @@ struct GuideReading: Equatable {
     /// The screen direction (guide axes) the picture of side A lies in; side B is the opposite.
     /// nil when not known, which keeps a side imbalance a rejection. See `SlideRoute`.
     var sideADirection: CGPoint?
+    /// The registration box's sharpness now (the tracker's, at its stats step).
+    var boxSharpness: Double?
+    /// The four quarters' sharpness in heading terms, relative to the low side half across the
+    /// heading: ahead or behind, toward the low side or away from it. See `BoxHalves.quarters`.
+    var quadAheadAway: Double?
+    var quadAheadToward: Double?
+    var quadBehindAway: Double?
+    var quadBehindToward: Double?
 }
 
 /// How the tracker took the picture back after a stretch with nothing to follow.
@@ -66,9 +74,12 @@ struct EdgeDiagnostics: Equatable {
     /// "none", "checking", "confirmed" or "blur".
     var verdict = "none"
     /// A short word when something was decided or rejected, else empty: arrived, not_arrived,
-    /// vouched, behind_blurred, side_imbalance, halves_too_close, spot_hold, speed_spike,
+    /// vouched, behind_blurred, side_imbalance, corner, corner_rejected, halves_too_close, spot_hold, speed_spike,
     /// same_spot, moved, timeout_no_detail.
     var reason = ""
+    /// The box's sharpness over the median before the candidate began, when the corner rule
+    /// looked at it; nil otherwise.
+    var cornerBoxShare: Double?
 }
 
 /// Why the run is paused: the phone moved off the eyepiece, or the picture went out of focus.

@@ -638,6 +638,14 @@
             logged.focusLow = monitor.map { $0.focusLow } ?? false
             logged.focusDialOffset = monitor?.dial?.offset
             logged.focusDialSide = monitor?.dial?.csvSide ?? ""
+            logged.quadAheadAway = guide?.quadAheadAway
+            logged.quadAheadToward = guide?.quadAheadToward
+            logged.quadBehindAway = guide?.quadBehindAway
+            logged.quadBehindToward = guide?.quadBehindToward
+            logged.cornerBoxShare = guide?.cornerBoxShare
+            logged.chainX = step.tracking.chain.map { Double($0.x) }
+            logged.chainY = step.tracking.chain.map { Double($0.y) }
+            logged.anchorChainGap = step.tracking.anchorChainGap
             logged.featureCells = step.tracking.featureCells
             logged.featureQuarters = step.tracking.featureQuarters
             logged.sparseTracking = step.tracking.sparse

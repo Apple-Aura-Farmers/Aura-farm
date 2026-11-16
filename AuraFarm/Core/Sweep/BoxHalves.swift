@@ -37,6 +37,11 @@ struct BoxHalves: Equatable {
     var right: Double
     var top: Double
     var bottom: Double
+    /// The four quarters' sharpness, in the same pass and at the same step; 0 when not measured.
+    var topLeft = 0.0
+    var topRight = 0.0
+    var bottomLeft = 0.0
+    var bottomRight = 0.0
 
     enum Side: Equatable { case left, right, top, bottom }
 
@@ -99,5 +104,34 @@ struct BoxHalves: Equatable {
     func aheadAndBehind(forFrameDirection direction: CGPoint) -> (ahead: Double, behind: Double)? {
         guard let side = Self.ahead(forFrameDirection: direction) else { return nil }
         return (sharpness(side), sharpness(Self.opposite(of: side)))
+    }
+
+    /// The sharpness of the quarter in the corner `vector` points to (frame axes: x right, y down).
+    func quarter(toward vector: CGPoint) -> Double {
+        switch (vector.x < 0, vector.y < 0) {
+        case (true, true): topLeft
+        case (false, true): topRight
+        case (true, false): bottomLeft
+        case (false, false): bottomRight
+        }
+    }
+
+    /// The four quarters in heading terms, for a view travelling toward `direction` (frame axes)
+    /// with the low side half on `lowSide`: ahead or behind, toward the low side or away from it.
+    func quarters(
+        forFrameDirection direction: CGPoint, lowSide: Side
+    ) -> (aheadAway: Double, aheadToward: Double, behindAway: Double, behindToward: Double)? {
+        guard let ahead = Self.ahead(forFrameDirection: direction) else { return nil }
+        let front = Self.frameVector(of: ahead)
+        let low = Self.frameVector(of: lowSide)
+        func corner(_ along: Double, _ across: Double) -> CGPoint {
+            CGPoint(
+                x: along * Double(front.x) + across * Double(low.x),
+                y: along * Double(front.y) + across * Double(low.y))
+        }
+        return (
+            quarter(toward: corner(1, -1)), quarter(toward: corner(1, 1)),
+            quarter(toward: corner(-1, -1)), quarter(toward: corner(-1, 1))
+        )
     }
 }

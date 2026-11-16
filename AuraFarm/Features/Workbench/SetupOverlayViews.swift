@@ -285,7 +285,8 @@
         private var tone: Color {
             guard let progress else { return .white }
             if case .failed = progress.step { return .red }
-            if progress.message == StageAxesCalibration.rejectedMessage || progress.nothingToFollow {
+            if progress.isPause { return .green }
+            if progress.isHeld || progress.nothingToFollow {
                 return .orange
             }
             return isDone ? .green : .white

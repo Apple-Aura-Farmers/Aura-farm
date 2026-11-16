@@ -8,6 +8,7 @@
             case alignClippedRight, alignUneven, alignGlare, alignPassed
             case focusTurnOneWay, focusPassedPeak, focusFocused, focusNeedsSample
             case stageWaitX, stageWaitY, stageRejected, stageDone, stageStart, stageNothingToFollow
+            case stageXDone
             case pausedAlignment, pausedFocus
 
             var title: String {
@@ -24,6 +25,7 @@
                 case .stageWaitY: "Stage: waitY, 0.4 of 2 fields"
                 case .stageRejected: "Stage: rejected (both knobs)"
                 case .stageDone: "Stage: done, tilt 9.6°"
+                case .stageXDone: "Stage: X done, stop turning (pause)"
                 case .stageStart: "Stage: start (particles hint)"
                 case .stageNothingToFollow: "Stage: nothing to follow (dim bar)"
                 case .pausedAlignment: "Paused: alignment (orange outline)"
@@ -120,6 +122,11 @@
                 info.step = .stage
                 info.stage = StageAxesProgress(
                     step: .done, travelFields: 2.2, message: "Stage straightened ✓ (tilt 9.6°)")
+            case .stageXDone:
+                info.step = .stage
+                info.stage = StageAxesProgress(
+                    step: .waitY, travelFields: StageAxesThresholds().minTravelFields,
+                    message: StageAxesCalibration.xDoneMessage, isPause: true)
             case .stageStart:
                 info.step = .stage
                 info.stage = StageAxesProgress(
@@ -390,6 +397,7 @@
     #Preview("Stage waitX") { SetupPreviewPanel(scene: .stageWaitX) }
     #Preview("Stage waitY") { SetupPreviewPanel(scene: .stageWaitY) }
     #Preview("Stage rejected") { SetupPreviewPanel(scene: .stageRejected) }
+    #Preview("Stage X done pause") { SetupPreviewPanel(scene: .stageXDone) }
     #Preview("Stage start") { SetupPreviewPanel(scene: .stageStart) }
     #Preview("Stage nothing to follow") { SetupPreviewPanel(scene: .stageNothingToFollow) }
     #Preview("Stage done") { SetupPreviewPanel(scene: .stageDone) }

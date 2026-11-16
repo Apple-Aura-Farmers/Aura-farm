@@ -49,6 +49,8 @@ final class SlideTracker {
     private var lastAgreementAt = -Double.infinity
     /// How long the last feature-cell count took, in milliseconds.
     private(set) var featureMilliseconds = 0.0
+    /// How long the last four-quarter measurement took, in milliseconds.
+    private(set) var quarterMilliseconds = 0.0
     /// Whether a box with little variance but distinct features still counts as having detail.
     var tracksSparse: Bool {
         get { detail.thresholds.tracksSparse }
@@ -215,9 +217,29 @@ final class SlideTracker {
             FrameAnalyzer.stats(of: buffer, in: rect, step: Self.statsStep)?.sharpness ?? fallback
         }
         let rects = halfRects(of: box)
-        return BoxHalves(
+        var halves = BoxHalves(
             left: sharpness(rects[0]), right: sharpness(rects[1]), top: sharpness(rects[2]),
             bottom: sharpness(rects[3]))
+        // The four quarters, for telling a corner from a sparse patch.
+        let started = ContinuousClock.now
+        let halfWidth = (box.width / 2).rounded(.down)
+        let halfHeight = (box.height / 2).rounded(.down)
+        func quarter(_ column: Int, _ row: Int) -> Double {
+            sharpness(
+                CGRect(
+                    x: box.minX + (column == 0 ? 0 : halfWidth),
+                    y: box.minY + (row == 0 ? 0 : halfHeight),
+                    width: column == 0 ? halfWidth : box.width - halfWidth,
+                    height: row == 0 ? halfHeight : box.height - halfHeight))
+        }
+        halves.topLeft = quarter(0, 0)
+        halves.topRight = quarter(1, 0)
+        halves.bottomLeft = quarter(0, 1)
+        halves.bottomRight = quarter(1, 1)
+        let taken = ContinuousClock.now - started
+        quarterMilliseconds =
+            Double(taken.components.seconds) * 1000 + Double(taken.components.attoseconds) / 1e15
+        return halves
     }
 
     // MARK: Reading
@@ -231,6 +253,8 @@ final class SlideTracker {
         var event = HopOdometer.Event.none
         var agreement: Double?
         var blankReturnEvent = ""
+        var chain: CGPoint?
+        var chainGap: Double?
     }
 
     private struct ReferenceReading {
@@ -263,7 +287,8 @@ final class SlideTracker {
             hopLimit: odometer.hopDistance(frameSize: frameSize, referenceSide: referenceSide),
             hops: odometer.hops, gaps: odometer.gaps, isLost: odometer.isLost, event: outcome.event,
             hopAgreement: outcome.agreement, reading: outcome.reading,
-            predictedStreak: outcome.streak, hasDetail: detail.hasDetail,
+            predictedStreak: outcome.streak, chain: outcome.chain, anchorChainGap: outcome.chainGap,
+            hasDetail: detail.hasDetail,
             blindStretches: blindStretches, blankReturnsMatched: blankReturnsMatched,
             blankReturnsUnmatched: blankReturnsUnmatched,
             blankReturnEvent: outcome.blankReturnEvent, referenceMatch: start.match,
@@ -348,6 +373,8 @@ final class SlideTracker {
         }
         outcome.reading = verdict.csvName
         outcome.streak = consistency.predictedStreak
+        outcome.chain = consistency.chain
+        outcome.chainGap = consistency.lastChainGap
         outcome.usedOffset = verdict.offset
         var committing: CGPoint?
         if case .predicted(let predicted) = verdict, consistency.mustCommit {

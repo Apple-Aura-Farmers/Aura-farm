@@ -75,7 +75,9 @@ final class StageAxesCalibrationTests: XCTestCase {
         XCTAssertEqual(progress.step, .waitX)
         XCTAssertEqual(progress.message, StageAxesCalibration.rejectedMessage)
         XCTAssertNil(calibration.result)
-        // It starts that axis again from here: a clean run is then accepted.
+        // It starts that axis again from here: a clean run is then accepted. The message is held
+        // for 2.0 s (Phase 2l) and readings during it are not counted, so the run starts after it.
+        seconds += StageAxesThresholds().messageHoldSeconds
         progress = run(from: CGPoint(x: 1.5, y: 1.5), degrees: 5, fields: 2.2)
         XCTAssertEqual(progress.step, .waitY)
     }
@@ -155,5 +157,95 @@ final class StageAxesCalibrationTests: XCTestCase {
         let short = feedPaused(for: 0.8)
         XCTAssertEqual(short.message, StageAxesCalibration.waitXMessage)
         XCTAssertFalse(short.nothingToFollow)
+    }
+
+    // MARK: Phase 2l hold, Phase 2m pause between the axes
+
+    private func xDone() {
+        XCTAssertEqual(run(from: .zero, degrees: 0, fields: 2.0).step, .waitY)
+    }
+
+    func testARejectionMessageIsHeldForTwoSecondsAndTheBarDoesNotFillMeanwhile() {
+        // A bend, along x then along y: "Keep to one knob".
+        var position = CGPoint.zero
+        var rejectedAt: Double?
+        _ = calibration.update(position: position, tracking: .tracking, seconds: 0)
+        for index in 1...60 where rejectedAt == nil {
+            if index <= 30 { position.x += 0.05 } else { position.y += 0.05 }
+            let now = Double(index) * 0.1
+            let progress = calibration.update(position: position, tracking: .tracking, seconds: now)
+            if progress.message == StageAxesCalibration.rejectedMessage { rejectedAt = now }
+        }
+        let start = try? XCTUnwrap(rejectedAt)
+        XCTAssertNotNil(start)
+        let from = start ?? 0
+        let held = calibration.update(position: position, tracking: .tracking, seconds: from + 1.9)
+        XCTAssertEqual(held.message, StageAxesCalibration.rejectedMessage)
+        XCTAssertEqual(held.travelFields, 0)
+        XCTAssertTrue(held.isHeld)
+        let after = calibration.update(position: position, tracking: .tracking, seconds: from + 2.0)
+        XCTAssertEqual(after.message, StageAxesCalibration.waitXMessage)
+        XCTAssertFalse(after.isHeld)
+    }
+
+    func testTheFailureMessageIsHeldToo() {
+        xDone()
+        // Y at 60 degrees from x: accepted as a straight run, then refused for the axes angle.
+        var position = CGPoint(x: 2.0, y: 0)
+        var failedAt: Double?
+        var progress = StageAxesProgress(step: .waitY, travelFields: 0, message: "")
+        for _ in 0..<80 where failedAt == nil {
+            seconds += 0.1
+            position.x += 0.025
+            position.y += 0.0433
+            progress = calibration.update(position: position, tracking: .tracking, seconds: seconds)
+            if progress.step == .failed(StageAxesCalibration.failedMessage) { failedAt = seconds }
+        }
+        let from = failedAt ?? 0
+        XCTAssertGreaterThan(from, 0)
+        XCTAssertTrue(progress.isHeld)
+        let held = calibration.update(position: position, tracking: .tracking, seconds: from + 1.9)
+        XCTAssertEqual(held.step, .failed(StageAxesCalibration.failedMessage))
+        let after = calibration.update(position: position, tracking: .tracking, seconds: from + 2.0)
+        XCTAssertEqual(after.step, .waitX)
+    }
+
+    func testXMovementForHalfASecondAfterXIsAcceptedIsNotAddedToY() {
+        xDone()
+        // The X knob keeps turning for 0.4 s: 4 readings, 0.1 field each.
+        var position = CGPoint(x: 2.0, y: 0)
+        for _ in 0..<4 {
+            seconds += 0.1
+            position.x += 0.1
+            _ = calibration.update(position: position, tracking: .tracking, seconds: seconds)
+        }
+        let progress = run(from: position, degrees: 90, fields: 2.2)
+        XCTAssertEqual(progress.step, .done, "a clean Y run is accepted, not refused as a bend")
+        XCTAssertNotNil(calibration.result)
+    }
+
+    func testThePauseShowsTheMessageWithTheBarFullAndTheStepStaysWaitY() {
+        let accepted = run(from: .zero, degrees: 0, fields: 2.0)
+        XCTAssertEqual(accepted.step, .waitY)
+        XCTAssertEqual(accepted.message, StageAxesCalibration.xDoneMessage)
+        XCTAssertTrue(accepted.isPause)
+        XCTAssertEqual(accepted.travelFields, 2.0, accuracy: 1e-9)
+        let during = calibration.update(
+            position: CGPoint(x: 2.2, y: 0), tracking: .tracking, seconds: seconds + 0.3)
+        XCTAssertEqual(during.step, .waitY)
+        XCTAssertEqual(during.message, StageAxesCalibration.xDoneMessage)
+        let after = calibration.update(
+            position: CGPoint(x: 2.2, y: 0), tracking: .tracking, seconds: seconds + 0.5)
+        XCTAssertEqual(after.step, .waitY)
+        XCTAssertEqual(after.message, StageAxesCalibration.waitYMessage)
+        XCTAssertFalse(after.isPause)
+        XCTAssertEqual(after.travelFields, 0)
+    }
+
+    func testATiltedXThenYIsStillAccepted() throws {
+        run(from: .zero, degrees: 10, fields: 2.2)
+        let progress = run(from: endOfLast(10, 2.2, from: .zero), degrees: 99, fields: 2.2)
+        XCTAssertEqual(progress.step, .done)
+        XCTAssertEqual(try XCTUnwrap(calibration.result).tiltDegrees, 10, accuracy: 0.5)
     }
 }

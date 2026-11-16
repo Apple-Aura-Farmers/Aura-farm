@@ -143,6 +143,18 @@ struct MovementLogRow: Equatable {
     var focusDialSide = ""
     /// The file name of the frame saved on this row (lab only), else empty.
     var snapshot = ""
+    /// The four quarters in heading terms (relative to the low side half across the heading)
+    /// and the corner rule's box share; empty when not known.
+    var quadAheadAway: Double?
+    var quadAheadToward: Double?
+    var quadBehindAway: Double?
+    var quadBehindToward: Double?
+    var cornerBoxShare: Double?
+    /// The sum of the frame-to-frame shifts since the anchor, and how far the anchor reading
+    /// was from it (px); empty when not available.
+    var chainX: Double?
+    var chainY: Double?
+    var anchorChainGap: Double?
 }
 
 enum MovementLog {
@@ -170,6 +182,8 @@ enum MovementLog {
         "edge_line_offset_fields", "edge_line_sign", "edge_line_slide_residual",
         "edge_line_candidate", "feature_cells", "feature_quarters", "sparse_tracking",
         "focus_dial_offset", "focus_dial_side", "edge_line_longest_run", "snapshot",
+        "quad_ahead_away", "quad_ahead_toward", "quad_behind_away", "quad_behind_toward",
+        "corner_box_share", "chain_x_px", "chain_y_px", "anchor_chain_gap_px",
     ]
 
     static func csv(_ rows: [MovementLogRow]) -> String {
@@ -221,6 +235,10 @@ enum MovementLog {
             String(row.featureCells), String(row.featureQuarters), row.sparseTracking ? "1" : "0",
             number(row.focusDialOffset, 3), row.focusDialSide,
             row.edgeLine.map { String($0.longestRun) } ?? "", row.snapshot,
+            number(row.quadAheadAway, 1), number(row.quadAheadToward, 1),
+            number(row.quadBehindAway, 1), number(row.quadBehindToward, 1),
+            number(row.cornerBoxShare, 3),
+            number(row.chainX, 2), number(row.chainY, 2), number(row.anchorChainGap, 2),
         ]
     }
 

@@ -39,6 +39,12 @@ struct GuidedSweepThresholds {
     /// box's half width 0.5. Source: failed_edge_detection.csv (16 Nov 2026, soil): at the top-left
     /// corner the halves across the heading read 600 against 90, with column 1 at the inset.
     var sideEdgeReachFields: Double = 1.1
+    /// A corner also needs the box's sharpness to have dropped to at most this share of its median
+    /// before the candidate (the 15 Nov corner went from about 1050 to 350), over the detail
+    /// readings of the last `cornerLookbackSeconds`. PLACEHOLDER: the 16 Nov run accepted a sparse
+    /// patch as a corner because uneven sides plus a known edge nearby were enough.
+    var cornerBoxDropShare: Double = 0.5
+    var cornerLookbackSeconds: Double = 3.0
     /// How far column 1 sits inside the left edge, toward the sample, when the edge was found
     /// at the centre cross. The box is 1 field wide, so 0.5 puts its edge on the cover slip's
     /// edge; 0.6 leaves a little margin for a skewed stage. PLACEHOLDER: not calibrated.
@@ -186,6 +192,10 @@ struct SlideRoute {
     private var longBlur: (position: CGPoint, returns: Int)?
     /// A rejection from the raw half-box conditions on this reading, for the CSV.
     private var rawReason = ""
+    /// The box's sharpness on detail readings that were not an edge candidate, the last
+    /// `cornerLookbackSeconds` before the newest: what a corner is judged against.
+    private var cornerBoxHistory: [(seconds: Double, sharpness: Double)] = []
+    private var cornerShare: Double?
     /// What the last reading made of the edge conditions, for the CSV.
     private(set) var diagnostics = EdgeDiagnostics()
 
@@ -273,6 +283,8 @@ struct SlideRoute {
         }
 
         rawReason = ""
+        cornerShare = nil
+        rememberBoxSharpness(reading)
         let halfEdge = rawHalfEdge(reading)
         halfEdgeSince = halfEdge ? (halfEdgeSince ?? reading.seconds) : nil
 
@@ -332,9 +344,43 @@ struct SlideRoute {
                 rawReason = "side_imbalance"
                 return false
             }
+            // Uneven sides next to a known edge are not enough: the corner also takes the sample
+            // away from the edge behind, the edge ahead across the far side too, and the whole box
+            // dropping.
+            guard hasCornerEvidence(reading) else {
+                rawReason = "corner_rejected"
+                return false
+            }
             rawReason = "corner"
         }
         return true
+    }
+
+    /// Keeps the box's sharpness of readings with detail that are not themselves the half-edge
+    /// candidate, trimmed to the lookback from the newest, so the median stays what it was before
+    /// the candidate began.
+    private mutating func rememberBoxSharpness(_ reading: GuideReading) {
+        let cut = thresholds.halfLowDetailBelowSharpness
+        let candidate =
+            reading.tracking == .tracking && (reading.aheadSharpness ?? cut) < cut
+            && (reading.behindSharpness ?? 0) >= cut
+        guard !Self.isLowDetail(reading), !candidate, let box = reading.boxSharpness else { return }
+        cornerBoxHistory.append((reading.seconds, box))
+        cornerBoxHistory.removeAll { reading.seconds - $0.seconds > thresholds.cornerLookbackSeconds }
+    }
+
+    /// aheadAway below the half cut, behindAway at or above it, and the box at most
+    /// `cornerBoxDropShare` of its recent median. Missing numbers fail it.
+    private mutating func hasCornerEvidence(_ reading: GuideReading) -> Bool {
+        let cut = thresholds.halfLowDetailBelowSharpness
+        guard let aheadAway = reading.quadAheadAway, let behindAway = reading.quadBehindAway,
+            let box = reading.boxSharpness
+        else { return false }
+        let recent = cornerBoxHistory.map(\.sharpness).sorted()
+        guard !recent.isEmpty else { return false }
+        let share = box / max(recent[recent.count / 2], 1e-9)
+        cornerShare = share
+        return aheadAway < cut && behindAway >= cut && share <= thresholds.cornerBoxDropShare
     }
 
     /// The x positions the route knows an edge at: the left edge column 1 was set inside, and
@@ -434,7 +480,8 @@ struct SlideRoute {
             spotReachedAt: atTargetSince)
         let reason = rawReason.isEmpty ? confirmation.reason : rawReason
         diagnostics = EdgeDiagnostics(
-            candidate: candidate.csvName, verdict: verdict.csvName, reason: reason)
+            candidate: candidate.csvName, verdict: verdict.csvName, reason: reason,
+            cornerBoxShare: cornerShare)
     }
 
     /// Takes the confirmed verdict, once.
@@ -512,6 +559,7 @@ struct SlideRoute {
         stretchStart = nil
         stretchWasMoving = false
         detailHistory = []
+        cornerBoxHistory = []
         verdict = .none
         candidateNow = .none
         rawReason = ""

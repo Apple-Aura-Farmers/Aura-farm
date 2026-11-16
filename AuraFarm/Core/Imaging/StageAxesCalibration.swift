@@ -18,6 +18,13 @@ struct StageAxesThresholds {
     /// Not tracking for this long in a row shows "Nothing to follow here". PLACEHOLDER: the 16
     /// Nov 2026 soil run sat at 0.30 field for 38 s on a sparse patch with no word on screen.
     var noTrackSeconds: Double = 1.0
+    /// Rejection and failure messages stay at least this long, by the readings' times, and the
+    /// bar does not fill while one shows. PLACEHOLDER: the failure used to flash for 0.1 s.
+    var messageHoldSeconds: Double = 2.0
+    /// When X is accepted, "X done ✓ Stop turning" shows this long and no reading counts, so the
+    /// helper can stop turning X before the Y run starts. PLACEHOLDER: the user asked for about
+    /// half a second.
+    var betweenAxesSeconds: Double = 0.5
 }
 
 /// How the stage's two knobs move the picture, measured, so the picture and the guide can be
@@ -95,6 +102,10 @@ struct StageAxesProgress: Equatable {
     var hint: String? = nil
     /// Tracking has been off for `noTrackSeconds`: the message says there is nothing to follow.
     var nothingToFollow = false
+    /// A rejection or failure message is being held.
+    var isHeld = false
+    /// The "X done ✓ Stop turning" pause is showing, with the bar full.
+    var isPause = false
 }
 
 /// Measures the stage's X and Y axes from the position while the helper turns one knob at a
@@ -113,6 +124,10 @@ struct StageAxesCalibration {
     private var travel = 0.0
     private var noTrackSince: Double?
     private var noTrackFor = 0.0
+    private var lastSeconds = 0.0
+    private var heldUntil: Double?
+    private var heldMessage: String?
+    private var heldIsPause = false
 
     init(thresholds: StageAxesThresholds = StageAxesThresholds()) {
         self.thresholds = thresholds
@@ -122,6 +137,7 @@ struct StageAxesCalibration {
     static let waitYMessage = "Now turn only the Y knob (up-down) about 2 fields"
     static let rejectedMessage = "Keep to one knob. Try again"
     static let failedMessage = "Axes don't look right. Redo"
+    static let xDoneMessage = "X done ✓ Stop turning"
     static let particlesHint = "Start on a patch with plenty of particles"
     static let nothingToFollowMessage =
         "Nothing to follow here. Turn back, or move to a patch with more particles"
@@ -132,7 +148,7 @@ struct StageAxesCalibration {
     mutating func update(
         position: CGPoint, tracking: TrackingState, seconds: Double
     ) -> StageAxesProgress {
-        if case .failed = step { step = .waitX }
+        lastSeconds = seconds
         if tracking == .tracking {
             noTrackSince = nil
             noTrackFor = 0
@@ -140,6 +156,20 @@ struct StageAxesCalibration {
             noTrackSince = noTrackSince ?? seconds
             noTrackFor = seconds - (noTrackSince ?? seconds)
         }
+        if let until = heldUntil {
+            if seconds < until - 1e-9 {
+                // A message is showing: readings are not added, so the run starts afresh after it.
+                rest = nil
+                points = []
+                travel = 0
+                return progress()
+            }
+            heldUntil = nil
+            heldMessage = nil
+            heldIsPause = false
+            rejected = false
+        }
+        if case .failed = step { step = .waitX }
         guard step != .done, tracking == .tracking else { return progress() }
 
         let start = rest ?? position
@@ -153,14 +183,24 @@ struct StageAxesCalibration {
 
         guard let line = Self.fit(points), line.rms <= thresholds.maxStraightnessRMSFields else {
             // Not one knob: this axis starts again from here.
-            rest = position
-            points = []
-            travel = 0
-            rejected = true
-            return progress()
+            return hold(Self.rejectedMessage, at: position, seconds)
         }
         rejected = false
         return accept(line.direction)
+    }
+
+    /// This axis starts again, and `message` stays for `messageHoldSeconds`.
+    private mutating func hold(
+        _ message: String, at position: CGPoint, _ seconds: Double
+    ) -> StageAxesProgress {
+        rest = position
+        points = []
+        travel = 0
+        rejected = true
+        heldIsPause = false
+        heldMessage = message
+        heldUntil = seconds + thresholds.messageHoldSeconds
+        return progress()
     }
 
     mutating func reset() {
@@ -175,6 +215,11 @@ struct StageAxesCalibration {
         if step == .waitX {
             xDirection = Self.signed(direction, toward: CGPoint(x: 1, y: 0))
             step = .waitY
+            // A short pause with the bar full, so the helper can stop turning X; no reading
+            // counts, and the Y run starts from the first tracked position after it.
+            heldMessage = Self.xDoneMessage
+            heldIsPause = true
+            heldUntil = lastSeconds + thresholds.betweenAxesSeconds
             return progress(travelled)
         }
         let y = Self.signed(direction, toward: CGPoint(x: 0, y: 1))
@@ -191,15 +236,27 @@ struct StageAxesCalibration {
 
     private mutating func restart(_ travelled: Double) -> StageAxesProgress {
         xDirection = nil
-        // Shown for this reading; the next one starts again from the X axis.
+        // Shown for `messageHoldSeconds`; then it starts again from the X axis.
         step = .failed(Self.failedMessage)
+        heldMessage = Self.failedMessage
+        heldIsPause = false
+        heldUntil = lastSeconds + thresholds.messageHoldSeconds
         return progress(travelled)
     }
 
     private func progress(_ travelled: Double? = nil) -> StageAxesProgress {
         var shown = base(travelled)
         let waiting = shown.step == .waitX || shown.step == .waitY
-        if waiting, noTrackFor >= thresholds.noTrackSeconds - 1e-9 {
+        if let heldMessage {
+            shown.message = heldMessage
+            if heldIsPause {
+                shown.isPause = true
+                shown.travelFields = thresholds.minTravelFields
+            } else {
+                shown.isHeld = true
+                shown.travelFields = 0
+            }
+        } else if waiting, noTrackFor >= thresholds.noTrackSeconds - 1e-9 {
             shown.message = Self.nothingToFollowMessage
             shown.nothingToFollow = true
         } else if shown.step == .waitX, shown.travelFields == 0, !rejected {

@@ -4,7 +4,9 @@ import Foundation
 /// decided. Pure; the caller feeds it every logged guide row and decides rate and count limits.
 struct SnapshotTrigger {
     /// Edge reasons worth a frame when they first show.
-    static let reasons: Set<String> = ["side_imbalance", "corner", "halves_too_close", "vouched"]
+    static let reasons: Set<String> = [
+        "side_imbalance", "corner", "corner_rejected", "halves_too_close", "vouched",
+    ]
 
     private var reason = ""
     private var verdict = ""

@@ -11,6 +11,12 @@ struct ReadingConsistencyThresholds {
     /// Readings in a row replaced by the prediction before the pipeline commits the
     /// predicted offset as a hop and re-anchors. PLACEHOLDER: not calibrated.
     var maxPredictedInARow: Int = 5
+    /// An anchor reading must also agree with the chain (the sum of the frame-to-frame shifts
+    /// since the anchor) within this many px plus this share of the chain's length. PLACEHOLDER.
+    /// Source: the 16 Nov 2026 free run (soil): where the anchor worked, chain and anchor agreed
+    /// within 2 px; where it stuck near zero, 450 px of chain gave a 42 px move.
+    var chainToleranceBasePx: Double = 6
+    var chainToleranceShareOfChain: Double = 0.10
 }
 
 /// What `ReadingConsistency` made of one reading.
@@ -54,6 +60,15 @@ struct ReadingConsistency {
     private(set) var lastAccepted = CGPoint.zero
     /// Readings in a row that were replaced by the prediction.
     private(set) var predictedStreak = 0
+    /// The sum of the frame-to-frame shifts since the anchor. It is never pulled toward the
+    /// anchor reading, so an anchor match stuck on something static cannot drag it back.
+    private var chainOffset = CGPoint.zero
+    private var chainValid = true
+    /// How far the last anchor reading was from the chain, px; nil without both.
+    private(set) var lastChainGap: Double?
+
+    /// The chain, nil once a frame without a frame-to-frame shift broke it (until the next reset).
+    var chain: CGPoint? { chainValid ? chainOffset : nil }
 
     init(thresholds: ReadingConsistencyThresholds = ReadingConsistencyThresholds()) {
         self.thresholds = thresholds
@@ -64,18 +79,33 @@ struct ReadingConsistency {
     var mustCommit: Bool { predictedStreak >= thresholds.maxPredictedInARow }
 
     mutating func judge(anchorOffset: CGPoint?, frameShift: CGPoint?, boxSide: Double) -> ReadingVerdict {
+        lastChainGap = nil
         guard let frameShift else {
-            // No frame-to-frame shift to check against, or to predict with.
+            // No frame-to-frame shift to check against, or to predict with: the chain is broken
+            // and the anchor stands until the next reset.
+            chainValid = false
             guard let anchorOffset else { return .missing }
             lastAccepted = anchorOffset
             predictedStreak = 0
             return .measured(anchorOffset)
         }
-        let prediction = CGPoint(x: lastAccepted.x + frameShift.x, y: lastAccepted.y + frameShift.y)
+        chainOffset = CGPoint(x: chainOffset.x + frameShift.x, y: chainOffset.y + frameShift.y)
+        let perFrame = CGPoint(x: lastAccepted.x + frameShift.x, y: lastAccepted.y + frameShift.y)
+        // With a chain, the prediction is the chain itself.
+        let prediction = chainValid ? chainOffset : perFrame
         if let anchorOffset {
-            let gap = hypot(
-                Double(anchorOffset.x - prediction.x), Double(anchorOffset.y - prediction.y))
-            if gap <= thresholds.maxDisagreementOfBox * boxSide {
+            let gap = hypot(Double(anchorOffset.x - perFrame.x), Double(anchorOffset.y - perFrame.y))
+            var agrees = true
+            if chainValid {
+                let fromChain = hypot(
+                    Double(anchorOffset.x - chainOffset.x), Double(anchorOffset.y - chainOffset.y))
+                lastChainGap = fromChain
+                let length = hypot(Double(chainOffset.x), Double(chainOffset.y))
+                agrees =
+                    fromChain <= thresholds.chainToleranceBasePx
+                    + thresholds.chainToleranceShareOfChain * length
+            }
+            if gap <= thresholds.maxDisagreementOfBox * boxSide, agrees {
                 lastAccepted = anchorOffset
                 predictedStreak = 0
                 return .measured(anchorOffset)
@@ -90,12 +120,17 @@ struct ReadingConsistency {
     /// been confirmed some other way (a picture match after a stretch with nothing to track).
     mutating func reset(to accepted: CGPoint) {
         lastAccepted = accepted
+        chainOffset = accepted
+        chainValid = true
         predictedStreak = 0
     }
 
     /// Call when the anchor changes: the next offset is measured from zero.
     mutating func reset() {
         lastAccepted = .zero
+        chainOffset = .zero
+        chainValid = true
+        lastChainGap = nil
         predictedStreak = 0
     }
 }
