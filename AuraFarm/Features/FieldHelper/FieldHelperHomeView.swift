@@ -18,12 +18,29 @@ struct FieldHelperHomeView: View {
     /// The one sheet slot this screen has for its forms. It carries what to show rather than
     /// a flag, because a sheet reads a flag before the value beside it has arrived.
     @State private var formSheet: FormSheet?
-    /// Whether the outline editor is pushed, for marking a plot before picking its farm.
-    @State private var markingPlot = false
+    /// The outline editor, when it is pushed. It carries the land to open on, so Edit from the
+    /// New Plot form shows the dots already placed rather than an empty map.
+    @State private var outline: Outline?
     /// Set to open a farm's page.
     @State private var openedFarmID: UUID?
     /// The plot whose card is showing over the map, if any.
     @State private var selection: Selection?
+
+    /// Land marked on the map and what has been typed about it so far. It travels between the
+    /// form and the outline editor, so a trip to the map and back loses neither.
+    private struct Draft: Hashable, Identifiable {
+        var id = UUID()
+        var corners: [GeoPoint] = []
+        var farmer = ""
+        var plot = ""
+    }
+
+    /// A push of the outline editor: the draft it opens on, and whether the helper came from
+    /// the New Plot form, which is where leaving the editor has to put them back.
+    private struct Outline: Hashable {
+        var draft = Draft()
+        var fromForm = false
+    }
 
     /// A plot the helper tapped, kept with its farm so the card can name the farmer.
     private struct Selection: Equatable {
@@ -36,14 +53,14 @@ struct FieldHelperHomeView: View {
         /// Naming a farm that has no land marked yet.
         case addFarm
         /// Land marked on the map, waiting to be filed against a farm.
-        case filePlot(Plot)
+        case filePlot(Draft)
         /// A plot the helper tapped on the map.
         case plot(Selection)
 
         var id: String {
             switch self {
             case .addFarm: "add"
-            case .filePlot(let plot): plot.id.uuidString
+            case .filePlot(let draft): draft.id.uuidString
             case .plot(let selection): selection.plot.id.uuidString
             }
         }
@@ -66,11 +83,15 @@ struct FieldHelperHomeView: View {
                 switch sheet {
                 case .addFarm:
                     FarmFormView()
-                case .filePlot(let plot):
-                    NewPlotFormView(corners: plot.corners) {
+                case .filePlot(let draft):
+                    NewPlotFormView(
+                        corners: draft.corners, farmer: draft.farmer, plot: draft.plot
+                    ) { farmer, plot in
                         // Back to the map with these corners, rather than starting again.
                         formSheet = nil
-                        markingPlot = true
+                        outline = Outline(
+                            draft: Draft(corners: draft.corners, farmer: farmer, plot: plot),
+                            fromForm: true)
                     }
                 case .plot(let selection):
                     plotCard(selection)
@@ -83,9 +104,17 @@ struct FieldHelperHomeView: View {
             .navigationDestination(item: $openedFarmID) { id in
                 FarmDetailView(farmID: id)
             }
-            .navigationDestination(isPresented: $markingPlot) {
-                LandOutlineEditorView(corners: [], neighbours: store.farms.neighbours()) { corners in
-                    formSheet = .filePlot(Plot(corners: corners))
+            .navigationDestination(item: $outline) { outline in
+                LandOutlineEditorView(
+                    corners: outline.draft.corners, neighbours: store.farms.neighbours()
+                ) { corners in
+                    var draft = outline.draft
+                    draft.corners = corners
+                    formSheet = .filePlot(draft)
+                } onCancel: {
+                    // Editing land that was already marked: leaving goes back to the form it
+                    // was being named in, with the outline as it was before Edit.
+                    if outline.fromForm { formSheet = .filePlot(outline.draft) }
                 }
             }
         }
@@ -112,7 +141,7 @@ struct FieldHelperHomeView: View {
             VStack(spacing: 12) {
                 Button("Add a farm") { formSheet = .addFarm }
                     .buttonStyle(.borderedProminent)
-                Button("Mark a plot on the map") { markingPlot = true }
+                Button("Mark a plot on the map") { outline = Outline() }
             }
         }
     }
@@ -180,7 +209,7 @@ struct FieldHelperHomeView: View {
         Menu {
             Button {
                 selection = nil
-                markingPlot = true
+                outline = Outline()
             } label: {
                 Label("Mark a plot on the map", systemImage: "mappin.and.ellipse")
             }

@@ -10,15 +10,26 @@ import SwiftUI
 struct NewPlotFormView: View {
     /// The outline just marked.
     let corners: [GeoPoint]
-    /// Called when the helper taps Edit, to go back to the map with these corners.
-    var onEditOutline: (() -> Void)?
+    /// Called when the helper taps Edit, to go back to the map with these corners. It is handed
+    /// what has been typed so far, so the form they come back to still holds it.
+    var onEditOutline: ((_ farmer: String, _ plot: String) -> Void)?
 
     @Environment(FarmStore.self) private var store
     @Environment(\.dismiss) private var dismiss
 
-    @State private var farmerName = ""
-    @State private var plotName = ""
+    @State private var farmerName: String
+    @State private var plotName: String
     @FocusState private var focus: Field?
+
+    init(
+        corners: [GeoPoint], farmer: String = "", plot: String = "",
+        onEditOutline: ((String, String) -> Void)? = nil
+    ) {
+        self.corners = corners
+        self.onEditOutline = onEditOutline
+        _farmerName = State(initialValue: farmer)
+        _plotName = State(initialValue: plot)
+    }
 
     private enum Field {
         case farmer, plot
@@ -101,7 +112,7 @@ struct NewPlotFormView: View {
             .listRowInsets(EdgeInsets())
             .overlay(alignment: .topTrailing) {
                 if let onEditOutline {
-                    Button("Edit", action: onEditOutline)
+                    Button("Edit") { onEditOutline(farmerName, plotName) }
                         .buttonStyle(.borderedProminent)
                         .buttonBorderShape(.capsule)
                         .padding(10)
@@ -152,7 +163,7 @@ struct NewPlotFormView: View {
             GeoPoint(latitude: -8.4095, longitude: 115.1900),
             GeoPoint(latitude: -8.4105, longitude: 115.1900),
         ],
-        onEditOutline: {}
+        onEditOutline: { _, _ in }
     )
     .environment(
         FarmStore(

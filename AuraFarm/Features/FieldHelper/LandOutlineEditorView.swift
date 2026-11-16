@@ -19,6 +19,9 @@ struct LandOutlineEditorView: View {
     /// Land already mapped, drawn on the map so the new outline can be kept clear of it.
     let neighbours: [Neighbour]
     let onConfirm: ([GeoPoint]) -> Void
+    /// Called when the helper leaves without confirming, so whoever opened the editor can put
+    /// back whatever was on screen before it.
+    var onCancel: (() -> Void)?
 
     @State private var corners: [GeoPoint]
     @State private var position: MapCameraPosition
@@ -32,11 +35,13 @@ struct LandOutlineEditorView: View {
 
     init(
         corners: [GeoPoint], neighbours: [Neighbour],
-        onConfirm: @escaping ([GeoPoint]) -> Void
+        onConfirm: @escaping ([GeoPoint]) -> Void,
+        onCancel: (() -> Void)? = nil
     ) {
         self.startingCorners = corners
         self.neighbours = neighbours
         self.onConfirm = onConfirm
+        self.onCancel = onCancel
         _corners = State(initialValue: corners)
         // Editing opens on the existing land; a new outline opens on where the phone is.
         if let region = LandGeometry.region(fitting: corners) {
@@ -134,7 +139,7 @@ struct LandOutlineEditorView: View {
             ToolbarItem(placement: .topBarLeading) {
                 Button("Cancel") {
                     if corners == startingCorners {
-                        dismiss()
+                        leave()
                     } else {
                         confirmDiscard = true
                     }
@@ -145,11 +150,18 @@ struct LandOutlineEditorView: View {
             "Discard your changes to the outline?", isPresented: $confirmDiscard,
             titleVisibility: .visible
         ) {
-            Button("Discard changes", role: .destructive) { dismiss() }
+            Button("Discard changes", role: .destructive) { leave() }
             Button("Keep editing", role: .cancel) {}
         }
         .onAppear { location.start() }
         .onDisappear { location.stop() }
+    }
+
+    /// Leaving without keeping the outline. The handler goes first and the pop second, the way
+    /// confirming does, so what it brings back is already there as the editor slides away.
+    private func leave() {
+        onCancel?()
+        dismiss()
     }
 
     // MARK: Dragging corners
