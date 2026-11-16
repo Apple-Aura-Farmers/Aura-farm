@@ -1,23 +1,16 @@
 import MapKit
 import SwiftUI
 
-/// The Plots tab: a full-screen map of every plot the helper looks after.
-///
-/// The map runs edge to edge with no navigation bar over it. Searching floats along the top
-/// and the button for marking new land sits beside the tab bar at the bottom, which is the
-/// only chrome over the land.
+/// The Plots tab: a map of every plot the helper looks after, under a bar carrying the one
+/// control it needs, which is marking new land.
 ///
 /// SwiftUI can only show one sheet at a time from a screen, and a sheet would sit on top of
 /// any page pushed from here, so the one sheet slot carries whichever form is wanted and the
 /// card for a tapped plot closes itself before opening that plot's farm.
 struct FieldHelperHomeView: View {
-    /// Whether the tab bar's own search button is sitting at the trailing end, which is where
-    /// marking a plot would otherwise go.
-    var isBesideSearchButton = false
-
     @Environment(FarmStore.self) private var store
 
-    /// Where the map is looking, so searching can send it somewhere.
+    /// Where the map is looking. Held here so it can be refitted when the land changes.
     @State private var camera: MapCameraPosition = .automatic
 
     /// The one sheet slot this screen has for its forms. It carries what to show rather than
@@ -80,10 +73,12 @@ struct FieldHelperHomeView: View {
                     mapScreen
                 }
             }
-            .overlay(alignment: .top) { searchBar }
             .overlay(alignment: .top) { problemBanner }
-            .overlay(alignment: .bottomTrailing) { addButton }
-            .toolbar(.hidden, for: .navigationBar)
+            .navigationTitle("Plots")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) { addButton }
+            }
             .sheet(item: $formSheet) { sheet in
                 switch sheet {
                 case .addFarm:
@@ -211,45 +206,18 @@ struct FieldHelperHomeView: View {
         .padding(.bottom, 20)
     }
 
-    // MARK: Floating controls
-
-    /// Farmers, plots and places, so the map can be sent somewhere without dragging to it.
-    private var searchBar: some View {
-        MapSearchBar(farms: store.farms) { region in
-            withAnimation(.snappy) { camera = .region(region) }
-        }
-        .padding(.top, 8)
-    }
+    // MARK: Controls
 
     /// Land is marked the way the map does it: drop the dots first, name it afterwards.
     ///
-    /// It belongs beside the floating tab bar rather than above it, so the inset that bar
-    /// reserves is added back rather than respected.
+    /// In the navigation bar, because the trailing end of the tab bar is the system's search
+    /// button and nothing can take its place there.
     private var addButton: some View {
-        GeometryReader { proxy in
-            markButton
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-                .offset(y: proxy.safeAreaInsets.bottom)
-        }
-    }
-
-    private var markButton: some View {
-        Button {
+        Button("Mark a plot on the map", systemImage: "plus") {
             selection = nil
             outline = Outline()
-        } label: {
-            Image(systemName: "plus")
-                .font(.title2.weight(.semibold))
-                .frame(width: 62, height: 62)
-                .glassCircle()
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Mark a plot on the map")
-        // The trailing end belongs to the search button when there is one, so this sits just
-        // inside it.
-        .padding(.trailing, isBesideSearchButton ? 91 : 21)
-        // Level with the middle of the bar beside it.
-        .padding(.bottom, 22)
+        .labelStyle(.iconOnly)
     }
 
     @ViewBuilder
@@ -262,20 +230,7 @@ struct FieldHelperHomeView: View {
                 .padding(.vertical, 8)
                 .background(.regularMaterial, in: .capsule)
                 .padding(.horizontal, 24)
-                // Below the search field.
-                .padding(.top, 66)
-        }
-    }
-}
-
-extension View {
-    /// Liquid Glass circle where the system has it (iOS 26), frosted material before that.
-    @ViewBuilder
-    fileprivate func glassCircle() -> some View {
-        if #available(iOS 26, *) {
-            glassEffect(.regular.interactive(), in: .circle)
-        } else {
-            background(.regularMaterial, in: Circle())
+                .padding(.top, 8)
         }
     }
 }

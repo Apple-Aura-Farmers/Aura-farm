@@ -22,7 +22,7 @@ struct FieldHelperTabs: View {
                 "Plots", systemImage: "point.topleft.down.to.point.bottomright.curvepath",
                 value: Screen.plots
             ) {
-                FieldHelperHomeView(isBesideSearchButton: true)
+                FieldHelperHomeView()
             }
 
             Tab("Results", systemImage: "doc.text", value: Screen.results) {
