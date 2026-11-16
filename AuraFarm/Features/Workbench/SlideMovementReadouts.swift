@@ -75,6 +75,10 @@
                         + Text(info.axesDiffer ? " · differs from the picker" : "")
                         .foregroundStyle(.orange)
                 }
+                StageLimitControl(
+                    showsHint: info.showsStageLimitHint, onTap: { model.stageLimit() }
+                )
+                .frame(maxWidth: .infinity)
             }
             .font(.footnote.monospaced())
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -207,6 +211,30 @@
                 .sensoryFeedback(.success, trigger: model.setupInfo.step) { old, new in
                     new.order > old.order
                 }
+                .background(SlideLabMonitorHaptics(model: model))
+        }
+    }
+
+    /// The Stage limit tap, and the run monitor: a warning when the run pauses, a success when it
+    /// carries on.
+    struct SlideLabMonitorHaptics: View {
+        var model: SlideMovementLabModel
+
+        private static func paused(_ old: RunMonitorState, _ new: RunMonitorState) -> Bool {
+            old == .ok && new != .ok
+        }
+
+        private static func resumed(_ old: RunMonitorState, _ new: RunMonitorState) -> Bool {
+            old != .ok && new == .ok
+        }
+
+        var body: some View {
+            let state = model.setupInfo.monitor.state
+            Color.clear
+                .frame(width: 0, height: 0)
+                .sensoryFeedback(.impact(weight: .medium), trigger: model.guideInfo.stageLimitCount)
+                .sensoryFeedback(.warning, trigger: state, condition: Self.paused)
+                .sensoryFeedback(.success, trigger: state, condition: Self.resumed)
         }
     }
 #endif

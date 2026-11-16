@@ -85,6 +85,7 @@ struct GuideOverlayModel: Equatable {
     static func tone(of instruction: GuideInstruction) -> GuideTone {
         switch instruction {
         case .aligned, .holding: .onTarget
+        case .paused, .stageLimit: .warning
         case .tooFar, .otherWay: .wrongWay
         case .slowDown, .refocus: .warning
         default: .move
@@ -101,13 +102,16 @@ struct GuideOverlayModel: Equatable {
         var forcesArrow = false
         var hasDistance = true
         switch step.instruction {
+        case .paused:
+            // The picture is not where the route thinks: nothing to point at.
+            return .none
         case .travel(let direction):
             vector = CGPoint(
                 x: direction.x * thresholds.travelArrowFields,
                 y: direction.y * thresholds.travelArrowFields)
             forcesArrow = true
             hasDistance = false
-        case .edgeGoBack(let toward), .stillNoDetail(let toward):
+        case .edgeGoBack(let toward), .stillNoDetail(let toward), .checkEdge(let toward):
             vector = toward
             hasDistance = false
         case .checkingEdge, .refocus:

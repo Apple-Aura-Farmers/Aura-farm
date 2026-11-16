@@ -1,5 +1,17 @@
 #if DEBUG
+    import CoreGraphics
     import Foundation
+
+    /// What the tracker saw on a frame of the field or stage step, for the log; nil while it
+    /// does not run.
+    struct SetupTrackerSample: Equatable {
+        var tracking: TrackingState
+        /// The guide's screen-field position the stage step measures from.
+        var position: CGPoint
+        var boxSharpness: Double
+        var viewClass: ViewClass
+        var stillSeconds: Double
+    }
 
     /// One analyzed frame of the setup (align or focus): what the checks said. Kept in memory
     /// for the "Export setup log" button, so the placeholder thresholds can be calibrated.
@@ -9,6 +21,10 @@
         var step: LabSetupStep
         var alignment: AlignmentReading
         var focus: FocusReading?
+        /// The stage step's progress and, once known, the measured axes.
+        var stage: StageAxesProgress?
+        var stageAxes: StageAxes?
+        var tracker: SetupTrackerSample?
     }
 
     enum SetupLog {
@@ -19,7 +35,9 @@
             "seconds", "step", "found", "circle_x", "circle_y", "circle_r", "clipped_sides",
             "roundness", "evenness", "darkest_sector", "brightest_sector", "saturated_share",
             "glare_ratio", "score", "problems", "focus_state", "focus_current", "focus_peak",
-            "focus_level",
+            "focus_level", "stage_step", "stage_travel_fields", "stage_tilt_deg", "stage_skew_deg",
+            "tracking", "position_x_fields", "position_y_fields", "box_sharpness", "view_class",
+            "still_seconds",
         ]
 
         static func csv(_ rows: [SetupLogRow]) -> String {
@@ -41,7 +59,23 @@
                 number(reading.score, 1), reading.problems.map(\.csvName).joined(separator: " "),
                 row.focus?.state.csvName ?? "", number(row.focus?.current, 1),
                 number(row.focus?.peak, 1), number(row.focus?.level, 3),
+                row.stage?.step.csvName ?? "", number(row.stage?.travelFields, 2),
+                number(row.stageAxes?.tiltDegrees, 2), number(row.stageAxes?.skewDegrees, 2),
+                row.tracker.map { Self.trackingName($0.tracking) } ?? "",
+                number(row.tracker.map { Double($0.position.x) }, 3),
+                number(row.tracker.map { Double($0.position.y) }, 3),
+                number(row.tracker?.boxSharpness, 1), row.tracker?.viewClass.rawValue ?? "",
+                number(row.tracker?.stillSeconds, 2),
             ]
+        }
+
+        private static func trackingName(_ state: TrackingState) -> String {
+            switch state {
+            case .tracking: "tracking"
+            case .paused: "paused"
+            case .matching: "matching"
+            case .lost: "lost"
+            }
         }
 
         /// Fixed decimals, always with a dot; empty for nil.

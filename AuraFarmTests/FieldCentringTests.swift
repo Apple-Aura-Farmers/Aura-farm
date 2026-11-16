@@ -19,44 +19,46 @@ final class FieldCentringTests: XCTestCase {
         XCTAssertEqual(rect.width, rect.width.rounded(), file: file, line: line)
     }
 
-    func testACentredFieldGivesTheWholeFrame() {
-        let rect = FieldCentring.cropRect(centre: CGPoint(x: 640, y: 360), frameSize: frame)
-        XCTAssertEqual(rect, CGRect(x: 0, y: 0, width: 1280, height: 720))
+    func testACentredFieldIsItsBoundingSquareWithTheMargin() {
+        // Was the whole frame; now the square of 2 x 300 x 1.02 = 612 px.
+        let rect = FieldCentring.cropRect(
+            centre: CGPoint(x: 640, y: 360), radius: 300, frameSize: frame)
+        XCTAssertEqual(rect, CGRect(x: 334, y: 54, width: 612, height: 612))
+        assertInsideAndCentred(rect, on: CGPoint(x: 640, y: 360))
     }
 
-    func testAFieldTowardTheBottomLeftTrimsTheTopAndTheRight() {
-        // 400 from the left, 550 down: the field is 400 from the left edge and 170 from the
-        // bottom, so the crop is 800 wide and 340 tall.
-        let centre = CGPoint(x: 400, y: 550)
-        let rect = FieldCentring.cropRect(centre: centre, frameSize: frame)
-        XCTAssertEqual(rect, CGRect(x: 0, y: 380, width: 800, height: 340))
-        XCTAssertEqual(rect.minX, 0, "nothing trimmed on the left")
-        XCTAssertEqual(rect.maxY, 720, "nothing trimmed at the bottom")
-        XCTAssertEqual(rect.minY, 380, "the top is trimmed by 380")
-        XCTAssertEqual(frame.width - rect.maxX, 480, "the right is trimmed by 480")
+    func testAFieldTowardTheBottomLeftIsASquareCentredOnIt() {
+        // Was 800 x 340 (the largest rectangle). 190 x 1.02 = 193.8: room is 220 below, so the
+        // square is 386 and nothing is shrunk.
+        let centre = CGPoint(x: 420, y: 500)
+        let rect = FieldCentring.cropRect(centre: centre, radius: 190, frameSize: frame)
+        XCTAssertEqual(rect, CGRect(x: 227, y: 307, width: 386, height: 386))
         assertInsideAndCentred(rect, on: centre)
     }
 
-    func testAFieldNearACornerGivesASmallRect() {
-        let centre = CGPoint(x: 60, y: 700)
-        let rect = FieldCentring.cropRect(centre: centre, frameSize: frame)
-        XCTAssertEqual(rect, CGRect(x: 0, y: 680, width: 120, height: 40))
+    func testACircleNearAnEdgeShrinksTheSquareStillCentred() {
+        // 20 px from the bottom edge: the square shrinks to 40.
+        let centre = CGPoint(x: 400, y: 700)
+        let rect = FieldCentring.cropRect(centre: centre, radius: 300, frameSize: frame)
+        XCTAssertEqual(rect, CGRect(x: 380, y: 680, width: 40, height: 40))
         assertInsideAndCentred(rect, on: centre)
     }
 
     func testACropUnderTheMinimumSideIsTheWholeFrame() {
-        let rect = FieldCentring.cropRect(centre: CGPoint(x: 6, y: 360), frameSize: frame)
+        let rect = FieldCentring.cropRect(
+            centre: CGPoint(x: 6, y: 360), radius: 200, frameSize: frame)
         XCTAssertEqual(rect, CGRect(origin: .zero, size: frame))
     }
 
     func testAFractionalCentreStaysInsideAndWithinAPixelOfCentred() {
         for centre in [
             CGPoint(x: 400.4, y: 550.6), CGPoint(x: 639.5, y: 360.5), CGPoint(x: 1000.9, y: 100.2),
-            CGPoint(x: 17.3, y: 719.9),
+            CGPoint(x: 117.3, y: 619.9),
         ] {
-            let rect = FieldCentring.cropRect(centre: centre, frameSize: frame)
+            let rect = FieldCentring.cropRect(centre: centre, radius: 150, frameSize: frame)
             if rect.size == frame { continue }
             assertInsideAndCentred(rect, on: centre)
+            XCTAssertEqual(rect.width, rect.height, "a square")
         }
     }
 
@@ -101,17 +103,5 @@ final class FieldCentringTests: XCTestCase {
         let big = CGRect(x: -100, y: -100, width: 600, height: 500)
         XCTAssertEqual(FramePreviewConverter.fitTransform(of: big, in: view).a, 1, accuracy: 1e-9)
         XCTAssertEqual(FramePreviewConverter.fitTransform(of: .zero, in: view), .identity)
-    }
-
-    @MainActor
-    func testTheCentredAndUncroppedPreviewsRender() throws {
-        let renderer = ImageRenderer(content: CentredFieldDemo())
-        renderer.scale = 2
-        let image = try XCTUnwrap(renderer.uiImage)
-        let data = try XCTUnwrap(image.pngData())
-        let url = FileManager.default.temporaryDirectory.appending(path: "centred-field-preview.png")
-        try data.write(to: url)
-        print("PREVIEW \(url.path) \(Int(image.size.width))x\(Int(image.size.height))")
-        XCTAssertGreaterThan(data.count, 10_000)
     }
 }

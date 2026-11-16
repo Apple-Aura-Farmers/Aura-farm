@@ -71,6 +71,12 @@ struct SpotAlignment {
         blurrySince = nil
     }
 
+    /// Forgets the hold in progress and the blur stretch, keeping the target (a pause).
+    mutating func clearHold() {
+        holdStartedAt = nil
+        blurrySince = nil
+    }
+
     mutating func clearTarget() {
         target = nil
         distance = .infinity
@@ -122,7 +128,8 @@ struct SpotAlignment {
 
         if remaining <= thresholds.alignToleranceFields {
             guard holds else { return .aligned }
-            guard reading.isStill else {
+            // Not still, or focus clearly low (the pause needs longer): the hold does not run.
+            guard reading.isStill, !reading.focusLow else {
                 holdStartedAt = nil
                 return .aligned
             }

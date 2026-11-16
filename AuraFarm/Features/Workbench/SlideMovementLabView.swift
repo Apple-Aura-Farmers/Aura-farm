@@ -25,6 +25,9 @@
         @AppStorage("slideLab.hopAgreement") private var hopAgreement = false
         @AppStorage("slideLab.guideDryRun") private var guideDryRun = false
         @AppStorage("slideLab.centreField") private var centresField = true
+        @AppStorage("slideLab.straighten") private var straightens = true
+        @AppStorage("slideLab.pauseOnMonitor") private var pausesOnMonitor = true
+        @AppStorage("slideLab.showEdgeLine") private var showsEdgeLine = true
         @AppStorage("slideLab.skipAlignFocus") private var skipsAlignFocus = false
         @State private var noteText = ""
 
@@ -51,6 +54,7 @@
             .navigationBarTitleDisplayMode(.inline)
             .onAppear {
                 model.setSkipsAlignAndFocus(skipsAlignFocus)
+                model.setPausesOnMonitor(pausesOnMonitor)
                 model.setFieldRegion(FieldRegionMode(rawValue: fieldRegionName) ?? .auto)
                 model.setMeasuresHopAgreement(hopAgreement)
                 model.setShowsThumbnail(showsSees)
@@ -65,6 +69,7 @@
             .onChange(of: showsSees) { _, shown in model.setShowsThumbnail(shown) }
             .onChange(of: guideDryRun) { _, enabled in model.setGuideDryRun(enabled) }
             .onChange(of: skipsAlignFocus) { _, skips in model.setSkipsAlignAndFocus(skips) }
+            .onChange(of: pausesOnMonitor) { _, pauses in model.setPausesOnMonitor(pauses) }
             .onChange(of: mappingName) { model.setScreenMapping(mapping, mirrored: mirrored) }
             .onChange(of: mirrored) { model.setScreenMapping(mapping, mirrored: mirrored) }
             .onDisappear { model.stop() }
@@ -92,30 +97,44 @@
                 VStack(spacing: 0) {
                     testPicker
                     GeometryReader { proxy in
-                        // The picture with the field centred: one transform for the preview and
-                        // the converter every frame-anchored mark goes through. Uncropped until
-                        // the field is learned and confirmed, and when the toggle is off.
+                        // The picture as the field's square: one transform for the preview and
+                        // the converter every frame-anchored mark goes through, the circle
+                        // centred, filling the width and straightened by the stage's axes.
+                        // Uncropped until the field is confirmed, and when the toggle is off.
+                        let isCentred =
+                            centresField && model.isAnalyzing
+                            && (model.setupInfo.step == .stage || model.setupInfo.step == .done)
                         let display =
-                            centresField && model.isAnalyzing && model.setupInfo.step == .done
-                            ? FramePreviewConverter.centringTransform(
-                                for: model.fieldInfo, layer: previewLayer, viewSize: proxy.size)
+                            isCentred
+                            ? FramePreviewConverter.displayTransform(
+                                for: model.fieldInfo, layer: previewLayer, viewSize: proxy.size,
+                                stage: straightens ? (model.setupInfo.stageAxes ?? .identity) : .identity)
                             : .identity
                         ZStack {
-                            CameraPreview(session: model.session, onLayer: { previewLayer = $0 })
-                                .scaleEffect(display.a, anchor: .topLeading)
-                                .offset(x: display.tx, y: display.ty)
+                            CameraPreview(
+                                session: model.session,
+                                onLayer: {
+                                    // The whole frame is kept: with aspect fill a circle away from
+                                    // the middle has part of its square outside what is drawn.
+                                    $0.videoGravity = .resizeAspect
+                                    previewLayer = $0
+                                }
+                            )
+                            .transformEffect(display)
                             if model.isAnalyzing {
                                 SlideMovementOverlays(
                                     model: model, mapping: mapping, mirrored: mirrored,
-                                    previewLayer: previewLayer, display: display,
+                                    previewLayer: previewLayer, display: display, centred: isCentred,
                                     onTapTrail: { isShowingTrail = true })
                             } else {
                                 startingCard
                             }
                         }
                         .frame(width: proxy.size.width, height: proxy.size.height)
+                        .clipShape(Rectangle())
                     }
-                    .frame(height: 440)
+                    .frame(maxWidth: .infinity)
+                    .aspectRatio(1, contentMode: .fit)
                     .clipped()
 
                     if model.isAnalyzing, isSettingUp {
@@ -328,6 +347,9 @@
                 Toggle("Measure hop agreement", isOn: $hopAgreement)
                 Toggle("Guide dry run", isOn: $guideDryRun)
                 Toggle("Centre the field", isOn: $centresField)
+                Toggle("Straighten picture", isOn: $straightens)
+                Toggle("Pause when out of focus or alignment", isOn: $pausesOnMonitor)
+                Toggle("Show edge line", isOn: $showsEdgeLine)
                 Text("Red tint: treated as the eyepiece. Yellow box: where movement is measured.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -372,7 +394,7 @@
                     Button("Reset position") { model.resetPosition() }
                     Spacer()
                     Button("Mark start") { model.markStart() }
-                        .disabled(!model.isLogging)
+                        .disabled(!model.isLogging || model.setupInfo.step != .done)
                     Button("Mark end") {
                         distanceText = ""
                         isAskingDistance = true

@@ -31,9 +31,14 @@
         private(set) var setupLogURL: URL?
         /// Whether the next session starts at the field step, skipping align and focus.
         private(set) var skipsAlignAndFocus = false
+        /// Whether the guide pauses when the run monitor sees the picture out of alignment or
+        /// out of focus. The monitor logs either way.
+        private(set) var pausesOnMonitor = true
         /// What the guide overlay draws, published on every analyzed frame; a value of its own
         /// so nothing else redraws that often.
         let overlayState = GuideOverlayState()
+        /// The edge line's path, for the cyan overlay.
+        let edgeLineState = EdgeLineState()
         /// The "What the app sees" picture, when it is switched on.
         private(set) var thumbnailImage: CGImage?
         private(set) var showsThumbnail = false
@@ -81,9 +86,12 @@
             return pipeline
         }()
         @ObservationIgnored private let dryRun = GuideDryRun()
+        @ObservationIgnored private let edgeProbe = EdgeLineProbe()
         @ObservationIgnored private var guideEnabled = false
         @ObservationIgnored private var setup = LabSetupSession()
         @ObservationIgnored private var lastPublishedStep = LabSetupStep.align
+        @ObservationIgnored private var pausesOnMonitorFlag = true
+        @ObservationIgnored private var pendingEventName = ""
         @ObservationIgnored private var latestGuide: GuideRowFields?
         @ObservationIgnored private var latestGuideInfo = SlideMovementInfo.Guide()
         @ObservationIgnored private var guideCaptured: [CGPoint] = []
@@ -145,6 +153,35 @@
         /// Whether a session starts at the field step: "Skip align and focus".
         func setSkipsAlignAndFocus(_ skips: Bool) {
             skipsAlignAndFocus = skips
+        }
+
+        /// Whether the guide pauses on the run monitor's say.
+        func setPausesOnMonitor(_ pauses: Bool) {
+            pausesOnMonitor = pauses
+            analysisQueue.async { [weak self] in self?.pausesOnMonitorFlag = pauses }
+        }
+
+        /// The helper says the stage cannot go further: the guide turns and remembers the limit.
+        /// Written to the movement CSV as the event "stage_limit". Ignored unless the guide is on.
+        func stageLimit() {
+            analysisQueue.async { [weak self] in
+                guard let self, self.guideEnabled else { return }
+                self.dryRun.stageLimitPressed = true
+                self.pendingEventName = "stage_limit"
+            }
+        }
+
+        /// Skips the stage step: the picture and the guide stay as they are (the identity).
+        func skipStage() {
+            analysisQueue.async { [weak self] in
+                guard let self, self.setup.step == .stage else { return }
+                self.setup.skipStage()
+                self.lastPublishedStep = .done
+                self.clearTrackingDisplay()
+                self.resetGuide()
+                let info = self.setup.info
+                DispatchQueue.main.async { self.setupInfo = info }
+            }
         }
 
         /// Starts the setup of a session, on the analysis queue: at align, or at field when
@@ -364,6 +401,8 @@
 
         private func resetGuide() {
             dryRun.reset()
+            edgeProbe.reset()
+            DispatchQueue.main.async { [edgeLineState] in edgeLineState.update([]) }
             latestGuide = nil
             latestGuideInfo = SlideMovementInfo.Guide()
             guideCaptured = []
@@ -407,6 +446,7 @@
             analysisQueue.async { [weak self] in
                 guard let self else { return }
                 self.pendingMark.place(PendingMark(name: "start", millimetres: nil))
+                self.setup.rearmMonitor()
                 self.pipeline.setStartPicture()
                 self.indicators.markStart(at: self.latestPositionFields)
                 self.startTrailPoint = self.latestPositionFields
@@ -422,6 +462,23 @@
             showToast(text)
             analysisQueue.async { [weak self] in
                 self?.pendingMark.place(PendingMark(name: "end", millimetres: millimetres))
+            }
+        }
+
+        /// "Stage straightened ✓ (tilt 9.6°)" for a moment when setup ends, with the real number.
+        private static func stageToast(_ axes: StageAxes) -> String {
+            axes == .identity
+                ? "Stage not measured" : String(format: "Stage straightened ✓ (tilt %.1f°)", axes.tiltDegrees)
+        }
+
+        /// Shows `text` for a moment, as a mark does but never "(not logging)". Main queue only.
+        private func showSetupToast(_ text: String) {
+            markToast = text
+            toastTask?.cancel()
+            toastTask = Task { [weak self] in
+                try? await Task.sleep(for: .seconds(2.5))
+                guard !Task.isCancelled else { return }
+                self?.markToast = nil
             }
         }
 
@@ -503,9 +560,9 @@
         private func row(
             from step: SlideMovementStep, indicators: MovementIndicators, seconds: Double,
             label: String, mark: String, millimetres: Double?, test: SlideLabTest, note: String,
-            guide: GuideRowFields? = nil
+            guide: GuideRowFields? = nil, monitor: RunMonitorInfo? = nil
         ) -> MovementLogRow {
-            MovementLogRow(
+            var logged = MovementLogRow(
                 seconds: seconds,
                 brightness: step.stats.brightness, sharpness: step.stats.sharpness,
                 contrast: step.stats.contrast,
@@ -552,6 +609,14 @@
                 edgeCandidate: guide?.edgeCandidate ?? "", edgeVerdict: guide?.edgeVerdict ?? "",
                 edgeReason: guide?.edgeReason ?? "", boxSharpSideA: guide?.sideSharpA,
                 boxSharpSideB: guide?.sideSharpB)
+            logged.monitorState = monitor?.state.csvName ?? ""
+            logged.focusIndex = monitor?.focusIndex
+            logged.focusBaseline = monitor?.focusBaseline
+            logged.circleShiftR = monitor?.circleShift
+            logged.circleRadiusChange = monitor?.circleRadiusChange
+            logged.focusLow = monitor.map { $0.focusLow } ?? false
+            logged.focusStillOnset = monitor.map { $0.focusStillOnset } ?? false
+            return logged
         }
 
         private static func writeSetupLog(_ rows: [SetupLogRow]) -> URL? {
@@ -711,13 +776,18 @@
             guard
                 let output = setup.process(
                     buffer, seconds: time, pipeline: pipeline,
-                    measureAgreement: logging && measureAgreementEnabled)
+                    measureAgreement: logging && measureAgreementEnabled,
+                    guidePosition: { [dryRun] in dryRun.guidePosition(for: $0) },
+                    viewClass: guideEnabled ? dryRun.lastViewClass : .blank,
+                    isStill: indicators.stillSeconds > 0, stillSeconds: indicators.stillSeconds)
             else { return }
             let stepChanged = setup.step != lastPublishedStep
             if stepChanged {
                 // Reaching field starts learning, which needs a clean display.
                 lastPublishedStep = setup.step
                 clearTrackingDisplay()
+                // The run starts clean: the stage's axes are in, so the guide's positions are.
+                if setup.step == .done { resetGuide() }
             }
             let step: SlideMovementStep
             switch output {
@@ -728,7 +798,13 @@
                 step = tracked
                 if stepChanged {
                     let info = setup.info
-                    DispatchQueue.main.async { [weak self] in self?.setupInfo = info }
+                    let toast =
+                        setup.step == .done
+                        ? setup.stageAxes.map { Self.stageToast($0) } : nil
+                    DispatchQueue.main.async { [weak self] in
+                        self?.setupInfo = info
+                        if let toast { self?.showSetupToast(toast) }
+                    }
                 }
             }
 
@@ -744,9 +820,18 @@
                 positionFields: step.positionFields, isLost: step.isLost, event: step.event,
                 referenceSide: step.boxSide, seconds: time, hopDistance: step.hopLimit,
                 hasDetail: step.hasDetail)
-            if guideEnabled {
+            var edgeLine: EdgeLine?
+            if guideEnabled, setup.step == .done {
+                dryRun.pauseReason =
+                    pausesOnMonitorFlag ? setup.monitorState.pauseReason : nil
+                dryRun.focusLow = pausesOnMonitorFlag && setup.isFocusLow
                 let result = dryRun.update(step: step, indicators: indicators, seconds: time)
                 latestGuide = result.fields
+                edgeLine = edgeProbe.update(buffer, step: step, direction: dryRun.frameHeading)
+                if let edgeLine {
+                    let path = edgeLine.isCandidate ? edgeLine.path : []
+                    DispatchQueue.main.async { [edgeLineState] in edgeLineState.update(path) }
+                }
                 latestGuideInfo = result.info
                 if let point = result.captureTrailPoint { guideCaptured.append(point) }
                 guideTarget = result.targetTrailPoint
@@ -779,15 +864,19 @@
                 let origin = logOrigin ?? time
                 logOrigin = origin
                 let mark = pendingMark.take()
-                let logged = row(
+                var logged = row(
                     from: step, indicators: indicators, seconds: time - origin,
                     label: currentLabel, mark: mark?.name ?? "",
                     millimetres: mark?.millimetres, test: currentTest, note: currentNote,
-                    guide: guideEnabled ? latestGuide : nil)
+                    guide: guideEnabled ? latestGuide : nil,
+                    monitor: setup.step == .done ? setup.info.monitor : nil)
+                logged.edgeLine = edgeLine
+                if !pendingEventName.isEmpty { logged.event = pendingEventName }
                 rows.append(logged)
                 if !currentLabel.isEmpty { labelledRows.append(logged) }
                 refreshStatistics(at: time)
             }
+            pendingEventName = ""
 
             guard time - lastPublishAt >= publishEverySeconds else { return }
             lastPublishAt = time
@@ -857,8 +946,10 @@
                 awaitingReview: step.awaitingReview, circle: circle)
             let count = rows.count
             let isLogging = logging
+            let setupSnapshot = setup.info
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
+                if self.setupInfo != setupSnapshot { self.setupInfo = setupSnapshot }
                 if self.statusInfo != status { self.statusInfo = status }
                 if self.readouts != readouts { self.readouts = readouts }
                 if self.trailInfo != trailInfo { self.trailInfo = trailInfo }

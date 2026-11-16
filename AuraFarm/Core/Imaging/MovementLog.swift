@@ -117,6 +117,21 @@ struct MovementLogRow: Equatable {
     /// The sharpness of the two halves across the guide's heading that the route used.
     var boxSharpSideA: Double?
     var boxSharpSideB: Double?
+    /// The run monitor: "ok", "paused_alignment" or "paused_focus"; the focus index (box
+    /// Laplacian variance at step 2 over step 6) and its baseline; and how far the eyepiece
+    /// circle is from the confirmed one (centre shift as a share of the radius, and radius
+    /// change). Empty before setup is done.
+    var monitorState = ""
+    var focusIndex: Double?
+    var focusBaseline: Double?
+    var circleShiftR: Double?
+    var circleRadiusChange: Double?
+    /// The monitor held a capture off because focus was clearly low.
+    var focusLow = false
+    /// Detail was lost while the slide was still: focus or a bump, not an edge.
+    var focusStillOnset = false
+    /// The edge-line detector's result on frames it ran on; nil elsewhere. Logged only.
+    var edgeLine: EdgeLine?
 }
 
 enum MovementLog {
@@ -138,6 +153,11 @@ enum MovementLog {
         "box_sharp_left", "box_sharp_right", "box_sharp_top", "box_sharp_bottom",
         "focus_left", "focus_right", "focus_top", "focus_bottom",
         "edge_candidate", "edge_verdict", "edge_reason", "box_sharp_side_a", "box_sharp_side_b",
+        "monitor_state", "focus_index", "focus_baseline", "circle_shift_r", "circle_radius_change",
+        "focus_low", "focus_still_onset",
+        "edge_line_strength", "edge_line_coverage", "edge_line_angle_deg",
+        "edge_line_offset_fields", "edge_line_sign", "edge_line_slide_residual",
+        "edge_line_candidate",
     ]
 
     static func csv(_ rows: [MovementLogRow]) -> String {
@@ -178,6 +198,14 @@ enum MovementLog {
             number(row.focusBottom, 3),
             row.edgeCandidate, row.edgeVerdict, row.edgeReason,
             number(row.boxSharpSideA, 3), number(row.boxSharpSideB, 3),
+            row.monitorState, number(row.focusIndex, 3), number(row.focusBaseline, 3),
+            number(row.circleShiftR, 3), number(row.circleRadiusChange, 3),
+            row.focusLow ? "1" : "0", row.focusStillOnset ? "1" : "0",
+            number(row.edgeLine?.strength, 2), number(row.edgeLine?.coverage, 3),
+            number(row.edgeLine?.angleDegrees, 1), number(row.edgeLine?.offsetFields, 3),
+            row.edgeLine.map { String($0.sign) } ?? "",
+            number(row.edgeLine?.slideResidualFields, 3),
+            row.edgeLine.map { $0.isCandidate ? "1" : "0" } ?? "",
         ]
     }
 

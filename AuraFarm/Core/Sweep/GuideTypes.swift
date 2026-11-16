@@ -42,6 +42,8 @@ struct GuideReading: Equatable {
     /// far (matched plus unmatched): a rise in the count is a new return.
     var lastBlankReturn = BlankReturnOutcome.none
     var blankReturnCount = 0
+    /// The run monitor says focus is clearly low: a spot is not captured yet. See `RunMonitor`.
+    var focusLow = false
 }
 
 /// How the tracker took the picture back after a stretch with nothing to follow.
@@ -64,6 +66,11 @@ struct EdgeDiagnostics: Equatable {
     /// vouched, behind_blurred, side_imbalance, halves_too_close, spot_hold, speed_spike,
     /// same_spot, moved, timeout_no_detail.
     var reason = ""
+}
+
+/// Why the run is paused: the phone moved off the eyepiece, or the picture went out of focus.
+enum GuidePauseReason: Equatable {
+    case alignment, focus
 }
 
 /// What the guide asks the person to do next.
@@ -92,6 +99,14 @@ enum GuideInstruction: Equatable {
     /// Going back did not bring detail back for a while: keep going back, or refocus if it
     /// looks blurry. Same direction as `edgeGoBack`.
     case stillNoDetail(toward: CGPoint)
+    /// The view went blank while the helper was moving normally: step back onto the sample
+    /// and come forward again, and the arrival decides whether that was the edge. Same
+    /// direction as `edgeGoBack`.
+    case checkEdge(toward: CGPoint)
+    /// The helper said the stage cannot go further: the route turns (see `SlideRoute`).
+    case stageLimit
+    /// The run is paused until the picture is back; see `RunMonitor`.
+    case paused(GuidePauseReason)
     case tooFar
     case otherWay
     case refocus
@@ -112,6 +127,9 @@ enum GuideInstruction: Equatable {
         case .edgeReached: "Edge reached"
         case .checkingEdge: "Checking edge"
         case .stillNoDetail: "Still no detail: go back, or refocus if it looks blurry"
+        case .checkEdge: "Check edge: step back"
+        case .stageLimit: "Stage limit, turning"
+        case .paused(let reason): reason == .alignment ? "Paused: alignment" : "Paused: focus"
         case .tooFar: "Too far, come back a little"
         case .otherWay: "Other way"
         case .refocus: "Refocus"
@@ -133,6 +151,10 @@ enum GuideInstruction: Equatable {
         case .checkingEdge: "Checking edge… hold still"
         case .edgeGoBack: "Edge of the sample. Follow the arrow back"
         case .stillNoDetail: "No detail. Follow the arrow back, or refocus if it's blurry"
+        case .checkEdge: "Step back a little, then come forward again"
+        case .stageLimit: "Stage limit reached. Turning"
+        case .paused(.alignment): "Phone moved. Put it back so the circle fills the outline"
+        case .paused(.focus): "Out of focus. Turn the focus knob slowly until it's sharp"
         case .tooFar, .otherWay: "Turn back toward the cross"
         case .refocus: "Refocus"
         case .slowDown: "Slow down"
@@ -154,6 +176,9 @@ enum GuideInstruction: Equatable {
         case .edgeReached: "edge_reached"
         case .checkingEdge: "checking_edge"
         case .stillNoDetail: "still_no_detail"
+        case .checkEdge: "check_edge"
+        case .stageLimit: "stage_limit"
+        case .paused(let reason): reason == .alignment ? "paused_alignment" : "paused_focus"
         case .tooFar: "too_far"
         case .otherWay: "other_way"
         case .refocus: "refocus"
@@ -177,4 +202,6 @@ struct FramePlacement: Codable, Equatable {
 
 enum SweepFinishReason: String, Codable {
     case sampleFinished, endedByHelper, storageFull
+    /// The stage ran out of travel to the right, so there is no column to step to.
+    case stageLimit
 }

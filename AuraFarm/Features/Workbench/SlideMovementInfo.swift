@@ -89,6 +89,11 @@
             var axesLine = ""
             /// True when the preview's axes are nearest to a different mapping than the picker's.
             var axesDiffer = false
+            /// The instruction has been to move, travel or follow the arrow for a while: the
+            /// stage may have run out (offers the Stage limit button).
+            var showsStageLimitHint = false
+            /// Times the Stage limit button was used, for the haptic.
+            var stageLimitCount = 0
         }
 
         /// For the cards and outlines drawn on the camera preview, in frame pixels.

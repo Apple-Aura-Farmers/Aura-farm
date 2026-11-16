@@ -7,6 +7,8 @@
         enum Scene: CaseIterable {
             case alignClippedRight, alignUneven, alignGlare, alignPassed
             case focusTurnOneWay, focusPassedPeak, focusFocused, focusNeedsSample
+            case stageWaitX, stageWaitY, stageRejected, stageDone, stageStart, stageNothingToFollow
+            case pausedAlignment, pausedFocus
 
             var title: String {
                 switch self {
@@ -18,6 +20,14 @@
                 case .focusPassedPeak: "Focus: passedPeak"
                 case .focusFocused: "Focus: focused"
                 case .focusNeedsSample: "Focus: needsSample"
+                case .stageWaitX: "Stage: waitX, 1.2 of 2 fields"
+                case .stageWaitY: "Stage: waitY, 0.4 of 2 fields"
+                case .stageRejected: "Stage: rejected (both knobs)"
+                case .stageDone: "Stage: done, tilt 9.6°"
+                case .stageStart: "Stage: start (particles hint)"
+                case .stageNothingToFollow: "Stage: nothing to follow (dim bar)"
+                case .pausedAlignment: "Paused: alignment (orange outline)"
+                case .pausedFocus: "Paused: focus"
                 }
             }
         }
@@ -88,6 +98,43 @@
             case .focusTurnOneWay, .focusPassedPeak, .focusFocused, .focusNeedsSample:
                 info.step = .focus
                 info.focusSquare = FieldCentring.focusSquareForPreview(circle: centred)
+            case .stageWaitX:
+                info.step = .stage
+                info.stage = StageAxesProgress(
+                    step: .waitX, travelFields: 1.2, message: StageAxesCalibration.waitXMessage)
+            case .stageWaitY:
+                info.step = .stage
+                info.stage = StageAxesProgress(
+                    step: .waitY, travelFields: 0.4, message: StageAxesCalibration.waitYMessage)
+            case .stageRejected:
+                info.step = .stage
+                info.stage = StageAxesProgress(
+                    step: .waitX, travelFields: 0, message: StageAxesCalibration.rejectedMessage)
+            case .stageDone:
+                info.step = .stage
+                info.stage = StageAxesProgress(
+                    step: .done, travelFields: 2.2, message: "Stage straightened ✓ (tilt 9.6°)")
+            case .stageStart:
+                info.step = .stage
+                info.stage = StageAxesProgress(
+                    step: .waitX, travelFields: 0, message: StageAxesCalibration.waitXMessage,
+                    hint: StageAxesCalibration.particlesHint)
+            case .stageNothingToFollow:
+                info.step = .stage
+                info.stage = StageAxesProgress(
+                    step: .waitY, travelFields: 0.3,
+                    message: StageAxesCalibration.nothingToFollowMessage, nothingToFollow: true)
+            case .pausedAlignment:
+                // The phone moved: the live circle is off to the right of the confirmed one.
+                info.step = .done
+                reading.circle = FieldCircle(centre: CGPoint(x: 800, y: 380), radius: 300)
+                info.monitor = RunMonitorInfo(
+                    state: .pausedAlignment, circleShift: 0.55, circleRadiusChange: 0,
+                    circle: centred)
+            case .pausedFocus:
+                info.step = .done
+                info.monitor = RunMonitorInfo(
+                    state: .pausedFocus, focusIndex: 0.9, focusBaseline: 2.1, circle: centred)
             }
             info.alignment = reading
             let meter: FocusReading?
@@ -111,9 +158,14 @@
             VStack(spacing: 4) {
                 ZStack {
                     picture(values.info)
-                    if values.info.step == .align {
+                    switch values.info.step {
+                    case .align:
                         AlignOverlay(info: values.info, mapper: Mapper())
-                    } else {
+                    case .stage:
+                        StageOverlay(progress: values.info.stage)
+                    case .done:
+                        PausedOverlay(monitor: values.info.monitor, mapper: Mapper())
+                    default:
                         FocusOverlay(info: values.info, reading: values.meter, mapper: Mapper())
                     }
                 }
@@ -163,7 +215,88 @@
         }
     }
 
-    /// Every scene, two to a row.
+    /// The guide's Stage limit button with its hint, and the check-edge arrow, over a stand-in
+    /// picture.
+    struct GuideExtrasPanel: View {
+        private static let size = CGSize(width: 400, height: 260)
+
+        /// The overlay the real guide draws for "step back and come forward": an arrow pinned
+        /// inside the field's edge, pointing back down the column.
+        static var checkEdgeModel: GuideOverlayModel {
+            let step = GuideStep(
+                instruction: .checkEdge(toward: CGPoint(x: 0, y: 1)), target: nil, capture: nil,
+                stateName: "column 1 up", column: 1, isFinished: false)
+            return GuideOverlayModel.make(
+                step: step, position: .zero, tracking: .paused,
+                centre: CGPoint(x: size.width / 2, y: size.height / 2), pointsPerField: 120,
+                fieldRadius: 84, alignToleranceFields: 0.15)
+        }
+
+        var body: some View {
+            HStack(spacing: 12) {
+                VStack(spacing: 4) {
+                    ZStack {
+                        LinearGradient(
+                            colors: [.brown, .gray], startPoint: .topLeading,
+                            endPoint: .bottomTrailing)
+                        GuideOverlayView(model: Self.checkEdgeModel)
+                    }
+                    .frame(width: Self.size.width, height: Self.size.height)
+                    .clipped()
+                    Text("checkEdge arrow").font(.caption).foregroundStyle(.white)
+                }
+                VStack(spacing: 4) {
+                    VStack(spacing: 16) {
+                        StageLimitControl(showsHint: true, onTap: {})
+                        StageLimitControl(showsHint: false, onTap: {})
+                    }
+                    .frame(width: Self.size.width, height: Self.size.height)
+                    .background(Color(white: 0.2))
+                    Text("Stage limit button, with and without the hint").font(.caption)
+                        .foregroundStyle(.white)
+                }
+            }
+        }
+    }
+
+    /// The cyan edge line the detector finds on a synthetic edge (bright to the right, a slight
+    /// tilt, dots on both sides), drawn over the box.
+    struct EdgeLinePreviewPanel: View {
+        private let state: EdgeLineState = {
+            let cells = 200
+            var luma = [Float](repeating: 100, count: cells * cells)
+            for y in 0..<cells {
+                for x in 0..<cells {
+                    let dx = Double(x) + 0.5 - 100
+                    let dy = Double(y) + 0.5 - 100
+                    let wave = 3 * sin(2 * .pi * dy / 100)
+                    if dx * cos(0.12) + dy * sin(0.12) - wave - 20 > 0 { luma[y * cells + x] = 200 }
+                    if (x * 7 + y * 13) % 31 == 0 { luma[y * cells + x] -= 40 }
+                }
+            }
+            let box = CGRect(x: 440, y: 160, width: 400, height: 400)
+            let found = EdgeLineDetector.detect(
+                grid: EdgeLineGrid(luma: luma, width: cells, height: cells, step: 2), box: box,
+                normal: CGPoint(x: 1, y: 0))
+            let state = EdgeLineState()
+            state.update(found?.path ?? [])
+            return state
+        }()
+
+        var body: some View {
+            VStack(spacing: 4) {
+                ZStack {
+                    Color(white: 0.45)
+                    EdgeLineOverlay(state: state, mapper: SetupPreviewPanel.Mapper())
+                }
+                .frame(width: SetupPreviewPanel.panel.width, height: SetupPreviewPanel.panel.height)
+                .clipped()
+                Text("Edge line (cyan) on a synthetic edge").font(.caption).foregroundStyle(.white)
+            }
+        }
+    }
+
+    /// Every scene, two to a row, then the guide's extras.
     struct SetupPreviewSheet: View {
         var body: some View {
             let scenes = SetupPreviewPanel.Scene.allCases
@@ -174,6 +307,7 @@
                         SetupPreviewPanel(scene: scenes[row * 2 + 1])
                     }
                 }
+                GuideExtrasPanel()
             }
             .padding(16)
             .background(Color(white: 0.12))
@@ -188,4 +322,14 @@
     #Preview("Focus passedPeak") { SetupPreviewPanel(scene: .focusPassedPeak) }
     #Preview("Focus focused") { SetupPreviewPanel(scene: .focusFocused) }
     #Preview("Focus needsSample") { SetupPreviewPanel(scene: .focusNeedsSample) }
+    #Preview("Stage waitX") { SetupPreviewPanel(scene: .stageWaitX) }
+    #Preview("Stage waitY") { SetupPreviewPanel(scene: .stageWaitY) }
+    #Preview("Stage rejected") { SetupPreviewPanel(scene: .stageRejected) }
+    #Preview("Stage start") { SetupPreviewPanel(scene: .stageStart) }
+    #Preview("Stage nothing to follow") { SetupPreviewPanel(scene: .stageNothingToFollow) }
+    #Preview("Stage done") { SetupPreviewPanel(scene: .stageDone) }
+    #Preview("Paused alignment") { SetupPreviewPanel(scene: .pausedAlignment) }
+    #Preview("Paused focus") { SetupPreviewPanel(scene: .pausedFocus) }
+    #Preview("Edge line") { EdgeLinePreviewPanel() }
+    #Preview("Guide extras") { GuideExtrasPanel() }
 #endif

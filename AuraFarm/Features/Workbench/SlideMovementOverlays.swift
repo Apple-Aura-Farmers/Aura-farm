@@ -23,11 +23,15 @@
         /// How the picture is shown (the field centred); every mark anchored to the picture is
         /// drawn through it. The text and the trail are not.
         var display = CGAffineTransform.identity
+        /// The picture is shown as the field's square: everything outside the circle is dark.
+        var centred = false
         var onTapTrail: () -> Void = {}
 
         var body: some View {
             ZStack {
-                LiveFieldOutlines(model: model, previewLayer: previewLayer, display: display)
+                LiveFieldOutlines(
+                    model: model, previewLayer: previewLayer, display: display,
+                    darkensOutside: centred)
                 LiveFieldCard(model: model)
                 if model.setupInfo.step == .align || model.setupInfo.step == .focus {
                     // Steps 1 and 2: nothing is learned or tracked yet.
@@ -43,11 +47,26 @@
                         SetupStepIndicator(step: .field).padding(8)
                         Spacer()
                     }
+                } else if model.setupInfo.step == .stage {
+                    // Step 4: the axes are measured from the guide's own position, so the
+                    // geometry is hosted even with the dry run off.
+                    GuideGeometryHost(model: model, previewLayer: previewLayer, display: display)
+                    LiveSetupOverlay(model: model, previewLayer: previewLayer)
                 } else {
                     if model.guideDryRun {
                         GuideGeometryHost(model: model, previewLayer: previewLayer, display: display)
                         LiveGuideOverlay(state: model.overlayState)
+                        EdgeLineOverlay(
+                            state: model.edgeLineState,
+                            mapper: FramePreviewConverter(
+                                layer: previewLayer, frameSize: model.fieldInfo.frameSize,
+                                display: display))
                     }
+                    PausedOverlay(
+                        monitor: model.setupInfo.monitor,
+                        mapper: FramePreviewConverter(
+                            layer: previewLayer, frameSize: model.fieldInfo.frameSize,
+                            display: display))
                     VStack {
                         HStack(alignment: .top) {
                             // The picture stays clear while the guide is drawing on it.
@@ -126,33 +145,51 @@
         var model: SlideMovementLabModel
         var previewLayer: AVCaptureVideoPreviewLayer?
         var display = CGAffineTransform.identity
+        /// The picture is shown as the field's square: everything outside the circle is dark.
+        var darkensOutside = false
         var body: some View {
             FieldOutlines(
                 info: model.fieldInfo,
                 converter: FramePreviewConverter(
-                    layer: previewLayer, frameSize: model.fieldInfo.frameSize, display: display))
+                    layer: previewLayer, frameSize: model.fieldInfo.frameSize, display: display),
+                darkensOutside: darkensOutside)
         }
     }
 
     // MARK: - Drawing from values
 
-    /// The learned eyepiece mask as a faint red tint, and the rectangle registration looks in as
-    /// a thin yellow outline, drawn over the preview with the preview layer's own conversion
-    /// from frame pixels. Nothing is drawn without a converter (a preview with no camera).
+    /// The learned eyepiece mask as a faint red tint (or, when the picture is shown as the
+    /// field's square, everything outside the circle dark: an even-odd fill of the view less the
+    /// circle), and the rectangle registration looks in as a thin yellow outline that turns with
+    /// the picture, drawn over the preview with the preview layer's own conversion from frame
+    /// pixels. Nothing is drawn without a converter (a preview with no camera).
     struct FieldOutlines: View {
         var info: SlideMovementInfo.Field
         var converter: FramePreviewConverter?
+        var darkensOutside = false
 
         var body: some View {
-            Canvas { context, _ in
+            Canvas { context, size in
                 guard let converter else { return }
-                for rect in info.state?.mask?.eyepieceRects() ?? [] {
-                    context.fill(
-                        Path(converter.viewRect(of: rect)), with: .color(.red.opacity(0.35)))
+                if darkensOutside, let mask = info.state?.mask, let circle = FieldCircle(fitting: mask) {
+                    var outside = Path(CGRect(origin: .zero, size: size))
+                    let box = converter.layerRect(
+                        of: CGRect(
+                            x: circle.centre.x - circle.radius, y: circle.centre.y - circle.radius,
+                            width: circle.radius * 2, height: circle.radius * 2))
+                    outside.addPath(Path(ellipseIn: box).applying(converter.display))
+                    context.fill(outside, with: .color(.black), style: FillStyle(eoFill: true))
+                } else {
+                    for rect in info.state?.mask?.eyepieceRects() ?? [] {
+                        context.fill(
+                            Path(converter.viewRect(of: rect)), with: .color(.red.opacity(0.35)))
+                    }
                 }
                 if let rect = info.registrationRect {
-                    context.stroke(
-                        Path(converter.viewRect(of: rect)), with: .color(.yellow), lineWidth: 1)
+                    var outline = Path()
+                    outline.addLines(converter.viewPolygon(of: rect))
+                    outline.closeSubpath()
+                    context.stroke(outline, with: .color(.yellow), lineWidth: 1)
                 }
             }
             .allowsHitTesting(false)
@@ -178,7 +215,7 @@
         }
 
         /// The length, in frame pixels, of the two probe vectors the axes are measured with.
-        private static let probePixels = 100.0
+        static let probePixels = 100.0
 
         var body: some View {
             GeometryReader { proxy in
@@ -201,24 +238,33 @@
                 let converter = FramePreviewConverter(
                     layer: previewLayer, frameSize: info.frameSize, display: display)
             else { return nil }
-            let box = info.registrationRect ?? CGRect(origin: .zero, size: info.frameSize)
+            var circle: FieldCircle?
+            if case .ready(let mask)? = info.state { circle = FieldCircle(fitting: mask) }
+            return Self.geometry(
+                using: converter, box: info.registrationRect ?? CGRect(origin: .zero, size: info.frameSize),
+                circle: circle)
+        }
+
+        /// How the preview shows the box. The size of a field and of the field's radius come from
+        /// the lengths of the probe vectors (`FrameToView.scale`), not from the bounding box of
+        /// a rectangle, which grows when the picture is turned or sheared.
+        static func geometry(
+            using mapper: any FrameToView, box: CGRect, circle: FieldCircle?
+        ) -> GuideScreenGeometry? {
             let middle = CGPoint(x: box.midX, y: box.midY)
-            let probe = Self.probePixels
-            let origin = converter.viewPoint(of: middle)
+            let probe = probePixels
+            let origin = mapper.viewPoint(of: middle)
             guard
                 let axes = GuideScreenAxes(
                     origin: origin,
-                    xUnit: converter.viewPoint(of: CGPoint(x: middle.x + probe, y: middle.y)),
-                    yUnit: converter.viewPoint(of: CGPoint(x: middle.x, y: middle.y + probe)),
+                    xUnit: mapper.viewPoint(of: CGPoint(x: middle.x + probe, y: middle.y)),
+                    yUnit: mapper.viewPoint(of: CGPoint(x: middle.x, y: middle.y + probe)),
                     framePixels: probe)
             else { return nil }
-            let onScreen = converter.viewRect(of: box)
-            let side = Double(min(onScreen.width, onScreen.height))
+            let scale = mapper.scale(at: middle, probe: probe)
+            let side = Double(min(box.width, box.height)) * scale
             guard side > 0 else { return nil }
-            var radius = side / 2
-            if case .ready(let mask)? = info.state, let circle = FieldCircle(fitting: mask) {
-                radius = converter.viewRadius(of: circle)
-            }
+            let radius = circle.map { mapper.viewRadius(of: $0) } ?? side / 2
             return GuideScreenGeometry(
                 axes: axes, centre: origin, pointsPerField: side, fieldRadius: radius)
         }

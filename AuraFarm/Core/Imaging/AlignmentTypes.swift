@@ -29,6 +29,18 @@ struct AlignmentThresholds {
     var trendDeadBand: Double = 3
     /// How long ago the trend compares the score with.
     var trendSeconds: Double = 2
+
+    // Losing alignment after it passed uses LOOSER limits than passing (hysteresis), so a
+    // reading just under the pass limits does not send the helper back. PLACEHOLDER: not
+    // calibrated; calibrate from the setup log.
+    var lostMinRoundness: Double = 0.78
+    var lostMinEvenness: Double = 0.65
+    var lostMaxGlareRatio: Double = 1.4
+    var lostMaxBorderTouchShare: Double = 0.04
+    /// The circle's centre moved this share of its radius from the last passing circle.
+    var lostCentreShiftShareOfRadius: Double = 0.10
+    /// A frame with no circle counts as failing. Failing this long without a break is lost.
+    var lostSeconds: Double = 2.0
 }
 
 /// A side of the camera frame, in FRAME axes (top-down pixels).
@@ -65,6 +77,9 @@ struct AlignmentReading: Equatable {
     /// The frame edges the bright region touches beyond `maxBorderTouchShare`.
     var clippedSides: Set<FrameSide> = []
     var roundness: Double?
+    /// The largest share of the frame border's cells that the bright region covers on one
+    /// side; `clippedSides` is the sides above `maxBorderTouchShare`.
+    var borderTouchShare = 0.0
     /// The mean luma of each sector of the circle. Sector 0 is centred on frame +x; sectors go
     /// clockwise in top-down frame coordinates (so sector 2 points down the frame, sector 4
     /// along -x, sector 6 up).

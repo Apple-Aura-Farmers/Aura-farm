@@ -123,4 +123,61 @@ final class AlignmentCheckTests: XCTestCase {
         feed(disc(cx: 140), from: 44, count: 25)
         XCTAssertEqual(check.trend, .steady)
     }
+
+    // MARK: Losing alignment (looser limits, held)
+
+    private func feed(
+        _ check: inout AlignmentCheck, _ luma: [UInt8], from start: Double, seconds: Double
+    ) -> Double {
+        var time = start
+        while time < start + seconds - 1e-9 {
+            _ = check.update(
+                luma: luma, gridWidth: width, gridHeight: height, gridStep: 8, seconds: time)
+            time += 0.1
+        }
+        return time
+    }
+
+    func testAOneSecondDipIsNotLostButTwoSecondsIs() {
+        var check = AlignmentCheck()
+        var time = feed(&check, disc(), from: 0, seconds: 2)
+        XCTAssertTrue(check.isPassed)
+        let dark = grid { _, _ in self.background }
+        time = feed(&check, dark, from: time, seconds: 1)
+        XCTAssertFalse(check.isLost, "1 s of no circle")
+        time = feed(&check, disc(), from: time, seconds: 0.5)
+        time = feed(&check, dark, from: time, seconds: 1.9)
+        XCTAssertFalse(check.isLost, "the dip was broken, the wait started again")
+        time = feed(&check, dark, from: time, seconds: 0.3)
+        XCTAssertTrue(check.isLost, "2 s without a circle")
+        _ = feed(&check, disc(), from: time, seconds: 0.2)
+        XCTAssertFalse(check.isLost, "back")
+    }
+
+    func testAReadingBetweenThePassAndLostLimitsDoesNotGoBack() {
+        var check = AlignmentCheck()
+        var time = feed(&check, disc(), from: 0, seconds: 2)
+        // One half 30% darker: evenness about 0.7, under the pass limit 0.75, over the lost 0.65.
+        let uneven = disc(modify: { x, _, level in x >= 80 ? UInt8(Int(level) * 7 / 10) : level })
+        let reading = measure(uneven)
+        XCTAssertEqual(reading.problems, [.uneven])
+        XCTAssertGreaterThan(reading.evenness ?? 0, 0.65)
+        time = feed(&check, uneven, from: time, seconds: 6)
+        XCTAssertFalse(check.isPassed)
+        XCTAssertFalse(check.isLost)
+        // Well under the lost limit does.
+        let worse = disc(modify: { x, _, level in x >= 80 ? level / 2 : level })
+        _ = feed(&check, worse, from: time, seconds: 2.2)
+        XCTAssertTrue(check.isLost)
+    }
+
+    func testACircleShiftedByMoreThanATenthOfItsRadiusIsLostEvenWhenTidy() {
+        var check = AlignmentCheck()
+        var time = feed(&check, disc(), from: 0, seconds: 2)
+        // 5 cells = 40 px of a 280 px radius: 0.14.
+        time = feed(&check, disc(cx: 85), from: time, seconds: 1)
+        XCTAssertFalse(check.isLost)
+        _ = feed(&check, disc(cx: 85), from: time, seconds: 1.5)
+        XCTAssertTrue(check.isLost)
+    }
 }

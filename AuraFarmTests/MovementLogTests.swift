@@ -49,13 +49,13 @@ final class MovementLogTests: XCTestCase {
         XCTAssertEqual(fields[index("position_x_frames")], "0.014")
         XCTAssertEqual(fields[index("frame_width")], "1280")
         XCTAssertEqual(
-            MovementLog.header.suffix(34).prefix(7),
+            MovementLog.header.suffix(48).prefix(7),
             [
                 "box_brightness", "box_sharpness", "box_contrast", "reading", "predicted_streak",
                 "no_detail", "blind_stretches",
             ])
         XCTAssertEqual(
-            MovementLog.header.suffix(27),
+            MovementLog.header.suffix(41).prefix(27),
             [
                 "start_match_x_px", "start_match_y_px", "true_off_start_fields",
                 "tracker_error_fields", "blank_returns_matched", "blank_returns_unmatched",
@@ -88,7 +88,12 @@ final class MovementLogTests: XCTestCase {
         XCTAssertEqual(fields[index("box_sharp_side_b")], "400.000")
         XCTAssertEqual(fields[index("focus_top")], "1.200")
         XCTAssertEqual(fields[index("focus_bottom")], "", "a half with no ratio is empty")
-        XCTAssertEqual(MovementLog.header.last, "box_sharp_side_b", "appended after every column")
+        XCTAssertEqual(
+            MovementLog.header.suffix(13).prefix(5),
+            ["focus_index", "focus_baseline", "circle_shift_r", "circle_radius_change", "focus_low"],
+            "the run monitor's columns are appended after every column")
+        XCTAssertEqual(fields[index("monitor_state")], "")
+        XCTAssertEqual(fields[index("focus_index")], "")
         XCTAssertEqual(fields[index("box_brightness")], "63.457")
         XCTAssertEqual(fields[index("box_sharpness")], "412.346")
         XCTAssertEqual(fields[index("box_contrast")], "18.250")

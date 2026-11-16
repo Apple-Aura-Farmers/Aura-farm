@@ -181,6 +181,9 @@ final class SlideRouteColumnTests: XCTestCase {
     /// A focus slip in the middle of a leg: two tracked readings already blurred, then nothing
     /// to follow, the helper still.
     private func slip(seconds duration: Double) {
+        // At rest before the picture goes (Phase 2i: motion is judged from the readings with
+        // detail before the onset; a helper still moving then is told to step back instead).
+        feed(Frame(still: true), times: 6)
         feed(
             Frame(
                 viewClass: .blurry, ahead: 60, behind: 60, aheadFocus: 0.3, behindFocus: 0.3,

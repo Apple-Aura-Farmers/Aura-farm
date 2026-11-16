@@ -57,6 +57,19 @@ struct GuidedSweepThresholds {
     var edgeSpotMinFields: Double = 0.5
     /// Tries to reach a travel target before giving up and ending the route.
     var maxTravelRetries: Int = 5
+    /// A spot within this of a recorded stage limit is at the limit (the leg ends after its
+    /// capture, with no tap), and a spot beyond it is moved onto it. PLACEHOLDER: about half the
+    /// alignment tolerance, so the limit is not asked for twice.
+    var stageLimitToleranceFields: Double = 0.1
+    /// The lab suggests the Stage limit button after this long on an instruction to move, travel
+    /// or follow the arrow. PLACEHOLDER: a spot is about a field away and the slow speed is about
+    /// half a millimetre a second, so a normal move takes 2 s; 6 s is a stage that will not go.
+    var stageLimitHintSeconds: Double = 6.0
+    /// Whether a blank arrived under a moving helper is judged from the readings WITH detail in
+    /// this many seconds before it: on a blank or blurry frame the speed estimate is noise (Test 4's
+    /// top edge read 0.28 to 1.05 with the position frozen). PLACEHOLDER: about 3 readings at the
+    /// lab's rate.
+    var checkEdgeLookbackSeconds: Double = 0.5
     var alignment = SpotAlignmentThresholds()
 }
 
@@ -101,6 +114,17 @@ struct SlideRoute {
         var endSpot = CGPoint.zero
     }
 
+    /// Where the helper said the stage runs out, in guide fields. Each is nil until one was
+    /// recorded and is kept for every later column.
+    struct StageLimits: Equatable {
+        /// The smallest y (the top, an up leg) and the largest (the bottom, a down leg).
+        var minY: Double?
+        var maxY: Double?
+        /// The smallest x (left) and the largest (right).
+        var minX: Double?
+        var maxX: Double?
+    }
+
     /// What one reading made of the route.
     struct Output {
         var instruction: GuideInstruction
@@ -117,6 +141,7 @@ struct SlideRoute {
     private(set) var failedProbes = 0
     private(set) var edgesReached = 0
     private(set) var edgesGoneBack = 0
+    private(set) var limits = StageLimits()
 
     private var alignment: SpotAlignment
     /// Tells a real edge from a blur. Called once per reading; see `confirm`.
@@ -143,6 +168,14 @@ struct SlideRoute {
     private var atTargetSince: Double?
     /// Where, and after how many blank returns, the current low-detail stretch began.
     private var stretchStart: (position: CGPoint, returns: Int)?
+    /// Whether the current low-detail stretch began while the helper was moving normally (not
+    /// still, not a speed spike): a blank that arrives that way is checked by stepping back.
+    private var stretchWasMoving = false
+    /// The latest readings with detail, `checkEdgeLookbackSeconds` back: what the helper was doing
+    /// before the picture went.
+    private var detailHistory: [(seconds: Double, isStill: Bool, speed: Double)] = []
+    /// What the last reading answered, for a stage limit pressed where it does not apply.
+    private var lastOutput = Output(instruction: .findSample, target: nil, capture: nil)
     /// Set once a stretch of blur has run past `refocusAfterSeconds` with nothing decided:
     /// what to compare the position and the returns against when detail comes back.
     private var longBlur: (position: CGPoint, returns: Int)?
@@ -188,6 +221,11 @@ struct SlideRoute {
     // MARK: Reading
 
     mutating func update(_ reading: GuideReading) -> Output {
+        lastOutput = advance(reading)
+        return lastOutput
+    }
+
+    private mutating func advance(_ reading: GuideReading) -> Output {
         if phase == .finished { return Output(instruction: .finished, target: nil, capture: nil) }
 
         let onSample = Self.isOnSample(reading)
@@ -199,9 +237,25 @@ struct SlideRoute {
                 current = column
             }
         }
+        if !Self.isLowDetail(reading) {
+            detailHistory.append((reading.seconds, reading.isStill, reading.speedFraction))
+            detailHistory.removeAll {
+                reading.seconds - $0.seconds > thresholds.checkEdgeLookbackSeconds
+            }
+        }
         if Self.isLowDetail(reading) {
             if lowDetailSince == nil {
                 stretchStart = (reading.position, reading.blankReturnCount)
+                // Judged from before the picture went: the onset reading's own speed is noise.
+                // Moving normally: the latest reading with detail is not still and none was
+                // fast. No such reading (after a resume or a lost stretch) is not moving.
+                let recent = detailHistory.filter {
+                    reading.seconds - $0.seconds <= thresholds.checkEdgeLookbackSeconds
+                }
+                stretchWasMoving =
+                    recent.last.map { !$0.isStill } == true
+                    && (recent.map(\.speed).max() ?? 0)
+                        < thresholds.confirmation.tooFastSpeedFraction
             }
             lowDetailSince = lowDetailSince ?? reading.seconds
             detailSince = nil
@@ -379,9 +433,74 @@ struct SlideRoute {
         Output(instruction: instruction, target: nil, capture: nil)
     }
 
+    // MARK: Stage limit
+
+    /// The helper says the stage cannot go further. Records the limit and turns as at an edge:
+    /// on a column leg the leg ends, on the left edge run column 1 starts here, on a step right
+    /// the route is over. In any other phase it changes nothing and returns the last answer.
+    mutating func stageLimitReached(_ reading: GuideReading) -> Output {
+        let x = Double(reading.position.x)
+        let y = Double(reading.position.y)
+        switch phase {
+        case .spot(let kind) where kind == .leg || kind == .edgeSpot:
+            guard let column = current else { return lastOutput }
+            if column.legDirection < 0 { limits.minY = y } else { limits.maxY = y }
+            if kind == .edgeSpot {
+                // Already ending the leg here: the spot is the limit, carry on to its capture.
+                lastOutput.instruction = .stageLimit
+                return lastOutput
+            }
+            edgesReached += 1
+            halfEdgeSince = nil
+            consumeConfirmation()
+            lastOutput = endLeg(reading)
+            lastOutput.instruction = .stageLimit
+        case .runToLeftEdge:
+            limits.minX = x
+            consumeConfirmation()
+            lastOutput = completeReturn(.leftEdge, reading)
+            lastOutput.instruction = .stageLimit
+        case .spot(.step):
+            limits.maxX = x
+            finish(reason: .stageLimit)
+            lastOutput = plain(.finished)
+        default:
+            break
+        }
+        return lastOutput
+    }
+
+    // MARK: Pausing
+
+    /// Forgets every running timer and the confirmation under way, so nothing fires because of
+    /// a gap in the readings (a pause). The route's place, targets and captures stay.
+    mutating func clearTimers() {
+        lowDetailSince = nil
+        detailSince = nil
+        halfEdgeSince = nil
+        atTargetSince = nil
+        longBlur = nil
+        stretchStart = nil
+        stretchWasMoving = false
+        detailHistory = []
+        verdict = .none
+        candidateNow = .none
+        rawReason = ""
+        confirmation.cancel()
+        alignment.clearHold()
+    }
+
     // MARK: Left edge
 
     private mutating func runToLeftEdge(_ reading: GuideReading) -> Output {
+        if let left = limits.minX,
+            Double(reading.position.x) <= left + thresholds.stageLimitToleranceFields
+        {
+            // A look for the left edge again stops where the stage ran out before.
+            var output = completeReturn(.leftEdge, reading)
+            output.instruction = .stageLimit
+            return output
+        }
         switch verdict {
         case .confirmed:
             let half = candidateNow == .halfEdge
@@ -445,14 +564,26 @@ struct SlideRoute {
 
     /// Refocus; after `refocusAfterSeconds` of whole-box low detail that is not an edge, "still
     /// no detail", which decides nothing. The route stays where it is until detail returns.
+    ///
+    /// A stretch that began while the helper was moving normally, on the left edge run or a
+    /// column leg, asks to step back and come forward again at once instead: the picture went
+    /// blank under a helper who was not flicking or resting, which is what an edge does, and
+    /// the whole-box arrival check decides when detail is back. After `refocusAfterSeconds` it
+    /// is "still no detail" like any other (a real defocus is not cured by stepping back).
     private mutating func blurInstruction(_ reading: GuideReading) -> GuideInstruction {
         guard candidateNow == .wholeBoxLowDetail, let lowDetailSince,
-            reading.seconds - lowDetailSince > thresholds.refocusAfterSeconds,
             case .edgeGoBack(let toward) = goBack(reading)
         else { return .refocus }
-        if longBlur == nil, let stretchStart { longBlur = stretchStart }
-        diagnostics.reason = "timeout_no_detail"
-        return .stillNoDetail(toward: toward)
+        if reading.seconds - lowDetailSince > thresholds.refocusAfterSeconds {
+            if longBlur == nil, let stretchStart { longBlur = stretchStart }
+            diagnostics.reason = "timeout_no_detail"
+            return .stillNoDetail(toward: toward)
+        }
+        if stretchWasMoving, phase == .runToLeftEdge || phase == .spot(.leg) {
+            diagnostics.reason = "moving_onset"
+            return .checkEdge(toward: toward)
+        }
+        return .refocus
     }
 
     private mutating func beginReturn(_ purpose: Purpose) {
@@ -572,7 +703,18 @@ struct SlideRoute {
             candidate += direction * thresholds.spotSpacingFields
             if !isDuplicate(CGPoint(x: x, y: candidate)) { break }
         }
+        // Never beyond a recorded stage limit: the last spot of the leg is on it.
+        if direction < 0, let top = limits.minY { candidate = max(candidate, top) }
+        if direction > 0, let bottom = limits.maxY { candidate = min(candidate, bottom) }
         return candidate
+    }
+
+    /// Whether `y` is at the recorded limit of a leg going `direction` (-1 up, +1 down).
+    private func isAtLimit(y: Double, direction: Double) -> Bool {
+        let tolerance = thresholds.stageLimitToleranceFields
+        if direction < 0, let top = limits.minY { return y <= top + tolerance }
+        if direction > 0, let bottom = limits.maxY { return y >= bottom - tolerance }
+        return false
     }
 
     private mutating func spot(_ kind: SpotKind, _ reading: GuideReading) -> Output {
@@ -620,6 +762,11 @@ struct SlideRoute {
         case .leg:
             let placement = capture(reading)
             if let column = current {
+                if isAtLimit(y: Double(target.y), direction: column.legDirection) {
+                    // At the stage limit: the leg ends as at an edge, with no tap.
+                    let next = finishLeg(reading)
+                    return Output(instruction: .captured, target: next.target, capture: placement)
+                }
                 let y = nextSpotY(
                     from: Double(reading.position.y), direction: column.legDirection, x: column.x)
                 aim(at: CGPoint(x: column.x, y: y), from: reading.position, kind: .leg, holds: true)
@@ -724,6 +871,10 @@ struct SlideRoute {
         let base = columns[index]
         let target = CGPoint(
             x: base.x + thresholds.columnSpacingFields, y: Double(base.endSpot.y))
+        if let right = limits.maxX, target.x > right + thresholds.stageLimitToleranceFields {
+            finish(reason: .stageLimit)
+            return plain(.finished)
+        }
         aim(at: target, from: reading.position, kind: .step, holds: !isDuplicate(target))
         return Output(instruction: .aligned, target: target, capture: nil)
     }

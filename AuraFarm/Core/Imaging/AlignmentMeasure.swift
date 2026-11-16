@@ -59,6 +59,7 @@ enum AlignmentMeasure {
             reading.clippedSides.insert(side)
         }
         let touchShare = touching.values.max().map { Double($0) / perimeter } ?? 0
+        reading.borderTouchShare = touchShare
 
         // Roundness: the bright area over the area of the circle that encloses it.
         var farthest = 0.0

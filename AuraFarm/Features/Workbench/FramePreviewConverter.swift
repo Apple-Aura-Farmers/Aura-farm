@@ -30,13 +30,20 @@
             self.display = display
         }
 
-        /// The rectangle in the displayed space, for a rectangle in frame pixels.
-        func viewRect(of rect: CGRect) -> CGRect {
+        /// The rectangle in the layer's own space (before `display`), for a rectangle in frame
+        /// pixels.
+        func layerRect(of rect: CGRect) -> CGRect {
             layer.layerRectConverted(
                 fromMetadataOutputRect: CGRect(
                     x: rect.minX / frameSize.width, y: rect.minY / frameSize.height,
-                    width: rect.width / frameSize.width, height: rect.height / frameSize.height)
-            ).applying(display)
+                    width: rect.width / frameSize.width, height: rect.height / frameSize.height))
+        }
+
+        /// The rectangle in the displayed space, for a rectangle in frame pixels. Under a
+        /// rotation this is the bounding box of the turned rectangle; use `viewPolygon` for its
+        /// outline.
+        func viewRect(of rect: CGRect) -> CGRect {
+            layerRect(of: rect).applying(display)
         }
 
         /// The scale and offset that show `rect` (a rectangle in the layer's own coordinates)
@@ -57,18 +64,40 @@
                 .translatedBy(x: -centre.x, y: -centre.y)
         }
 
-        /// The transform that centres a confirmed field in a preview of `viewSize`, the identity
-        /// while the field is not learned and confirmed (still learning, waiting for review or
-        /// being adjusted: the uncropped picture, which the review's circle is mapped through).
-        static func centringTransform(
+        /// How a confirmed field is shown in a SQUARE preview of `viewSize`: the circle's
+        /// bounding square (`FieldCentring`) fills the view, the circle centred, and the picture
+        /// straightened by `stage` about the circle's centre. The identity while the field is
+        /// not learned and confirmed (still learning, waiting for review or being adjusted: the
+        /// uncropped picture, which the review's circle is mapped through).
+        ///
+        /// The preview layer must use `.resizeAspect`: with aspect fill a circle away from the
+        /// middle of the frame has part of its square outside what the layer draws.
+        static func displayTransform(
             for field: SlideMovementInfo.Field, layer: AVCaptureVideoPreviewLayer?,
-            viewSize: CGSize
+            viewSize: CGSize, stage: StageAxes = .identity
         ) -> CGAffineTransform {
             guard !field.awaitingReview, let mask = field.state?.mask,
-                let crop = FieldCentring.cropRect(for: mask, frameSize: field.frameSize),
+                let circle = FieldCircle(fitting: mask),
                 let plain = FramePreviewConverter(layer: layer, frameSize: field.frameSize)
             else { return .identity }
-            return fitTransform(of: plain.viewRect(of: crop), in: viewSize)
+            let crop = FieldCentring.cropRect(for: circle, frameSize: field.frameSize)
+            return displayTransform(
+                crop: plain.layerRect(of: crop),
+                centre: plain.layerRect(of: CGRect(origin: circle.centre, size: .zero)).origin,
+                straightening: stage.straightening, viewSize: viewSize)
+        }
+
+        /// The pure part of `displayTransform(for:layer:viewSize:stage:)`: `straightening`
+        /// (a linear map) about `centre`, then the fit of `crop`, both in the layer's own space.
+        /// The centre of the field ends at the middle of the view.
+        static func displayTransform(
+            crop: CGRect, centre: CGPoint, straightening: CGAffineTransform, viewSize: CGSize
+        ) -> CGAffineTransform {
+            let about = CGAffineTransform(
+                a: straightening.a, b: straightening.b, c: straightening.c, d: straightening.d,
+                tx: centre.x - (straightening.a * centre.x + straightening.c * centre.y),
+                ty: centre.y - (straightening.b * centre.x + straightening.d * centre.y))
+            return about.concatenating(fitTransform(of: crop, in: viewSize))
         }
 
         func viewPoint(of point: CGPoint) -> CGPoint {
@@ -82,14 +111,34 @@
             return CGPoint(
                 x: normalised.origin.x * frameSize.width, y: normalised.origin.y * frameSize.height)
         }
+    }
+
+    extension FrameToView {
+        /// Points per frame pixel at `point`: the mean length of two probe vectors (`probe` px
+        /// along frame x and along frame y). The length of a probe is right under a rotation or
+        /// a shear, where the bounding box of a rectangle grows (about 1.16 times at 10
+        /// degrees).
+        func scale(at point: CGPoint, probe: Double = 100) -> Double {
+            let origin = viewPoint(of: point)
+            let along = viewPoint(of: CGPoint(x: point.x + probe, y: point.y))
+            let down = viewPoint(of: CGPoint(x: point.x, y: point.y + probe))
+            let x = hypot(Double(along.x - origin.x), Double(along.y - origin.y))
+            let y = hypot(Double(down.x - origin.x), Double(down.y - origin.y))
+            return (x + y) / 2 / probe
+        }
 
         /// A circle's radius on the preview, in points.
         func viewRadius(of circle: FieldCircle) -> Double {
-            let box = viewRect(
-                of: CGRect(
-                    x: circle.centre.x - circle.radius, y: circle.centre.y - circle.radius,
-                    width: circle.radius * 2, height: circle.radius * 2))
-            return Double(min(box.width, box.height)) / 2
+            circle.radius * scale(at: circle.centre)
+        }
+
+        /// The four corners of a frame rectangle on the preview, in order: turned with the
+        /// picture, unlike `viewRect`'s bounding box.
+        func viewPolygon(of rect: CGRect) -> [CGPoint] {
+            [
+                CGPoint(x: rect.minX, y: rect.minY), CGPoint(x: rect.maxX, y: rect.minY),
+                CGPoint(x: rect.maxX, y: rect.maxY), CGPoint(x: rect.minX, y: rect.maxY),
+            ].map { viewPoint(of: $0) }
         }
     }
 #endif

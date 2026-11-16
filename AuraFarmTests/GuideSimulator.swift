@@ -455,7 +455,7 @@ final class GuideSimulator {
 
     private func act(on output: GuideStep) {
         switch output.instruction {
-        case .edgeGoBack, .stillNoDetail: break
+        case .edgeGoBack, .stillNoDetail, .checkEdge: break
         default: goBackReadings = 0
         }
         // The helper's own mistakes come first.
@@ -507,7 +507,7 @@ final class GuideSimulator {
                 pending = toward
             }
             move(toward)
-        case .edgeGoBack(let toward), .stillNoDetail(let toward):
+        case .edgeGoBack(let toward), .stillNoDetail(let toward), .checkEdge(let toward):
             // A person who has not found the sample after 3 s of going back turns toward it.
             goBackReadings += 1
             if goBackReadings > 30, let centre = drop.centre {
@@ -532,7 +532,8 @@ final class GuideSimulator {
             } else {
                 lastMove = 0
             }
-        case .aligned, .holding, .captured, .edgeReached, .refocus, .slowDown, .finished:
+        case .aligned, .holding, .captured, .edgeReached, .refocus, .slowDown, .finished,
+            .stageLimit, .paused:
             lastMove = 0
         }
     }

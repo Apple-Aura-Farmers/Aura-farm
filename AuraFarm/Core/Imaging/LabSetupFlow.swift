@@ -1,7 +1,7 @@
 import Foundation
 
 enum LabSetupStep: Equatable {
-    case align, focus, field, done
+    case align, focus, field, stage, done
 
     /// Later steps are higher; for telling forward moves from a redo.
     var order: Int {
@@ -9,7 +9,8 @@ enum LabSetupStep: Equatable {
         case .align: 0
         case .focus: 1
         case .field: 2
-        case .done: 3
+        case .stage: 3
+        case .done: 4
         }
     }
 
@@ -19,19 +20,26 @@ enum LabSetupStep: Equatable {
         case .align: "align"
         case .focus: "focus"
         case .field: "field"
+        case .stage: "stage"
         case .done: "done"
         }
     }
 }
 
 /// The order of a lab session's setup: 1 align the phone, 2 focus, 3 field (learn, review and
-/// confirm the eyepiece field), then the lab itself. It only holds the step; the caller feeds
-/// it what the checks say.
+/// confirm the eyepiece field), 4 stage (measure the two knobs' axes), then the lab itself. It
+/// only holds the step; the caller feeds it what the checks say.
+///
+/// Losing alignment after it passed (`alignmentLost`) sends it back to align and, once aligned
+/// again, on to where it was; the field and stage steps return to FIELD, because the circle
+/// moved and the mask must be learned again.
 struct LabSetupFlow: Equatable {
     /// How many steps the indicator shows.
-    static let stepCount = 3
+    static let stepCount = 4
 
     private(set) var step: LabSetupStep
+    /// Where to go when align passes again after `alignmentLost`; nil in an ordinary run.
+    private(set) var resumeStep: LabSetupStep?
 
     /// Starts at align, or at field when the helper chose to skip align and focus.
     init(skippingAlignAndFocus: Bool = false) {
@@ -43,7 +51,8 @@ struct LabSetupFlow: Equatable {
         switch step {
         case .align: 1
         case .focus: 2
-        case .field, .done: 3
+        case .field: 3
+        case .stage, .done: 4
         }
     }
 
@@ -55,25 +64,51 @@ struct LabSetupFlow: Equatable {
     ///   - alignmentPassed: `AlignmentCheck.isPassed`.
     ///   - focused: `FocusGuide` reached `focused`.
     ///   - fieldConfirmed: the field is learned and the person confirmed it.
+    ///   - stageMeasured: `StageAxesCalibration` is done.
     @discardableResult
     mutating func update(
-        alignmentPassed: Bool = false, focused: Bool = false, fieldConfirmed: Bool = false
+        alignmentPassed: Bool = false, focused: Bool = false, fieldConfirmed: Bool = false,
+        stageMeasured: Bool = false
     ) -> Bool {
         switch step {
-        case .align where alignmentPassed: step = .focus
+        case .align where alignmentPassed:
+            step = resumeStep ?? .focus
+            resumeStep = nil
         case .focus where focused: step = .field
-        case .field where fieldConfirmed: step = .done
+        case .field where fieldConfirmed: step = .stage
+        case .stage where stageMeasured: step = .done
         default: return false
         }
         return true
     }
 
+    /// Alignment was lost after it passed: back to align, remembering where it was. The field
+    /// and stage steps are remembered as FIELD. Nothing happens at align or when done (the run
+    /// monitor watches then).
+    mutating func alignmentLost() {
+        switch step {
+        case .focus: resumeStep = .focus
+        case .field, .stage: resumeStep = .field
+        case .align, .done: return
+        }
+        step = .align
+    }
+
     /// All of it again, from align.
-    mutating func redo() { step = .align }
+    mutating func redo() {
+        step = .align
+        resumeStep = nil
+    }
 
     /// Only the field again.
-    mutating func redoField() { step = .field }
+    mutating func redoField() {
+        step = .field
+        resumeStep = nil
+    }
 
-    /// Straight to the lab.
-    mutating func skip() { step = .done }
+    /// Straight to the lab (on the stage step, with `StageAxes.identity`).
+    mutating func skip() {
+        step = .done
+        resumeStep = nil
+    }
 }

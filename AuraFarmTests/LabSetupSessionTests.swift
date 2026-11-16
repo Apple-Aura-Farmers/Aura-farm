@@ -74,7 +74,7 @@ final class LabSetupSessionTests: XCTestCase {
         XCTAssertGreaterThan(progress(pipeline), 0, "learning started")
     }
 
-    func testFieldConfirmedMovesOnToDone() {
+    func testFieldConfirmedMovesOnToStageAndSkippingTheStageUsesTheIdentity() {
         let pipeline = makePipeline()
         let session = LabSetupSession(skippingAlignAndFocus: true)
         XCTAssertEqual(session.step, .field)
@@ -91,7 +91,78 @@ final class LabSetupSessionTests: XCTestCase {
         pipeline.confirmField()
         seconds += 0.1
         _ = session.process(frame, seconds: seconds, pipeline: pipeline, measureAgreement: false)
+        XCTAssertEqual(session.step, .stage)
+        XCTAssertNil(session.stageAxes)
+        session.skipStage()
         XCTAssertEqual(session.step, .done)
+        XCTAssertEqual(session.stageAxes, .identity)
+        XCTAssertEqual(session.info.stageAxes, .identity)
+    }
+
+    // MARK: Losing alignment
+
+    private func darkFrame() -> CVPixelBuffer {
+        SyntheticFrame.make(width: 1280, height: 720) { _, _ in 10 }
+    }
+
+    /// Feeds `seconds` of `frame` at 10 a second; returns the time reached.
+    @discardableResult
+    private func feed(
+        _ frame: CVPixelBuffer, for duration: Double, from start: Double,
+        session: LabSetupSession, pipeline: SlideMovementPipeline
+    ) -> Double {
+        var seconds = start
+        for _ in 0..<Int((duration * 10).rounded()) {
+            seconds += 0.1
+            _ = session.process(
+                frame, seconds: seconds, pipeline: pipeline, measureAgreement: false)
+        }
+        return seconds
+    }
+
+    func testALossInFocusGoesBackToAlignAndReturnsToFocus() {
+        let pipeline = makePipeline()
+        let session = LabSetupSession()
+        var time = feed(discFrame(), for: 2.0, from: 0, session: session, pipeline: pipeline)
+        XCTAssertEqual(session.step, .focus)
+        time = feed(darkFrame(), for: 1.0, from: time, session: session, pipeline: pipeline)
+        XCTAssertEqual(session.step, .focus, "a 1 s dip does not go back")
+        time = feed(discFrame(), for: 0.5, from: time, session: session, pipeline: pipeline)
+        time = feed(darkFrame(), for: 2.2, from: time, session: session, pipeline: pipeline)
+        XCTAssertEqual(session.step, .align)
+        XCTAssertEqual(session.info.resumeStep, .focus)
+        XCTAssertEqual(progress(pipeline), 0, "nothing learns while aligning again")
+        feed(discFrame(), for: 2.0, from: time, session: session, pipeline: pipeline)
+        XCTAssertEqual(session.step, .focus)
+        XCTAssertNil(session.info.resumeStep)
+    }
+
+    func testAReadingBetweenThePassAndLostLimitsDoesNotGoBack() {
+        let pipeline = makePipeline()
+        let session = LabSetupSession()
+        var time = feed(discFrame(), for: 2.0, from: 0, session: session, pipeline: pipeline)
+        XCTAssertEqual(session.step, .focus)
+        // One half 30% darker: fails passing (0.75) but not the looser limit (0.65).
+        let uneven = SyntheticFrame.make(width: 1280, height: 720) { x, y in
+            hypot(Double(x) - 640, Double(y) - 360) <= 300 ? (x >= 640 ? 140 : 200) : 10
+        }
+        time = feed(uneven, for: 6, from: time, session: session, pipeline: pipeline)
+        XCTAssertEqual(session.step, .focus)
+        XCTAssertNil(session.info.resumeStep)
+    }
+
+    func testALossInFieldGoesBackToAlignAndReturnsToFieldWithARedetect() {
+        let pipeline = makePipeline()
+        let session = LabSetupSession(skippingAlignAndFocus: true)
+        var time = feed(discFrame(), for: 1.0, from: 0, session: session, pipeline: pipeline)
+        XCTAssertEqual(session.step, .field)
+        XCTAssertGreaterThan(progress(pipeline), 0, "the mask is being learned")
+        time = feed(darkFrame(), for: 3.0, from: time, session: session, pipeline: pipeline)
+        XCTAssertEqual(session.step, .align)
+        XCTAssertEqual(session.info.resumeStep, .field)
+        time = feed(discFrame(), for: 2.0, from: time, session: session, pipeline: pipeline)
+        XCTAssertEqual(session.step, .field)
+        XCTAssertLessThan(progress(pipeline), 0.2, "learning started again (a redetect)")
     }
 
     func testRedoGoesBackToAlignWithFreshChecks() {
@@ -145,6 +216,33 @@ final class LabSetupSessionTests: XCTestCase {
         print(String(format: "SETUP TIMING align %.3f ms, focus %.3f ms per frame", ms(align), ms(focus)))
         XCTAssertLessThan(ms(align), 20)
         XCTAssertLessThan(ms(focus), 20)
+    }
+
+    func testRunMonitorAnalysisTime() throws {
+        let frame = discFrame()
+        let box = CGRect(x: 430, y: 150, width: 420, height: 420)
+        let runs = 100
+        func ms(_ duration: Duration) -> Double {
+            Double(duration.components.seconds) * 1000 + Double(duration.components.attoseconds) / 1e15
+        }
+        var clock = ContinuousClock.now
+        for _ in 0..<runs { _ = FrameAnalyzer.focusIndex(of: frame, in: box) }
+        let focus = (ContinuousClock.now - clock) / runs
+        let grid = try XCTUnwrap(LumaGrid.sample(of: frame, step: 8))
+        clock = ContinuousClock.now
+        for _ in 0..<runs {
+            let sampled = LumaGrid.sample(of: frame, step: 8)
+            _ = AlignmentMeasure.measure(
+                luma: sampled?.luma ?? grid.luma, gridWidth: grid.width, gridHeight: grid.height,
+                gridStep: 8, thresholds: AlignmentThresholds())
+        }
+        let alignment = (ContinuousClock.now - clock) / runs
+        print(
+            String(
+                format: "MONITOR TIMING focus index %.3f ms, alignment (grid and measure) %.3f ms",
+                ms(focus), ms(alignment)))
+        XCTAssertLessThan(ms(focus), 30)
+        XCTAssertLessThan(ms(alignment), 30)
     }
 
     @MainActor

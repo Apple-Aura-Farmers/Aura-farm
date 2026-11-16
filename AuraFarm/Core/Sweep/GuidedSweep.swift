@@ -53,8 +53,49 @@ struct GuidedSweep {
     /// left edge, sweeping a column leg or stepping right; nil in the other phases.
     var heading: CGPoint? { route.guideHeading }
 
+    /// Why the run is paused, nil while it runs.
+    private(set) var pauseReason: GuidePauseReason?
+    /// When the last pause ended, in the readings' seconds.
+    private(set) var resumedAt: Double?
+    private var lastTarget: CGPoint?
+    /// The limits the helper recorded with `stageLimitReached`, kept for every later column.
+    var stageLimits: SlideRoute.StageLimits { route.limits }
+
     mutating func update(_ reading: GuideReading) -> GuideStep {
-        let output = route.update(reading)
+        if let pauseReason, !route.isFinished {
+            // Paused: the route is not fed, so nothing is captured, confirmed or timed. The
+            // tracker keeps running outside, so the position stays right.
+            return GuideStep(
+                instruction: .paused(pauseReason), target: lastTarget, capture: nil,
+                stateName: "paused", column: route.columnNumber, isFinished: false,
+                finishReason: nil)
+        }
+        return step(from: route.update(reading))
+    }
+
+    /// The helper says the stage cannot go further: the limit is recorded and the route turns
+    /// as at an edge (see `SlideRoute.stageLimitReached`). Ignored while paused.
+    mutating func stageLimitReached(_ reading: GuideReading) -> GuideStep {
+        guard pauseReason == nil else { return update(reading) }
+        return step(from: route.stageLimitReached(reading))
+    }
+
+    /// Holds the route where it is until `resume`.
+    mutating func pause(_ reason: GuidePauseReason) {
+        pauseReason = reason
+    }
+
+    /// Carries on, with every timer of the route cleared so nothing fires because of the gap:
+    /// a fresh low-detail stretch is needed before any edge.
+    mutating func resume(seconds: Double) {
+        guard pauseReason != nil else { return }
+        pauseReason = nil
+        resumedAt = seconds
+        route.clearTimers()
+    }
+
+    private mutating func step(from output: SlideRoute.Output) -> GuideStep {
+        lastTarget = output.target ?? lastTarget
         return GuideStep(
             instruction: route.isFinished ? .finished : output.instruction, target: output.target,
             capture: output.capture, stateName: route.stateName, column: route.columnNumber,

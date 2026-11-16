@@ -67,6 +67,18 @@
         var mapping = ScreenMapping.asIs
         var mirrored = false
         var geometry: GuideScreenGeometry?
+        /// Why the run monitor wants the guide paused; nil to run. Set before each `update`.
+        var pauseReason: GuidePauseReason?
+        /// The run monitor says focus is clearly low; set before each `update`.
+        var focusLow = false
+        /// The helper pressed Stage limit: the next update feeds it to the route.
+        var stageLimitPressed = false
+        /// What the box looked like on the last update, for the run monitor.
+        private(set) var lastViewClass = ViewClass.blank
+        private(set) var stageLimitCount = 0
+        /// The heading as a frame vector (the side new content comes into), for the edge-line
+        /// detector; nil without a heading or axes. Set by `update`.
+        private(set) var frameHeading: CGPoint?
 
         private var classifier = ViewClassifier()
         private var guide = GuidedSweep()
@@ -83,6 +95,24 @@
         /// way it went.
         private var previousReturns = (matched: 0, unmatched: 0)
         private var lastReturn = BlankReturnOutcome.none
+        /// When the instruction became one that moves the view (move, travel, far away).
+        private var movingInstructionSince: Double?
+        private let hintSeconds = GuidedSweepThresholds().stageLimitHintSeconds
+
+        /// The axes of the content's motion on screen: measured from the preview, or the
+        /// picker's mapping (which describes the view's travel) negated.
+        private var axes: GuideScreenAxes {
+            geometry?.axes
+                ?? GuideScreenAxes.from(mapping, mirrored: mirrored, pointsPerPixel: 1).viewTravel
+        }
+
+        /// Where the view is, in the guide's screen fields: the tracker's pixels through the
+        /// axes, divided by the on-screen size of one field.
+        func guidePosition(for step: SlideMovementStep) -> CGPoint {
+            axes.guideFields(
+                forTrackerPosition: step.position,
+                pointsPerField: geometry?.pointsPerField ?? max(step.boxSide, 1))
+        }
 
         /// Feeds one lab step; returns the CSV fields and the info for the screen.
         func update(
@@ -91,6 +121,7 @@
             let viewClass = classifier.update(
                 brightness: step.boxStats.brightness, sharpness: step.boxStats.sharpness,
                 contrast: step.boxStats.contrast)
+            lastViewClass = viewClass
 
             // The position in screen fields: the tracker's pixels through the axes, divided by
             // the on-screen size of one field. Without a preview the picker's mapping stands in,
@@ -98,9 +129,8 @@
             let boxSide = max(step.boxSide, 1)
             // The axes of the CONTENT's motion on screen: measured from the preview, or the
             // picker's mapping (which describes the view's travel) negated.
-            let axes =
-                geometry?.axes
-                ?? GuideScreenAxes.from(mapping, mirrored: mirrored, pointsPerPixel: 1).viewTravel
+            let axes = self.axes
+            frameHeading = lastHeading.flatMap { axes.frameVector(ofScreenVector: $0) }
             let pointsPerField = geometry?.pointsPerField ?? boxSide
             let position = axes.guideFields(
                 forTrackerPosition: step.position, pointsPerField: pointsPerField)
@@ -143,14 +173,30 @@
                 lastReturn = .unmatched
             }
             previousReturns = returns
-            let result = guide.update(
-                GuideReading(
-                    seconds: seconds, position: position, tracking: tracking,
-                    unconfirmedGaps: step.tracking.unconfirmedGaps, viewClass: viewClass,
-                    speedFraction: indicators.speedFraction, isStill: indicators.stillSeconds > 0,
-                    aheadSharpness: ahead, behindSharpness: behind, aheadFocusRatio: aheadFocus,
-                    behindFocusRatio: behindFocus, sideSharpnessA: sideA, sideSharpnessB: sideB,
-                    lastBlankReturn: lastReturn, blankReturnCount: returns.matched + returns.unmatched))
+            if pauseReason != guide.pauseReason {
+                if let pauseReason { guide.pause(pauseReason) } else { guide.resume(seconds: seconds) }
+            }
+            let guideReading = GuideReading(
+                seconds: seconds, position: position, tracking: tracking,
+                unconfirmedGaps: step.tracking.unconfirmedGaps, viewClass: viewClass,
+                speedFraction: indicators.speedFraction, isStill: indicators.stillSeconds > 0,
+                aheadSharpness: ahead, behindSharpness: behind, aheadFocusRatio: aheadFocus,
+                behindFocusRatio: behindFocus, sideSharpnessA: sideA, sideSharpnessB: sideB,
+                lastBlankReturn: lastReturn, blankReturnCount: returns.matched + returns.unmatched,
+                focusLow: focusLow)
+            let result: GuideStep
+            if stageLimitPressed {
+                stageLimitPressed = false
+                stageLimitCount += 1
+                result = guide.stageLimitReached(guideReading)
+            } else {
+                result = guide.update(guideReading)
+            }
+            switch result.instruction {
+            case .move, .travel, .farAway: movingInstructionSince = movingInstructionSince ?? seconds
+            default: movingInstructionSince = nil
+            }
+            let showsHint = movingInstructionSince.map { seconds - $0 >= hintSeconds } ?? false
             lastHeading = guide.heading
             if case .edgeReached = result.instruction { edgeReachedCount += 1 }
 
@@ -210,7 +256,8 @@
                     targetDx: dx, targetDy: dy, viewClass: viewClass.rawValue, captures: captures,
                     captureCount: captureCount, edgeCount: edgeCount, isFinished: result.isFinished,
                     wrongWayCount: wrongWayCount, edgeReachedCount: edgeReachedCount, axesLine: axesLine,
-                    axesDiffer: differs),
+                    axesDiffer: differs, showsStageLimitHint: showsHint,
+                    stageLimitCount: stageLimitCount),
                 overlay: overlay,
                 captureTrailPoint: result.capture == nil ? nil : step.positionFields,
                 targetTrailPoint: targetPoint)
@@ -232,6 +279,9 @@
             edgeReachedCount = 0
             lastHeading = nil
             lastInstruction = nil
+            movingInstructionSince = nil
+            stageLimitPressed = false
+            stageLimitCount = 0
         }
     }
 #endif

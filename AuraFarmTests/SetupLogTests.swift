@@ -18,14 +18,18 @@ final class SetupLogTests: XCTestCase {
         alignment.problems = [.clipped, .glare]
         let focus = FocusReading(state: .nearPeak, current: 450, peak: 500, level: 0.9)
         let rows = [
-            SetupLogRow(seconds: 1.234, step: .focus, alignment: alignment, focus: focus),
+            SetupLogRow(
+                seconds: 1.234, step: .focus, alignment: alignment, focus: focus,
+                tracker: SetupTrackerSample(
+                    tracking: .paused, position: CGPoint(x: 0.3, y: -1.23456), boxSharpness: 17.04,
+                    viewClass: .blank, stillSeconds: 2.5)),
             SetupLogRow(seconds: 2, step: .align, alignment: AlignmentReading(), focus: nil),
         ]
         let lines = SetupLog.csv(rows).split(separator: "\n").map(String.init)
         XCTAssertEqual(lines.count, 3)
         XCTAssertEqual(
             lines[0],
-            "seconds,step,found,circle_x,circle_y,circle_r,clipped_sides,roundness,evenness,darkest_sector,brightest_sector,saturated_share,glare_ratio,score,problems,focus_state,focus_current,focus_peak,focus_level"
+            "seconds,step,found,circle_x,circle_y,circle_r,clipped_sides,roundness,evenness,darkest_sector,brightest_sector,saturated_share,glare_ratio,score,problems,focus_state,focus_current,focus_peak,focus_level,stage_step,stage_travel_fields,stage_tilt_deg,stage_skew_deg,tracking,position_x_fields,position_y_fields,box_sharpness,view_class,still_seconds"
         )
         let first = lines[1].split(separator: ",", omittingEmptySubsequences: false).map(String.init)
         XCTAssertEqual(first.count, SetupLog.header.count)
@@ -43,11 +47,19 @@ final class SetupLogTests: XCTestCase {
         XCTAssertEqual(first[index("problems")], "clipped glare")
         XCTAssertEqual(first[index("focus_state")], "near_peak")
         XCTAssertEqual(first[index("focus_level")], "0.900")
+        XCTAssertEqual(first[index("tracking")], "paused")
+        XCTAssertEqual(first[index("position_x_fields")], "0.300")
+        XCTAssertEqual(first[index("position_y_fields")], "-1.235")
+        XCTAssertEqual(first[index("box_sharpness")], "17.0")
+        XCTAssertEqual(first[index("view_class")], "blank")
+        XCTAssertEqual(first[index("still_seconds")], "2.50")
         let empty = lines[2].split(separator: ",", omittingEmptySubsequences: false).map(String.init)
         XCTAssertEqual(empty.count, SetupLog.header.count)
         XCTAssertEqual(empty[index("step")], "align")
         XCTAssertEqual(empty[index("found")], "0")
         XCTAssertEqual(empty[index("circle_x")], "")
         XCTAssertEqual(empty[index("focus_state")], "")
+        XCTAssertEqual(empty[index("tracking")], "", "the tracker is not running at align")
+        XCTAssertEqual(empty[index("still_seconds")], "")
     }
 }

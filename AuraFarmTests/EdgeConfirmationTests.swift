@@ -88,6 +88,9 @@ final class EdgeConfirmationTests: XCTestCase {
 
     func test3_aDefocusAtRestAsksForRefocusThroughoutAndTheRouteResumes() throws {
         travel()
+        // At rest before the picture goes (Phase 2i: motion is judged from the readings with
+        // detail before the onset, so a defocus "at rest" must be at rest there).
+        feed(Frame(still: true), times: 6)
         let slip = index + 1
         feed(
             Frame(viewClass: .blurry, ahead: 80, behind: 80, aheadFocus: 0.4, behindFocus: 0.4, still: true),
@@ -131,7 +134,22 @@ final class EdgeConfirmationTests: XCTestCase {
         XCTAssertTrue(instructions.contains(where: isGoBack))
         XCTAssertFalse(instructions.contains(.refocus))
 
-        // The last tracked readings already had both halves blurred: not an edge.
+        // The last tracked readings already had both halves blurred: not an edge. A helper who
+        // was resting when the picture went (the stretch began still) is told to refocus.
+        guide = GuidedSweep()
+        (seconds, position, index, steps) = (0, .zero, 0, [])
+        feed(Frame(dx: -0.05, aheadFocus: 0.3, behindFocus: 0.3), times: 15)
+        feed(Frame(aheadFocus: 0.3, behindFocus: 0.3, still: true), times: 2)
+        feed(
+            Frame(
+                viewClass: .blank, tracking: .paused, ahead: nil, behind: nil, aheadFocus: nil,
+                behindFocus: nil, still: true), times: 40)
+        XCTAssertFalse(instructions.contains(where: isGoBack))
+        XCTAssertTrue(steps.suffix(20).allSatisfy { $0.step.instruction == .refocus })
+
+        // Phase 2h part F: the same blank arriving under a helper who was moving normally is
+        // checked by stepping back at once (this part used to say Refocus), and still decides
+        // nothing: no edge is confirmed.
         guide = GuidedSweep()
         (seconds, position, index, steps) = (0, .zero, 0, [])
         feed(Frame(dx: -0.05, aheadFocus: 0.3, behindFocus: 0.3), times: 15)
@@ -140,7 +158,10 @@ final class EdgeConfirmationTests: XCTestCase {
                 viewClass: .blank, tracking: .paused, ahead: nil, behind: nil, aheadFocus: nil,
                 behindFocus: nil), times: 40)
         XCTAssertFalse(instructions.contains(where: isGoBack))
-        XCTAssertTrue(steps.suffix(20).allSatisfy { $0.step.instruction == .refocus })
+        XCTAssertTrue(
+            steps.suffix(20).allSatisfy {
+                if case .checkEdge = $0.step.instruction { true } else { false }
+            })
     }
 
     func test7_aKnockAtAStepRightLandingIsNotAFailedProbe() {

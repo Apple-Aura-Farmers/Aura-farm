@@ -5,11 +5,12 @@ import XCTest
 final class SpotAlignmentTests: XCTestCase {
     private func reading(
         _ x: Double, _ y: Double = 0, at seconds: Double = 0, still: Bool = false,
-        speed: Double = 0.05, viewClass: ViewClass = .sample, tracking: TrackingState = .tracking
+        speed: Double = 0.05, viewClass: ViewClass = .sample, tracking: TrackingState = .tracking,
+        focusLow: Bool = false
     ) -> GuideReading {
         GuideReading(
             seconds: seconds, position: CGPoint(x: x, y: y), tracking: tracking, unconfirmedGaps: 0,
-            viewClass: viewClass, speedFraction: speed, isStill: still)
+            viewClass: viewClass, speedFraction: speed, isStill: still, focusLow: focusLow)
     }
 
     private func aimed(at x: Double = 2, holds: Bool = true) -> SpotAlignment {
@@ -39,6 +40,21 @@ final class SpotAlignmentTests: XCTestCase {
         XCTAssertEqual(alignment.update(reading(2, at: 3, still: true)), .aligned)
         alignment.setTarget(CGPoint(x: 2, y: 0), from: .zero)
         XCTAssertEqual(alignment.update(reading(2, at: 4, still: true)), .holding(progress: 0))
+    }
+
+    func testNoCaptureWhileFocusIsLowAndTheHoldRunsFullyFromTheClear() {
+        var alignment = aimed()
+        for step in 0..<50 {
+            let instruction = alignment.update(
+                reading(2, at: Double(step) * 0.1, still: true, focusLow: true))
+            XCTAssertEqual(instruction, .aligned, "5 s of low focus: no hold, no capture")
+        }
+        // Focus clears at 5.0 s: the hold runs its full second from then.
+        XCTAssertEqual(alignment.update(reading(2, at: 5.0, still: true)), .holding(progress: 0))
+        XCTAssertEqual(alignment.update(reading(2, at: 5.5, still: true)), .holding(progress: 0.5))
+        XCTAssertEqual(alignment.update(reading(2, at: 5.9, still: true, focusLow: true)), .aligned)
+        XCTAssertEqual(alignment.update(reading(2, at: 6.0, still: true)), .holding(progress: 0))
+        XCTAssertEqual(alignment.update(reading(2, at: 7.0, still: true)), .captured)
     }
 
     func testMovingOrLeavingTheToleranceResetsTheHold() {

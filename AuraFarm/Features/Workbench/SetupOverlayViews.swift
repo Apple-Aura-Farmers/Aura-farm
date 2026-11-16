@@ -11,13 +11,15 @@
 
     extension FramePreviewConverter: FrameToView {}
 
-    /// "1 Align · 2 Focus · 3 Field", the current step highlighted and finished ones ticked.
+    /// "1 Align · 2 Focus · 3 Field · 4 Stage", the current step highlighted and finished ones
+    /// ticked.
     struct SetupStepIndicator: View {
         var step: LabSetupStep
 
         var body: some View {
             HStack(spacing: 6) {
-                ForEach(Array(["Align", "Focus", "Field"].enumerated()), id: \.offset) { index, name in
+                ForEach(Array(["Align", "Focus", "Field", "Stage"].enumerated()), id: \.offset) {
+                    index, name in
                     if index > 0 { Text("·").foregroundStyle(.white.opacity(0.6)) }
                     let finished = step.order > index
                     let current = step.order == index
@@ -61,8 +63,12 @@
         var info: LabSetupInfo
         var mapper: (any FrameToView)?
 
+        /// Shown while setup is back at align because alignment was lost.
+        static let lostText = "Alignment lost. Fix it and setup carries on"
+
         static func text(for info: LabSetupInfo) -> (text: String, isGood: Bool) {
             if info.isAlignmentPassed { return ("Phone aligned ✓", true) }
+            if info.resumeStep != nil { return (lostText, false) }
             switch info.alignment.problems.first {
             case .noCircle?:
                 return (
@@ -259,6 +265,130 @@
         }
     }
 
+    // MARK: - Stage
+
+    /// Step 4: the progress of the two knob runs and the words for each state, with a Skip button
+    /// that keeps the picture as it is.
+    struct StageOverlay: View {
+        var progress: StageAxesProgress?
+        var onSkip: () -> Void = {}
+
+        private var isDone: Bool { progress?.step == .done }
+
+        private var tone: Color {
+            guard let progress else { return .white }
+            if case .failed = progress.step { return .red }
+            if progress.message == StageAxesCalibration.rejectedMessage || progress.nothingToFollow {
+                return .orange
+            }
+            return isDone ? .green : .white
+        }
+
+        var body: some View {
+            VStack(spacing: 8) {
+                SetupStepIndicator(step: .stage)
+                Spacer()
+                ProgressView(
+                    value: min((progress?.travelFields ?? 0) / StageAxesThresholds().minTravelFields, 1)
+                )
+                .tint(tone)
+                .opacity(progress?.nothingToFollow == true ? 0.3 : 1)
+                .padding(.horizontal, 24)
+                Text(String(format: "%.1f fields", progress?.travelFields ?? 0))
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.white)
+                SetupLine(text: progress?.message ?? StageAxesCalibration.waitXMessage, tone: tone)
+                if let hint = progress?.hint { SetupLine(text: hint, tone: .white) }
+                Button("Skip", action: onSkip)
+                    .buttonStyle(.borderedProminent)
+                    .tint(.gray)
+                    .font(.caption)
+            }
+            .padding(8)
+        }
+    }
+
+    // MARK: - Edge line
+
+    /// The edge-line detector's candidate as a thin cyan polyline in the box. Drawing only: no
+    /// guide decision uses it.
+    struct EdgeLineOverlay: View {
+        var state: EdgeLineState
+        var mapper: (any FrameToView)?
+        @AppStorage("slideLab.showEdgeLine") private var shows = true
+
+        var body: some View {
+            Canvas { context, _ in
+                guard shows, let mapper, state.path.count > 1 else { return }
+                var line = Path()
+                line.move(to: mapper.viewPoint(of: state.path[0]))
+                for point in state.path.dropFirst() { line.addLine(to: mapper.viewPoint(of: point)) }
+                context.stroke(line, with: .color(.cyan), lineWidth: 1.5)
+            }
+            .allowsHitTesting(false)
+        }
+    }
+
+    // MARK: - Run monitor
+
+    /// While the run is paused: the words for the reason, and (for alignment) the confirmed circle
+    /// outlined in orange so the phone can be lined up with it again.
+    struct PausedOverlay: View {
+        var monitor: RunMonitorInfo
+        var mapper: (any FrameToView)?
+
+        var body: some View {
+            if let reason = monitor.state.pauseReason {
+                ZStack {
+                    Canvas { context, _ in
+                        guard reason == .alignment, let mapper, let circle = monitor.circle else { return }
+                        let box = mapper.viewRect(
+                            of: CGRect(
+                                x: circle.centre.x - circle.radius,
+                                y: circle.centre.y - circle.radius, width: circle.radius * 2,
+                                height: circle.radius * 2))
+                        context.stroke(Path(ellipseIn: box), with: .color(.orange), lineWidth: 4)
+                    }
+                    .allowsHitTesting(false)
+                    VStack {
+                        Text("Paused")
+                            .font(.headline)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 4)
+                            .background(.orange, in: Capsule())
+                            .foregroundStyle(.black)
+                        SetupLine(text: GuideInstruction.paused(reason).helperText, tone: .orange)
+                        Spacer()
+                    }
+                    .padding(8)
+                }
+            }
+        }
+    }
+
+    // MARK: - Stage limit
+
+    /// The "Stage limit" button, and the hint that offers it after a while on the same move.
+    struct StageLimitControl: View {
+        var showsHint: Bool
+        var onTap: () -> Void
+
+        static let hint = "Stage won't go further? Tap Stage limit"
+
+        var body: some View {
+            VStack(spacing: 4) {
+                if showsHint {
+                    Text(Self.hint)
+                        .font(.footnote.bold())
+                        .foregroundStyle(.orange)
+                }
+                Button("Stage limit", action: onTap)
+                    .buttonStyle(.bordered)
+                    .tint(showsHint ? .orange : .gray)
+            }
+        }
+    }
+
     // MARK: - Live views
 
     /// Reads the model and draws the setup step: align or focus. Field and done have their
@@ -273,6 +403,8 @@
             switch info.step {
             case .align: AlignOverlay(info: info, mapper: mapper)
             case .focus: FocusOverlay(info: info, reading: model.focusMeter.reading, mapper: mapper)
+            case .stage:
+                StageOverlay(progress: info.stage, onSkip: { model.skipStage() })
             case .field, .done: EmptyView()
             }
         }
