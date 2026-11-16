@@ -11,6 +11,10 @@ import SwiftUI
 /// any page pushed from here, so the one sheet slot carries whichever form is wanted and the
 /// card for a tapped plot closes itself before opening that plot's farm.
 struct FieldHelperHomeView: View {
+    /// Whether the tab bar's own search button is sitting at the trailing end, which is where
+    /// marking a plot would otherwise go.
+    var isBesideSearchButton = false
+
     @Environment(FarmStore.self) private var store
 
     /// Where the map is looking, so searching can send it somewhere.
@@ -241,7 +245,9 @@ struct FieldHelperHomeView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Mark a plot on the map")
-        .padding(.trailing, 21)
+        // The trailing end belongs to the search button when there is one, so this sits just
+        // inside it.
+        .padding(.trailing, isBesideSearchButton ? 91 : 21)
         // Level with the middle of the bar beside it.
         .padding(.bottom, 22)
     }

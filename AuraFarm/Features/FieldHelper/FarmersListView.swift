@@ -3,20 +3,24 @@ import SwiftUI
 /// Every farmer the helper looks after, one row each, with the way through to their land and
 /// its test results.
 ///
-/// This screen has the navigation bar the map has not, so switching role lives here rather
-/// than floating over the land.
+/// The same list serves the Results tab and the search tab beside it. Only the search tab
+/// carries a field to type into; Results is the whole list, in order. This screen has the
+/// navigation bar the map has not, so switching role lives here rather than over the land.
 struct FarmersListView: View {
     /// Sends the person back to the role picker.
     var onSwitchRole: (() -> Void)?
+    /// Set on the search tab, which is the only copy with a field to type into.
+    var isSearch = false
 
     @Environment(FarmStore.self) private var store
 
+    @State private var query = ""
     /// The farm waiting on a yes to being deleted.
     @State private var farmToDelete: Farm?
 
     var body: some View {
         NavigationStack {
-            list
+            searchableList
                 .navigationTitle("Farmers")
                 .navigationDestination(for: Farm.ID.self) { id in
                     FarmDetailView(farmID: id)
@@ -30,6 +34,15 @@ struct FarmersListView: View {
                         }
                     }
                 }
+        }
+    }
+
+    @ViewBuilder
+    private var searchableList: some View {
+        if isSearch {
+            list.searchable(text: $query, prompt: "Farmers or Locations")
+        } else {
+            list
         }
     }
 
@@ -66,10 +79,11 @@ struct FarmersListView: View {
         }
     }
 
-    /// Sorted by the farmer, because that is what the row is read by. Searching is on the map,
-    /// so this screen is the whole list.
+    /// Sorted by the farmer, because that is what the row is read by. Nothing typed, or no
+    /// field to type into, is the whole list.
     private var shown: [Farm] {
         store.farms
+            .matching(isSearch ? query : "")
             .sorted { $0.farmerName.localizedStandardCompare($1.farmerName) == .orderedAscending }
     }
 
@@ -87,10 +101,14 @@ struct FarmersListView: View {
     @ViewBuilder
     private var emptyState: some View {
         if shown.isEmpty {
-            ContentUnavailableView {
-                Label("No farmers yet", systemImage: "person.2")
-            } description: {
-                Text("Mark a farmer's land on the Plots tab to see them here.")
+            if store.farms.isEmpty {
+                ContentUnavailableView {
+                    Label("No farmers yet", systemImage: "person.2")
+                } description: {
+                    Text("Mark a farmer's land on the Plots tab to see them here.")
+                }
+            } else {
+                ContentUnavailableView.search(text: query)
             }
         }
     }

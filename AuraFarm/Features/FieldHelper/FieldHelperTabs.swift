@@ -1,10 +1,11 @@
 import SwiftUI
 
-/// The Field Helper's two screens: the land on a map, and the farmers as a list.
+/// The Field Helper's screens: the land on a map, the farmers as a list, and searching them.
 ///
-/// Searching lives on each screen rather than in the bar: the map carries a field for places
-/// and farmers along its top, and the farmers list has the system's own search. That leaves
-/// the bar as the mockup has it, with the button for marking new land beside it.
+/// The search tab is the system's own button appearance: it leaves the bar as its own circle
+/// at the trailing end, and tapping it expands that circle into the field in place. The map
+/// keeps a field of its own along the top, because it searches places as well as farmers,
+/// which this list cannot do.
 struct FieldHelperTabs: View {
     /// Sends the person back to the role picker.
     var onSwitchRole: () -> Void
@@ -12,7 +13,7 @@ struct FieldHelperTabs: View {
     @State private var screen: Screen = .plots
 
     private enum Screen: Hashable {
-        case plots, results
+        case plots, results, search
     }
 
     var body: some View {
@@ -21,13 +22,20 @@ struct FieldHelperTabs: View {
                 "Plots", systemImage: "point.topleft.down.to.point.bottomright.curvepath",
                 value: Screen.plots
             ) {
-                FieldHelperHomeView()
+                FieldHelperHomeView(isBesideSearchButton: true)
             }
 
             Tab("Results", systemImage: "doc.text", value: Screen.results) {
                 FarmersListView(onSwitchRole: onSwitchRole)
             }
+
+            Tab(value: Screen.search, role: .search) {
+                FarmersListView(onSwitchRole: onSwitchRole, isSearch: true)
+            }
         }
+        // What makes the search tab the prominent one, and so draws it as that trailing
+        // circle: without it the system puts search back in the capsule as an ordinary tab.
+        .tabViewSearchActivation(.searchTabSelection)
     }
 }
 
