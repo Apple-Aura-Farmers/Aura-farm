@@ -116,8 +116,16 @@ struct FieldHelperHomeView: View {
             // map is rebuilt for a change to the farms. Only the first two should raise the sheet:
             // editing a plot changes the farms while the farm's page is still open, and the sheet
             // must not slide up over it.
-            .onAppear {
-                if openedFarmID == nil && !markingPlot && formSheet == nil { showFarmList = true }
+            .onAppear { raiseListIfIdle() }
+            // Coming back from a farm's page or the outline editor raises the list again from the
+            // navigation state itself, not only from `onAppear`. A share sheet or file exporter
+            // shown on the farm's page (exporting the PDF) can take the appearance callback the
+            // map relies on, and the list then never came back, leaving Home without its sheet.
+            .onChange(of: openedFarmID) { _, id in
+                if id == nil { raiseListIfIdle() }
+            }
+            .onChange(of: markingPlot) { _, marking in
+                if !marking { raiseListIfIdle() }
             }
             .sheet(isPresented: $showFarmList, onDismiss: runPending) {
                 FarmListSheet(
@@ -151,6 +159,24 @@ struct FieldHelperHomeView: View {
                 Button("Mark a plot on the map") { markingPlot = true }
             }
         }
+    }
+
+    /// Shows the list unless something else is on screen over the map. Only ever raises it: the
+    /// farms, the selected plot and what is pushed are left as they are.
+    private func raiseListIfIdle() {
+        if Self.shouldRaiseList(
+            hasFarms: !store.farms.isEmpty, farmOpen: openedFarmID != nil, markingPlot: markingPlot,
+            formOpen: formSheet != nil)
+        {
+            showFarmList = true
+        }
+    }
+
+    /// Whether the list sheet should be up: only when Home itself is showing, with nothing pushed
+    /// or presented over the map. Exporting a report from a farm's page changes none of these, so
+    /// the list comes back as soon as that page is closed.
+    static func shouldRaiseList(hasFarms: Bool, farmOpen: Bool, markingPlot: Bool, formOpen: Bool) -> Bool {
+        hasFarms && !farmOpen && !markingPlot && !formOpen
     }
 
     // MARK: The plot the helper tapped

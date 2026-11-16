@@ -7,9 +7,12 @@
 
 import SwiftUI
 
-/// Where a field helper records what they know about a farm's soil: NPK, pH, organic carbon and
-/// any fertilizer put on. Every field is optional; leave blank what is not known, and empty a
-/// field to remove a value that was entered before.
+/// Where a field helper records what they know about a farm's soil: NPK, pH and how it was
+/// measured, organic carbon, and the fertilizer put on. Every field is optional; leave blank what
+/// is not known, and empty a field to remove a value that was entered before.
+///
+/// The fertilizer's kind is picked from a short list, not typed, so the same answer always reads
+/// the same. The product name and amount stay as optional details.
 struct SoilMeasurementsForm: View {
     let farm: Farm
 
@@ -21,6 +24,9 @@ struct SoilMeasurementsForm: View {
     @State private var potassium: Double?
     @State private var ph: Double?
     @State private var organicCarbon: Double?
+    @State private var phMethod: PHMethod?
+    @State private var phFieldWater: PHFieldWater?
+    @State private var fertilizerType: FertilizerType?
     @State private var fertilizerProduct: String
     @State private var fertilizerAmount: Double?
 
@@ -32,6 +38,9 @@ struct SoilMeasurementsForm: View {
         _potassium = State(initialValue: soil?.potassium)
         _ph = State(initialValue: soil?.ph)
         _organicCarbon = State(initialValue: soil?.organicCarbonPercent)
+        _phMethod = State(initialValue: soil?.phMethod)
+        _phFieldWater = State(initialValue: soil?.phFieldWater)
+        _fertilizerType = State(initialValue: soil?.fertilizerType)
         _fertilizerProduct = State(initialValue: soil?.fertilizerProduct ?? "")
         _fertilizerAmount = State(initialValue: soil?.fertilizerKilogramsPerHectare)
     }
@@ -56,10 +65,18 @@ struct SoilMeasurementsForm: View {
 
                 Section {
                     numberRow("pH", value: $ph, unit: "0 to 14")
+                    Picker("Field at the time", selection: $phFieldWater) {
+                        Text("Not recorded").tag(PHFieldWater?.none)
+                        ForEach(PHFieldWater.allCases) { Text($0.label).tag(PHFieldWater?.some($0)) }
+                    }
                 } header: {
                     Text("Acidity")
                 } footer: {
-                    Text("Standard: \(SoilStandards.ph.description).")
+                    Text(
+                        "Provisional target for flooded rice: about pH \(SoilStandards.ph.description). "
+                            + "Flooding often moves pH toward neutral, so a reading from dry soil may differ "
+                            + "from the pH around the roots once the field is flooded."
+                    )
                 }
 
                 Section {
@@ -71,13 +88,26 @@ struct SoilMeasurementsForm: View {
                 }
 
                 Section {
-                    TextField("Product, such as urea or compost", text: $fertilizerProduct)
+                    Picker("Type", selection: $fertilizerType) {
+                        Text("Choose…").tag(FertilizerType?.none)
+                        ForEach(FertilizerType.allCases) { Text($0.label).tag(FertilizerType?.some($0)) }
+                    }
+                    if let fertilizerType {
+                        Text(fertilizerType.definition)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                    TextField("Product name (optional)", text: $fertilizerProduct)
                         .textInputAutocapitalization(.sentences)
                     numberRow("Amount", value: $fertilizerAmount, unit: "kg/ha")
                 } header: {
                     Text("Fertilizer")
                 } footer: {
-                    Text("What has been put on this land, and how much per hectare.")
+                    Text(
+                        "The type is background for the advice, never a recommendation on its own. "
+                            + "The amount is kept for the record and is not given to Apple Intelligence. "
+                            + "Mark recent fertilizing on the sample itself."
+                    )
                 }
 
                 if !measurements.problems.isEmpty {
@@ -123,7 +153,8 @@ struct SoilMeasurementsForm: View {
         let product = fertilizerProduct.trimmingCharacters(in: .whitespacesAndNewlines)
         return SoilMeasurements(
             nitrogen: nitrogen, phosphorus: phosphorus, potassium: potassium, ph: ph,
-            organicCarbonPercent: organicCarbon,
+            organicCarbonPercent: organicCarbon, phMethod: phMethod, phFieldWater: phFieldWater,
+            fertilizerType: fertilizerType,
             fertilizerProduct: product.isEmpty ? nil : product,
             fertilizerKilogramsPerHectare: fertilizerAmount)
     }

@@ -7,9 +7,14 @@
 
 import Foundation
 
-/// The soil measurements a piece of advice is written with: the five that have a standard.
-/// Fertilizer is left out. It has no standard yet, and an amount in the prompt would only
-/// tempt the model into quoting a dose.
+/// The soil measurements a piece of advice is written with: the five that have a standard, and
+/// two things that change how they are read: whether the field was flooded when the pH was
+/// measured, and the kind of fertilizer.
+///
+/// The fertilizer's amount and product name are left out. An amount in the prompt would only
+/// tempt the model into quoting a dose, and a product name can be a brand. The kind is kept only
+/// when it names one (organic, inorganic or a blend), and only beside at least one reading: on its
+/// own it is never advice.
 ///
 /// Two values are the same when their numbers are, whatever day they were saved. Saving the
 /// form again without changing anything is not a change, so it does not rewrite the advice.
@@ -21,7 +26,12 @@ struct SoilInputs: Codable, Equatable, Hashable {
     var potassium: Double?
     var ph: Double?
     var organicCarbonPercent: Double?
+    /// Only kept when there is a pH reading.
+    var phFieldWater: PHFieldWater?
+    /// Only kept when it names a kind of fertilizer.
+    var fertilizerType: FertilizerType?
 
+    /// True when there is no reading. The two notes above are not readings.
     var isEmpty: Bool {
         nitrogen == nil && phosphorus == nil && potassium == nil && ph == nil
             && organicCarbonPercent == nil
@@ -66,7 +76,9 @@ extension SoilInputs {
         guard let soil else { return nil }
         self.init(
             nitrogen: soil.nitrogen, phosphorus: soil.phosphorus, potassium: soil.potassium, ph: soil.ph,
-            organicCarbonPercent: soil.organicCarbonPercent)
+            organicCarbonPercent: soil.organicCarbonPercent,
+            phFieldWater: soil.ph == nil ? nil : soil.phFieldWater,
+            fertilizerType: soil.fertilizerType?.namesAKind == true ? soil.fertilizerType : nil)
         if isEmpty { return nil }
     }
 }

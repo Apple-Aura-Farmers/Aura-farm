@@ -26,6 +26,19 @@ struct AdviceAction: Equatable {
         case talkExtension = "talk_extension"
         case labTest = "lab_test"
         case keepNotes = "keep_notes"
+        // From the soil measurements the field helper recorded. They come last so a sample with
+        // no measurements lists its actions exactly as before.
+        case raisePH = "raise_ph"
+        case lowerPH = "lower_ph"
+        case boostNitrogen = "boost_nitrogen"
+        case reduceNitrogen = "reduce_nitrogen"
+        case unlockPhosphorus = "unlock_phosphorus"
+        case reducePhosphorus = "reduce_phosphorus"
+        case boostPotassium = "boost_potassium"
+        case reducePotassium = "reduce_potassium"
+        case keepStrawOnTop = "keep_straw_on_top"
+        case checkNutrientBalance = "check_nutrient_balance"
+        case addOrganicInput = "add_organic_input"
     }
 
     var id: ID

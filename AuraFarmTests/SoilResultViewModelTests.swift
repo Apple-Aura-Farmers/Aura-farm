@@ -456,7 +456,10 @@ final class SoilResultViewModelTests: XCTestCase {
         await viewModel.loadRecommendation()
 
         XCTAssertEqual(stub.calls, 0)
-        XCTAssertEqual(viewModel.recommendationState, .ready(savedAdvice().recommendation))
+        // The pH is in its standard range, so the summary also says to keep going.
+        var shown = savedAdvice().recommendation
+        shown.summary += " " + AdviceComposer.soilAllGood
+        XCTAssertEqual(viewModel.recommendationState, .ready(shown))
         XCTAssertNil(viewModel.updateNote)
         XCTAssertTrue(viewModel.adviceBasis?.contains("soil measurements (pH)") ?? false)
     }
@@ -491,7 +494,7 @@ final class SoilResultViewModelTests: XCTestCase {
         guard case .ready(let recommendation) = viewModel.recommendationState else {
             return XCTFail("Expected advice, got \(viewModel.recommendationState)")
         }
-        XCTAssertEqual(recommendation.summary, "From the model")
+        XCTAssertEqual(recommendation.summary, "From the model " + AdviceComposer.soilAllGood)
         XCTAssertEqual(viewModel.updateNote, "Updated with the new soil measurements.")
         let saved = try XCTUnwrap(store.load(for: sweep))
         XCTAssertEqual(saved.recommendation.summary, "From the model")
@@ -541,7 +544,7 @@ final class SoilResultViewModelTests: XCTestCase {
         XCTAssertNil(viewModel.updateNote, "Advice written for the first time has no update note")
     }
 
-    func testWhenTheModelCannotRunTheEarlierAdviceStaysWithANote() async throws {
+    func testWhenTheModelCannotRunStandardAdviceForTheNewMeasurementsIsShown() async throws {
         let stub = StubRecommender()
         stub.availability = .unavailable(reason: "Off")
         let store = InMemoryAdviceStore()
@@ -553,18 +556,21 @@ final class SoilResultViewModelTests: XCTestCase {
         await viewModel.loadRecommendation()
 
         XCTAssertEqual(stub.calls, 0)
-        XCTAssertEqual(viewModel.recommendationState, .ready(earlier.recommendation))
-        XCTAssertEqual(viewModel.savedAt, earlier.writtenAt)
+        // The earlier steps were chosen for other measurements, so they are not shown again.
+        XCTAssertNotEqual(viewModel.recommendationState, .ready(earlier.recommendation))
+        guard case .ready(let shown) = viewModel.recommendationState else {
+            return XCTFail("Expected advice, got \(viewModel.recommendationState)")
+        }
+        XCTAssertEqual(shown.source, .rules)
+        XCTAssertNil(viewModel.savedAt)
         XCTAssertTrue(
-            viewModel.modelUnavailableReason?.hasPrefix(
-                "The soil measurements changed, but Apple Intelligence can't write new advice now, "
-                    + "so the earlier advice is shown.") ?? false)
+            viewModel.modelUnavailableReason?.hasPrefix(SoilResultViewModel.measurementsChangedNote) ?? false)
         XCTAssertTrue(viewModel.modelUnavailableReason?.hasSuffix("Off") ?? false)
         XCTAssertNil(viewModel.updateNote)
         XCTAssertEqual(store.load(for: sweep), earlier)
     }
 
-    func testWhenWritingFailsTheEarlierAdviceStaysWithANote() async throws {
+    func testWhenWritingFailsStandardAdviceForTheNewMeasurementsIsShown() async throws {
         let failures: [AdviceFailure] = [
             .retry(message: "Busy."), .useStandardAdvice(note: "Refused."),
         ]
@@ -580,12 +586,11 @@ final class SoilResultViewModelTests: XCTestCase {
 
             await viewModel.loadRecommendation()
 
-            XCTAssertEqual(viewModel.recommendationState, .ready(earlier.recommendation), "\(failure)")
-            XCTAssertTrue(
-                viewModel.modelUnavailableReason?.hasPrefix(
-                    "The soil measurements changed, but new advice couldn't be written, so the earlier "
-                        + "advice is shown.") ?? false,
-                "\(failure)")
+            guard case .ready(let shown) = viewModel.recommendationState else {
+                return XCTFail("Expected advice, got \(viewModel.recommendationState)")
+            }
+            XCTAssertEqual(shown.source, .rules, "\(failure)")
+            XCTAssertEqual(viewModel.modelUnavailableReason, SoilResultViewModel.measurementsChangedNote, "\(failure)")
             XCTAssertNil(viewModel.updateNote, "\(failure)")
             XCTAssertEqual(store.saveCount, savesBefore, "\(failure)")
             XCTAssertEqual(store.load(for: sweep), earlier, "\(failure)")

@@ -7,8 +7,8 @@
 
 import SwiftUI
 
-/// One recorded soil value, with where it sits against its standard under it. Tapping a row that
-/// has a standard opens what that band means and what to do about it.
+/// One recorded soil value, with where it sits against its standard under it, and a line on what
+/// this reading may mean. What to do about it is in "What to do next", not here.
 ///
 /// The band shows as a word and an icon as well as a colour, so it reads without telling the
 /// colours apart. The colour and icon follow the band's tone, because "high" is good for
@@ -17,20 +17,25 @@ struct SoilMeasurementRow: View {
     let row: SoilMeasurements.Row
 
     var body: some View {
-        if let note = row.note {
-            DisclosureGroup {
-                VStack(alignment: .leading, spacing: 10) {
-                    if let effect = note.effect {
-                        explanation("What this does", effect)
-                    }
-                    explanation("What to do", note.action)
-                    Text("Placeholder guidance, not yet reviewed by an agronomist.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.vertical, 4)
-            } label: {
+        if let education = row.education {
+            VStack(alignment: .leading, spacing: 6) {
                 summary
+                if let meaning = education.meaning {
+                    Text(meaning)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        } else if let type = row.fertilizerType {
+            VStack(alignment: .leading, spacing: 6) {
+                summary
+                if let effect = type.effect {
+                    Text(effect)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         } else {
             summary
@@ -43,10 +48,22 @@ struct SoilMeasurementRow: View {
             Spacer()
             VStack(alignment: .trailing, spacing: 2) {
                 Text(row.value)
+                    .multilineTextAlignment(.trailing)
                 if let band = row.band, let note = row.note {
                     Label(band.label, systemImage: note.tone.systemImage)
                         .font(.caption)
                         .foregroundStyle(note.tone.tint)
+                }
+                if let tone = row.fertilizerType?.tone, let verdict = row.fertilizerType?.verdict {
+                    Label(verdict, systemImage: tone.systemImage)
+                        .font(.caption)
+                        .foregroundStyle(tone.tint)
+                }
+                if let context = row.context {
+                    Text(context)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.trailing)
                 }
             }
         }
@@ -60,12 +77,13 @@ struct SoilMeasurementRow: View {
                 .foregroundStyle(.secondary)
             Text(text)
                 .font(.subheadline)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 }
 
 extension SoilTone {
-    fileprivate var systemImage: String {
+    var systemImage: String {
         switch self {
         case .good: return "checkmark.circle.fill"
         case .watch: return "eye.fill"
@@ -73,7 +91,7 @@ extension SoilTone {
         }
     }
 
-    fileprivate var tint: Color {
+    var tint: Color {
         switch self {
         case .good: return .green
         case .watch: return .orange
@@ -84,15 +102,11 @@ extension SoilTone {
 
 #Preview {
     List {
-        SoilMeasurementRow(
-            row: .init(
-                label: "Potassium (K)", value: "200 mg/kg", band: .high,
-                note: SoilStandards.potassium.note(for: .high)))
-        SoilMeasurementRow(
-            row: .init(
-                label: "Nitrogen (N)", value: "170 mg/kg", band: .excessive,
-                note: SoilStandards.nitrogen.note(for: .excessive)))
-        SoilMeasurementRow(
-            row: .init(label: "Fertilizer", value: "Urea · 50 kg/ha", band: nil, note: nil))
+        ForEach(
+            SoilMeasurements(
+                nitrogen: 170, potassium: 200, ph: 5.6, phMethod: .fieldProbe, phFieldWater: .drained,
+                fertilizerType: .organic, fertilizerProduct: "Compost"
+            ).rows
+        ) { SoilMeasurementRow(row: $0) }
     }
 }
