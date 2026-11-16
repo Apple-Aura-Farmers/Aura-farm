@@ -74,6 +74,9 @@ struct FieldHelperHomeView: View {
                 }
             }
             .overlay(alignment: .top) { problemBanner }
+            // On the screen rather than on the map, because a phone with no farms yet shows no
+            // map, and that is exactly the phone with everything to read.
+            .task { await store.pull() }
             .navigationTitle("Plots")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -132,9 +135,6 @@ struct FieldHelperHomeView: View {
         .onChange(of: store.farms.flatMap(\.allCorners), initial: true) {
             camera = FarmsOverviewMap.fitting(store.farms)
         }
-        // Reads the records once when the map appears; after that it is the pull on the
-        // farmers list.
-        .task { await store.pull() }
     }
 
     private var emptyState: some View {
