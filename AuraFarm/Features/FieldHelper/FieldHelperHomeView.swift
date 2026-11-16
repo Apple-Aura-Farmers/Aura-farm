@@ -79,6 +79,11 @@ struct FieldHelperHomeView: View {
             .task { await store.pull() }
             .navigationTitle("Plots")
             .navigationBarTitleDisplayMode(.inline)
+            // There is nothing scrolling under these bars, only the map, so the system has no
+            // edge to fade against and draws a hard band of tinted blur across the land. The
+            // bars float over it instead, which is what the design has.
+            .toolbarBackgroundVisibility(.hidden, for: .navigationBar)
+            .toolbarBackgroundVisibility(.hidden, for: .tabBar)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) { addButton }
             }
