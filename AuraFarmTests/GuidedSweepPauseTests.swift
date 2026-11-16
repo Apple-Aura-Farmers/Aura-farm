@@ -42,8 +42,8 @@ final class GuidedSweepPauseTests: XCTestCase {
                 if case .checkingEdge = $0 { true } else if case .edgeGoBack = $0 { true } else { false }
             })
         XCTAssertEqual(route.guide.edgesGoneBack, 0)
-        // A fresh stretch of its own does decide, as it always did.
-        route.feed(.blank, times: 30)
+        // A fresh stretch of its own does decide, as it always did (at rest, Phase 2o).
+        route.feed(.blankStill, times: 40)
         XCTAssertEqual(route.guide.edgesGoneBack, 1)
     }
 

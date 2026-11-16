@@ -7,9 +7,11 @@ import Foundation
 /// `edge_line_strength`, `edge_line_coverage` and `edge_line_slide_residual` columns.
 struct EdgeLineThresholds {
     /// Lines up to this far from perpendicular to the normal are tried, in steps. PLACEHOLDER:
-    /// 30 because the corner of 16 Nov 2026 read at the old 12 degree limit (+10 / -12).
-    var maxAngleDegrees = 30.0
-    var angleStepDegrees = 3.0
+    /// 45 because the corner band of 16 Nov 2026 ran at about 45 to 50 degrees (it read at the
+    /// old 12 and 30 degree limits before). 4.5 degree steps keep it at 21 angles, the cost of
+    /// the 30 degrees at 3.
+    var maxAngleDegrees = 45.0
+    var angleStepDegrees = 4.5
     /// The gradient is taken on the luma minus its box blur of this share of the box's side, so
     /// the eyepiece's illumination falloff (a smooth ramp) is gone. PLACEHOLDER.
     var backgroundBlurShare = 1.0 / 6
@@ -35,7 +37,13 @@ struct EdgeLineThresholds {
     /// PLACEHOLDER: calibrate from `edge_line_*`.
     var candidateCoverage = 0.75
     var candidateRun = 5
-    var candidateStrength = 6.0
+    /// PLACEHOLDER: 20. The 16 Nov 2026 15:32 run read the real cover-slip edge at 26 to 53 and
+    /// every other candidate at 6.1 to 7.0.
+    var candidateStrength = 20.0
+    /// The bands either side of the path where the texture is compared (see `EdgeLine.beforeEnergy`)
+    /// run from `beyondGapFields` to `beyondGapFields + bandFields` away from it. PLACEHOLDER.
+    var beyondGapFields = 0.06
+    var bandFields = 0.30
 }
 
 /// The box's luma sampled every `step` pixels, row-major, with where it came from.
@@ -96,6 +104,13 @@ struct EdgeLine: Equatable {
     /// The path's points in frame pixels, one per part along the line, for drawing.
     var path: [CGPoint]
     var isCandidate: Bool
+    /// The mean gradient energy (|gradient|^2 of the picture with its slow illumination taken
+    /// away, both axes) in a band behind the line and in one beyond it, on the heading side. Each
+    /// band runs from `beyondGapFields` to that plus `bandFields` from the path, parallel to it,
+    /// inside the box. A cover-slip edge has the texture before it and little or none beyond it.
+    /// nil when not measured.
+    var beforeEnergy: Double?
+    var beyondEnergy: Double?
 }
 
 /// Finds a line across the box where the brightness steps along the expected normal. Soil
@@ -138,17 +153,23 @@ enum EdgeLineDetector {
             }
         }
 
-        var best: Candidate?
+        // The wander lets a line a few degrees off still score alike, so the strength alone does
+        // not say the angle: among the angles within 15% of the strongest, the straightest path
+        // (the truest angle) wins, the stronger of equals.
+        var found: [Candidate] = []
         let steps = Int((thresholds.maxAngleDegrees / thresholds.angleStepDegrees).rounded())
         for k in -steps...steps {
             let degrees = Double(k) * thresholds.angleStepDegrees
-            if let found = bestPath(
-                gradient, width, height, nx, ny, margin: margin, degrees: degrees, thresholds: thresholds),
-                found.strength > (best?.strength ?? -.infinity)
+            if let candidate = bestPath(
+                gradient, width, height, nx, ny, margin: margin, degrees: degrees, thresholds: thresholds)
             {
-                best = found
+                found.append(candidate)
             }
         }
+        let strongest = found.map(\.strength).max() ?? 0
+        let best =
+            found.filter { $0.strength >= strongest * 0.85 }
+            .min { ($0.roughness, -$0.strength) < ($1.roughness, -$1.strength) }
         guard let line = best else { return nil }
 
         let offsetCells = line.distances.reduce(0, +) / Double(line.distances.count)
@@ -160,6 +181,9 @@ enum EdgeLineDetector {
         let radians = line.degrees * .pi / 180
         let normalX = nx * cos(radians) - ny * sin(radians)
         let normalY = nx * sin(radians) + ny * cos(radians)
+        let energies = bandEnergies(
+            flat, width, height, margin: margin, nx: nx, ny: ny, line: line,
+            cellsPerField: Double(box.width) / Double(grid.step), thresholds: thresholds)
         let span = Double(min(width, height)) / 2 - Double(margin)
         let points = line.distances.enumerated().map { index, distance in
             let along = -span + (Double(index) + 0.5) * 2 * span / Double(line.distances.count)
@@ -174,15 +198,65 @@ enum EdgeLineDetector {
             angleDegrees: line.degrees,
             offsetFields: offsetFields, sign: line.sign, slideResidualFields: residual,
             path: points,
+            // A line at (or within one step of) the search limit is a line outside the range
+            // that was searched, such as the side edge of a column, not an edge to be found.
             isCandidate: (line.coverage >= thresholds.candidateCoverage
                 || line.longestRun >= thresholds.candidateRun)
-                && line.strength >= thresholds.candidateStrength)
+                && line.strength >= thresholds.candidateStrength
+                && abs(line.degrees) < thresholds.maxAngleDegrees - thresholds.angleStepDegrees - 1e-9,
+            beforeEnergy: energies.before, beyondEnergy: energies.beyond)
+    }
+
+    /// The texture energy in the bands before and beyond the path, per cell.
+    private static func bandEnergies(
+        _ flat: [Float], _ width: Int, _ height: Int, margin: Int, nx: Double, ny: Double,
+        line: Candidate, cellsPerField: Double, thresholds: EdgeLineThresholds
+    ) -> (before: Double, beyond: Double) {
+        let radians = line.degrees * .pi / 180
+        let normalX = nx * cos(radians) - ny * sin(radians)
+        let normalY = nx * sin(radians) + ny * cos(radians)
+        let parts = line.distances.count
+        let halfSpan = Double(min(width, height)) / 2 - Double(margin)
+        let partLength = 2 * halfSpan / Double(parts)
+        let near = thresholds.beyondGapFields * cellsPerField
+        let far = near + thresholds.bandFields * cellsPerField
+        var sums = (before: 0.0, beyond: 0.0)
+        var counts = (before: 0, beyond: 0)
+        let centreX = Double(width) / 2
+        let centreY = Double(height) / 2
+        for y in (margin + 1)..<(height - margin - 1) {
+            let dy = Double(y) + 0.5 - centreY
+            for x in (margin + 1)..<(width - margin - 1) {
+                let dx = Double(x) + 0.5 - centreX
+                let along = -dx * normalY + dy * normalX
+                guard abs(along) < halfSpan else { continue }
+                let part = min(Int((along + halfSpan) / partLength), parts - 1)
+                let delta = dx * normalX + dy * normalY - line.distances[part]
+                guard abs(delta) >= near, abs(delta) <= far else { continue }
+                let i = y * width + x
+                let gx = Double(flat[i + 1] - flat[i - 1]) / 2
+                let gy = Double(flat[i + width] - flat[i - width]) / 2
+                if delta > 0 {
+                    sums.beyond += gx * gx + gy * gy
+                    counts.beyond += 1
+                } else {
+                    sums.before += gx * gx + gy * gy
+                    counts.before += 1
+                }
+            }
+        }
+        return (
+            counts.before > 0 ? sums.before / Double(counts.before) : 0,
+            counts.beyond > 0 ? sums.beyond / Double(counts.beyond) : 0
+        )
     }
 
     private struct Candidate {
         var strength: Double
         var coverage: Double
         var longestRun: Int
+        /// The sum of the bin changes between neighbouring parts: 0 for a straight path.
+        var roughness: Int
         var degrees: Double
         var sign: Int
         /// Per part: the path's distance from the centre along the angle's normal, in cells.
@@ -327,7 +401,9 @@ enum EdgeLineDetector {
             }
             best = Candidate(
                 strength: strength, coverage: Double(passes.filter { $0 }.count) / Double(parts),
-                longestRun: longest, degrees: degrees, sign: sign,
+                longestRun: longest,
+                roughness: zip(path, path.dropFirst()).reduce(0) { $0 + abs($1.1 - $1.0) },
+                degrees: degrees, sign: sign,
                 distances: path.map { (Double($0) + 0.5) * thresholds.binWidth - reach })
         }
         return best

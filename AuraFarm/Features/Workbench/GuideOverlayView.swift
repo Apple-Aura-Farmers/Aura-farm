@@ -7,10 +7,19 @@
     final class GuideOverlayState {
         var model: GuideOverlayModel?
         private(set) var captureCount = 0
+        /// The edge buttons: "✓ Edge" / "✗ Not an edge" while an attached line is at the cross and
+        /// the helper is asked, and "Mark edge here" while an edge is looked for.
+        private(set) var asksEdge = false
+        private(set) var canMarkEdge = false
 
-        func update(model: GuideOverlayModel?, captureCount: Int) {
+        func update(
+            model: GuideOverlayModel?, captureCount: Int, asksEdge: Bool = false,
+            canMarkEdge: Bool = false
+        ) {
             if self.model != model { self.model = model }
             if self.captureCount != captureCount { self.captureCount = captureCount }
+            if self.asksEdge != asksEdge { self.asksEdge = asksEdge }
+            if self.canMarkEdge != canMarkEdge { self.canMarkEdge = canMarkEdge }
         }
     }
 

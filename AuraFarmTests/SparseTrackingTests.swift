@@ -70,7 +70,9 @@ final class SparseTrackingTests: XCTestCase {
     }
 
     func testASparseSequenceWithASteadyShiftIsTrackedAndBlankGlassStillFreezes() {
-        let tracker = SlideTracker()
+        // Phase 2p: frames with fewer than 12 feature cells are skipped by default, which would
+        // pre-empt the sparse rule (4 or more cells) on these 6 dots, so the skip is lowered to 4 here.
+        let tracker = SlideTracker(ghost: GhostFrameThresholds(minFeatureCellsToRegister: 4))
         func track(_ buffer: CVPixelBuffer) -> SlideTrackerReading {
             seconds += 0.1
             return tracker.track(buffer, box: box, frameSize: frameSize, seconds: seconds)

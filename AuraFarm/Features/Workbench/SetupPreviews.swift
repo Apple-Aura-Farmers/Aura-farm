@@ -368,6 +368,76 @@
         }
     }
 
+    /// The full-cover-slip mode's words and edge line: "Edge line ahead" with the candidate path
+    /// in cyan, the same once attached (green) and confirmed (with the "edge" label), and the
+    /// blank box's "Step back until the edge line is in view".
+    struct LineEdgePreviewPanel: View {
+        enum Kind: CaseIterable {
+            case ahead, attached, confirmed, blank
+
+            var title: String {
+                switch self {
+                case .ahead: "Line ahead (cyan candidate)"
+                case .attached: "Line attached (green)"
+                case .confirmed: "Line confirmed (\"edge\")"
+                case .blank: "Blank box: step back until the line is in view"
+                }
+            }
+
+            var state: String {
+                switch self {
+                case .ahead: "ahead"
+                case .attached: "attached"
+                case .confirmed: "confirmed"
+                case .blank: "none"
+                }
+            }
+        }
+
+        let kind: Kind
+        private static let size = CGSize(width: 400, height: 260)
+
+        /// The line's path in frame pixels: a slightly uneven line across the box.
+        private static let path = (0..<8).map { part in
+            CGPoint(x: 470 + Double(part) * 50, y: 250 + (part % 2 == 0 ? 0 : 8))
+        }
+
+        private func overlayModel() -> GuideOverlayModel {
+            var edge = EdgeDiagnostics()
+            edge.edgeMode = "line"
+            edge.lineState = kind.state
+            let instruction: GuideInstruction =
+                kind == .blank ? .checkEdge(toward: CGPoint(x: 0, y: 1)) : .lineAhead
+            let step = GuideStep(
+                instruction: instruction, target: CGPoint(x: 0, y: -0.8), capture: nil,
+                stateName: "column 1 up", column: 1, isFinished: false, edge: edge)
+            return GuideOverlayModel.make(
+                step: step, position: .zero, tracking: .tracking,
+                centre: CGPoint(x: Self.size.width / 2, y: Self.size.height / 2),
+                pointsPerField: 120, fieldRadius: 84, alignToleranceFields: 0.15,
+                heading: CGPoint(x: 0, y: -1))
+        }
+
+        var body: some View {
+            let state = EdgeLineState()
+            let _ = {
+                if kind != .blank { state.update(Self.path) }
+                state.setLineState(kind.state)
+            }()
+            VStack(spacing: 4) {
+                ZStack {
+                    LinearGradient(
+                        colors: [.brown, .gray], startPoint: .topLeading, endPoint: .bottomTrailing)
+                    EdgeLineOverlay(state: state, mapper: SetupPreviewPanel.Mapper())
+                    GuideOverlayView(model: overlayModel())
+                }
+                .frame(width: Self.size.width, height: Self.size.height)
+                .clipped()
+                Text(kind.title).font(.caption).foregroundStyle(.white)
+            }
+        }
+    }
+
     /// Every scene, two to a row, then the guide's extras.
     struct SetupPreviewSheet: View {
         var body: some View {
@@ -403,6 +473,32 @@
     #Preview("Stage done") { SetupPreviewPanel(scene: .stageDone) }
     #Preview("Paused alignment") { SetupPreviewPanel(scene: .pausedAlignment) }
     #Preview("Paused focus") { SetupPreviewPanel(scene: .pausedFocus) }
+    #Preview("Line ahead") { LineEdgePreviewPanel(kind: .ahead) }
+    #Preview("Line attached") { LineEdgePreviewPanel(kind: .attached) }
+    #Preview("Line confirmed") { LineEdgePreviewPanel(kind: .confirmed) }
+    #Preview("Blank: step back to the line") { LineEdgePreviewPanel(kind: .blank) }
+    #Preview("Edge buttons: ask and mark") {
+        ZStack {
+            Color(white: 0.2)
+            EdgeFeedbackBar(asks: true, canMark: true)
+        }
+        .frame(width: 400, height: 260)
+    }
+    #Preview("Edge buttons: mark only") {
+        ZStack {
+            Color(white: 0.2)
+            EdgeFeedbackBar(asks: false, canMark: true)
+        }
+        .frame(width: 400, height: 260)
+    }
+    #Preview("Full cover slip toggle") {
+        Form {
+            Toggle("Show edge line", isOn: .constant(true))
+            Toggle("Track sparse sample", isOn: .constant(true))
+            Toggle("Full cover slip (line edges)", isOn: .constant(true))
+            Toggle("Ask me to confirm edges", isOn: .constant(true))
+        }
+    }
     #Preview("Focus dial states") { FocusDialPreviewPanel() }
     #Preview("Edge line") { EdgeLinePreviewPanel() }
     #Preview("Guide extras") { GuideExtrasPanel() }

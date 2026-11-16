@@ -55,6 +55,22 @@ struct GuideReading: Equatable {
     var quadAheadToward: Double?
     var quadBehindAway: Double?
     var quadBehindToward: Double?
+    /// How long the slide has been still, in seconds, in a row (`MovementIndicators.stillSeconds`);
+    /// nil when not known, which leaves `isStill` alone to decide. Edges are confirmed only after
+    /// `EdgeConfirmationThresholds.confirmSeconds` of it.
+    var stillSeconds: Double?
+    /// The edge-line detector's result on frames it ran on, nil on the others. Offsets are
+    /// along the heading, positive ahead. Used only by the full-cover-slip mode.
+    var edgeLine: EdgeLine?
+    /// The heading the edge line was measured along (screen unit vector); nil when not known. A
+    /// line measured along another heading than the route's current one is ignored.
+    var edgeLineHeading: CGPoint?
+
+    /// Whether the slide has been still for `seconds` in a row. Without `stillSeconds` this is
+    /// `isStill`.
+    func isStill(for seconds: Double) -> Bool {
+        stillSeconds.map { $0 >= seconds - 1e-9 } ?? isStill
+    }
 }
 
 /// How the tracker took the picture back after a stretch with nothing to follow.
@@ -77,9 +93,40 @@ struct EdgeDiagnostics: Equatable {
     /// vouched, behind_blurred, side_imbalance, corner, corner_rejected, halves_too_close, spot_hold, speed_spike,
     /// same_spot, moved, timeout_no_detail.
     var reason = ""
+    /// Full-cover-slip mode: "none", "ahead", "attached" or "confirmed"; empty in legacy mode.
+    var lineState = ""
+    /// How many of the last moving readings with a candidate line were attached to the slide.
+    var lineAttachedCount = 0
+    /// The line is attached and at the cross: the stage where the helper may be asked.
+    var lineAtCross = false
+    /// An edge may be marked here (the route has a heading along which an edge is looked for).
+    var canMarkEdge = false
+    /// "auto" on the reading where the rule confirmed an edge by itself.
+    var feedback = ""
+    /// "line" in full-cover-slip mode, "legacy" otherwise.
+    var edgeMode = "legacy"
     /// The box's sharpness over the median before the candidate began, when the corner rule
     /// looked at it; nil otherwise.
     var cornerBoxShare: Double?
+}
+
+/// The helper's answer about an edge, in full-cover-slip mode.
+enum EdgeFeedback: Equatable {
+    /// "✓ Edge": the line at the cross is the edge.
+    case yes
+    /// "✗ Not an edge": it is not; the route keeps going.
+    case no
+    /// "Mark edge here": an edge the rule missed, at the cross.
+    case mark
+
+    /// The word written in the CSV's `edge_feedback` column.
+    var csvName: String {
+        switch self {
+        case .yes: "yes"
+        case .no: "no"
+        case .mark: "mark"
+        }
+    }
 }
 
 /// Why the run is paused: the phone moved off the eyepiece, or the picture went out of focus.
@@ -121,6 +168,16 @@ enum GuideInstruction: Equatable {
     case stageLimit
     /// The run is paused until the picture is back; see `RunMonitor`.
     case paused(GuidePauseReason)
+    /// Full-cover-slip mode: a line that may be the edge is ahead; keep going until it reaches
+    /// the centre cross.
+    case lineAhead
+    /// Full-cover-slip mode: the line is attached and at the cross. Stay still: the rule confirms it
+    /// after `confirmSeconds`, or the helper is asked.
+    case edgeDetected
+    /// The helper said the line is not an edge: keep going (shown for a moment).
+    case notAnEdge
+    /// Full-cover-slip mode: the box has no detail, which says nothing about an edge.
+    case nothingToFollow
     case tooFar
     case otherWay
     case refocus
@@ -142,6 +199,10 @@ enum GuideInstruction: Equatable {
         case .checkingEdge: "Checking edge"
         case .stillNoDetail: "Still no detail: go back, or refocus if it looks blurry"
         case .checkEdge: "Check edge: step back"
+        case .lineAhead: "Edge line ahead"
+        case .edgeDetected: "Stay still, edge detected"
+        case .notAnEdge: "Not an edge, keep going"
+        case .nothingToFollow: "Nothing to follow here"
         case .stageLimit: "Stage limit, turning"
         case .paused(let reason): reason == .alignment ? "Paused: alignment" : "Paused: focus"
         case .tooFar: "Too far, come back a little"
@@ -166,6 +227,11 @@ enum GuideInstruction: Equatable {
         case .edgeGoBack: "Edge of the sample. Follow the arrow back"
         case .stillNoDetail: "No detail. Follow the arrow back, or refocus if it's blurry"
         case .checkEdge: "Step back a little, then come forward again"
+        case .lineAhead: "Edge line ahead. Keep going until it reaches the centre cross"
+        case .edgeDetected: "Stay still, edge detected"
+        case .notAnEdge: "Not an edge. Keep going"
+        case .nothingToFollow:
+            "Nothing to follow here. Turn back, or move to a patch with more particles"
         case .stageLimit: "Stage limit reached. Turning"
         case .paused(.alignment): "Phone moved. Put it back so the circle fills the outline"
         case .paused(.focus): "Out of focus. Turn the focus knob slowly until it's sharp"
@@ -174,6 +240,13 @@ enum GuideInstruction: Equatable {
         case .slowDown: "Slow down"
         case .finished: "Sample finished"
         }
+    }
+
+    /// `helperText`, with the words for full-cover-slip mode: there a blank box means the edge
+    /// line is out of view, so the helper steps back until it is in view.
+    func helperText(fullCoverSlip: Bool) -> String {
+        if fullCoverSlip, case .checkEdge = self { return "Step back until the edge line is in view" }
+        return helperText
     }
 
     /// A short word for the CSV.
@@ -191,6 +264,10 @@ enum GuideInstruction: Equatable {
         case .checkingEdge: "checking_edge"
         case .stillNoDetail: "still_no_detail"
         case .checkEdge: "check_edge"
+        case .lineAhead: "line_ahead"
+        case .edgeDetected: "edge_detected"
+        case .notAnEdge: "not_an_edge"
+        case .nothingToFollow: "nothing_to_follow"
         case .stageLimit: "stage_limit"
         case .paused(let reason): reason == .alignment ? "paused_alignment" : "paused_focus"
         case .tooFar: "too_far"
@@ -218,4 +295,7 @@ enum SweepFinishReason: String, Codable {
     case sampleFinished, endedByHelper, storageFull
     /// The stage ran out of travel to the right, so there is no column to step to.
     case stageLimit
+    /// Full-cover-slip mode: a step right found the right edge line (or blank), so the last
+    /// column is done.
+    case rightEdge
 }

@@ -1,6 +1,16 @@
 #if DEBUG
     /// Recorded rows for `SlideMovementCharacterizationTests`, taken from the pipeline
     /// before the tracking chain moved to Core.
+    ///
+    /// Phase 2n re-recorded 11 reading labels (rows only, never a position): c and d, rows 4, 5, 10
+    /// and 11, are "ghost" where a textured frame met the flat blank frame and the registration
+    /// read a shift over 0.4 of the box; f, rows 34 to 36, are measured where the unfiltered
+    /// registration had been predicted, because the high-pass removes the false jump.
+    ///
+    /// Phase 2p re-recorded 8 more labels in c and d, rows 4 and 5 and 6 and 7: the first two blank
+    /// frames, which still have detail but no features, are "sparse_skip" (they used to be "ghost"),
+    /// and the next two are "ghost" (a skipped frame leaves the ghost count alone, so the third
+    /// ghost, and the fallback to "missing", comes two frames later).
     enum Expected {
         static let a: [String] = [
             "p=(0.0,0.0) pf=(0.0,0.0) h=0 g=0 lost=false ev= r=missing st=0 d=true bl=0 m=0 u=0 be= pc=none sm=- rr=(39,39,179,179) fs=- bs=(126.8,12299.7,24.1)",
@@ -31,14 +41,14 @@
             "p=(0.0,0.0) pf=(0.0,0.0) h=0 g=0 lost=false ev= r=measured st=0 d=true bl=0 m=0 u=0 be= pc=none sm=- rr=(465,185,358,358) fs=ready bs=(133.5,2988.6,12.2)",
             "p=(0.0,0.0) pf=(0.0,0.0) h=0 g=0 lost=false ev= r=measured st=0 d=true bl=0 m=0 u=0 be= pc=none sm=- rr=(465,185,358,358) fs=ready bs=(133.5,2988.6,12.2)",
             "p=(0.0,0.0) pf=(0.0,0.0) h=0 g=0 lost=false ev= r=measured st=0 d=true bl=0 m=0 u=0 be= pc=none sm=- rr=(465,185,358,358) fs=ready bs=(133.5,2988.6,12.2)",
-            "p=(0.0,0.0) pf=(0.0,0.0) h=0 g=0 lost=false ev= r=measured st=0 d=true bl=0 m=0 u=0 be= pc=none sm=- rr=(465,185,358,358) fs=ready bs=(90.0,0.0,0.0)",
-            "p=(0.0,0.0) pf=(0.0,0.0) h=0 g=0 lost=false ev= r=measured st=0 d=true bl=0 m=0 u=0 be= pc=none sm=- rr=(465,185,358,358) fs=ready bs=(90.0,0.0,0.0)",
+            "p=(0.0,0.0) pf=(0.0,0.0) h=0 g=0 lost=false ev= r=sparse_skip st=0 d=true bl=0 m=0 u=0 be= pc=none sm=- rr=(465,185,358,358) fs=ready bs=(90.0,0.0,0.0)",
+            "p=(0.0,0.0) pf=(0.0,0.0) h=0 g=0 lost=false ev= r=sparse_skip st=0 d=true bl=0 m=0 u=0 be= pc=none sm=- rr=(465,185,358,358) fs=ready bs=(90.0,0.0,0.0)",
+            "p=(0.0,0.0) pf=(0.0,0.0) h=0 g=0 lost=false ev= r=ghost st=0 d=false bl=1 m=0 u=0 be= pc=none sm=- rr=(465,185,358,358) fs=ready bs=(90.0,0.0,0.0)",
+            "p=(0.0,0.0) pf=(0.0,0.0) h=0 g=0 lost=false ev= r=ghost st=0 d=false bl=1 m=0 u=0 be= pc=none sm=- rr=(465,185,358,358) fs=ready bs=(90.0,0.0,0.0)",
             "p=(0.0,0.0) pf=(0.0,0.0) h=0 g=0 lost=false ev= r=missing st=0 d=false bl=1 m=0 u=0 be= pc=none sm=- rr=(465,185,358,358) fs=ready bs=(90.0,0.0,0.0)",
             "p=(0.0,0.0) pf=(0.0,0.0) h=0 g=0 lost=false ev= r=missing st=0 d=false bl=1 m=0 u=0 be= pc=none sm=- rr=(465,185,358,358) fs=ready bs=(90.0,0.0,0.0)",
-            "p=(0.0,0.0) pf=(0.0,0.0) h=0 g=0 lost=false ev= r=missing st=0 d=false bl=1 m=0 u=0 be= pc=none sm=- rr=(465,185,358,358) fs=ready bs=(90.0,0.0,0.0)",
-            "p=(0.0,0.0) pf=(0.0,0.0) h=0 g=0 lost=false ev= r=missing st=0 d=false bl=1 m=0 u=0 be= pc=none sm=- rr=(465,185,358,358) fs=ready bs=(90.0,0.0,0.0)",
-            "p=(0.0,0.0) pf=(0.0,0.0) h=0 g=0 lost=false ev= r=missing st=0 d=false bl=1 m=0 u=0 be= pc=none sm=- rr=(465,185,358,358) fs=ready bs=(133.5,3023.3,12.3)",
-            "p=(0.0,0.0) pf=(0.0,0.0) h=0 g=0 lost=false ev= r=missing st=0 d=false bl=1 m=0 u=0 be= pc=none sm=- rr=(465,185,358,358) fs=ready bs=(133.5,3023.3,12.3)",
+            "p=(0.0,0.0) pf=(0.0,0.0) h=0 g=0 lost=false ev= r=ghost st=0 d=false bl=1 m=0 u=0 be= pc=none sm=- rr=(465,185,358,358) fs=ready bs=(133.5,3023.3,12.3)",
+            "p=(0.0,0.0) pf=(0.0,0.0) h=0 g=0 lost=false ev= r=ghost st=0 d=false bl=1 m=0 u=0 be= pc=none sm=- rr=(465,185,358,358) fs=ready bs=(133.5,3023.3,12.3)",
             "p=(0.0,0.0) pf=(0.0,0.0) h=0 g=0 lost=false ev= r=matching st=0 d=true bl=1 m=0 u=0 be= pc=none sm=- rr=(465,185,358,358) fs=ready bs=(133.5,3023.3,12.3)",
             "p=(0.0,0.0) pf=(0.0,0.0) h=0 g=0 lost=false ev= r=matching st=0 d=true bl=1 m=0 u=0 be= pc=none sm=- rr=(465,185,358,358) fs=ready bs=(133.5,3023.3,12.3)",
             "p=(60.0,0.0) pf=(0.2,0.0) h=0 g=0 lost=false ev= r=measured st=0 d=true bl=1 m=1 u=0 be=matched pc=none sm=- rr=(465,185,358,358) fs=ready bs=(133.5,3023.3,12.3)",
@@ -51,14 +61,14 @@
             "p=(0.0,0.0) pf=(0.0,0.0) h=0 g=0 lost=false ev= r=measured st=0 d=true bl=0 m=0 u=0 be= pc=none sm=- rr=(465,185,358,358) fs=ready bs=(133.5,2988.6,12.2)",
             "p=(0.0,0.0) pf=(0.0,0.0) h=0 g=0 lost=false ev= r=measured st=0 d=true bl=0 m=0 u=0 be= pc=none sm=- rr=(465,185,358,358) fs=ready bs=(133.5,2988.6,12.2)",
             "p=(0.0,0.0) pf=(0.0,0.0) h=0 g=0 lost=false ev= r=measured st=0 d=true bl=0 m=0 u=0 be= pc=none sm=- rr=(465,185,358,358) fs=ready bs=(133.5,2988.6,12.2)",
-            "p=(0.0,0.0) pf=(0.0,0.0) h=0 g=0 lost=false ev= r=measured st=0 d=true bl=0 m=0 u=0 be= pc=none sm=- rr=(465,185,358,358) fs=ready bs=(90.0,0.0,0.0)",
-            "p=(0.0,0.0) pf=(0.0,0.0) h=0 g=0 lost=false ev= r=measured st=0 d=true bl=0 m=0 u=0 be= pc=none sm=- rr=(465,185,358,358) fs=ready bs=(90.0,0.0,0.0)",
+            "p=(0.0,0.0) pf=(0.0,0.0) h=0 g=0 lost=false ev= r=sparse_skip st=0 d=true bl=0 m=0 u=0 be= pc=none sm=- rr=(465,185,358,358) fs=ready bs=(90.0,0.0,0.0)",
+            "p=(0.0,0.0) pf=(0.0,0.0) h=0 g=0 lost=false ev= r=sparse_skip st=0 d=true bl=0 m=0 u=0 be= pc=none sm=- rr=(465,185,358,358) fs=ready bs=(90.0,0.0,0.0)",
+            "p=(0.0,0.0) pf=(0.0,0.0) h=0 g=0 lost=false ev= r=ghost st=0 d=false bl=1 m=0 u=0 be= pc=none sm=- rr=(465,185,358,358) fs=ready bs=(90.0,0.0,0.0)",
+            "p=(0.0,0.0) pf=(0.0,0.0) h=0 g=0 lost=false ev= r=ghost st=0 d=false bl=1 m=0 u=0 be= pc=none sm=- rr=(465,185,358,358) fs=ready bs=(90.0,0.0,0.0)",
             "p=(0.0,0.0) pf=(0.0,0.0) h=0 g=0 lost=false ev= r=missing st=0 d=false bl=1 m=0 u=0 be= pc=none sm=- rr=(465,185,358,358) fs=ready bs=(90.0,0.0,0.0)",
             "p=(0.0,0.0) pf=(0.0,0.0) h=0 g=0 lost=false ev= r=missing st=0 d=false bl=1 m=0 u=0 be= pc=none sm=- rr=(465,185,358,358) fs=ready bs=(90.0,0.0,0.0)",
-            "p=(0.0,0.0) pf=(0.0,0.0) h=0 g=0 lost=false ev= r=missing st=0 d=false bl=1 m=0 u=0 be= pc=none sm=- rr=(465,185,358,358) fs=ready bs=(90.0,0.0,0.0)",
-            "p=(0.0,0.0) pf=(0.0,0.0) h=0 g=0 lost=false ev= r=missing st=0 d=false bl=1 m=0 u=0 be= pc=none sm=- rr=(465,185,358,358) fs=ready bs=(90.0,0.0,0.0)",
-            "p=(0.0,0.0) pf=(0.0,0.0) h=0 g=0 lost=false ev= r=missing st=0 d=false bl=1 m=0 u=0 be= pc=none sm=- rr=(465,185,358,358) fs=ready bs=(133.3,2987.1,12.2)",
-            "p=(0.0,0.0) pf=(0.0,0.0) h=0 g=0 lost=false ev= r=missing st=0 d=false bl=1 m=0 u=0 be= pc=none sm=- rr=(465,185,358,358) fs=ready bs=(133.3,2987.1,12.2)",
+            "p=(0.0,0.0) pf=(0.0,0.0) h=0 g=0 lost=false ev= r=ghost st=0 d=false bl=1 m=0 u=0 be= pc=none sm=- rr=(465,185,358,358) fs=ready bs=(133.3,2987.1,12.2)",
+            "p=(0.0,0.0) pf=(0.0,0.0) h=0 g=0 lost=false ev= r=ghost st=0 d=false bl=1 m=0 u=0 be= pc=none sm=- rr=(465,185,358,358) fs=ready bs=(133.3,2987.1,12.2)",
             "p=(0.0,0.0) pf=(0.0,0.0) h=0 g=0 lost=false ev= r=matching st=0 d=true bl=1 m=0 u=0 be= pc=none sm=- rr=(465,185,358,358) fs=ready bs=(133.3,2987.1,12.2)",
             "p=(0.0,0.0) pf=(0.0,0.0) h=0 g=0 lost=false ev= r=matching st=0 d=true bl=1 m=0 u=0 be= pc=none sm=- rr=(465,185,358,358) fs=ready bs=(133.3,2987.1,12.2)",
             "p=(0.0,0.0) pf=(0.0,0.0) h=0 g=0 lost=false ev= r=matching st=0 d=true bl=1 m=0 u=0 be= pc=none sm=- rr=(465,185,358,358) fs=ready bs=(133.3,2987.1,12.2)",
@@ -126,9 +136,9 @@
             "p=(15.0,0.0) pf=(0.0,0.0) h=0 g=0 lost=false ev= r=measured st=0 d=true bl=0 m=0 u=0 be= pc=none sm=- rr=(465,185,358,358) fs=ready bs=(133.2,3070.5,13.0)",
             "p=(30.0,0.0) pf=(0.1,0.0) h=0 g=0 lost=false ev= r=measured st=0 d=true bl=0 m=0 u=0 be= pc=none sm=- rr=(465,185,358,358) fs=ready bs=(132.9,3341.4,14.7)",
             "p=(45.0,0.0) pf=(0.1,0.0) h=0 g=0 lost=false ev= r=measured st=0 d=true bl=0 m=0 u=0 be= pc=none sm=- rr=(465,185,358,358) fs=ready bs=(132.7,3515.5,16.5)",
-            "p=(60.0,0.0) pf=(0.2,0.0) h=0 g=0 lost=false ev= r=predicted st=1 d=true bl=0 m=0 u=0 be= pc=none sm=- rr=(465,185,358,358) fs=ready bs=(132.1,3793.2,18.3)",
-            "p=(75.0,0.0) pf=(0.2,0.0) h=0 g=0 lost=false ev= r=predicted st=2 d=true bl=0 m=0 u=0 be= pc=none sm=- rr=(465,185,358,358) fs=ready bs=(131.8,4100.4,20.0)",
-            "p=(90.0,0.0) pf=(0.3,0.0) h=1 g=0 lost=false ev=hop r=predicted st=3 d=true bl=0 m=0 u=0 be= pc=none sm=- rr=(465,185,358,358) fs=ready bs=(131.4,4289.4,21.1)",
+            "p=(60.0,0.0) pf=(0.2,0.0) h=0 g=0 lost=false ev= r=measured st=0 d=true bl=0 m=0 u=0 be= pc=none sm=- rr=(465,185,358,358) fs=ready bs=(132.1,3793.2,18.3)",
+            "p=(75.0,0.0) pf=(0.2,0.0) h=0 g=0 lost=false ev= r=predicted st=1 d=true bl=0 m=0 u=0 be= pc=none sm=- rr=(465,185,358,358) fs=ready bs=(131.8,4100.4,20.0)",
+            "p=(90.0,0.0) pf=(0.3,0.0) h=1 g=0 lost=false ev=hop r=predicted st=2 d=true bl=0 m=0 u=0 be= pc=none sm=- rr=(465,185,358,358) fs=ready bs=(131.4,4289.4,21.1)",
             "p=(105.0,0.0) pf=(0.3,0.0) h=1 g=0 lost=false ev= r=measured st=0 d=true bl=0 m=0 u=0 be= pc=none sm=- rr=(465,185,358,358) fs=ready bs=(131.2,4473.9,22.4)",
             "p=(120.0,0.0) pf=(0.3,0.0) h=1 g=0 lost=false ev= r=measured st=0 d=true bl=0 m=0 u=0 be= pc=none sm=- rr=(465,185,358,358) fs=ready bs=(130.7,4727.4,23.7)",
             "p=(135.0,0.0) pf=(0.4,0.0) h=1 g=0 lost=false ev= r=measured st=0 d=true bl=0 m=0 u=0 be= pc=none sm=- rr=(465,185,358,358) fs=ready bs=(130.4,5032.5,25.0)",

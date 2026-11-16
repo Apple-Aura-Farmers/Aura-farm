@@ -63,6 +63,17 @@ struct GuidedSweepThresholds {
     /// before the left edge is looked for again, in fields.
     var recheckLeftFields: Double = 1.0
     var maxLeftRechecks: Int = 2
+    /// Full-cover-slip mode: the sample fills the cover slip, so the edge is the cover slip's
+    /// line (`LineEdgeTracker`) and not a patch of low detail. Half edges, blank boxes and
+    /// uneven sides are still logged but decide nothing; there is no left-edge recheck and no
+    /// inward probing, and a right edge on a step finishes the route. Off (legacy) is the
+    /// detail-density rule.
+    var fullCoverSlip = false
+    var lineEdge = LineEdgeThresholds()
+    /// Full-cover-slip mode: the rule never confirms an edge by itself; it reaches "Stay still,
+    /// edge detected" and waits for the helper's answer (`SlideRoute.userEdge`). Off: it confirms
+    /// after `confirmSeconds` at rest.
+    var asksEdges = false
     /// At the end of a leg, a spot is also taken at the edge when it is further than this
     /// from every capture, so the last stretch is not left out.
     var edgeSpotMinFields: Double = 0.5
@@ -197,13 +208,41 @@ struct SlideRoute {
     private var cornerBoxHistory: [(seconds: Double, sharpness: Double)] = []
     private var cornerShare: Double?
     /// What the last reading made of the edge conditions, for the CSV.
-    private(set) var diagnostics = EdgeDiagnostics()
+    private var rawDiagnostics = EdgeDiagnostics()
+    private var lineEdge: LineEdgeTracker
+    /// Edges the line rule confirmed (or the helper did), and lines the helper rejected.
+    private var edgeMemory = LineEdgeMemory()
+    private var notAnEdgeUntil: Double?
+    /// Where the view was after the last reading: `edgeHeading` is decided from it.
+    private var lastPosition = CGPoint.zero
 
     init(thresholds: GuidedSweepThresholds = GuidedSweepThresholds()) {
         self.thresholds = thresholds
         alignment = SpotAlignment(thresholds: thresholds.alignment)
         confirmation = EdgeConfirmation(
             thresholds: thresholds.confirmation, halfCut: thresholds.halfLowDetailBelowSharpness)
+        lineEdge = LineEdgeTracker(
+            thresholds: thresholds.lineEdge, confirmSeconds: thresholds.confirmation.confirmSeconds)
+    }
+
+    /// What the last reading made of the edge conditions, for the CSV. In full-cover-slip mode
+    /// it also says how far the line has got, and the reading that attached or confirmed it
+    /// carries that as its reason (which asks for a snapshot).
+    var diagnostics: EdgeDiagnostics {
+        var shown = rawDiagnostics
+        shown.canMarkEdge = thresholds.fullCoverSlip && markHeading != nil
+        if thresholds.fullCoverSlip {
+            shown.edgeMode = "line"
+            // The detail rules only log in line mode.
+            shown.verdict = "off"
+            shown.lineAtCross = lineEdge.atCross
+            if lineEdge.event == "line_confirmed" { shown.feedback = "auto" }
+            shown.lineState =
+                lineEdge.event == "line_confirmed" ? "confirmed" : lineEdge.state.csvName
+            shown.lineAttachedCount = lineEdge.attachedCount
+            if !lineEdge.event.isEmpty { shown.reason = lineEdge.event }
+        }
+        return shown
     }
 
     var isFinished: Bool { phase == .finished }
@@ -237,7 +276,41 @@ struct SlideRoute {
 
     mutating func update(_ reading: GuideReading) -> Output {
         lastOutput = advance(reading)
+        lastPosition = reading.position
         return lastOutput
+    }
+
+    /// The direction "Mark edge here" marks along: the same as `edgeHeading` but wherever the view
+    /// is, so an edge can be marked while the guide says to turn back toward the cross (the view
+    /// off the column, past the spot, holding on a spot).
+    var markHeading: CGPoint? {
+        switch phase {
+        case .runToLeftEdge: return CGPoint(x: -1, y: 0)
+        case .spot(.leg): return current.map { CGPoint(x: 0, y: $0.legDirection) }
+        case .spot(.step): return CGPoint(x: 1, y: 0)
+        default: return nil
+        }
+    }
+
+    /// The direction an edge line is looked for along (screen unit vector), or nil: screen left on
+    /// the left-edge run, the leg's direction on a column leg, screen right on a step right. nil
+    /// on returns, the trip to a column's start (the view is not yet on the column), edge spots,
+    /// while holding on a spot's target, and on travel. The lab measures the line along it.
+    var edgeHeading: CGPoint? {
+        let holding = alignment.holdsTarget && alignment.isAtTarget
+        switch phase {
+        case .runToLeftEdge:
+            return CGPoint(x: -1, y: 0)
+        case .spot(.leg):
+            guard let column = current, !holding,
+                abs(Double(lastPosition.x) - column.x) <= thresholds.alignment.alignToleranceFields
+            else { return nil }
+            return CGPoint(x: 0, y: column.legDirection)
+        case .spot(.step):
+            return holding ? nil : CGPoint(x: 1, y: 0)
+        default:
+            return nil
+        }
     }
 
     private mutating func advance(_ reading: GuideReading) -> Output {
@@ -285,6 +358,7 @@ struct SlideRoute {
         rawReason = ""
         cornerShare = nil
         rememberBoxSharpness(reading)
+        updateLineEdge(reading)
         let halfEdge = rawHalfEdge(reading)
         halfEdgeSince = halfEdge ? (halfEdgeSince ?? reading.seconds) : nil
 
@@ -416,12 +490,22 @@ struct SlideRoute {
             longBlur = nil
             return nil
         }
-        longBlur = nil
         let returned = reading.blankReturnCount > pending.returns
         let moved = hypot(
             Double(reading.position.x - pending.position.x),
             Double(reading.position.y - pending.position.y))
-        if !returned || (reading.lastBlankReturn == .matched && moved <= thresholds.sameSpotFields) {
+        let isBlur =
+            !returned || (reading.lastBlankReturn == .matched && moved <= thresholds.sameSpotFields)
+        // An edge is decided only at rest: while the helper is moving the decision waits (and in
+        // full-cover-slip mode only the line decides an edge, so it is taken as blur).
+        if !isBlur, !thresholds.fullCoverSlip,
+            !reading.isStill(for: thresholds.confirmation.confirmSeconds)
+        {
+            rawReason = "moving"
+            return nil
+        }
+        longBlur = nil
+        if isBlur || thresholds.fullCoverSlip {
             // Blur: carry on where it was, nothing was decided.
             lowDetailSince = nil
             detailSince = nil
@@ -430,7 +514,7 @@ struct SlideRoute {
             rawReason = "same_spot"
             return nil
         }
-        diagnostics = EdgeDiagnostics(candidate: "whole_box", verdict: "confirmed", reason: "moved")
+        rawDiagnostics = EdgeDiagnostics(candidate: "whole_box", verdict: "confirmed", reason: "moved")
         confirmation.cancel()
         verdict = .none
         return takeWholeBoxEdge(reading, completeNow: onSample)
@@ -479,9 +563,14 @@ struct SlideRoute {
             reading: reading, heading: heading, candidate: candidate, since: since,
             spotReachedAt: atTargetSince)
         let reason = rawReason.isEmpty ? confirmation.reason : rawReason
-        diagnostics = EdgeDiagnostics(
+        rawDiagnostics = EdgeDiagnostics(
             candidate: candidate.csvName, verdict: verdict.csvName, reason: reason,
             cornerBoxShare: cornerShare)
+        if thresholds.fullCoverSlip {
+            // Logged above as it was computed (verdict written "off"), but it decides nothing and
+            // says nothing: no check-edge, no checking, no blur, never an edge.
+            verdict = .none
+        }
     }
 
     /// Takes the confirmed verdict, once.
@@ -560,6 +649,8 @@ struct SlideRoute {
         stretchWasMoving = false
         detailHistory = []
         cornerBoxHistory = []
+        lineEdge.reset()
+        notAnEdgeUntil = nil
         verdict = .none
         candidateNow = .none
         rawReason = ""
@@ -578,6 +669,7 @@ struct SlideRoute {
             output.instruction = .stageLimit
             return output
         }
+        if thresholds.fullCoverSlip { return runToLeftEdgeByLine(reading) }
         switch verdict {
         case .confirmed:
             let half = candidateNow == .halfEdge
@@ -601,6 +693,156 @@ struct SlideRoute {
         }
         if let warning = alignment.warning(reading, allowsRefocus: false) { return plain(warning) }
         return plain(.travel(direction: CGPoint(x: -1, y: 0)))
+    }
+
+    /// Full-cover-slip mode on the left-edge run: the line decides, at rest and attached.
+    private mutating func runToLeftEdgeByLine(_ reading: GuideReading) -> Output {
+        if lineEdge.state == .confirmed,
+            let output = takeLineEdge(
+                reading, offsetFields: lineEdge.offsetFields ?? 0,
+                angleDegrees: lineEdge.angleDegrees ?? 0)
+        {
+            return output
+        }
+        if let instruction = lineInstruction(reading, backward: CGPoint(x: 1, y: 0)) {
+            return plain(instruction)
+        }
+        if let warning = alignment.warning(reading, allowsRefocus: false) { return plain(warning) }
+        if lineEdge.state == .ahead || lineEdge.state == .attached { return plain(.lineAhead) }
+        if Self.isLowDetail(reading) { return plain(.nothingToFollow) }
+        return plain(.travel(direction: CGPoint(x: -1, y: 0)))
+    }
+
+    /// What the line says to do, before anything else: keep going after "not an edge", stay still
+    /// at the cross, or step back and come forward when the line at the cross was never seen to
+    /// move with the slide. nil when it says nothing.
+    private func lineInstruction(_ reading: GuideReading, backward: CGPoint) -> GuideInstruction? {
+        if let until = notAnEdgeUntil, reading.seconds < until { return .notAnEdge }
+        if lineEdge.needsProof(reading) { return .checkEdge(toward: backward) }
+        if lineEdge.atCross { return .edgeDetected }
+        return nil
+    }
+
+    /// Feeds the line tracker on the phases that look for an edge (the left-edge run, a column
+    /// leg and a step right); any other phase forgets the line.
+    private mutating func updateLineEdge(_ reading: GuideReading) {
+        guard thresholds.fullCoverSlip else { return }
+        guard let heading = edgeHeading else {
+            lineEdge.reset()
+            return
+        }
+        var seen = reading
+        if let line = reading.edgeLine {
+            // A line measured along another heading is not this leg's; a known or rejected
+            // edge is not found a second time.
+            let other = reading.edgeLineHeading.map {
+                Double($0.x * heading.x + $0.y * heading.y) < 0.9
+            }
+            if other == true
+                || edgeMemory.ignores(
+                    normal: heading, position: reading.position, offsetFields: line.offsetFields,
+                    angleDegrees: line.angleDegrees, thresholds: thresholds.lineEdge)
+            {
+                seen.edgeLine = nil
+            }
+        }
+        lineEdge.confirmsAutomatically = !thresholds.asksEdges
+        lineEdge.update(seen)
+    }
+
+    /// Takes the line at the cross as the edge (the rule's, or the helper's): remembers it so it is
+    /// not found again, and ends the left-edge run, the leg or the route as a confirmed edge does.
+    private mutating func takeLineEdge(
+        _ reading: GuideReading, offsetFields: Double, angleDegrees: Double,
+        along: CGPoint? = nil
+    ) -> Output? {
+        guard let heading = along ?? edgeHeading else { return nil }
+        edgeMemory.recordKnown(
+            LineEdgeMemory.entry(
+                normal: heading, position: reading.position, offsetFields: offsetFields,
+                angleDegrees: angleDegrees))
+        edgeMemory.clearRejected()
+        lineEdge.consume()
+        halfEdgeSince = nil
+        switch phase {
+        case .runToLeftEdge:
+            edgesReached += 1
+            var output = completeReturn(.leftEdge, reading, edgeAtCentre: true)
+            output.instruction = .edgeReached
+            return output
+        case .spot(.leg):
+            edgesReached += 1
+            var output = endLeg(reading)
+            output.instruction = .edgeReached
+            return output
+        case .spot(.step):
+            finish(reason: .rightEdge)
+            return plain(.finished)
+        default:
+            return nil
+        }
+    }
+
+    /// The helper's answer about an edge in full-cover-slip mode. "Yes" takes the line that is
+    /// attached and at the cross; "mark" takes an edge at the cross along `edgeHeading` (one the
+    /// rule missed); "no" rejects the line for the rest of the leg or run and says to keep going.
+    /// Anything that does not apply returns the last answer.
+    mutating func userEdge(_ feedback: EdgeFeedback, _ reading: GuideReading) -> Output {
+        guard thresholds.fullCoverSlip else { return lastOutput }
+        var output: Output?
+        switch feedback {
+        case .yes:
+            guard lineEdge.atCross else { return lastOutput }
+            output = takeLineEdge(
+                reading, offsetFields: lineEdge.offsetFields ?? 0,
+                angleDegrees: lineEdge.angleDegrees ?? 0)
+        case .mark:
+            guard let along = markHeading else { return lastOutput }
+            output = takeLineEdge(reading, offsetFields: 0, angleDegrees: 0, along: along)
+        case .no:
+            guard let heading = edgeHeading, lineEdge.state != .none,
+                let offset = lineEdge.offsetFields
+            else {
+                return lastOutput
+            }
+            edgeMemory.recordRejected(
+                LineEdgeMemory.entry(
+                    normal: heading, position: reading.position, offsetFields: offset,
+                    angleDegrees: lineEdge.angleDegrees ?? 0))
+            lineEdge.reset()
+            notAnEdgeUntil = reading.seconds + thresholds.lineEdge.notAnEdgeSeconds
+            lastOutput.instruction = .notAnEdge
+        }
+        if let output { lastOutput = output }
+        return lastOutput
+    }
+
+    /// Full-cover-slip mode on a leg or a step right: a confirmed line ends the leg (or the
+    /// route, on a step); a blank box after a step right is the right edge too, at rest; a line
+    /// at the cross that was never seen to move with the slide asks to be proven. nil otherwise.
+    private mutating func lineEdgeOutcome(
+        _ kind: SpotKind, _ reading: GuideReading, target: CGPoint
+    ) -> Output? {
+        guard kind == .leg || kind == .step else { return nil }
+        if lineEdge.state == .confirmed,
+            let output = takeLineEdge(
+                reading, offsetFields: lineEdge.offsetFields ?? 0,
+                angleDegrees: lineEdge.angleDegrees ?? 0)
+        {
+            return output
+        }
+        if kind == .step, candidateNow == .wholeBoxLowDetail, edgeReached(reading),
+            reading.isStill(for: thresholds.confirmation.confirmSeconds)
+        {
+            finish(reason: .rightEdge)
+            return plain(.finished)
+        }
+        if lineEdge.needsProof(reading) {
+            return Output(
+                instruction: .checkEdge(toward: CGPoint(x: -heading.x, y: -heading.y)),
+                target: target, capture: nil)
+        }
+        return nil
     }
 
     // MARK: Edges
@@ -653,11 +895,11 @@ struct SlideRoute {
         else { return .refocus }
         if reading.seconds - lowDetailSince > thresholds.refocusAfterSeconds {
             if longBlur == nil, let stretchStart { longBlur = stretchStart }
-            diagnostics.reason = "timeout_no_detail"
+            rawDiagnostics.reason = "timeout_no_detail"
             return .stillNoDetail(toward: toward)
         }
         if stretchWasMoving, phase == .runToLeftEdge || phase == .spot(.leg) {
-            diagnostics.reason = "moving_onset"
+            rawDiagnostics.reason = "moving_onset"
             return .checkEdge(toward: toward)
         }
         return .refocus
@@ -798,6 +1040,9 @@ struct SlideRoute {
         guard let target = alignment.target else { return plain(.aligned) }
         // Keeps the blur stretch whatever happens below: `alignment.update` is not always reached.
         _ = alignment.warning(reading, allowsRefocus: false)
+        if thresholds.fullCoverSlip, let output = lineEdgeOutcome(kind, reading, target: target) {
+            return output
+        }
 
         // A candidate edge must pass `EdgeConfirmation`; a blur is not an edge and the leg
         // carries on where it was.
@@ -824,12 +1069,29 @@ struct SlideRoute {
             return takeWholeBoxEdge(reading, completeNow: false)
         }
 
-        let instruction = alignment.update(reading)
+        var instruction = alignment.update(reading)
         switch instruction {
         case .refocus, .slowDown, .tooFar, .otherWay:
             return Output(instruction: instruction, target: target, capture: nil)
         default:
             break
+        }
+        if thresholds.fullCoverSlip, kind == .leg || kind == .step {
+            switch instruction {
+            case .move, .farAway, .aligned:
+                if let until = notAnEdgeUntil, reading.seconds < until {
+                    instruction = .notAnEdge
+                } else if lineEdge.atCross {
+                    instruction = .edgeDetected
+                } else if instruction != .aligned,
+                    lineEdge.state == .ahead || lineEdge.state == .attached
+                {
+                    instruction = .lineAhead
+                } else if instruction != .aligned, Self.isLowDetail(reading) {
+                    instruction = .nothingToFollow
+                }
+            default: break
+            }
         }
 
         let reached = instruction == .captured || (!alignment.holdsTarget && alignment.isAtTarget)
@@ -908,6 +1170,7 @@ struct SlideRoute {
 
     @discardableResult
     private mutating func finishLeg(_ reading: GuideReading) -> Output {
+        edgeMemory.clearRejected()
         guard var column = current else { return plain(.aligned) }
         column.legsDone += 1
         column.endDirection = column.legDirection
@@ -928,7 +1191,8 @@ struct SlideRoute {
     private mutating func finishColumn(_ column: Column, _ reading: GuideReading) -> Output {
         let leftmost = columns.map(\.x).min() ?? column.x
         let middle = (column.minY + column.maxY) / 2
-        if column.x <= leftmost, rechecks < thresholds.maxLeftRechecks,
+        let allowedRechecks = thresholds.fullCoverSlip ? 0 : thresholds.maxLeftRechecks
+        if column.x <= leftmost, rechecks < allowedRechecks,
             abs(middle - leftEdgeY) > thresholds.recheckLeftFields
         {
             rechecks += 1
@@ -960,6 +1224,11 @@ struct SlideRoute {
     /// and step again from there.
     private mutating func failProbe(_ reading: GuideReading) -> Output {
         guard let index = stepBase else { return plain(.aligned) }
+        if thresholds.fullCoverSlip {
+            // No inward probing: the sample fills the cover slip, so blank here is its right edge.
+            finish(reason: .rightEdge)
+            return plain(.finished)
+        }
         failedProbes += 1
         let base = columns[index]
         probeIndex += thresholds.probeStrideSpots

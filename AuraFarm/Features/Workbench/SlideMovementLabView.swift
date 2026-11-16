@@ -29,6 +29,8 @@
         @AppStorage("slideLab.pauseOnMonitor") private var pausesOnMonitor = true
         @AppStorage("slideLab.showEdgeLine") private var showsEdgeLine = true
         @AppStorage("slideLab.trackSparse") private var tracksSparse = true
+        @AppStorage("slideLab.fullCoverSlip") private var fullCoverSlip = true
+        @AppStorage("slideLab.askEdges") private var asksEdges = true
         @AppStorage("slideLab.skipAlignFocus") private var skipsAlignFocus = false
         @State private var noteText = ""
 
@@ -57,6 +59,8 @@
                 model.setSkipsAlignAndFocus(skipsAlignFocus)
                 model.setPausesOnMonitor(pausesOnMonitor)
                 model.setTracksSparse(tracksSparse)
+                model.setFullCoverSlip(fullCoverSlip)
+                model.setAsksEdges(asksEdges)
                 model.setFieldRegion(FieldRegionMode(rawValue: fieldRegionName) ?? .auto)
                 model.setMeasuresHopAgreement(hopAgreement)
                 model.setShowsThumbnail(showsSees)
@@ -73,6 +77,8 @@
             .onChange(of: skipsAlignFocus) { _, skips in model.setSkipsAlignAndFocus(skips) }
             .onChange(of: pausesOnMonitor) { _, pauses in model.setPausesOnMonitor(pauses) }
             .onChange(of: tracksSparse) { _, tracks in model.setTracksSparse(tracks) }
+            .onChange(of: fullCoverSlip) { _, enabled in model.setFullCoverSlip(enabled) }
+            .onChange(of: asksEdges) { _, asks in model.setAsksEdges(asks) }
             .onChange(of: mappingName) { model.setScreenMapping(mapping, mirrored: mirrored) }
             .onChange(of: mirrored) { model.setScreenMapping(mapping, mirrored: mirrored) }
             .onDisappear { model.stop() }
@@ -354,6 +360,8 @@
                 Toggle("Pause when out of focus or alignment", isOn: $pausesOnMonitor)
                 Toggle("Show edge line", isOn: $showsEdgeLine)
                 Toggle("Track sparse sample", isOn: $tracksSparse)
+                Toggle("Full cover slip (line edges)", isOn: $fullCoverSlip)
+                Toggle("Ask me to confirm edges", isOn: $asksEdges)
                 Text("Red tint: treated as the eyepiece. Yellow box: where movement is measured.")
                     .font(.caption)
                     .foregroundStyle(.secondary)

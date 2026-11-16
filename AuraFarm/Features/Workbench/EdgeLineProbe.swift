@@ -10,8 +10,15 @@
         /// The candidate's path in frame pixels; empty when there is none.
         private(set) var path: [CGPoint] = []
 
+        /// How far the guide's line rule has got: "", "none", "ahead", "attached" or "confirmed".
+        private(set) var lineState = ""
+
         func update(_ path: [CGPoint]) {
             if self.path != path { self.path = path }
+        }
+
+        func setLineState(_ state: String) {
+            if lineState != state { lineState = state }
         }
     }
 

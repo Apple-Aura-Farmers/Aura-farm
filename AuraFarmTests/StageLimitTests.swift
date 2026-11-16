@@ -37,7 +37,7 @@ final class StageLimitTests: XCTestCase {
             guardCount += 1
             if guardCount > 4 {
                 route.feed(move: CGPoint(x: 0, y: 0.1), times: 4)
-                route.feed(.edgeAhead, times: 14)
+                route.feed(.edgeAhead, times: 24)
                 route.feed(ScriptedRoute.Frame(still: true), times: 14)
             } else {
                 route.visitTarget()
@@ -49,7 +49,7 @@ final class StageLimitTests: XCTestCase {
         XCTAssertEqual(route.guide.placements.last?.column, 2)
         // Straight to its bottom edge, then up: the up leg stops at the limit, no tap.
         route.feed(move: CGPoint(x: 0, y: 0.1), times: 3)
-        route.feed(.edgeAhead, times: 14)
+        route.feed(.edgeAhead, times: 24)
         route.feed(ScriptedRoute.Frame(still: true), times: 14)
         XCTAssertEqual(route.last.stateName, "column 2 up")
         let presses = route.instructions.filter { $0 == .stageLimit }.count
@@ -79,10 +79,10 @@ final class StageLimitTests: XCTestCase {
         for _ in 0..<2 { route.visitTarget() }
         // Both ends of column 1 are edges.
         route.feed(move: ScriptedRoute.up, times: 3)
-        route.feed(.edgeAhead, times: 14)
+        route.feed(.edgeAhead, times: 24)
         route.feed(ScriptedRoute.Frame(still: true), times: 14)
         route.feed(move: CGPoint(x: 0, y: 0.1), times: 8)
-        route.feed(.edgeAhead, times: 14)
+        route.feed(.edgeAhead, times: 24)
         route.feed(ScriptedRoute.Frame(still: true), times: 14)
         for _ in 0..<4 where route.last.stateName != "step right" { route.visitTarget() }
         XCTAssertEqual(route.last.stateName, "step right")

@@ -45,6 +45,12 @@ struct SlideTrackerReading: Equatable {
     /// from it, px; nil when not available (see `ReadingConsistency`).
     var chain: CGPoint?
     var anchorChainGap: Double?
+    /// Frames dropped so far because the frame-to-frame shift was too large to be real, and how
+    /// many times `maxInARow` of them gave up. A dropped frame carries the last good shift.
+    var ghostFrames = 0
+    var ghostFallbacks = 0
+    /// Frames skipped so far because the box held too few feature cells to register.
+    var sparseSkips = 0
     /// False while the box holds too little detail to follow.
     var hasDetail = true
     var blindStretches = 0

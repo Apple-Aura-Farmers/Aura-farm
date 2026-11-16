@@ -155,6 +155,20 @@ struct MovementLogRow: Equatable {
     var chainX: Double?
     var chainY: Double?
     var anchorChainGap: Double?
+    /// Frames dropped as ghosts so far (a running count) and the times a run of them gave up.
+    var ghostFrames = 0
+    var ghostFallbacks = 0
+    /// Full-cover-slip mode: how far the edge line has got ("none", "ahead", "attached",
+    /// "confirmed"), how many of the last moving readings were attached to the slide, and the
+    /// edge mode ("line" or "legacy"); empty before the guide runs.
+    var lineState = ""
+    var lineAttachedCount = 0
+    var edgeMode = ""
+    /// Frames skipped as near empty so far (a running count).
+    var sparseSkips = 0
+    /// "yes", "no" or "mark" on the row of a tap on an edge button, "auto" when the rule confirmed
+    /// an edge by itself, else empty.
+    var edgeFeedback = ""
 }
 
 enum MovementLog {
@@ -184,6 +198,9 @@ enum MovementLog {
         "focus_dial_offset", "focus_dial_side", "edge_line_longest_run", "snapshot",
         "quad_ahead_away", "quad_ahead_toward", "quad_behind_away", "quad_behind_toward",
         "corner_box_share", "chain_x_px", "chain_y_px", "anchor_chain_gap_px",
+        "ghost_frames", "ghost_fallbacks", "line_state", "line_attached_count", "edge_mode",
+        "sparse_skips", "line_before_energy", "line_beyond_energy",
+        "edge_feedback",
     ]
 
     static func csv(_ rows: [MovementLogRow]) -> String {
@@ -239,6 +256,10 @@ enum MovementLog {
             number(row.quadBehindAway, 1), number(row.quadBehindToward, 1),
             number(row.cornerBoxShare, 3),
             number(row.chainX, 2), number(row.chainY, 2), number(row.anchorChainGap, 2),
+            String(row.ghostFrames), String(row.ghostFallbacks), row.lineState,
+            row.lineState.isEmpty ? "" : String(row.lineAttachedCount), row.edgeMode,
+            String(row.sparseSkips), number(row.edgeLine?.beforeEnergy, 2),
+            number(row.edgeLine?.beyondEnergy, 2), row.edgeFeedback,
         ]
     }
 

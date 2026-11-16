@@ -27,7 +27,7 @@ final class CornerEdgeTests: XCTestCase {
                 ahead: ahead, behind: 660, sideA: lowSideLeft ? 90 : 600,
                 sideB: lowSideLeft ? 600 : 90, still: true, sideDirection: direction ?? towardLeft,
                 box: box, aheadAway: aheadAway, aheadToward: aheadToward, behindAway: behindAway,
-                behindToward: behindToward), times: 15)
+                behindToward: behindToward), times: 25)
     }
 
     private func lastReasons(_ route: ScriptedRoute) -> Set<String> {

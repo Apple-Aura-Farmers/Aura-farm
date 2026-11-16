@@ -65,7 +65,7 @@ final class SlideRouteColumnTests: XCTestCase {
     @discardableResult
     private func startColumnOne() throws -> Double {
         feed(Frame(), move: left, times: 15)
-        feed(Frame(ahead: 50, behind: 250, still: true), times: 14)
+        feed(Frame(ahead: 50, behind: 250, still: true), times: 24)
         let reached = try XCTUnwrap(steps.first { $0.instruction == .edgeReached })
         XCTAssertEqual(reached.stateName, "column 1 up")
         let edgeX = Double(position.x)
@@ -79,7 +79,7 @@ final class SlideRouteColumnTests: XCTestCase {
 
     func testA_theLeftEdgeAtTheCentreStartsColumnOneInsideIt() throws {
         feed(Frame(), move: left, times: 15)
-        feed(Frame(ahead: 50, behind: 250, still: true), times: 14)
+        feed(Frame(ahead: 50, behind: 250, still: true), times: 24)
         let reached = try XCTUnwrap(steps.first { $0.instruction == .edgeReached })
         let target = try XCTUnwrap(reached.target)
         XCTAssertEqual(Double(target.x), Double(position.x) + 0.6, accuracy: 1e-9, "edge x + 0.6")
@@ -98,7 +98,7 @@ final class SlideRouteColumnTests: XCTestCase {
         feed(
             Frame(
                 viewClass: .blank, tracking: .paused, ahead: nil, behind: nil, aheadFocus: nil,
-                behindFocus: nil, sideA: nil, sideB: nil), times: 25)
+                behindFocus: nil, sideA: nil, sideB: nil, still: true), times: 35)  // at rest (2o, 2 s in 2p)
         XCTAssertTrue(instructions.contains(where: isGoBack))
         let backAt = position
         feed(Frame(), move: right, times: 3)
@@ -167,7 +167,7 @@ final class SlideRouteColumnTests: XCTestCase {
     func testD_aRealTopEdgeEndsTheLegAndTheColumnTurnsDown() throws {
         try startColumnOne()
         feed(Frame(), move: up, times: 6)
-        feed(Frame(ahead: 50, behind: 300, sideA: 300, sideB: 300, still: true), times: 14)
+        feed(Frame(ahead: 50, behind: 300, sideA: 300, sideB: 300, still: true), times: 24)
         XCTAssertEqual(guide.edgesReached, 2, "the left edge and the top edge")
         XCTAssertTrue(steps.contains { $0.edge.verdict == "confirmed" && $0.edge.reason == "arrived" })
         // The end spot is taken where the edge was found, then the column comes back down.

@@ -78,7 +78,8 @@ struct GuideOverlayModel: Equatable {
                 pointsPerField: pointsPerField, fieldRadius: fieldRadius, heading: heading,
                 thresholds: thresholds),
             holdProgress: holdProgress, justCaptured: justCaptured,
-            line: step.instruction.helperText, isFinished: step.isFinished,
+            line: step.instruction.helperText(fullCoverSlip: step.edge.edgeMode == "line"),
+            isFinished: step.isFinished,
             justReachedEdge: justReachedEdge, checkProgress: checkProgress)
     }
 
@@ -114,7 +115,7 @@ struct GuideOverlayModel: Equatable {
         case .edgeGoBack(let toward), .stillNoDetail(let toward), .checkEdge(let toward):
             vector = toward
             hasDistance = false
-        case .checkingEdge, .refocus:
+        case .checkingEdge, .refocus, .lineAhead:
             if let target = step.target {
                 vector = CGPoint(x: target.x - position.x, y: target.y - position.y)
             } else if let heading {

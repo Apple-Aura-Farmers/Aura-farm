@@ -325,13 +325,27 @@
         var mapper: (any FrameToView)?
         @AppStorage("slideLab.showEdgeLine") private var shows = true
 
+        /// Cyan for a candidate, green once it has been seen moving with the slide, and the
+        /// word "edge" beside it when the guide has confirmed it.
+        static func colour(for lineState: String) -> Color {
+            lineState == "attached" || lineState == "confirmed" ? .green : .cyan
+        }
+
         var body: some View {
             Canvas { context, _ in
                 guard shows, let mapper, state.path.count > 1 else { return }
+                let points = state.path.map { mapper.viewPoint(of: $0) }
                 var line = Path()
-                line.move(to: mapper.viewPoint(of: state.path[0]))
-                for point in state.path.dropFirst() { line.addLine(to: mapper.viewPoint(of: point)) }
-                context.stroke(line, with: .color(.cyan), lineWidth: 1.5)
+                line.move(to: points[0])
+                for point in points.dropFirst() { line.addLine(to: point) }
+                let colour = Self.colour(for: state.lineState)
+                context.stroke(line, with: .color(colour), lineWidth: 1.5)
+                if state.lineState == "confirmed" {
+                    let middle = points[points.count / 2]
+                    context.draw(
+                        Text("edge").font(.caption.bold()).foregroundStyle(colour),
+                        at: CGPoint(x: middle.x + 20, y: middle.y - 10))
+                }
             }
             .allowsHitTesting(false)
         }

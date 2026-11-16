@@ -36,18 +36,21 @@
 
         /// Takes the frame; returns the file name written into the CSV row, or nil when a limit
         /// stops it. A manual save ignores the rate and the count.
-        func save(_ buffer: CVPixelBuffer, csvSeconds: Double, automatic: Bool) -> String? {
+        /// - Parameter tap: a tap on one of the edge buttons: it ignores the one-a-second limit but
+        ///   counts toward the cap.
+        func save(
+            _ buffer: CVPixelBuffer, csvSeconds: Double, automatic: Bool, tap: Bool = false
+        ) -> String? {
             guard let directory else { return nil }
+            if automatic || tap {
+                guard automaticCount < Self.maxAutomatic else { return nil }
+            }
             if automatic {
-                guard automaticCount < Self.maxAutomatic,
-                    csvSeconds - lastAutomaticAt >= Self.minGapSeconds
-                else { return nil }
+                guard csvSeconds - lastAutomaticAt >= Self.minGapSeconds else { return nil }
             }
             guard let luma = Self.lumaCopy(of: buffer) else { return nil }
-            if automatic {
-                automaticCount += 1
-                lastAutomaticAt = csvSeconds
-            }
+            if automatic || tap { automaticCount += 1 }
+            if automatic { lastAutomaticAt = csvSeconds }
             let name = Self.fileName(forSeconds: csvSeconds)
             let url = directory.appending(path: name)
             urls.append(url)

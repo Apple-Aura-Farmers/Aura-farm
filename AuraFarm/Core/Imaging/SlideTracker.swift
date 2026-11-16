@@ -26,6 +26,9 @@ final class SlideTracker {
     /// A seam for tests: replaces the reference picture's registration, called with the
     /// number of readings taken since the picture was kept and what Vision returned.
     var referenceReadingOverride: ((_ index: Int, _ measured: CGPoint?) -> CGPoint?)?
+    /// A seam for tests: replaces the frame-to-frame shift. Called with the number of frames
+    /// tracked so far (1 for the first) and what the registration returned.
+    var frameShiftOverride: ((_ index: Int, _ measured: CGPoint?) -> CGPoint?)?
 
     private let shake = ShakeEstimator()
     private let travel = TravelSinceLastFrame()
@@ -42,6 +45,18 @@ final class SlideTracker {
     private var blankMatch: PictureMatchCheck
     private(set) var blankReturnsMatched = 0
     private(set) var blankReturnsUnmatched = 0
+    /// Frames dropped because their frame-to-frame shift was too large to be real (a running
+    /// count), and how many times `maxInARow` of them in a row gave up and let the frame through.
+    private(set) var ghostFrames = 0
+    private(set) var ghostFallbacks = 0
+    private var ghostRun = 0
+    /// Frames skipped for being near empty (a running count), and how many in a row.
+    private(set) var sparseSkips = 0
+    private var sparseRun = 0
+    private var ghostThresholds: GhostFrameThresholds
+    private var frameIndex = 0
+    /// The last frame-to-frame shift of a frame that was not a ghost, which a ghost frame carries.
+    private var lastGoodShake: CGPoint?
     /// The frame the travel is measured from. The same buffer `travel` holds, kept here as
     /// well because a hop's agreement needs both frames as images.
     private var anchor: CVPixelBuffer?
@@ -76,8 +91,10 @@ final class SlideTracker {
         odometer: HopOdometerThresholds = HopOdometerThresholds(),
         consistency: ReadingConsistencyThresholds = ReadingConsistencyThresholds(),
         detail: DetailThresholds = DetailThresholds(),
-        pictureMatch: PictureMatchThresholds = PictureMatchThresholds()
+        pictureMatch: PictureMatchThresholds = PictureMatchThresholds(),
+        ghost: GhostFrameThresholds = GhostFrameThresholds()
     ) {
+        ghostThresholds = ghost
         self.odometer = HopOdometer(thresholds: odometer)
         self.consistency = ReadingConsistency(thresholds: consistency)
         self.detail = DetailCheck(thresholds: detail)
@@ -96,6 +113,8 @@ final class SlideTracker {
         detail.reset()
         blindStretches = 0
         resumeAfterBlind = false
+        ghostRun = 0
+        lastGoodShake = nil
         readingIndex = 0
         blankMatch.reset()
         blankReturnsMatched = 0
@@ -161,6 +180,9 @@ final class SlideTracker {
         var result = reading(outcome, boxStats: stats, frameSize: frameSize, start: start)
         result.halfSharpness = halfSharpness
         result.featureCells = features?.cells ?? 0
+        result.ghostFrames = ghostFrames
+        result.ghostFallbacks = ghostFallbacks
+        result.sparseSkips = sparseSkips
         result.featureQuarters = features?.quarters ?? 0
         result.sparse = detail.hasDetail && detail.isSparse
         if let box, let heldAnchor, let halfSharpness, detail.hasDetail {
@@ -255,6 +277,7 @@ final class SlideTracker {
         var blankReturnEvent = ""
         var chain: CGPoint?
         var chainGap: Double?
+        var isGhost = false
     }
 
     private struct ReferenceReading {
@@ -281,7 +304,8 @@ final class SlideTracker {
         let referenceSide = box.map { Double(min($0.width, $0.height)) }
         let boxSide = referenceSide ?? Double(min(frameSize.width, frameSize.height))
         return SlideTrackerReading(
-            boxStats: boxStats, frameShift: outcome.frameShift, anchorOffset: outcome.offset,
+            boxStats: boxStats, frameShift: shownShift(outcome),
+            anchorOffset: outcome.offset,
             usedOffset: outcome.usedOffset, position: odometer.position,
             positionFields: odometer.positionInFields(fieldSide: boxSide), boxSide: boxSide,
             hopLimit: odometer.hopDistance(frameSize: frameSize, referenceSide: referenceSide),
@@ -305,9 +329,32 @@ final class SlideTracker {
         features: FeatureCells?
     ) -> Outcome {
         var outcome = Outcome()
-        outcome.frameShift = measureFrameShift(buffer)
+        frameIndex += 1
         let hadDetail = detail.hasDetail
         detail.update(boxSharpness: boxStats.sharpness, features: features)
+        // A frame with detail on but almost no features cannot be registered: it is skipped like
+        // a ghost (no shift, no anchor reading, the previous frame kept), and a run of them is
+        // the no-detail pause.
+        let nearEmpty =
+            anchor != nil && detail.hasDetail && box != nil
+            && (features?.cells ?? Int.max) < ghostThresholds.minFeatureCellsToRegister
+        if nearEmpty {
+            sparseSkips += 1
+            sparseRun += 1
+            outcome.isGhost = true
+            outcome.reading = "sparse_skip"
+            if sparseRun >= ghostThresholds.maxSparseSkipsInARow {
+                sparseRun = 0
+                detail.forceNoDetail()
+            }
+        } else {
+            sparseRun = 0
+            var measuredShift = measureFrameShift(buffer)
+            if let override = frameShiftOverride {
+                measuredShift = override(frameIndex, measuredShift)
+            }
+            outcome.frameShift = acceptedShift(measuredShift, buffer, frameSize: frameSize, &outcome)
+        }
         if hadDetail && !detail.hasDetail {
             blindStretches += 1
             resumeAfterBlind = true
@@ -322,6 +369,8 @@ final class SlideTracker {
         // Nothing to follow: paused. Not a lost reading, no distance added, and the held
         // anchor is kept exactly as it is.
         guard detail.hasDetail else { return outcome }
+        // A ghost frame changes nothing: no anchor reading, no chain, no odometer.
+        guard !outcome.isGhost else { return outcome }
 
         let boxSide = Self.side(of: box, frameSize: frameSize)
         if resumeAfterBlind {
@@ -505,7 +554,6 @@ final class SlideTracker {
     /// The frame-to-frame shift. With a box, both frames are cropped to it; with the whole
     /// frame it is `ShakeEstimator`'s.
     private func measureFrameShift(_ buffer: CVPixelBuffer) -> CGPoint? {
-        defer { previousFrame = box == nil ? nil : buffer }
         guard let box else {
             _ = shake.update(with: buffer)
             return shake.lastShift
@@ -513,6 +561,46 @@ final class SlideTracker {
         shake.reset()
         guard let previousFrame else { return nil }
         return boxRegistration.offset(from: previousFrame, to: buffer, box: box)
+    }
+
+    /// The frame-to-frame shift this frame may use, and what to hold as the previous frame. A shift
+    /// larger than `maxFrameShiftShareOfBox` of the box is a ghost: the frame is dropped and the
+    /// previous frame stays the last good one, so the next frame registers against it. Ghosts
+    /// `maxInARow` times in a row are taken as real: no shift is used, and the frame moves on.
+    private func acceptedShift(
+        _ measured: CGPoint?, _ buffer: CVPixelBuffer, frameSize: CGSize, _ outcome: inout Outcome
+    ) -> CGPoint? {
+        let side = Self.side(of: box, frameSize: frameSize)
+        if box != nil, let measured,
+            hypot(Double(measured.x), Double(measured.y))
+                > ghostThresholds.maxFrameShiftShareOfBox * side
+        {
+            ghostFrames += 1
+            ghostRun += 1
+            if ghostRun >= ghostThresholds.maxInARow {
+                // Real fast movement or a broken view: the missing-shift fallback.
+                ghostFallbacks += 1
+                ghostRun = 0
+                previousFrame = buffer
+                return nil
+            }
+            outcome.isGhost = true
+            outcome.reading = "ghost"
+            return nil
+        }
+        ghostRun = 0
+        previousFrame = box == nil ? nil : buffer
+        if let measured { lastGoodShake = measured }
+        return measured
+    }
+
+    /// The frame-to-frame shift a reading reports. A ghost frame carries the last good one, so a
+    /// speed spike does not show; a skipped near-empty frame reports none (zero), because carrying
+    /// the last one made a helper who had stopped look in motion for as long as the picture stayed
+    /// near empty, and the hold on an aligned spot never began.
+    private func shownShift(_ outcome: Outcome) -> CGPoint? {
+        guard outcome.isGhost else { return outcome.frameShift }
+        return outcome.reading == "sparse_skip" ? .zero : lastGoodShake
     }
 
     private func measureAnchorOffset(held: CVPixelBuffer, current: CVPixelBuffer) -> CGPoint? {

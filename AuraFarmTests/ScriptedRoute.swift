@@ -25,16 +25,33 @@ final class ScriptedRoute {
         var aheadToward: Double?
         var behindAway: Double?
         var behindToward: Double?
+        /// The edge-line detector's result on this reading (nil: not computed).
+        var line: EdgeLine?
+        /// The heading the line was measured along; nil: the route's own.
+        var lineHeading: CGPoint?
 
         /// Nothing to follow: the tracker is paused over blank glass.
         static let blank = Frame(
             viewClass: .blank, tracking: .paused, ahead: nil, behind: nil, aheadFocus: nil,
             behindFocus: nil, sideA: nil, sideB: nil)
+        /// The same with the helper resting on it: an edge is confirmed only at rest.
+        static let blankStill = Frame(
+            viewClass: .blank, tracking: .paused, ahead: nil, behind: nil, aheadFocus: nil,
+            behindFocus: nil, sideA: nil, sideB: nil, still: true)
         /// The half ahead is over the edge, the half behind still sharp.
         static let edgeAhead = Frame(ahead: 50, behind: 300, sideA: 300, sideB: 300, still: true)
     }
 
     var guide = GuidedSweep()
+    /// Seconds the slide has been still in a row, as the indicators count them.
+    private var stillRun = 0.0
+
+    init(fullCoverSlip: Bool = false, asksEdges: Bool = false) {
+        var thresholds = GuidedSweepThresholds()
+        thresholds.fullCoverSlip = fullCoverSlip
+        thresholds.asksEdges = asksEdges
+        guide = GuidedSweep(thresholds: thresholds)
+    }
     var seconds = 0.0
     var position = CGPoint.zero
     var steps: [GuideStep] = []
@@ -49,7 +66,8 @@ final class ScriptedRoute {
     static let right = CGPoint(x: 0.1, y: 0)
 
     func reading(_ frame: Frame) -> GuideReading {
-        GuideReading(
+        stillRun = frame.still ? stillRun + 0.1 : 0
+        return GuideReading(
             seconds: seconds, position: position, tracking: frame.tracking, unconfirmedGaps: 0,
             viewClass: frame.viewClass, speedFraction: frame.speed, isStill: frame.still,
             aheadSharpness: frame.ahead, behindSharpness: frame.behind,
@@ -58,7 +76,8 @@ final class ScriptedRoute {
             blankReturnCount: returnCount, sideADirection: frame.sideDirection,
             boxSharpness: frame.box, quadAheadAway: frame.aheadAway,
             quadAheadToward: frame.aheadToward, quadBehindAway: frame.behindAway,
-            quadBehindToward: frame.behindToward)
+            quadBehindToward: frame.behindToward, stillSeconds: stillRun, edgeLine: frame.line,
+            edgeLineHeading: frame.lineHeading)
     }
 
     func feed(_ frame: Frame = Frame(), move: CGPoint = .zero, times: Int = 1) {
@@ -67,6 +86,15 @@ final class ScriptedRoute {
             position = CGPoint(x: position.x + move.x, y: position.y + move.y)
             steps.append(guide.update(reading(frame)))
         }
+    }
+
+    /// The helper's answer about an edge on the next reading, with the view where it is.
+    @discardableResult
+    func answer(_ feedback: EdgeFeedback, _ frame: Frame = Frame(still: true)) -> GuideStep {
+        seconds += 0.1
+        let step = guide.userEdge(feedback, reading(frame))
+        steps.append(step)
+        return step
     }
 
     /// Presses "Stage limit" on the next reading, with the view where it is.
@@ -103,7 +131,7 @@ final class ScriptedRoute {
     /// spot of column 1.
     func startColumnOne() {
         feed(move: Self.left, times: 15)
-        feed(Frame(ahead: 50, behind: 250, still: true), times: 14)
+        feed(Frame(ahead: 50, behind: 250, still: true), times: 24)
         feed(move: Self.right, times: 6)
         feed(Frame(still: true), times: 14)
     }

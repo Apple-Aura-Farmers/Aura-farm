@@ -9,9 +9,10 @@ struct EdgeConfirmationThresholds {
     /// leaves the content where it was.
     var arriveFields: Double = 0.10
     var arriveWindowSeconds: Double = 1.0
-    /// The condition must hold this long, with the helper still, before the edge counts.
+    /// The condition must hold this long, with the helper still, in a row, before the edge counts.
+    /// PLACEHOLDER: 2.0 (the user's request; it was 1.0).
     /// Fps is about 10; a flick or a focus slip clears faster than this.
-    var confirmSeconds: Double = 1.0
+    var confirmSeconds: Double = 2.0
     /// The half behind must be at least this sharp relative to the same patch in the last
     /// sharp frame: it still shows the same content, just as sharp.
     var behindFocusRatioMin: Double = 0.6
@@ -75,8 +76,8 @@ struct EdgeConfirmation {
 
     /// The distance travelled along the heading before the candidate began, in fields.
     private(set) var arrivalFields = 0.0
-    /// How long the candidate has held, with the helper still (half edge) or in all (whole
-    /// box), in seconds.
+    /// How long the candidate has held with the helper still, in seconds. Any reading that is
+    /// not still sets it back to zero: an edge is confirmed only at rest.
     private(set) var heldSeconds = 0.0
     /// Why the last `update` said what it said, for the CSV: arrived, not_arrived, vouched,
     /// behind_blurred, speed_spike or spot_hold; empty when there is nothing to say.
@@ -188,15 +189,12 @@ struct EdgeConfirmation {
                 return .none
             }
             reason = arrived ? "arrived" : "vouched"
-            if reading.isStill { heldSeconds += step }
-            if heldSeconds >= thresholds.confirmSeconds - 1e-9 { return .confirmed }
-            return .checking(progress: heldSeconds / thresholds.confirmSeconds)
+            return confirmWhenStill(reading, step: step)
         case .wholeBoxLowDetail:
             // As for the half rule: no arrival is only blur when the last tracked half behind
             // does not vouch for the content (the position is frozen while paused, so a helper
             // who set off just before the glass began shows no travel).
             let vouched = (lastTrackedBehind ?? 0) >= thresholds.behindFocusRatioMin
-            heldSeconds = now - firstSeen
             // Never confirmed on a timer: a long blur is decided when detail returns (the
             // route does that), not by waiting.
             guard arrived || vouched else {
@@ -210,9 +208,27 @@ struct EdgeConfirmation {
                 return .blur
             }
             reason = arrived ? "arrived" : "vouched"
-            if heldSeconds >= thresholds.confirmSeconds - 1e-9 { return .confirmed }
-            return .checking(progress: heldSeconds / thresholds.confirmSeconds)
+            return confirmWhenStill(reading, step: step)
         }
+    }
+
+    /// The same for both candidates: the time held counts only while the helper is still and
+    /// goes back to zero on any reading that is not, and the edge is confirmed once it has held
+    /// `confirmSeconds` AND the slide has been still that long in a row. While moving the
+    /// candidate is still reported (checking, 0) so it can be shown.
+    private mutating func confirmWhenStill(_ reading: GuideReading, step: Double) -> EdgeVerdict {
+        guard reading.isStill else {
+            heldSeconds = 0
+            reason = "moving"
+            return .checking(progress: 0)
+        }
+        heldSeconds += step
+        if heldSeconds >= thresholds.confirmSeconds - 1e-9,
+            reading.isStill(for: thresholds.confirmSeconds)
+        {
+            return .confirmed
+        }
+        return .checking(progress: min(heldSeconds / thresholds.confirmSeconds, 1))
     }
 
     mutating func reset() {

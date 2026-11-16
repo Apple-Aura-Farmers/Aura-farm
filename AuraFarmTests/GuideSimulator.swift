@@ -198,8 +198,51 @@ final class GuideSimulator {
     private var heading: CGPoint?
     private var edgeAtCentre = false
     private var lastTracking = TrackingState.tracking
+    /// Seconds the view has not moved, in a row, as `MovementIndicators.stillSeconds` counts them.
+    private var stillRun = 0.0
     private var goBackReadings = 0
     private var stoppedAtEdge = 0
+
+    /// Full-cover-slip mode: the guide decides edges from a line, which the simulated detector
+    /// finds when the sample's edge is within `lineRange` ahead of (or just behind) the view. The
+    /// line is on the slide, so its slide residual is 0 while the view moves.
+    private(set) var lineMode = false
+    var lineRange = 0.5
+    private var lineOffset: Double?
+
+    /// Switches to the full-cover-slip rules (a new guide).
+    func useFullCoverSlip() {
+        var thresholds = GuidedSweepThresholds()
+        thresholds.fullCoverSlip = true
+        guide = GuidedSweep(thresholds: thresholds)
+        lineMode = true
+    }
+
+    /// The edge line the detector would report: found by walking along the heading from the true
+    /// position to where the sample ends (ahead), or back to where it began when the view is
+    /// already past it. nil with no heading or no edge within `lineRange`.
+    private func edgeLine() -> EdgeLine? {
+        guard let heading else { return nil }
+        let inside = drop.contains(truePosition)
+        let direction = inside ? 1.0 : -1.0
+        var distance = 0.0
+        var found = false
+        while distance <= lineRange {
+            distance += 0.02
+            let point = CGPoint(
+                x: truePosition.x + CGFloat(direction * distance) * heading.x,
+                y: truePosition.y + CGFloat(direction * distance) * heading.y)
+            if drop.contains(point) != inside {
+                found = true
+                break
+            }
+        }
+        guard found else { return nil }
+        return EdgeLine(
+            strength: 12, coverage: 1, longestRun: 8, angleDegrees: 0,
+            offsetFields: direction * distance, sign: -1, slideResidualFields: lastMove > 0 ? 0 : nil,
+            path: [], isCandidate: true)
+    }
     /// The sharpness the simulated halves read with and without sample.
     private let sharpOnSample = 400.0
     private let sharpOnGlass = 50.0
@@ -401,12 +444,16 @@ final class GuideSimulator {
             }
         }
         lastTracking = tracking
+        stillRun = lastMove == 0 ? stillRun + 0.1 : 0
+        if lineMode { lineOffset = edgeLine()?.offsetFields }
+        edgeAtCentre = lineMode ? (lineOffset.map { $0 <= 0.1 } ?? false) : edgeAtCentre
         return GuideReading(
             seconds: seconds, position: frozen, tracking: tracking, unconfirmedGaps: unconfirmed,
             viewClass: viewClass, speedFraction: speed, isStill: lastMove == 0,
             aheadSharpness: ahead, behindSharpness: behind, aheadFocusRatio: aheadFocus,
             behindFocusRatio: behindFocus, sideSharpnessA: sideA, sideSharpnessB: sideB,
-            lastBlankReturn: lastReturn, blankReturnCount: returnCount)
+            lastBlankReturn: lastReturn, blankReturnCount: returnCount, stillSeconds: stillRun,
+            edgeLine: lineMode ? edgeLine() : nil)
     }
 
     /// Whether the view shows enough detail to follow. Over blank glass never; on a soil slide
@@ -478,11 +525,11 @@ final class GuideSimulator {
         }
         if stopsAtEdge, edgeAtCentre, Self.isEdgeBound(output.stateName) {
             switch output.instruction {
-            case .travel, .move, .farAway:
+            case .travel, .move, .farAway, .lineAhead:
                 // A person who stopped at what looks like the edge but is still told to carry
                 // on does so after 2 s.
                 stoppedAtEdge += 1
-                if stoppedAtEdge <= 20 {
+                if stoppedAtEdge <= 30 {
                     lastMove = 0
                     return
                 }
@@ -497,6 +544,14 @@ final class GuideSimulator {
             move(CGPoint(x: searchTarget.x - truePosition.x, y: searchTarget.y - truePosition.y))
         case .travel(let direction), .farAway(let direction):
             move(direction)
+        case .edgeDetected:
+            lastMove = 0
+        case .lineAhead, .notAnEdge, .nothingToFollow:
+            if let target = output.target {
+                move(CGPoint(x: target.x - frozen.x, y: target.y - frozen.y))
+            } else if let heading {
+                move(heading)
+            }
         case .move(let toward):
             let remaining = hypot(Double(toward.x), Double(toward.y))
             if overshootFields > 0, !overshotAlready, capturesSoFar >= overshootAfterCaptures,

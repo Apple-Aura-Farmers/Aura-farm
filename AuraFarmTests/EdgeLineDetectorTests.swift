@@ -20,7 +20,7 @@ final class EdgeLineDetectorTests: XCTestCase {
     /// Bright where `signedDistance` (cells, along the normal, from the centre) is positive,
     /// with sparse dark dots on both sides at the same density.
     private func grid(
-        dots: Bool = true, ramp: Double = 0, edge: ((Double, Double) -> Double)? = nil,
+        dots: Bool = true, ramp: Double = 0, contrast: Float = 100, edge: ((Double, Double) -> Double)? = nil,
         extra: ((Int, Int) -> Float?)? = nil
     ) -> EdgeLineGrid {
         var random = Dots()
@@ -30,7 +30,7 @@ final class EdgeLineDetectorTests: XCTestCase {
                 let dx = Double(x) + 0.5 - Double(cells) / 2
                 let dy = Double(y) + 0.5 - Double(cells) / 2
                 var value: Float = 100 + Float(ramp * dx)
-                if let edge, edge(dx, dy) > 0 { value = 200 }
+                if let edge, edge(dx, dy) > 0 { value += contrast }
                 if dots, random.next() < 0.03 { value -= 40 }
                 if let extra, let override = extra(x, y) { value = override }
                 luma[y * cells + x] = value
@@ -137,6 +137,62 @@ final class EdgeLineDetectorTests: XCTestCase {
                 grid: grid(edge: corner), box: box, normal: normal, thresholds: thresholds))
         XCTAssertGreaterThanOrEqual(line.longestRun, 5)
         XCTAssertTrue(line.isCandidate, "run \(line.longestRun) strength \(line.strength)")
+    }
+
+    func testALineAtTheSearchLimitIsNotACandidateItIsOutsideTheRangeSearched() throws {
+        // The side edge of a column read -40.5 at the 45 degree limit on 16 Nov 2026: within one
+        // 4.5 degree step of the limit means a line the search could not place.
+        let line = try XCTUnwrap(
+            EdgeLineDetector.detect(
+                grid: grid(edge: straight(offsetCells: 0, degrees: 40.5)), box: box, normal: normal))
+        XCTAssertEqual(abs(line.angleDegrees), 40.5, accuracy: 4.6)
+        XCTAssertFalse(line.isCandidate, "angle \(line.angleDegrees)")
+        // The same edge at 31.5 degrees is found.
+        let inside = try XCTUnwrap(
+            EdgeLineDetector.detect(
+                grid: grid(edge: straight(offsetCells: 0, degrees: 31.5)), box: box, normal: normal))
+        XCTAssertTrue(inside.isCandidate, "angle \(inside.angleDegrees) strength \(inside.strength)")
+    }
+
+    func testAWeakFullWidthLineOfStrengthAboutSevenIsNoLongerACandidate() throws {
+        // The 16 Nov 2026 15:32 run read every false candidate at 6.1 to 7.0 and the real edge at
+        // 26 to 53, so the strength limit is 20.
+        for contrast: Float in [10, 14, 20] {
+            let line = try XCTUnwrap(
+                EdgeLineDetector.detect(
+                    grid: grid(contrast: contrast, edge: straight()), box: box, normal: normal))
+            print("WEAK contrast \(contrast): strength \(line.strength) coverage \(line.coverage)")
+            if line.strength < 20 {
+                XCTAssertFalse(line.isCandidate, "strength \(line.strength)")
+            }
+        }
+        let weak = try XCTUnwrap(
+            EdgeLineDetector.detect(
+                grid: grid(contrast: 12, edge: straight()), box: box, normal: normal))
+        XCTAssertLessThan(weak.strength, 20)
+        XCTAssertGreaterThanOrEqual(weak.coverage, 0.75)
+        XCTAssertGreaterThanOrEqual(weak.strength, 6, "the old limit would have taken it")
+        XCTAssertFalse(weak.isCandidate)
+    }
+
+    func testTheTextureBeyondALineIsMeasuredSoAnEmptySideCanBeTold() throws {
+        // Dots only before the edge (x < 0): the side beyond (x > 0) is empty bright glass.
+        let sparse = grid(dots: false) { dx, dy in
+            dx - 20
+        }
+        var withDots = sparse
+        var state: UInt64 = 5
+        for y in 0..<cells {
+            for x in 0..<(cells / 2 - 10) {
+                state = state &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
+                if Double(state >> 33) / Double(1 << 31) < 0.08 { withDots.luma[y * cells + x] -= 60 }
+            }
+        }
+        let line = try XCTUnwrap(
+            EdgeLineDetector.detect(grid: withDots, box: box, normal: normal))
+        let before = try XCTUnwrap(line.beforeEnergy)
+        let beyond = try XCTUnwrap(line.beyondEnergy)
+        XCTAssertGreaterThan(before, 10 * max(beyond, 0.01), "before \(before) beyond \(beyond)")
     }
 
     func testTimePerCallOnAFullBox() throws {

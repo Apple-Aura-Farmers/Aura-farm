@@ -236,11 +236,23 @@ final class TravelSinceLastFrame {
 /// part of it. Hand-moved tests showed single readings jumping to about 250 px with the
 /// frame-to-frame shift at 1 to 16 px. Cropping both compares like with like.
 ///
+/// Both crops are high-passed first (`RegistrationFilter`): a strong static brightness gradient
+/// otherwise dominates the correlation and makes a still frame read a false +-242 px.
+///
 /// Each call gets a fresh request handler, for the reason `TravelSinceLastFrame` documents.
 /// It holds nothing between calls: the crops are lazy images over the caller's buffers.
 final class BoxRegistration {
     /// The least box side, in px, worth registering.
     private static let minimumSide: CGFloat = 16
+
+    /// The high-pass both crops get before Vision sees them; nil leaves them raw (used to measure
+    /// what the filter costs, and by tests of the raw behaviour).
+    var filter: RegistrationFilterThresholds? = RegistrationFilterThresholds() {
+        didSet { cache = [] }
+    }
+    /// The filtered crops kept: the current frame, the previous frame and the anchor.
+    private static let cacheSize = 3
+    private var cache: [(buffer: CVPixelBuffer, rect: CGRect, image: CIImage)] = []
 
     /// The signed shift from `held` to `current` inside `box` (full-frame pixels, origin at
     /// the top left), x to the right and y down: the same convention as
@@ -248,7 +260,9 @@ final class BoxRegistration {
     /// nothing.
     func offset(from held: CVPixelBuffer, to current: CVPixelBuffer, box: CGRect) -> CGPoint? {
         guard let rect = Self.wholePixelRect(of: box, in: current) else { return nil }
-        return register(target: Self.crop(held, to: rect), on: Self.crop(current, to: rect))
+        return register(
+            target: filtered(held, rect) ?? Self.crop(held, to: rect),
+            on: filtered(current, rect) ?? Self.crop(current, to: rect))
     }
 
     /// The same, with the held picture a stored copy of the box (see `copy(of:box:context:)`)
@@ -258,7 +272,35 @@ final class BoxRegistration {
         guard let rect = Self.wholePixelRect(of: box, in: current),
             stored.width == Int(rect.width), stored.height == Int(rect.height)
         else { return nil }
-        return register(target: CIImage(cgImage: stored), on: Self.crop(current, to: rect))
+        // The stored picture is the raw crop; it gets the same filter as the live one here.
+        var target = CIImage(cgImage: stored)
+        if let filter, let luma = RegistrationFilter.luma(of: stored),
+            let flat = RegistrationFilter.highPass(luma, thresholds: filter)
+        {
+            target = CIImage(cgImage: flat)
+        }
+        return register(target: target, on: filtered(current, rect) ?? Self.crop(current, to: rect))
+    }
+
+    /// The box's luma with the brightness gradient taken away (see `RegistrationFilter`), or nil
+    /// when the filter is off or the buffer has no luma plane (the raw crop is used then).
+    ///
+    /// Each frame is registered against both the previous frame and the anchor, and next frame
+    /// the current one is the previous, so the last few filtered crops are kept, by buffer
+    /// identity. The cache holds the buffers, so an identical one is never a camera buffer that
+    /// was given back and filled again.
+    private func filtered(_ buffer: CVPixelBuffer, _ rect: CGRect) -> CIImage? {
+        guard let filter else { return nil }
+        if let hit = cache.first(where: { $0.buffer === buffer && $0.rect == rect }) {
+            return hit.image
+        }
+        guard let luma = RegistrationFilter.luma(of: buffer, in: rect),
+            let flat = RegistrationFilter.highPass(luma, thresholds: filter)
+        else { return nil }
+        let image = CIImage(cgImage: flat)
+        cache.append((buffer, rect, image))
+        if cache.count > Self.cacheSize { cache.removeFirst() }
+        return image
     }
 
     /// A deep copy of the box, rendered to an image of its own. It holds no reference to the

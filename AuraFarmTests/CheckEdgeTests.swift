@@ -128,7 +128,8 @@ final class CheckEdgeTests: XCTestCase {
         // Forward again, into blank: the whole-box arrival decides (the helper travelled in).
         route.feed(move: ScriptedRoute.up, times: 8)
         route.feed(.blank, move: ScriptedRoute.up, times: 4)
-        route.feed(.blank, times: 20)
+        // Phase 2o: an edge is confirmed only at rest, so the helper rests on the blank.
+        route.feed(.blankStill, times: 30)
         XCTAssertEqual(route.guide.edgesGoneBack, 1, "the edge is confirmed")
         XCTAssertTrue(route.instructions.contains { if case .edgeGoBack = $0 { true } else { false } })
     }

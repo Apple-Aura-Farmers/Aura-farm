@@ -25,6 +25,15 @@
         var quadBehindAway: Double?
         var quadBehindToward: Double?
         var cornerBoxShare: Double?
+        /// Full-cover-slip mode: how far the edge line has got, and the mode ("line" or "legacy").
+        var lineState = ""
+        var lineAttachedCount = 0
+        var edgeMode = "legacy"
+        /// Full-cover-slip mode: the line is attached and at the cross, and an edge may be marked.
+        var lineAtCross = false
+        var canMarkEdge = false
+        /// "auto" when the rule confirmed an edge by itself.
+        var edgeFeedback = ""
     }
 
     /// How the preview shows the box, measured from the live preview layer on the main thread.
@@ -82,12 +91,28 @@
         /// What the box looked like on the last update, for the run monitor.
         private(set) var lastViewClass = ViewClass.blank
         private(set) var stageLimitCount = 0
-        /// The heading as a frame vector (the side new content comes into), for the edge-line
-        /// detector; nil without a heading or axes. Set by `update`.
-        private(set) var frameHeading: CGPoint?
+        /// The direction an edge line is looked for along (`GuidedSweep.edgeHeading`, screen unit
+        /// vector), after the last update; nil while no edge is looked for.
+        private(set) var lastEdgeHeading: CGPoint?
+        /// The same as a frame vector, for the edge-line detector; nil without a heading or axes.
+        var frameHeading: CGPoint? {
+            lastEdgeHeading.flatMap { axes.frameVector(ofScreenVector: $0) }
+        }
+        /// The last reading handed to the guide, for the helper's edge buttons.
+        private var lastReading: GuideReading?
 
         private var classifier = ViewClassifier()
         private var guide = GuidedSweep()
+        /// Full-cover-slip mode (edges from the line only); changing it starts the guide afresh.
+        var fullCoverSlip = false {
+            didSet { if fullCoverSlip != oldValue { reset() } }
+        }
+        /// Full-cover-slip mode: the rule waits for the helper's tap instead of confirming itself.
+        var asksEdges = true {
+            didSet { if asksEdges != oldValue { reset() } }
+        }
+        /// The edge line's state after the last update, for the overlay.
+        private(set) var lineState = ""
         private let alignTolerance = GuidedSweepThresholds().alignment.alignToleranceFields
         private(set) var captureCount = 0
         private(set) var edgeCount = 0
@@ -122,7 +147,8 @@
 
         /// Feeds one lab step; returns the CSV fields and the info for the screen.
         func update(
-            step: SlideMovementStep, indicators: MovementIndicators, seconds: Double
+            step: SlideMovementStep, indicators: MovementIndicators, seconds: Double,
+            edgeLine: EdgeLine? = nil
         ) -> GuideDryRunResult {
             let viewClass = classifier.update(
                 brightness: step.boxStats.brightness, sharpness: step.boxStats.sharpness,
@@ -136,7 +162,6 @@
             // The axes of the CONTENT's motion on screen: measured from the preview, or the
             // picker's mapping (which describes the view's travel) negated.
             let axes = self.axes
-            frameHeading = lastHeading.flatMap { axes.frameVector(ofScreenVector: $0) }
             let pointsPerField = geometry?.pointsPerField ?? boxSide
             let position = axes.guideFields(
                 forTrackerPosition: step.position, pointsPerField: pointsPerField)
@@ -204,7 +229,9 @@
                 focusLow: focusLow, sideADirection: sideADirection,
                 boxSharpness: step.boxStats.sharpness, quadAheadAway: quads?.aheadAway,
                 quadAheadToward: quads?.aheadToward, quadBehindAway: quads?.behindAway,
-                quadBehindToward: quads?.behindToward)
+                quadBehindToward: quads?.behindToward, stillSeconds: indicators.stillSeconds,
+                edgeLine: edgeLine, edgeLineHeading: lastEdgeHeading)
+            lastReading = guideReading
             let result: GuideStep
             if stageLimitPressed {
                 stageLimitPressed = false
@@ -229,6 +256,8 @@
                 wrongWayCount += 1
             }
             lastInstruction = result.instruction
+            lineState = result.edge.lineState
+            lastEdgeHeading = guide.edgeHeading
 
             let dx = result.target.map { Double($0.x - position.x) }
             let dy = result.target.map { Double($0.y - position.y) }
@@ -274,7 +303,10 @@
                     edgeReason: result.edge.reason, sideSharpA: sideA, sideSharpB: sideB,
                     quadAheadAway: quads?.aheadAway, quadAheadToward: quads?.aheadToward,
                     quadBehindAway: quads?.behindAway, quadBehindToward: quads?.behindToward,
-                    cornerBoxShare: result.edge.cornerBoxShare),
+                    cornerBoxShare: result.edge.cornerBoxShare, lineState: result.edge.lineState,
+                    lineAttachedCount: result.edge.lineAttachedCount, edgeMode: result.edge.edgeMode,
+                    lineAtCross: result.edge.lineAtCross, canMarkEdge: result.edge.canMarkEdge,
+                    edgeFeedback: result.edge.feedback),
                 info: SlideMovementInfo.Guide(
                     isOn: true, instruction: result.instruction.debugText, state: result.stateName,
                     targetDx: dx, targetDy: dy, viewClass: viewClass.rawValue, captures: captures,
@@ -294,9 +326,23 @@
             }
         }
 
+        /// The helper's answer about an edge; the route changes at once (the next update shows it).
+        func userEdge(_ feedback: EdgeFeedback, seconds: Double) {
+            guard var reading = lastReading else { return }
+            reading.seconds = seconds
+            _ = guide.userEdge(feedback, reading)
+            lastEdgeHeading = guide.edgeHeading
+        }
+
         func reset() {
             classifier.reset()
-            guide = GuidedSweep()
+            var thresholds = GuidedSweepThresholds()
+            thresholds.fullCoverSlip = fullCoverSlip
+            thresholds.asksEdges = asksEdges
+            guide = GuidedSweep(thresholds: thresholds)
+            lastEdgeHeading = nil
+            lastReading = nil
+            lineState = ""
             captureCount = 0
             edgeCount = 0
             wrongWayCount = 0

@@ -68,6 +68,15 @@ struct DetailCheck {
         }
     }
 
+    /// Puts the check into "no detail" at once, for a run of frames too empty to register; detail
+    /// comes back by the usual streak.
+    mutating func forceNoDetail() {
+        hasDetail = false
+        isSparse = false
+        lowStreak = 0
+        highStreak = 0
+    }
+
     mutating func reset() {
         self = DetailCheck(thresholds: thresholds)
     }

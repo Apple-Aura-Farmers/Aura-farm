@@ -53,6 +53,10 @@ struct GuidedSweep {
     /// left edge, sweeping a column leg or stepping right; nil in the other phases.
     var heading: CGPoint? { route.guideHeading }
 
+    /// The direction an edge line is looked for along (screen unit vector): the left-edge run, a
+    /// column leg or a step right; nil otherwise. See `SlideRoute.edgeHeading`.
+    var edgeHeading: CGPoint? { route.edgeHeading }
+
     /// Why the run is paused, nil while it runs.
     private(set) var pauseReason: GuidePauseReason?
     /// When the last pause ended, in the readings' seconds.
@@ -78,6 +82,13 @@ struct GuidedSweep {
     mutating func stageLimitReached(_ reading: GuideReading) -> GuideStep {
         guard pauseReason == nil else { return update(reading) }
         return step(from: route.stageLimitReached(reading))
+    }
+
+    /// The helper's answer to an edge in full-cover-slip mode (see `SlideRoute.userEdge`). Ignored
+    /// while paused.
+    mutating func userEdge(_ feedback: EdgeFeedback, _ reading: GuideReading) -> GuideStep {
+        guard pauseReason == nil else { return update(reading) }
+        return step(from: route.userEdge(feedback, reading))
     }
 
     /// Holds the route where it is until `resume`.

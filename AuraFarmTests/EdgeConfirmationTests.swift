@@ -60,13 +60,13 @@ final class EdgeConfirmationTests: XCTestCase {
     func test1_aRealEdgeIsCheckedThenReached() throws {
         travel()
         let stop = index + 1
-        feed(Frame(ahead: 50, behind: 250, still: true), times: 16)
+        feed(Frame(ahead: 50, behind: 250, still: true), times: 26)
         let checking = try XCTUnwrap(steps.first { isChecking($0.step.instruction) })
         let reached = try XCTUnwrap(steps.first { $0.step.instruction == .edgeReached })
         print("SCENARIO 1: checking at \(checking.index - stop), edgeReached at \(reached.index - stop)")
         XCTAssertEqual(checking.index, stop)
         XCTAssertTrue(
-            (stop + 9)...(stop + 12) ~= reached.index, "about confirmSeconds: \(reached.index - stop)")
+            (stop + 19)...(stop + 22) ~= reached.index, "about confirmSeconds: \(reached.index - stop)")
         XCTAssertTrue(reached.step.stateName.hasPrefix("column 1"), reached.step.stateName)
         XCTAssertFalse(instructions.contains(where: isGoBack))
     }
@@ -119,9 +119,9 @@ final class EdgeConfirmationTests: XCTestCase {
         XCTAssertFalse(instructions.contains(.edgeReached), "still creeping")
         XCTAssertTrue(steps.suffix(10).allSatisfy { isChecking($0.step.instruction) })
         let still = index + 1
-        feed(Frame(ahead: 50, behind: 250, still: true), times: 14)
+        feed(Frame(ahead: 50, behind: 250, still: true), times: 24)
         let reached = try XCTUnwrap(steps.first { $0.step.instruction == .edgeReached })
-        XCTAssertTrue((still + 9)...(still + 12) ~= reached.index, "\(reached.index - still)")
+        XCTAssertTrue((still + 19)...(still + 22) ~= reached.index, "\(reached.index - still)")
     }
 
     func test6_theOvershootFallbackGoesBackUnlessItWasBlur() {
@@ -130,7 +130,7 @@ final class EdgeConfirmationTests: XCTestCase {
         feed(
             Frame(
                 viewClass: .blank, tracking: .paused, ahead: nil, behind: nil, aheadFocus: nil,
-                behindFocus: nil), times: 40)
+                behindFocus: nil, still: true), times: 40)  // resting on the blank (Phase 2o)
         XCTAssertTrue(instructions.contains(where: isGoBack))
         XCTAssertFalse(instructions.contains(.refocus))
 
@@ -223,7 +223,7 @@ final class EdgeConfirmationTests: XCTestCase {
             verdict = confirmation.update(
                 reading: reading(Double(index) * 0.1), heading: heading, candidate: .halfEdge, since: 0)
         }
-        XCTAssertEqual(verdict, .checking(progress: 0.5))
+        XCTAssertEqual(verdict, .checking(progress: 0.25))  // 0.5 s of 2.0 s (Phase 2p)
         verdict = confirmation.update(
             reading: reading(0.6, speed: 0.3), heading: heading, candidate: .halfEdge, since: 0)
         XCTAssertEqual(verdict, .none, "a spike restarts it")
@@ -233,7 +233,7 @@ final class EdgeConfirmationTests: XCTestCase {
         guard case .checking(let progress) = verdict else {
             return XCTFail("expected checking, got \(verdict)")
         }
-        XCTAssertEqual(progress, 0.1, accuracy: 1e-6, "from the spike on, not from before")
+        XCTAssertEqual(progress, 0.05, accuracy: 1e-6, "from the spike on, not from before")
     }
 
     // MARK: The tracker

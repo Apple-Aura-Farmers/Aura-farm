@@ -56,6 +56,7 @@
                     if model.guideDryRun {
                         GuideGeometryHost(model: model, previewLayer: previewLayer, display: display)
                         LiveGuideOverlay(state: model.overlayState)
+                        LiveEdgeFeedback(model: model, state: model.overlayState)
                         EdgeLineOverlay(
                             state: model.edgeLineState,
                             mapper: FramePreviewConverter(
@@ -110,6 +111,47 @@
     }
 
     // MARK: - Pieces that read the model
+
+    /// The edge buttons, from values: "✓ Edge" and "✗ Not an edge" while an attached line is at the
+    /// cross and the helper is asked, and "Mark edge here" while an edge is looked for.
+    struct EdgeFeedbackBar: View {
+        var asks: Bool
+        var canMark: Bool
+        var onAnswer: (EdgeFeedback) -> Void = { _ in }
+
+        var body: some View {
+            VStack(spacing: 8) {
+                Spacer()
+                if asks {
+                    HStack(spacing: 12) {
+                        Button("✓ Edge") { onAnswer(.yes) }.tint(.green)
+                        Button("✗ Not an edge") { onAnswer(.no) }.tint(.red)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                }
+                if canMark {
+                    Button("Mark edge here") { onAnswer(.mark) }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .tint(.white)
+                }
+            }
+            .padding(.bottom, 64)
+        }
+    }
+
+    /// Reads the guide overlay's state and answers to the model.
+    struct LiveEdgeFeedback: View {
+        var model: SlideMovementLabModel
+        var state: GuideOverlayState
+
+        var body: some View {
+            EdgeFeedbackBar(
+                asks: state.asksEdge, canMark: state.canMarkEdge,
+                onAnswer: { model.edgeFeedback($0) })
+        }
+    }
 
     struct LiveStatusBanner: View {
         var model: SlideMovementLabModel

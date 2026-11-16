@@ -92,6 +92,10 @@
         @ObservationIgnored private let snapshots = FrameSnapshotWriter()
         @ObservationIgnored private var snapshotTrigger = SnapshotTrigger()
         @ObservationIgnored private var snapshotRequested = false
+        /// A tap on an edge button waiting for the next logged row: it names the row, saves a
+        /// frame, and is answered to the guide.
+        @ObservationIgnored private var pendingEdgeFeedback: EdgeFeedback?
+        @ObservationIgnored private var lastFrameSeconds = 0.0
         @ObservationIgnored private var guideEnabled = false
         @ObservationIgnored private var setup = LabSetupSession()
         @ObservationIgnored private var lastPublishedStep = LabSetupStep.align
@@ -164,6 +168,15 @@
         func setPausesOnMonitor(_ pauses: Bool) {
             pausesOnMonitor = pauses
             analysisQueue.async { [weak self] in self?.pausesOnMonitorFlag = pauses }
+        }
+
+        /// Whether the guide takes edges from the cover slip's line only ("Full cover slip").
+        func setFullCoverSlip(_ enabled: Bool) {
+            analysisQueue.async { [weak self] in
+                guard let self, self.dryRun.fullCoverSlip != enabled else { return }
+                self.dryRun.fullCoverSlip = enabled
+                self.resetGuide()
+            }
         }
 
         /// Whether the tracker follows a sparse but distinct sample ("Track sparse sample").
@@ -366,6 +379,26 @@
                     self.exportURL = url
                     self.exportItems = items
                 }
+            }
+        }
+
+        /// The helper's answer about an edge, from the buttons on the guide overlay ("✓ Edge", "✗ Not
+        /// an edge", "Mark edge here"). Written to the CSV as the event `edge_user_yes`,
+        /// `edge_user_no` or `edge_user_mark`, with a frame saved.
+        func edgeFeedback(_ feedback: EdgeFeedback) {
+            analysisQueue.async { [weak self] in
+                guard let self, self.guideEnabled else { return }
+                self.dryRun.userEdge(feedback, seconds: self.lastFrameSeconds)
+                self.pendingEdgeFeedback = feedback
+            }
+        }
+
+        /// Whether the guide asks the helper to confirm edges ("Ask me to confirm edges").
+        func setAsksEdges(_ asks: Bool) {
+            analysisQueue.async { [weak self] in
+                guard let self, self.dryRun.asksEdges != asks else { return }
+                self.dryRun.asksEdges = asks
+                self.resetGuide()
             }
         }
 
@@ -646,6 +679,13 @@
             logged.chainX = step.tracking.chain.map { Double($0.x) }
             logged.chainY = step.tracking.chain.map { Double($0.y) }
             logged.anchorChainGap = step.tracking.anchorChainGap
+            logged.lineState = guide?.lineState ?? ""
+            logged.lineAttachedCount = guide?.lineAttachedCount ?? 0
+            logged.edgeMode = guide?.edgeMode ?? ""
+            logged.sparseSkips = step.tracking.sparseSkips
+            logged.edgeFeedback = guide?.edgeFeedback ?? ""
+            logged.ghostFrames = step.tracking.ghostFrames
+            logged.ghostFallbacks = step.tracking.ghostFallbacks
             logged.featureCells = step.tracking.featureCells
             logged.featureQuarters = step.tracking.featureQuarters
             logged.sparseTracking = step.tracking.sparse
@@ -807,6 +847,7 @@
                 let buffer = CMSampleBufferGetImageBuffer(sampleBuffer)
             else { return }
             let time = CMSampleBufferGetPresentationTimeStamp(sampleBuffer).seconds
+            lastFrameSeconds = time
             guard
                 let output = setup.process(
                     buffer, seconds: time, pipeline: pipeline,
@@ -859,20 +900,28 @@
                 dryRun.pauseReason =
                     pausesOnMonitorFlag ? setup.monitorState.pauseReason : nil
                 dryRun.focusLow = pausesOnMonitorFlag && setup.isFocusLow
-                let result = dryRun.update(step: step, indicators: indicators, seconds: time)
-                latestGuide = result.fields
+                // The line is measured first so the guide can use it on this very reading.
                 edgeLine = edgeProbe.update(buffer, step: step, direction: dryRun.frameHeading)
-                if let edgeLine {
-                    let path = edgeLine.isCandidate ? edgeLine.path : []
-                    DispatchQueue.main.async { [edgeLineState] in edgeLineState.update(path) }
+                let result = dryRun.update(
+                    step: step, indicators: indicators, seconds: time, edgeLine: edgeLine)
+                latestGuide = result.fields
+                let path = edgeLine.map { $0.isCandidate ? $0.path : [] }
+                let lineState = dryRun.lineState
+                DispatchQueue.main.async { [edgeLineState] in
+                    if let path { edgeLineState.update(path) }
+                    edgeLineState.setLineState(lineState)
                 }
                 latestGuideInfo = result.info
                 if let point = result.captureTrailPoint { guideCaptured.append(point) }
                 guideTarget = result.targetTrailPoint
                 let overlay = result.overlay
                 let captureCount = result.info.captureCount
+                let asks = dryRun.asksEdges && result.fields.lineAtCross
+                let canMark = result.fields.canMarkEdge
                 DispatchQueue.main.async { [weak self] in
-                    self?.overlayState.update(model: overlay, captureCount: captureCount)
+                    self?.overlayState.update(
+                        model: overlay, captureCount: captureCount, asksEdge: asks,
+                        canMarkEdge: canMark)
                 }
             }
             if step.event == .hop {
@@ -911,12 +960,22 @@
                         edgeReason: logged.edgeReason, edgeVerdict: logged.edgeVerdict,
                         instruction: logged.guideInstruction, lineCandidate: edgeLine?.isCandidate)
                 }
-                if automatic || snapshotRequested {
+                let tapped = pendingEdgeFeedback
+                if tapped != nil || automatic || snapshotRequested {
                     logged.snapshot =
-                        snapshots.save(buffer, csvSeconds: time - origin, automatic: !snapshotRequested)
+                        snapshots.save(
+                            buffer, csvSeconds: time - origin,
+                            automatic: tapped == nil && !snapshotRequested, tap: tapped != nil)
                         ?? ""
                 }
                 snapshotRequested = false
+                if let tapped {
+                    logged.edgeFeedback = tapped.csvName
+                    pendingEventName = "edge_user_\(tapped.csvName)"
+                } else if logged.edgeFeedback == "auto" {
+                    pendingEventName = pendingEventName.isEmpty ? "edge_auto" : pendingEventName
+                }
+                pendingEdgeFeedback = nil
                 if !pendingEventName.isEmpty { logged.event = pendingEventName }
                 rows.append(logged)
                 if !currentLabel.isEmpty { labelledRows.append(logged) }
