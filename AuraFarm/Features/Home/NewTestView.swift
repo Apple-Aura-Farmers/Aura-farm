@@ -17,86 +17,58 @@ struct NewTestView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    LabeledContent("Date") {
-                        Text(details.recordedAt.formatted(date: .long, time: .omitted))
-                            .font(.subheadline)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(Capsule().fill(Color(uiColor: .secondarySystemFill)))
-                    }
-                    .font(.headline)
+            Form {
+                Section {
+                    LabeledContent(
+                        "Date", value: details.recordedAt.formatted(date: .long, time: .omitted))
+                }
 
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Farm")
-                            .font(.headline)
-                        card {
-                            NavigationLink {
-                                FarmChoiceList(details: $details)
-                            } label: {
-                                HStack {
-                                    Text(
-                                        details.sampleID.isEmpty
-                                            ? "Choose a farm" : details.sampleID
-                                    )
-                                    .foregroundStyle(details.sampleID.isEmpty ? .secondary : .primary)
-                                    Spacer()
-                                    Image(systemName: "chevron.right")
-                                        .font(.footnote.weight(.semibold))
-                                        .foregroundStyle(.tertiary)
-                                }
-                                .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                            // Taken from the farm, so it is shown and not typed.
-                            if details.farmID != nil, let location = details.location {
-                                Divider()
-                                LabeledContent("Location", value: location)
-                                    .font(.subheadline)
-                            }
-                        }
+                Section("Farm") {
+                    NavigationLink {
+                        FarmChoiceList(details: $details)
+                    } label: {
+                        Text(details.sampleID.isEmpty ? "Choose a farm" : details.sampleID)
+                            .foregroundStyle(details.sampleID.isEmpty ? .secondary : .primary)
                     }
-
-                    card {
-                        TextField("Description…", text: $details.note.orEmpty, axis: .vertical)
-                            .focused($focus, equals: .note)
-                            .lineLimit(4...)
+                    // Taken from the farm, so it is shown and not typed.
+                    if details.farmID != nil, let location = details.location {
+                        LabeledContent("Location", value: location)
                     }
+                }
 
-                    // The guide fixes the amounts the sample records, so it stays one tap
-                    // from the only screen that opens a test.
+                Section("Description") {
+                    TextField("Description…", text: $details.note.orEmpty, axis: .vertical)
+                        .focused($focus, equals: .note)
+                        .lineLimit(4...)
+                }
+
+                // The guide fixes the amounts the sample records, so it stays one tap
+                // from the only screen that opens a test.
+                Section {
                     NavigationLink {
                         SamplePrepView()
                     } label: {
                         Label("How to prepare the sample", systemImage: "testtube.2")
-                            .font(.subheadline)
                     }
                 }
-                .textInputAutocapitalization(.words)
-                .autocorrectionDisabled()
-                .padding()
             }
+            .textInputAutocapitalization(.words)
+            .autocorrectionDisabled()
             .navigationTitle("New Test")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Label("Close", systemImage: "xmark")
-                    }
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Close", systemImage: "xmark") { dismiss() }
                 }
             }
             .safeAreaInset(edge: .bottom) {
                 VStack(spacing: 8) {
                     Button(action: start) {
                         Text("Start")
-                            .font(.headline)
                             .frame(maxWidth: .infinity)
-                            .padding(.vertical, 14)
                     }
-                    .buttonStyle(InvertedButtonStyle())
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
                     .disabled(!details.isComplete)
 
                     // Prototype: the same pipeline, fed from a recorded microscope video.
@@ -107,6 +79,7 @@ struct NewTestView: View {
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)
+                    .controlSize(.large)
                     .disabled(!details.isComplete)
                 }
                 .padding()
@@ -116,14 +89,6 @@ struct NewTestView: View {
                 RecordedSampleView(details: $details)
             }
         }
-    }
-
-    private func card<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 12, content: content)
-            .padding()
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 14).fill(Color(uiColor: .secondarySystemFill)))
     }
 }
 

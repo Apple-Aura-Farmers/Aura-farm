@@ -154,7 +154,8 @@ struct CaptureView: View {
     private func hintOverlay(_ hint: Hint) -> some View {
         VStack(spacing: 10) {
             Image(systemName: hint.systemImage)
-                .font(.system(size: 44))
+                .font(.largeTitle)
+                .imageScale(.large)
                 .symbolRenderingMode(.hierarchical)
             Text(hint.text)
                 .font(.headline)
@@ -296,11 +297,10 @@ struct CaptureView: View {
             } label: {
                 Label("At the edge", systemImage: "arrow.turn.down.left")
                     .font(.subheadline.bold())
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
-                    .background(Capsule().fill(.thinMaterial))
             }
-            .foregroundStyle(.white)
+            .buttonStyle(.bordered)
+            .buttonBorderShape(.capsule)
+            .tint(.white)
         }
     }
 

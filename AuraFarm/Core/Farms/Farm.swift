@@ -122,3 +122,31 @@ extension Array where Element == Farm {
         }
     }
 }
+
+extension Farm {
+    /// Where the farm's land is, for the line under the farmer's name: the first plot that was
+    /// given a name, then the farm's own name when that is not just the farmer's again, and
+    /// how much land there is when neither says anything.
+    var locationLine: String {
+        if let named = plots.first(where: { !$0.name.isEmpty }) { return named.name }
+        if name.caseInsensitiveCompare(farmerName) != .orderedSame { return name }
+        guard let area = areaSquareMetres else { return "No land marked yet" }
+        let count = plots.count == 1 ? "1 plot" : "\(plots.count) plots"
+        return count + " · " + LandGeometry.hectaresDescription(squareMetres: area)
+    }
+}
+
+extension Array where Element == Farm {
+    /// The farms the helper is looking for: matched on the farmer, the farm's name and the
+    /// names of its plots, which are the three things a row shows. Nothing typed matches
+    /// everything. Case and accents are ignored, so "wayan" finds "Pak Wayan".
+    func matching(_ query: String) -> [Farm] {
+        let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return self }
+        return filter { farm in
+            farm.farmerName.localizedStandardContains(query)
+                || farm.name.localizedStandardContains(query)
+                || farm.plots.contains { $0.name.localizedStandardContains(query) }
+        }
+    }
+}

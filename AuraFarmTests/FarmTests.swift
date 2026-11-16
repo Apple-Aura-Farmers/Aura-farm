@@ -113,6 +113,40 @@ final class FarmTests: XCTestCase {
         XCTAssertEqual(loaded.plots.first?.name, "Tabanan")
     }
 
+    func testTheLineUnderAFarmerNamesTheirLandWhereverItCanBeRead() {
+        let named = Farm(
+            name: "Pak Wayan", farmerName: "Pak Wayan",
+            plots: [Plot(corners: square), Plot(name: "Tabanan", corners: square)])
+        XCTAssertEqual(named.locationLine, "Tabanan")
+
+        // No plot named, but the farm has a name of its own.
+        let farmNamed = Farm(name: "Subak", farmerName: "Pak Wayan", plots: [Plot(corners: square)])
+        XCTAssertEqual(farmNamed.locationLine, "Subak")
+
+        // A farm named after the farmer, with nothing else to say: how much land there is.
+        let bare = Farm(name: "Pak Wayan", farmerName: "Pak Wayan", plots: [Plot(corners: square)])
+        XCTAssertTrue(bare.locationLine.hasPrefix("1 plot · "), bare.locationLine)
+
+        XCTAssertEqual(
+            Farm(name: "Pak Wayan", farmerName: "Pak Wayan").locationLine, "No land marked yet")
+    }
+
+    func testSearchMatchesTheFarmerTheFarmOrAPlotWhateverTheCase() {
+        let farms = [
+            Farm(
+                name: "Subak Jatiluwih", farmerName: "Pak Wayan",
+                plots: [Plot(name: "Tabanan", corners: square)]),
+            Farm(name: "Carik Kaja", farmerName: "Ibu Made"),
+        ]
+
+        XCTAssertEqual(farms.matching("wayan").map(\.farmerName), ["Pak Wayan"])
+        XCTAssertEqual(farms.matching("carik").map(\.farmerName), ["Ibu Made"])
+        XCTAssertEqual(farms.matching("TABANAN").map(\.farmerName), ["Pak Wayan"])
+        XCTAssertTrue(farms.matching("nobody").isEmpty)
+        // Nothing typed is not a filter.
+        XCTAssertEqual(farms.matching("   ").count, 2)
+    }
+
     private func decode(_ json: String) throws -> Farm {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601

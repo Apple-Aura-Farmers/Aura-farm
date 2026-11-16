@@ -18,36 +18,31 @@ struct NameEntryView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(alignment: .leading, spacing: 16) {
-                Text("Your name goes on every test and every farm you record.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-
-                TextField("Name", text: $name)
-                    .textContentType(.name)
-                    .textInputAutocapitalization(.words)
-                    .autocorrectionDisabled()
-                    .submitLabel(.continue)
-                    .focused($isTyping)
-                    .onSubmit(submit)
-                    .font(.title3)
-                    .padding(20)
-                    .background(.fill.tertiary, in: RoundedRectangle(cornerRadius: 16))
-
-                Spacer(minLength: 0)
-
-                Button(action: submit) {
-                    Text("Continue")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
+            Form {
+                Section {
+                    TextField("Name", text: $name)
+                        .textContentType(.name)
+                        .textInputAutocapitalization(.words)
+                        .autocorrectionDisabled()
+                        .submitLabel(.continue)
+                        .focused($isTyping)
+                        .onSubmit(submit)
+                } footer: {
+                    Text("Your name goes on every test and every farm you record.")
                 }
-                .buttonStyle(InvertedButtonStyle())
-                .disabled(trimmed.isEmpty)
             }
-            .padding(20)
             .navigationTitle("Who are you?")
             .navigationBarTitleDisplayMode(.large)
+            .safeAreaInset(edge: .bottom) {
+                Button(action: submit) {
+                    Text("Continue")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .disabled(trimmed.isEmpty)
+                .padding()
+            }
             .onAppear { isTyping = true }
         }
     }
