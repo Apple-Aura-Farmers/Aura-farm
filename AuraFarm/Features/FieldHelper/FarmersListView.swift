@@ -11,14 +11,12 @@ struct FarmersListView: View {
 
     @Environment(FarmStore.self) private var store
 
-    @State private var query = ""
     /// The farm waiting on a yes to being deleted.
     @State private var farmToDelete: Farm?
 
     var body: some View {
         NavigationStack {
             list
-                .searchable(text: $query, prompt: "Farmers or Locations")
                 .navigationTitle("Farmers")
                 .navigationDestination(for: Farm.ID.self) { id in
                     FarmDetailView(farmID: id)
@@ -68,10 +66,10 @@ struct FarmersListView: View {
         }
     }
 
-    /// Sorted by the farmer, because that is what the row is read by.
+    /// Sorted by the farmer, because that is what the row is read by. Searching is on the map,
+    /// so this screen is the whole list.
     private var shown: [Farm] {
         store.farms
-            .matching(query)
             .sorted { $0.farmerName.localizedStandardCompare($1.farmerName) == .orderedAscending }
     }
 
@@ -89,14 +87,10 @@ struct FarmersListView: View {
     @ViewBuilder
     private var emptyState: some View {
         if shown.isEmpty {
-            if store.farms.isEmpty {
-                ContentUnavailableView {
-                    Label("No farmers yet", systemImage: "person.2")
-                } description: {
-                    Text("Mark a farmer's land on the Plots tab to see them here.")
-                }
-            } else {
-                ContentUnavailableView.search(text: query)
+            ContentUnavailableView {
+                Label("No farmers yet", systemImage: "person.2")
+            } description: {
+                Text("Mark a farmer's land on the Plots tab to see them here.")
             }
         }
     }
