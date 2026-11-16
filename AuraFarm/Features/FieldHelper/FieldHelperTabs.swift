@@ -1,12 +1,10 @@
 import SwiftUI
 
-/// The Field Helper's screens: the land on a map, the farmers as a list, and the search beside
-/// them.
+/// The Field Helper's two screens: the land on a map, and the farmers as a list.
 ///
-/// Search is a tab with the search role, which is what draws it as its own round button to the
-/// right of the bar in the mockup. Tapping it is the system's own move: the bar shrinks out of
-/// the way to the left and the field grows into the space it leaves. Nothing here animates
-/// that; it comes with the role.
+/// Searching lives on each screen rather than in the bar: the map carries a field for places
+/// and farmers along its top, and the farmers list has the system's own search. That leaves
+/// the bar as the mockup has it, with the button for marking new land beside it.
 struct FieldHelperTabs: View {
     /// Sends the person back to the role picker.
     var onSwitchRole: () -> Void
@@ -14,7 +12,7 @@ struct FieldHelperTabs: View {
     @State private var screen: Screen = .plots
 
     private enum Screen: Hashable {
-        case plots, results, search
+        case plots, results
     }
 
     var body: some View {
@@ -23,15 +21,11 @@ struct FieldHelperTabs: View {
                 "Plots", systemImage: "point.topleft.down.to.point.bottomright.curvepath",
                 value: Screen.plots
             ) {
-                FieldHelperHomeView(onSwitchRole: onSwitchRole)
+                FieldHelperHomeView()
             }
 
             Tab("Results", systemImage: "doc.text", value: Screen.results) {
-                FarmersListView()
-            }
-
-            Tab(value: Screen.search, role: .search) {
-                FarmersListView(isSearch: true)
+                FarmersListView(onSwitchRole: onSwitchRole)
             }
         }
     }
@@ -39,20 +33,5 @@ struct FieldHelperTabs: View {
 
 #Preview {
     FieldHelperTabs(onSwitchRole: {})
-        .environment(
-            FarmStore(
-                fileURL: nil,
-                farms: [
-                    Farm(
-                        name: "Pak Wayan", farmerName: "Pak Wayan",
-                        plots: [
-                            Plot(
-                                name: "Tabanan",
-                                corners: [
-                                    GeoPoint(latitude: -8.4095, longitude: 115.1889),
-                                    GeoPoint(latitude: -8.4095, longitude: 115.1900),
-                                    GeoPoint(latitude: -8.4105, longitude: 115.1900),
-                                ])
-                        ])
-                ]))
+        .environment(FarmStore(fileURL: nil))
 }

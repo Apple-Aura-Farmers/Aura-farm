@@ -3,12 +3,11 @@ import SwiftUI
 /// Every farmer the helper looks after, one row each, with the way through to their land and
 /// its test results.
 ///
-/// The same list serves the Results tab and the search tab beside it. On the search tab it
-/// carries the search field, so what is typed into the tab bar filters these rows; everywhere
-/// else it is the plain list.
+/// This screen has the navigation bar the map has not, so switching role lives here rather
+/// than floating over the land.
 struct FarmersListView: View {
-    /// Set on the search tab, which is the only copy that shows a search field.
-    var isSearch = false
+    /// Sends the person back to the role picker.
+    var onSwitchRole: (() -> Void)?
 
     @Environment(FarmStore.self) private var store
 
@@ -18,20 +17,21 @@ struct FarmersListView: View {
 
     var body: some View {
         NavigationStack {
-            searchableList
+            list
+                .searchable(text: $query, prompt: "Farmers or Locations")
                 .navigationTitle("Farmers")
                 .navigationDestination(for: Farm.ID.self) { id in
                     FarmDetailView(farmID: id)
                 }
-        }
-    }
-
-    @ViewBuilder
-    private var searchableList: some View {
-        if isSearch {
-            list.searchable(text: $query, prompt: "Farmers or Locations")
-        } else {
-            list
+                .toolbar {
+                    if let onSwitchRole {
+                        ToolbarItem(placement: .topBarLeading) {
+                            Button("Switch role", systemImage: "arrow.left.arrow.right") {
+                                onSwitchRole()
+                            }
+                        }
+                    }
+                }
         }
     }
 
@@ -103,7 +103,7 @@ struct FarmersListView: View {
 }
 
 #Preview {
-    FarmersListView(isSearch: true)
+    FarmersListView(onSwitchRole: {})
         .environment(
             FarmStore(
                 fileURL: nil,

@@ -1,19 +1,20 @@
+import MapKit
 import SwiftUI
 
 /// The Plots tab: a full-screen map of every plot the helper looks after.
 ///
-/// The map runs edge to edge with no navigation bar over it. The two controls that would sit
-/// in that bar — switching role, and adding land — float on the map instead, clear of the tab
-/// bar along the bottom.
+/// The map runs edge to edge with no navigation bar over it. Searching floats along the top
+/// and the button for marking new land sits beside the tab bar at the bottom, which is the
+/// only chrome over the land.
 ///
 /// SwiftUI can only show one sheet at a time from a screen, and a sheet would sit on top of
 /// any page pushed from here, so the one sheet slot carries whichever form is wanted and the
 /// card for a tapped plot closes itself before opening that plot's farm.
 struct FieldHelperHomeView: View {
-    /// Sends the person back to the role picker.
-    var onSwitchRole: () -> Void
-
     @Environment(FarmStore.self) private var store
+
+    /// Where the map is looking, so searching can send it somewhere.
+    @State private var camera: MapCameraPosition = .automatic
 
     /// The one sheet slot this screen has for its forms. It carries what to show rather than
     /// a flag, because a sheet reads a flag before the value beside it has arrived.
@@ -75,7 +76,7 @@ struct FieldHelperHomeView: View {
                     mapScreen
                 }
             }
-            .overlay(alignment: .topLeading) { switchRoleButton }
+            .overlay(alignment: .top) { searchBar }
             .overlay(alignment: .top) { problemBanner }
             .overlay(alignment: .bottomTrailing) { addButton }
             .toolbar(.hidden, for: .navigationBar)
@@ -123,13 +124,18 @@ struct FieldHelperHomeView: View {
     // MARK: Screens
 
     private var mapScreen: some View {
-        FarmsOverviewMap(farms: store.farms, onOpen: show, onDeselect: deselect, selected: selection?.plot.id)
-            // A new map when farms are added, deleted or reshaped, so it refits to them.
-            .id(store.farms.flatMap(\.allCorners))
-            .ignoresSafeArea()
-            // Reads the records once when the map appears; after that it is the pull on the
-            // farmers list.
-            .task { await store.pull() }
+        FarmsOverviewMap(
+            farms: store.farms, camera: $camera, onOpen: show, onDeselect: deselect,
+            selected: selection?.plot.id
+        )
+        .ignoresSafeArea()
+        // Fits the land when it appears and whenever land is added, deleted or reshaped.
+        .onChange(of: store.farms.flatMap(\.allCorners), initial: true) {
+            camera = FarmsOverviewMap.fitting(store.farms)
+        }
+        // Reads the records once when the map appears; after that it is the pull on the
+        // farmers list.
+        .task { await store.pull() }
     }
 
     private var emptyState: some View {
@@ -203,45 +209,41 @@ struct FieldHelperHomeView: View {
 
     // MARK: Floating controls
 
-    /// Land is added the way the map does it: walk the edge first, name it afterwards. A farm
-    /// with no land yet can be started here too.
+    /// Farmers, plots and places, so the map can be sent somewhere without dragging to it.
+    private var searchBar: some View {
+        MapSearchBar(farms: store.farms) { region in
+            withAnimation(.snappy) { camera = .region(region) }
+        }
+        .padding(.top, 8)
+    }
+
+    /// Land is marked the way the map does it: drop the dots first, name it afterwards.
+    ///
+    /// It belongs beside the floating tab bar rather than above it, so the inset that bar
+    /// reserves is added back rather than respected.
     private var addButton: some View {
-        Menu {
-            Button {
-                selection = nil
-                outline = Outline()
-            } label: {
-                Label("Mark a plot on the map", systemImage: "mappin.and.ellipse")
-            }
-            Button {
-                formSheet = .addFarm
-            } label: {
-                Label("New farm", systemImage: "leaf")
-            }
+        GeometryReader { proxy in
+            markButton
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                .offset(y: proxy.safeAreaInsets.bottom)
+        }
+    }
+
+    private var markButton: some View {
+        Button {
+            selection = nil
+            outline = Outline()
         } label: {
             Image(systemName: "plus")
                 .font(.title2.weight(.semibold))
-                .frame(width: 56, height: 56)
+                .frame(width: 62, height: 62)
                 .glassCircle()
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Add")
-        .padding(.trailing, 16)
-        // Clear of the floating tab bar along the bottom.
-        .padding(.bottom, 80)
-    }
-
-    private var switchRoleButton: some View {
-        Button(action: onSwitchRole) {
-            Image(systemName: "arrow.left.arrow.right")
-                .font(.body.weight(.semibold))
-                .frame(width: 44, height: 44)
-                .glassCircle()
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Switch role")
-        .padding(.leading, 16)
-        .padding(.top, 8)
+        .accessibilityLabel("Mark a plot on the map")
+        .padding(.trailing, 21)
+        // Level with the middle of the bar beside it.
+        .padding(.bottom, 22)
     }
 
     @ViewBuilder
@@ -253,8 +255,9 @@ struct FieldHelperHomeView: View {
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
                 .background(.regularMaterial, in: .capsule)
-                .padding(.horizontal, 72)
-                .padding(.top, 8)
+                .padding(.horizontal, 24)
+                // Below the search field.
+                .padding(.top, 66)
         }
     }
 }
@@ -272,7 +275,7 @@ extension View {
 }
 
 #Preview {
-    FieldHelperHomeView(onSwitchRole: {})
+    FieldHelperHomeView()
         .environment(
             FarmStore(
                 fileURL: nil,
