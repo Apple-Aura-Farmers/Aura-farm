@@ -222,4 +222,68 @@ final class RunMonitorTests: XCTestCase {
         XCTAssertEqual(feed(sharpness: 60, tracking: .paused, for: 2.6), .pausedFocus)
         XCTAssertEqual(feed(focus: 0.2, sharpness: 400, for: 1.2), .ok)
     }
+
+    // MARK: Two-signal focus pause (Phase 2s-D part C), numbers from the 17 Nov device runs
+
+    func testRunBFalsePauseDoesNotHappenWhenTheFocusIndexIsLowButTheFrameIsSharp() {
+        monitor.setFocusBaseline(0.443)
+        feed(focus: 0.5, sharpness: 1660, for: 8)
+        XCTAssertEqual(feed(focus: 0.24, sharpness: 2105, for: 4), .ok, "sharp: not a focus pause")
+        XCTAssertFalse(monitor.isFocusLow)
+        XCTAssertEqual(try XCTUnwrap(monitor.sharpnessShare), 1.27, accuracy: 0.05)
+    }
+
+    func testRunAPausesAfterTwoAndAHalfSecondsWhenBothSignalsAreLow() {
+        monitor.setFocusBaseline(0.222)
+        feed(focus: 0.3, sharpness: 2240, for: 8)
+        XCTAssertEqual(feed(focus: 0.08, sharpness: 585, for: 2.4), .ok)
+        XCTAssertEqual(feed(focus: 0.08, sharpness: 585, for: 0.2), .pausedFocus)
+        XCTAssertEqual(monitor.pauseCause, "index_and_sharpness")
+        XCTAssertEqual(try XCTUnwrap(monitor.sharpnessShare), 0.26, accuracy: 0.02)
+    }
+
+    func testAPauseEndsOnSharpnessAloneAndTheReferenceSurvivesALongPause() {
+        monitor.setFocusBaseline(0.222)
+        feed(focus: 0.3, sharpness: 2240, for: 8)
+        feed(focus: 0.08, sharpness: 585, for: 3)
+        XCTAssertEqual(monitor.state, .pausedFocus)
+        feed(focus: 0.08, sharpness: 585, for: 60)
+        XCTAssertEqual(monitor.state, .pausedFocus, "still blurry: stays paused")
+        XCTAssertEqual(feed(focus: 0.08, sharpness: 1600, for: 3), .pausedFocus, "0.71 of the reference")
+        XCTAssertEqual(feed(focus: 0.08, sharpness: 1900, for: 0.9), .pausedFocus, "spanning 0.8 s")
+        XCTAssertEqual(feed(focus: 0.08, sharpness: 1900, for: 0.2), .ok, "0.85 of the reference")
+    }
+
+    func testSharpnessBackAtEightyPercentOfTheReferenceResumes() {
+        monitor.setFocusBaseline(0.222)
+        feed(focus: 0.3, sharpness: 2240, for: 8)
+        feed(focus: 0.08, sharpness: 585, for: 3)
+        XCTAssertEqual(feed(focus: 0.08, sharpness: 1900, for: 1.2), .ok)
+        XCTAssertEqual(monitor.pauseCause, "")
+    }
+
+    func testResumingByHandMeasuresTheBaselineAgain() {
+        monitor.setFocusBaseline(0.222)
+        feed(focus: 0.3, sharpness: 2240, for: 8)
+        feed(focus: 0.08, sharpness: 585, for: 3)
+        XCTAssertEqual(monitor.state, .pausedFocus)
+        monitor.resumeManually()
+        XCTAssertEqual(monitor.state, .ok)
+        XCTAssertNil(monitor.focusBaseline)
+        feed(focus: 0.4, sharpness: 2000, for: 3.2)
+        XCTAssertEqual(try XCTUnwrap(monitor.focusBaseline), 0.4, accuracy: 1e-9)
+        monitor.resumeManually()
+        XCTAssertEqual(monitor.state, .ok, "nothing to resume from when not paused")
+    }
+
+    func testTheFirstFiveSecondsBehaveAsBefore() {
+        monitor.setFocusBaseline(1.0)
+        XCTAssertEqual(feed(focus: 0.5, sharpness: 2000, for: 2.6), .pausedFocus, "no reference yet")
+    }
+
+    func testAlignmentPauseSaysSoInTheCsv() {
+        feed(alignment: reading(shift: 0.3), for: 2.1)
+        XCTAssertEqual(monitor.state, .pausedAlignment)
+        XCTAssertEqual(monitor.pauseCause, "alignment")
+    }
 }

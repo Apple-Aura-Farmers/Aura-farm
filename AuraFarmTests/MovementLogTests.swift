@@ -49,13 +49,13 @@ final class MovementLogTests: XCTestCase {
         XCTAssertEqual(fields[index("position_x_frames")], "0.014")
         XCTAssertEqual(fields[index("frame_width")], "1280")
         XCTAssertEqual(
-            MovementLog.header.suffix(100).prefix(7),
+            MovementLog.header.suffix(112).prefix(7),
             [
                 "box_brightness", "box_sharpness", "box_contrast", "reading", "predicted_streak",
                 "no_detail", "blind_stretches",
             ])
         XCTAssertEqual(
-            MovementLog.header.suffix(93).prefix(27),
+            MovementLog.header.suffix(105).prefix(27),
             [
                 "start_match_x_px", "start_match_y_px", "true_off_start_fields",
                 "tracker_error_fields", "blank_returns_matched", "blank_returns_unmatched",
@@ -89,7 +89,7 @@ final class MovementLogTests: XCTestCase {
         XCTAssertEqual(fields[index("focus_top")], "1.200")
         XCTAssertEqual(fields[index("focus_bottom")], "", "a half with no ratio is empty")
         XCTAssertEqual(
-            MovementLog.header.suffix(65).prefix(5),
+            MovementLog.header.suffix(77).prefix(5),
             ["focus_index", "focus_baseline", "circle_shift_r", "circle_radius_change", "focus_low"],
             "the run monitor's columns are appended after every column")
         XCTAssertEqual(fields[index("monitor_state")], "")
@@ -186,12 +186,14 @@ final class MovementLogTests: XCTestCase {
 
     func testTheSpotAndCountingColumnsAreAppendedLast() {
         XCTAssertEqual(
-            MovementLog.header.suffix(27).prefix(3), ["spot_mode", "spot_window", "touch_seconds"])
+            MovementLog.header.suffix(39).prefix(3), ["spot_mode", "spot_window", "touch_seconds"])
         XCTAssertEqual(
-            MovementLog.header.suffix(11),
+            MovementLog.header.suffix(23).prefix(18),
             [
                 "event_detail", "detector_model", "det_drop_disc", "det_drop_big", "det_units",
                 "frame_dt", "camera_fps", "exposure_ms", "iso", "thermal_state", "battery_level",
+                "sharpness_ref", "sharpness_share", "pause_cause", "det_frame_seconds", "det_pre_ms",
+                "det_infer_ms", "det_decode_ms",
             ])
         var logged = row()
         logged.spotMode = "brief_touch"
@@ -216,6 +218,13 @@ final class MovementLogTests: XCTestCase {
         logged.iso = 160
         logged.thermalState = "fair"
         logged.batteryLevel = 0.874
+        logged.sharpnessRef = 2240.04
+        logged.sharpnessShare = 0.2612
+        logged.pauseCause = "index_and_sharpness"
+        logged.detFrameSeconds = 12.3456
+        logged.detPreMs = 3.04
+        logged.detInferMs = 28.96
+        logged.detDecodeMs = 0.52
         let fields = MovementLog.csv([logged]).split(separator: "\n")[1].split(
             separator: ",", omittingEmptySubsequences: false
         ).map(String.init)
@@ -241,6 +250,32 @@ final class MovementLogTests: XCTestCase {
         XCTAssertEqual(fields[index("iso")], "160")
         XCTAssertEqual(fields[index("thermal_state")], "fair")
         XCTAssertEqual(fields[index("battery_level")], "0.87")
+        XCTAssertEqual(fields[index("sharpness_ref")], "2240.0")
+        XCTAssertEqual(fields[index("sharpness_share")], "0.26")
+        XCTAssertEqual(fields[index("pause_cause")], "index_and_sharpness")
+        XCTAssertEqual(fields[index("det_frame_seconds")], "12.346")
+        XCTAssertEqual(fields[index("det_pre_ms")], "3.0")
+        XCTAssertEqual(fields[index("det_infer_ms")], "29.0")
+        XCTAssertEqual(fields[index("det_decode_ms")], "0.5")
         XCTAssertEqual(fields.count, MovementLog.header.count)
+    }
+
+    /// Phase 2u: the edge-acceptance, prediction and camera-drop columns are appended last.
+    func testThePhase2uColumnsAreAppendedLast() {
+        XCTAssertEqual(
+            Array(MovementLog.header.suffix(5)),
+            ["line_accept", "area_ahead_share", "predicted_edge_along", "expected_edge_ask", "camera_drops"])
+        var logged = row()
+        logged.lineState = "attached"
+        logged.lineAccept = "area"
+        logged.areaAheadShare = 0.0512
+        logged.predictedEdgeAlong = -9.1234
+        logged.expectedEdgeAsk = true
+        logged.cameraDrops = 7
+        let fields = MovementLog.csv([logged]).split(separator: "\n")[1].split(
+            separator: ",", omittingEmptySubsequences: false
+        ).map(String.init)
+        XCTAssertEqual(fields.count, MovementLog.header.count)
+        XCTAssertEqual(Array(fields.suffix(5)), ["area", "0.051", "-9.123", "1", "7"])
     }
 }

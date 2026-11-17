@@ -107,9 +107,6 @@
                         + (info.isLoadingModel ? " · opening…" : ""))
                 Text("Dropped: disc \(info.discDrops) · too big \(info.bigDrops)")
                 Text("Frames counted \(info.framesCounted) · skipped \(skipped)")
-                if info.runsEverySecondFrame {
-                    Text("Analysis was slow: detecting every second frame.").foregroundStyle(.orange)
-                }
             }
             .font(.footnote.monospaced())
             .frame(maxWidth: .infinity, alignment: .leading)

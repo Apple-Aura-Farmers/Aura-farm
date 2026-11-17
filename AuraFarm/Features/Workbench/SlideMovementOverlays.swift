@@ -79,7 +79,8 @@
                         monitor: model.setupInfo.monitor,
                         mapper: FramePreviewConverter(
                             layer: previewLayer, frameSize: model.fieldInfo.frameSize,
-                            display: display))
+                            display: display),
+                        onResumeAnyway: { model.resumeFocusAnyway() })
                     VStack {
                         HStack(alignment: .top) {
                             // The picture stays clear while the guide is drawing on it.
@@ -613,6 +614,16 @@
                     with: .color(.yellow), lineWidth: 2)
             }
 
+            // The predicted top, bottom and right edges: faint dashed lines.
+            for line in info.predicted {
+                var path = Path()
+                path.move(to: place(line.from))
+                path.addLine(to: place(line.to))
+                context.stroke(
+                    path, with: .color(.cyan.opacity(0.45)),
+                    style: StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
+            }
+
             if let start = info.startPoint {
                 let home = place(start)
                 let radius = thresholds.homeZoneFields * scale
@@ -755,6 +766,26 @@
     #Preview("Too fast") { PreviewStrip(status: .tooFast, speed: 0.22, mapping: .rotateRight) }
     #Preview("Lost") {
         PreviewStrip(status: .lost, speed: 0.02, mapping: .asIs, mirrored: true)
+    }
+
+    /// The trail mini-map with the predicted top, bottom and right edges drawn faint and dashed.
+    #Preview("Trail map: predicted edges") {
+        SlideMovementTrail(
+            info: .init(
+                trail: (0..<40).map { CGPoint(x: Double($0) * 0.05, y: -2.0 + Double($0) * 0.1) },
+                startPoint: .zero, guideCaptured: [CGPoint(x: 0.4, y: -1.5), CGPoint(x: 0.4, y: -0.7)],
+                predicted: [
+                    PredictedTrailLine(
+                        kind: .top, from: CGPoint(x: -0.6, y: -2.4), to: CGPoint(x: 3.4, y: -2.4)),
+                    PredictedTrailLine(
+                        kind: .bottom, from: CGPoint(x: -0.6, y: 2.4), to: CGPoint(x: 3.4, y: 2.4)),
+                    PredictedTrailLine(
+                        kind: .right, from: CGPoint(x: 3.4, y: -2.4), to: CGPoint(x: 3.4, y: 2.4)),
+                ]),
+            mapping: .asIs, mirrored: false
+        )
+        .frame(width: 240, height: 240)
+        .background(Color.gray)
     }
 
     #Preview("Thermal badge: each state") {

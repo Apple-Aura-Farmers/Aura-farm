@@ -73,6 +73,10 @@ struct GuideOverlayModel: Equatable {
         if case .checkingEdge(let progress) = step.instruction {
             checkProgress = min(max(progress, 0), 1)
         }
+        var line = step.instruction.helperText(fullCoverSlip: step.edge.edgeMode == "line")
+        if step.lastColumn, !step.isFinished {
+            line = line.isEmpty ? "Last column" : "Last column. \(line)"
+        }
         return GuideOverlayModel(
             centre: centre, toleranceRadius: alignToleranceFields * pointsPerField,
             mark: mark(
@@ -80,8 +84,7 @@ struct GuideOverlayModel: Equatable {
                 pointsPerField: pointsPerField, fieldRadius: fieldRadius, heading: heading,
                 thresholds: thresholds),
             holdProgress: holdProgress, justCaptured: justCaptured,
-            line: step.instruction.helperText(fullCoverSlip: step.edge.edgeMode == "line"),
-            isFinished: step.isFinished,
+            line: line, isFinished: step.isFinished,
             justReachedEdge: justReachedEdge, checkProgress: checkProgress)
     }
 

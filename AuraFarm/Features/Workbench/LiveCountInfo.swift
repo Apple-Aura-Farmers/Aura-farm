@@ -40,8 +40,6 @@
         var hapticCount = 0
         /// Why counting cannot run (the model did not open); nil otherwise.
         var problem: String?
-        /// Every other eligible frame goes to the detector, because the analysis was too slow.
-        var runsEverySecondFrame = false
         /// The model counting ("v1" or "v2"), the boxes the guards dropped, how long the model took
         /// to open, and whether it is still opening.
         var detectorModel = DetectorModel.v2.rawValue

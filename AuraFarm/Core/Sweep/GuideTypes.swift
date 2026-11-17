@@ -66,6 +66,16 @@ struct GuideReading: Equatable {
     /// line measured along another heading than the route's current one is ignored.
     var edgeLineHeading: CGPoint?
 
+    /// The detail in the two quarters of the box ahead along the heading over the detail in the two
+    /// behind (the `quad_*` columns): near 0 when the area ahead is empty. nil when any quarter or
+    /// the heading is unknown, or nothing is behind.
+    var areaAheadShare: Double? {
+        guard let aa = quadAheadAway, let at = quadAheadToward, let ba = quadBehindAway,
+            let bt = quadBehindToward, ba + bt > 1e-9
+        else { return nil }
+        return (aa + at) / (ba + bt)
+    }
+
     /// Whether the slide has been still for `seconds` in a row. Without `stillSeconds` this is
     /// `isStill`.
     func isStill(for seconds: Double) -> Bool {
@@ -108,6 +118,15 @@ struct EdgeDiagnostics: Equatable {
     /// The box's sharpness over the median before the candidate began, when the corner rule
     /// looked at it; nil otherwise.
     var cornerBoxShare: Double?
+    /// Which rule accepted the latest edge line ("strict" or "area"); empty without one.
+    var lineAccept = ""
+    /// The detail ahead over the detail behind on this reading (`GuideReading.areaAheadShare`).
+    var areaAheadShare: Double?
+    /// The predicted edge's position along the current leg's heading at the column's x, in fields;
+    /// nil without a prediction.
+    var predictedEdgeAlong: Double?
+    /// "Edge should be here. Confirm?" is showing.
+    var expectedEdgeAsk = false
 }
 
 /// The helper's answer about an edge, in full-cover-slip mode.
@@ -177,6 +196,9 @@ enum GuideInstruction: Equatable {
     /// Full-cover-slip mode: a line that passes the rule is just behind the cross (the helper went
     /// past it): come back along the leg until it is on the cross; unit vector or the way back.
     case edgeBehind(toward: CGPoint)
+    /// The view passed the predicted edge with nothing ahead and no edge found: ✓ takes it as the
+    /// edge, ✗ keeps going.
+    case expectedEdge
     /// The helper said the line is not an edge: keep going (shown for a moment).
     case notAnEdge
     /// Full-cover-slip mode: the box has no detail, which says nothing about an edge.
@@ -207,6 +229,7 @@ enum GuideInstruction: Equatable {
         case .lineAhead: "Edge line ahead"
         case .edgeDetected: "Stay still, edge detected"
         case .edgeBehind: "Edge just behind, come back"
+        case .expectedEdge: "Edge should be here. Confirm?"
         case .notAnEdge: "Not an edge, keep going"
         case .nothingToFollow: "Nothing to follow here"
         case .stageLimit: "Stage limit, turning"
@@ -237,6 +260,7 @@ enum GuideInstruction: Equatable {
         case .lineAhead: "Edge line ahead. Keep going until it reaches the centre cross"
         case .edgeDetected: "Stay still, edge detected"
         case .edgeBehind: "Edge just behind you. Come back until it's on the cross"
+        case .expectedEdge: "Edge should be here. Confirm?"
         case .notAnEdge: "Not an edge. Keep going"
         case .nothingToFollow:
             "Nothing to follow here. Turn back, or move to a patch with more particles"
@@ -277,6 +301,7 @@ enum GuideInstruction: Equatable {
         case .lineAhead: "line_ahead"
         case .edgeDetected: "edge_detected"
         case .edgeBehind: "edge_behind"
+        case .expectedEdge: "expected_edge"
         case .notAnEdge: "not_an_edge"
         case .nothingToFollow: "nothing_to_follow"
         case .stageLimit: "stage_limit"

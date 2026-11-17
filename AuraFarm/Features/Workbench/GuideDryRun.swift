@@ -42,6 +42,12 @@
         var coverageStep = 0.8
         var countingActive = false
         var column = 0
+        /// The rule that accepted the latest edge line, the detail ahead over behind, the predicted
+        /// edge's position and whether the expected-edge ask shows (see `EdgeDiagnostics`).
+        var lineAccept = ""
+        var areaAheadShare: Double?
+        var predictedEdgeAlong: Double?
+        var expectedEdgeAsk = false
     }
 
     /// How the preview shows the box, measured from the live preview layer on the main thread.
@@ -76,6 +82,24 @@
         /// A capture and the target, in the trail's space (frame axes, in fields).
         var captureTrailPoint: CGPoint?
         var targetTrailPoint: CGPoint?
+        /// The predicted edges as segments in the trail's space.
+        var predictedTrailLines: [PredictedTrailLine] = []
+    }
+
+    /// One predicted edge segment for the trail mini-map.
+    struct PredictedTrailLine: Equatable {
+        enum Kind: Equatable { case top, bottom, right }
+        var kind: Kind
+        var from: CGPoint
+        var to: CGPoint
+    }
+
+    /// The lab's "Cover slip" setting: a square slip (the usual 22 x 22 mm) lets the guide predict
+    /// the right edge from the top and bottom ones; with an unknown shape it does not.
+    enum CoverSlipShape: String, CaseIterable, Identifiable {
+        case square, unknown
+        var id: String { rawValue }
+        var title: String { self == .square ? "Square" : "Unknown" }
     }
 
     /// Feeds `ViewClassifier` and `GuidedSweep` from the lab's steps, so the team can try the
@@ -120,6 +144,10 @@
         /// Full-cover-slip mode: the rule waits for the helper's tap instead of confirming itself.
         var asksEdges = true {
             didSet { if asksEdges != oldValue { reset() } }
+        }
+        /// The cover slip's shape ("Cover slip"); changing it starts the guide afresh.
+        var coverSlip = CoverSlipShape.square {
+            didSet { if coverSlip != oldValue { reset() } }
         }
         /// How a spot is ticked: the lab's default is the brief touch; changing it starts afresh.
         var spotMode = SpotConfirmMode.briefTouch {
@@ -326,18 +354,26 @@
                     && guide.distanceToSpot <= Self.easeOffFields
                     && indicators.speedFraction > briefThresholds.maxTouchSpeedFraction
             }
-            var targetPoint: CGPoint?
-            if let target = result.target,
-                let frame = axes.frameVector(
+            // A guide point back into the tracker's space (content displacement): the view travels
+            // the opposite way, so the offset is subtracted.
+            func trailPoint(_ point: CGPoint) -> CGPoint? {
+                axes.frameVector(
                     ofScreenVector: CGPoint(
-                        x: Double(target.x - position.x) * pointsPerField,
-                        y: Double(target.y - position.y) * pointsPerField))
-            {
-                // Back into the tracker's space (content displacement): the view travels the
-                // opposite way, so the offset is subtracted.
-                targetPoint = CGPoint(
-                    x: step.positionFields.x - frame.x / boxSide,
-                    y: step.positionFields.y - frame.y / boxSide)
+                        x: Double(point.x - position.x) * pointsPerField,
+                        y: Double(point.y - position.y) * pointsPerField)
+                ).map {
+                    CGPoint(
+                        x: step.positionFields.x - $0.x / boxSide,
+                        y: step.positionFields.y - $0.y / boxSide)
+                }
+            }
+            let targetPoint = result.target.flatMap(trailPoint)
+            let predictedLines = Self.predictedSegments(guide.predictedEdges).compactMap {
+                segment -> PredictedTrailLine? in
+                guard let from = trailPoint(segment.from), let to = trailPoint(segment.to) else {
+                    return nil
+                }
+                return PredictedTrailLine(kind: segment.kind, from: from, to: to)
             }
             return GuideDryRunResult(
                 fields: GuideRowFields(
@@ -355,7 +391,10 @@
                     spotWindow: spotMode == .briefTouch ? (guide.spotWindow?.rawValue ?? "") : "",
                     touchSeconds: spotMode == .briefTouch ? guide.touchElapsed : nil,
                     missedSpots: guide.missedSpots, coverageStep: coverageStep,
-                    countingActive: guide.countingActive, column: guide.columnNumber),
+                    countingActive: guide.countingActive, column: guide.columnNumber,
+                    lineAccept: result.edge.lineAccept, areaAheadShare: result.edge.areaAheadShare,
+                    predictedEdgeAlong: result.edge.predictedEdgeAlong,
+                    expectedEdgeAsk: result.edge.expectedEdgeAsk),
                 info: SlideMovementInfo.Guide(
                     isOn: true, instruction: result.instruction.debugText, state: result.stateName,
                     targetDx: dx, targetDy: dy, viewClass: viewClass.rawValue, captures: captures,
@@ -366,7 +405,29 @@
                     columnInProgress: guide.columnInProgress, spotMode: spotMode),
                 overlay: overlay,
                 captureTrailPoint: result.capture == nil ? nil : step.positionFields,
-                targetTrailPoint: targetPoint)
+                targetTrailPoint: targetPoint, predictedTrailLines: predictedLines)
+        }
+
+        /// The predicted edges as segments in guide fields: the top and bottom lines over the x
+        /// range, and the right edge between them.
+        static func predictedSegments(
+            _ edges: PredictedEdges
+        ) -> [(kind: PredictedTrailLine.Kind, from: CGPoint, to: CGPoint)] {
+            guard let range = edges.xRange else { return [] }
+            var segments: [(kind: PredictedTrailLine.Kind, from: CGPoint, to: CGPoint)] = []
+            for (kind, fit) in [(PredictedTrailLine.Kind.top, edges.top), (.bottom, edges.bottom)] {
+                guard let fit else { continue }
+                segments.append(
+                    (
+                        kind, CGPoint(x: range.lowerBound, y: fit.along(at: range.lowerBound)),
+                        CGPoint(x: range.upperBound, y: fit.along(at: range.upperBound))
+                    ))
+            }
+            if let x = edges.rightX, let top = edges.top, let bottom = edges.bottom {
+                segments.append(
+                    (.right, CGPoint(x: x, y: top.along(at: x)), CGPoint(x: x, y: bottom.along(at: x))))
+            }
+            return segments
         }
 
         /// Within this of the cross, a speed above the touch limit shows "Ease off at the cross".
@@ -418,6 +479,7 @@
             var thresholds = GuidedSweepThresholds()
             thresholds.fullCoverSlip = fullCoverSlip
             thresholds.asksEdges = asksEdges
+            thresholds.squareCoverSlip = coverSlip == .square
             thresholds.alignment.spotMode = spotMode
             thresholds.columnSpacingFields = coverageStep
             guide = GuidedSweep(thresholds: thresholds)

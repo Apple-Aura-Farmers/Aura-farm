@@ -14,6 +14,8 @@ struct GuideStep: Equatable {
     var finishReason: SweepFinishReason?
     /// What the edge conditions made of this reading, for the CSV.
     var edge = EdgeDiagnostics()
+    /// The column being swept is the last one (at the right edge): "Last column".
+    var lastColumn = false
 }
 
 /// Tells a person moving a slide by hand where to go next, so the whole sample is covered
@@ -70,6 +72,10 @@ struct GuidedSweep {
     /// Left edge to right edge, in fields, when both are known.
     var edgeSpanFields: Double? { route.edgeSpanFields }
     var columnSpacingFields: Double { route.thresholds.columnSpacingFields }
+    /// How the right edge was found ("line", "empty" or "predicted"); empty when it was not.
+    var rightEdgeSource: String { route.rightEdgeSource }
+    /// The predicted top, bottom and right edges, for the trail mini-map.
+    var predictedEdges: PredictedEdges { route.predictedEdges }
 
     /// Ends the run now (`.endedByHelper`). Idempotent; nothing after a finish.
     mutating func endNow() { route.endNow() }
@@ -131,7 +137,7 @@ struct GuidedSweep {
             instruction: route.isFinished ? .finished : output.instruction, target: output.target,
             capture: output.capture, stateName: route.stateName, column: route.columnNumber,
             isFinished: route.isFinished, finishReason: route.finishReason,
-            edge: route.diagnostics)
+            edge: route.diagnostics, lastColumn: route.isLastColumn && !route.isFinished)
     }
 
     /// Ends the route at once, whatever it was doing. The instruction is then always

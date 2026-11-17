@@ -67,6 +67,8 @@
             /// The guide's captured spots and its current target, in the same space as `trail`.
             var guideCaptured: [CGPoint] = []
             var guideTarget: CGPoint?
+            /// The predicted top, bottom and right edges as segments in the same space as `trail`.
+            var predicted: [PredictedTrailLine] = []
         }
 
         /// The guide dry run's block. Counters drive haptics, like `Readouts`.

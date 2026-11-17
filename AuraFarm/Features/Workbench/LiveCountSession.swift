@@ -25,15 +25,49 @@
         var units = ""
         /// "Volvox id=7 slide=(12,-40) column=2", one per organism counted on this frame.
         var counted: [String] = []
+        /// For a result that arrived after its frame: when that frame was taken (run seconds),
+        /// and where the detection's time went, in milliseconds.
+        var frameSeconds: Double?
+        var preMilliseconds: Double?
+        var inferMilliseconds: Double?
+        var decodeMilliseconds: Double?
+    }
+
+    /// One camera buffer on its way to the detector queue. The detector queue empties it as soon
+    /// as it is done, so at most one buffer is ever held (see `LiveCountSession.process`).
+    private final class HeldBuffer {
+        var buffer: CVPixelBuffer?
+        init(_ buffer: CVPixelBuffer) { self.buffer = buffer }
     }
 
     /// Runs the detector on the frames the guide's counting rules let through and feeds
-    /// `LiveOrganismCounter`. Analysis queue only, except `prepare()`, which any queue may call.
+    /// `LiveOrganismCounter`.
     ///
-    /// The detector opens off the analysis queue (`prepare()`, at Mark start and when the model
-    /// changes), on the CPU and GPU (measured 5.1 ms a frame on an iPhone 17 in
-    /// `CaptureViewModel`). Until it is ready, frames are skipped as "model_loading".
+    /// Two queues. The analysis queue (the lab's) calls `process` for every analysed frame and gets
+    /// its answer at once. The model runs on a serial queue of its own, "slidelab.detector": the
+    /// detector, the counter and the snapshots all live there, so the analysis queue never waits
+    /// for it (V2 takes about 30 ms a frame on the phone). Each frame sends the detector queue ONE
+    /// note, in order:
+    /// - a skip, with the frame's picture shift, for every frame the counting rules or the model
+    ///   being busy turned away, or
+    /// - a detect, for a frame the model may look at, only when no detect is still pending or
+    ///   running. Otherwise that frame becomes a skip with the reason "busy".
+    /// Every note carries its frame's shift and the notes are handled in order, so the counter's
+    /// carried shift stays exact and an organism straddling busy frames is the same track.
+    ///
+    /// A detect holds the camera buffer until it is done and no second one is sent meanwhile, so
+    /// at most one buffer is held. Reset, a new run, a model change and counting starting or
+    /// stopping are notes on the same queue. A result that was running when a reset or a model
+    /// change was asked for is thrown away (`epoch`) and counted into nothing.
+    ///
+    /// The detector opens off both queues (`prepare()`), on the Neural Engine by default. Until it
+    /// is ready, frames are skipped as "model_loading".
     final class LiveCountSession {
+        /// What runs the model: opened detector by default; a test puts a slow one in.
+        typealias Detect = (CVPixelBuffer, CGRect?) throws -> (
+            found: [OrganismDetector.Detection], timing: OrganismDetector.Timing
+        )
+
         /// Settings, set from the lab's switches (through the analysis queue).
         var isEnabled = true
         /// On by default: V2 calls the whole bright eyepiece disc Volvox or Nematode without it.
@@ -44,10 +78,14 @@
         /// The hardware it runs on: the Neural Engine by default, for power per inference. Change
         /// it with `setUnits` only.
         private(set) var units = DetectorUnits.neuralEngine
+        /// Called on the detector queue after a result is in the count, so the screen need not
+        /// wait for the next analysed frame.
+        var onResult: (() -> Void)?
 
         private let loadQueue = DispatchQueue(label: "slidelab.detector-load", qos: .userInitiated)
-        /// Guards the properties below: the load finishes on `loadQueue`. `generation` counts the
-        /// changes of model or units, so a load that finishes after one is thrown away.
+        private let detectorQueue = DispatchQueue(label: "slidelab.detector", qos: .userInitiated)
+        private let injected: Detect?
+        /// Guards everything below that the two queues share.
         private let lock = NSLock()
         private var loaded: OrganismDetector?
         private var loadingGeneration: Int?
@@ -57,35 +95,74 @@
         private var loadMilliseconds: Double?
         /// When the detector last ran, on the run's clock.
         private var lastDetectedAt: Double?
-
-        /// If the analysis p95 goes above this, only every second eligible frame is detected.
-        /// PLACEHOLDER: about 80% of the 100 ms between analysed frames at 10 fps.
-        static let slowAnalysisMilliseconds = 80.0
-        private static let windowFrames = 60
-
-        private(set) var counter = LiveOrganismCounter()
-        private let snapshots = DetectionSnapshotWriter()
-        private var runsEverySecond = false
-        private var eligibleSeen = 0
-        private var recentMilliseconds: [Double] = []
+        /// Counts the runs and model changes. A detect that finishes under another epoch is dropped.
+        private var epoch = 0
+        /// A detect note is pending or running.
+        private var detectInFlight = false
+        /// Results that arrived and are not yet in a CSV row, oldest first.
+        private var completed: [LiveCountFrameLog] = []
+        private var counting = false
+        private var counterState = LiveOrganismCounter()
         private var hapticCount = 0
+
+        // Detector queue only.
+        private let snapshots = DetectionSnapshotWriter()
         private var lastHapticAt = -Double.infinity
+        // Analysis queue only.
         private var lastCircle: FieldCircle?
 
-        /// A new run: counts, snapshots and timing start afresh. The model stays open.
+        init(detect: Detect? = nil) {
+            injected = detect
+        }
+
+        /// A copy of the counter as it is now.
+        var counter: LiveOrganismCounter {
+            lock.lock()
+            defer { lock.unlock() }
+            return counterState
+        }
+
+        /// A new run: counts and snapshots start afresh. The model stays open. A detection that is
+        /// running is thrown away.
         func begin(stamp: String) {
-            counter.reset()
-            snapshots.begin(stamp: stamp)
-            runsEverySecond = false
-            eligibleSeen = 0
-            recentMilliseconds = []
-            hapticCount = 0
-            lastDetectedAt = nil
+            restart { [snapshots] in snapshots.begin(stamp: stamp) }
+        }
+
+        /// Counting starts or stops (the guide's `countingActive`). A note like the others, so it
+        /// is seen in order with the frames around it.
+        func setCounting(_ isOn: Bool) {
+            detectorQueue.async { [self] in
+                lock.lock()
+                counting = isOn
+                lock.unlock()
+            }
+        }
+
+        /// Whether the detector queue has been told counting is on, once it has caught up.
+        var isCounting: Bool {
+            lock.lock()
+            defer { lock.unlock() }
+            return counting
+        }
+
+        /// Waits until the detector queue has handled everything sent so far. For the end of a run
+        /// and for tests; the analysis queue never needs it per frame.
+        func drain() {
+            detectorQueue.sync {}
         }
 
         /// How long ago the detector last ran, on the run's clock; nil if it has not.
         func secondsSinceDetection(at seconds: Double) -> Double? {
-            lastDetectedAt.map { seconds - $0 }
+            lock.lock()
+            defer { lock.unlock() }
+            return lastDetectedAt.map { seconds - $0 }
+        }
+
+        /// The oldest detection result not yet written to a CSV row. Each is handed out once.
+        func takeCompleted() -> LiveCountFrameLog? {
+            lock.lock()
+            defer { lock.unlock() }
+            return completed.isEmpty ? nil : completed.removeFirst()
         }
 
         /// The hardware the open detector was opened for; nil until it is open.
@@ -103,6 +180,29 @@
             lock.unlock()
             let all = names ?? (model == .v1 ? OrganismDetector.classNames : DetectorModel.v2ClassNames)
             return (minimumConfidence, cropsToEyepiece, Array(all.dropFirst()))
+        }
+
+        // MARK: Starting afresh
+
+        /// Asks for a clean count: running detections are dropped from now on, and the counter is
+        /// emptied once the detector queue gets there.
+        private func restart(_ then: @escaping () -> Void = {}) {
+            lock.lock()
+            epoch += 1
+            lastDetectedAt = nil
+            completed = []
+            counterState.reset()
+            hapticCount = 0
+            lock.unlock()
+            detectorQueue.async { [self] in
+                lock.lock()
+                counterState.reset()
+                hapticCount = 0
+                completed = []
+                lock.unlock()
+                lastHapticAt = -Double.infinity
+                then()
+            }
         }
 
         // MARK: Opening the model
@@ -123,11 +223,7 @@
         }
 
         private func reopen() {
-            counter.reset()
-            recentMilliseconds = []
-            eligibleSeen = 0
-            runsEverySecond = false
-            lastDetectedAt = nil
+            restart()
             lock.lock()
             generation += 1
             wanted = (model, units)
@@ -144,7 +240,8 @@
             lock.lock()
             let wanted = wanted
             let ticket = generation
-            let skip = loaded != nil || loadingGeneration == ticket || loadFailure != nil
+            let skip =
+                injected != nil || loaded != nil || loadingGeneration == ticket || loadFailure != nil
             if !skip { loadingGeneration = ticket }
             lock.unlock()
             guard !skip else { return }
@@ -181,14 +278,11 @@
             return loaded
         }
 
-        /// The p50 and p95 of the analysis time (tracker plus detector) over the last frames.
-        var analysisPercentiles: (p50: Double, p95: Double)? {
-            guard recentMilliseconds.count >= 10 else { return nil }
-            let sorted = recentMilliseconds.sorted()
-            return (sorted[sorted.count / 2], sorted[min(sorted.count - 1, sorted.count * 95 / 100)])
-        }
+        // MARK: Frames
 
-        /// One analysed frame while counting is on (the guide's `countingActive`).
+        /// One analysed frame while counting is on (the guide's `countingActive`). Analysis queue.
+        /// Returns at once: a frame sent to the model comes back with `ran` false, and its result
+        /// turns up later in `takeCompleted()`.
         /// - Parameters:
         ///   - skipReason: why this frame may not go to the detector (see
         ///     `LiveOrganismCounter.skipReason`), nil when it may.
@@ -196,52 +290,107 @@
         func process(
             buffer: CVPixelBuffer, skipReason: String?, pictureMoved: CGPoint,
             trackerPosition: CGPoint, frameSize: CGSize, fieldCircle: FieldCircle?, seconds: Double,
-            column: Int, trackerMilliseconds: Double
+            column: Int
         ) -> LiveCountFrameLog {
             var log = LiveCountFrameLog(active: true)
+            log.model = model.rawValue
+            log.units = units.rawValue
             if let fieldCircle { lastCircle = fieldCircle }
             guard isEnabled else {
                 log.skipReason = "off"
-                note(trackerMilliseconds)
                 return log
             }
             var reason = skipReason
-            if reason == nil {
-                eligibleSeen += 1
-                if runsEverySecond, eligibleSeen % 2 == 0 { reason = "stride" }
-            }
-            if let reason {
-                counter.skip(pictureMoved: pictureMoved, reason: reason)
-                log.skipReason = reason
-                finish(&log)
-                note(trackerMilliseconds)
-                return log
-            }
-            guard var detector = readyDetector() else {
+            if reason == nil, !isReady {
                 prepare()
                 lock.lock()
                 let failed = loadFailure != nil
                 lock.unlock()
-                let why = failed ? "no_model" : "model_loading"
-                counter.skip(pictureMoved: pictureMoved, reason: why)
-                log.skipReason = why
+                reason = failed ? "no_model" : "model_loading"
+            }
+            var ticket = 0
+            if reason == nil {
+                lock.lock()
+                if detectInFlight {
+                    reason = "busy"
+                } else {
+                    detectInFlight = true
+                    ticket = epoch
+                }
+                lock.unlock()
+            }
+            if let reason {
+                detectorQueue.async { [self] in
+                    lock.lock()
+                    counterState.skip(pictureMoved: pictureMoved, reason: reason)
+                    lock.unlock()
+                }
+                log.skipReason = reason
                 finish(&log)
-                note(trackerMilliseconds)
                 return log
             }
-            detector.minimumConfidence = minimumConfidence
             var crop: CGRect?
             if cropsToEyepiece, let circle = lastCircle {
                 crop = FieldCentring.cropRect(for: circle, frameSize: frameSize)
             }
+            let held = HeldBuffer(buffer)
+            let confidence = minimumConfidence
+            let circle = fieldCircle ?? lastCircle
+            detectorQueue.async { [self] in
+                detect(
+                    held, ticket: ticket, confidence: confidence, crop: crop, circle: circle,
+                    pictureMoved: pictureMoved, trackerPosition: trackerPosition,
+                    frameSize: frameSize, seconds: seconds, column: column)
+            }
+            finish(&log)
+            return log
+        }
+
+        private var isReady: Bool {
+            lock.lock()
+            defer { lock.unlock() }
+            return injected != nil || loaded != nil
+        }
+
+        /// The detect note. Detector queue.
+        private func detect(
+            _ held: HeldBuffer, ticket: Int, confidence: Float, crop: CGRect?, circle: FieldCircle?,
+            pictureMoved: CGPoint, trackerPosition: CGPoint, frameSize: CGSize, seconds: Double,
+            column: Int
+        ) {
+            guard let buffer = held.buffer else { return }
+            var run = injected
+            if run == nil, var detector = readyDetector() {
+                detector.minimumConfidence = confidence
+                run = { try detector.timedDetections(in: $0, crop: $1) }
+            }
+            guard let run else {
+                // Closed by a model change while this note waited: nothing was looked at.
+                lock.lock()
+                counterState.skip(pictureMoved: pictureMoved, reason: "model_loading")
+                detectInFlight = false
+                lock.unlock()
+                held.buffer = nil
+                return
+            }
             let started = CACurrentMediaTime()
-            let detections = (try? detector.detections(in: buffer, crop: crop)) ?? []
+            let output = (try? run(buffer, crop)) ?? (found: [], timing: OrganismDetector.Timing())
             let milliseconds = (CACurrentMediaTime() - started) * 1000
-            let result = counter.update(
-                detections: detections, pictureMoved: pictureMoved, trackerPosition: trackerPosition,
-                frameSize: frameSize, fieldCircle: fieldCircle ?? lastCircle, crop: crop,
-                seconds: seconds, column: column)
+
+            lock.lock()
+            guard epoch == ticket else {
+                // A reset or a model change came while the model ran: this belongs to no run.
+                detectInFlight = false
+                lock.unlock()
+                held.buffer = nil
+                return
+            }
+            let result = counterState.update(
+                detections: output.found, pictureMoved: pictureMoved,
+                trackerPosition: trackerPosition, frameSize: frameSize, fieldCircle: circle,
+                crop: crop, seconds: seconds, column: column)
             lastDetectedAt = seconds
+            var log = LiveCountFrameLog(active: true)
             log.ran = true
             log.milliseconds = milliseconds
             log.found = result.found
@@ -251,44 +400,46 @@
             log.repeatOnMap = result.repeatOnMap
             log.droppedDisc = result.droppedDisc
             log.droppedBig = result.droppedBig
+            log.frameSeconds = seconds
+            log.preMilliseconds = output.timing.preMilliseconds
+            log.inferMilliseconds = output.timing.inferMilliseconds
+            log.decodeMilliseconds = output.timing.decodeMilliseconds
+            log.tallyTotal = counterState.tallyTotal
+            log.mapTotal = counterState.helperTotal
+            log.model = model.rawValue
+            log.units = units.rawValue
             for entry in result.newEntries {
                 log.counted.append(
                     "\(entry.label) id=\(entry.id) slide=(\(Int(entry.position.x)),\(Int(entry.position.y))) column=\(entry.column)"
                 )
             }
+            var drawn: [(id: Int, label: String, rect: CGRect)] = []
             if !result.newEntries.isEmpty {
                 if seconds - lastHapticAt >= 0.5 {
                     lastHapticAt = seconds
                     hapticCount += 1
                 }
-                let drawn = counter.visibleBoxes.filter { $0.status == .counted }.map {
+                drawn = counterState.visibleBoxes.filter { $0.status == .counted }.map {
                     (id: $0.id, label: $0.label, rect: $0.box)
                 }
-                snapshots.save(buffer, boxes: drawn)
             }
-            finish(&log)
-            note(trackerMilliseconds + milliseconds)
-            return log
+            completed.append(log)
+            lock.unlock()
+
+            if !drawn.isEmpty { snapshots.save(buffer, boxes: drawn) }
+            held.buffer = nil
+            lock.lock()
+            detectInFlight = false
+            lock.unlock()
+            onResult?()
         }
 
-        /// A frame while counting is on and nothing is eligible and nothing moved on it.
+        /// What the counter and the model say about a frame, for the CSV.
         private func finish(_ log: inout LiveCountFrameLog) {
-            log.tallyTotal = counter.tallyTotal
-            log.mapTotal = counter.helperTotal
-            log.model = model.rawValue
-            log.units = units.rawValue
-        }
-
-        private func note(_ milliseconds: Double) {
-            recentMilliseconds.append(milliseconds)
-            if recentMilliseconds.count > Self.windowFrames {
-                recentMilliseconds.removeFirst(recentMilliseconds.count - Self.windowFrames)
-            }
-            if !runsEverySecond, let p95 = analysisPercentiles?.p95,
-                p95 > Self.slowAnalysisMilliseconds
-            {
-                runsEverySecond = true
-            }
+            lock.lock()
+            log.tallyTotal = counterState.tallyTotal
+            log.mapTotal = counterState.helperTotal
+            lock.unlock()
         }
 
         /// The screen's view of the count.
@@ -297,6 +448,8 @@
             let failure = loadFailure
             let opened = loadMilliseconds
             let isLoading = loadingGeneration != nil
+            let counter = counterState
+            let haptics = hapticCount
             lock.unlock()
             var labels: [String: LiveCountInfo.LabelCount] = [:]
             for (label, count) in counter.helperCountByLabel {
@@ -314,8 +467,8 @@
                         status: $0.status)
                 },
                 frameSize: frameSize, framesCounted: counter.framesCounted,
-                framesSkipped: counter.framesSkippedByReason, hapticCount: hapticCount,
-                problem: failure, runsEverySecondFrame: runsEverySecond,
+                framesSkipped: counter.framesSkippedByReason, hapticCount: haptics,
+                problem: failure,
                 detectorModel: model.rawValue, detectorUnits: units.rawValue, discDrops: counter.discDrops,
                 bigDrops: counter.bigDrops, loadMilliseconds: opened, isLoadingModel: isLoading)
         }

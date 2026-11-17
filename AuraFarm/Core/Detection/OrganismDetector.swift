@@ -2,6 +2,7 @@ import CoreGraphics
 import CoreImage
 import CoreML
 import CoreVideo
+import QuartzCore
 
 /// The trained detector: an RF-DETR model exported to Core ML.
 ///
@@ -30,6 +31,15 @@ struct OrganismDetector {
         var confidence: Float
         /// Vision's coordinates: a share of the image, with the origin at the bottom left.
         var box: CGRect
+    }
+
+    /// Where one detection's time went, in milliseconds: cropping and rendering into the square,
+    /// the model alone, and turning its answer into detections.
+    struct Timing: Equatable {
+        var preMilliseconds = 0.0
+        var inferMilliseconds = 0.0
+        var decodeMilliseconds = 0.0
+        var totalMilliseconds: Double { preMilliseconds + inferMilliseconds + decodeMilliseconds }
     }
 
     enum Failure: LocalizedError {
@@ -148,12 +158,19 @@ struct OrganismDetector {
     }
 
     func detections(in image: CGImage, crop: CGRect? = nil) throws -> [Detection] {
-        try detections(in: CIImage(cgImage: image), crop: crop)
+        try run(CIImage(cgImage: image), crop: crop).found
     }
 
     /// The live path: a camera frame, with no copy out of it.
     func detections(in buffer: CVPixelBuffer, crop: CGRect? = nil) throws -> [Detection] {
-        try detections(in: CIImage(cvPixelBuffer: buffer), crop: crop)
+        try run(CIImage(cvPixelBuffer: buffer), crop: crop).found
+    }
+
+    /// The live path with the time split.
+    func timedDetections(
+        in buffer: CVPixelBuffer, crop: CGRect? = nil
+    ) throws -> (found: [Detection], timing: Timing) {
+        try run(CIImage(cvPixelBuffer: buffer), crop: crop)
     }
 
     /// A box that is a share of `crop` (Vision's axes: origin bottom left) as a share of the
@@ -181,7 +198,14 @@ struct OrganismDetector {
             by: CGAffineTransform(translationX: -rect.minX, y: -rect.minY))
     }
 
-    private func detections(in whole: CIImage, crop: CGRect?) throws -> [Detection] {
+    private func run(_ whole: CIImage, crop: CGRect?) throws -> (found: [Detection], timing: Timing) {
+        var timing = Timing()
+        var mark = CACurrentMediaTime()
+        func lap() -> Double {
+            let now = CACurrentMediaTime()
+            defer { mark = now }
+            return (now - mark) * 1000
+        }
         let image = crop.map { Self.cropped(whole, to: $0) } ?? whole
         // Training squashed whole frames into a square, so feed the model the same way
         // rather than cropping the middle out.
@@ -190,13 +214,15 @@ struct OrganismDetector {
             by: CGAffineTransform(
                 scaleX: side / image.extent.width, y: side / image.extent.height))
         context.render(scaled, to: square)
+        timing.preMilliseconds = lap()
 
         let input = try MLDictionaryFeatureProvider(
             dictionary: [inputName: MLFeatureValue(pixelBuffer: square)])
         let output = try network.prediction(from: input)
+        timing.inferMilliseconds = lap()
         guard let scores = output.featureValue(for: kind.scoresOutput)?.multiArrayValue,
             let boxes = output.featureValue(for: "boxes")?.multiArrayValue
-        else { return [] }
+        else { return ([], timing) }
         var found = Self.decode(
             scores: scores, boxes: boxes, classNames: classNames,
             scoresAreProbabilities: kind.scoresAreProbabilities,
@@ -207,7 +233,8 @@ struct OrganismDetector {
                 found[index].box = Self.boxInFrame(found[index].box, crop: crop, frameSize: frame)
             }
         }
-        return found
+        timing.decodeMilliseconds = lap()
+        return (found, timing)
     }
 
     /// V1's path: logits and V1's class names. What the existing callers and tests use.
@@ -232,13 +259,15 @@ struct OrganismDetector {
         let queries = scores.shape[1].intValue
         let classes = scores.shape[2].intValue
         guard classes > 1 else { return [] }
+        let scoreValues = values(of: scores)
+        let boxValues = values(of: boxes)
 
         var found: [Detection] = []
         for query in 0..<queries {
             var best = -Float.greatestFiniteMagnitude
             var bestClass = 1
             for klass in 1..<classes {
-                let value = scores[[0, query, klass] as [NSNumber]].floatValue
+                let value = Float(scoreValues[query * classes + klass])
                 if value > best {
                     best = value
                     bestClass = klass
@@ -247,10 +276,10 @@ struct OrganismDetector {
             let confidence = scoresAreProbabilities ? best : 1 / (1 + exp(-best))
             guard confidence >= minimumConfidence else { continue }
 
-            let centreX = boxes[[0, query, 0] as [NSNumber]].doubleValue
-            let centreY = boxes[[0, query, 1] as [NSNumber]].doubleValue
-            let width = boxes[[0, query, 2] as [NSNumber]].doubleValue
-            let height = boxes[[0, query, 3] as [NSNumber]].doubleValue
+            let centreX = boxValues[query * 4]
+            let centreY = boxValues[query * 4 + 1]
+            let width = boxValues[query * 4 + 2]
+            let height = boxValues[query * 4 + 3]
             let box = CGRect(
                 x: centreX - width / 2,
                 y: 1 - (centreY + height / 2),
@@ -267,5 +296,84 @@ struct OrganismDetector {
                 ))
         }
         return found
+    }
+
+    /// Every element of `array` in row-major order, read straight from its memory with its
+    /// strides and data type, as doubles. Float16 and Float32 widen exactly, so what the old
+    /// `NSNumber` subscripts gave is what this gives. Reading 7000 elements through subscripts
+    /// built an `NSNumber` for each.
+    static func values(of array: MLMultiArray) -> [Double] {
+        let shape = array.shape.map(\.intValue)
+        let strides = array.strides.map(\.intValue)
+        let count = shape.reduce(1, *)
+        var result = [Double](repeating: 0, count: count)
+        guard count > 0, !shape.isEmpty else { return result }
+        let type = array.dataType
+        var running = 1
+        var contiguous = true
+        for dimension in stride(from: shape.count - 1, through: 0, by: -1) {
+            if strides[dimension] != running { contiguous = false }
+            running *= shape[dimension]
+        }
+        if contiguous {
+            // The usual case: one run of elements in order.
+            array.withUnsafeBytes { raw in
+                switch type {
+                case .float32:
+                    let source = raw.bindMemory(to: Float.self)
+                    for n in 0..<count { result[n] = Double(source[n]) }
+                case .double:
+                    let source = raw.bindMemory(to: Double.self)
+                    for n in 0..<count { result[n] = source[n] }
+                case .float16:
+                    let source = raw.bindMemory(to: UInt16.self)
+                    for n in 0..<count { result[n] = Double(halfToFloat(source[n])) }
+                default: break
+                }
+            }
+            return result
+        }
+        array.withUnsafeBytes { raw in
+            func element(_ offset: Int) -> Double {
+                switch type {
+                case .float32: return Double(raw.loadUnaligned(fromByteOffset: offset * 4, as: Float.self))
+                case .double: return raw.loadUnaligned(fromByteOffset: offset * 8, as: Double.self)
+                case .float16:
+                    return Double(
+                        halfToFloat(raw.loadUnaligned(fromByteOffset: offset * 2, as: UInt16.self)))
+                default: return 0
+                }
+            }
+            var index = [Int](repeating: 0, count: shape.count)
+            for n in 0..<count {
+                var offset = 0
+                for dimension in 0..<shape.count { offset += index[dimension] * strides[dimension] }
+                result[n] = element(offset)
+                var dimension = shape.count - 1
+                while dimension >= 0 {
+                    index[dimension] += 1
+                    if index[dimension] < shape[dimension] { break }
+                    index[dimension] = 0
+                    dimension -= 1
+                }
+            }
+        }
+        return result
+    }
+
+    /// An IEEE half as a float, exactly. Written out because `Float16` is missing on Intel
+    /// simulators.
+    static func halfToFloat(_ bits: UInt16) -> Float {
+        let sign: UInt32 = UInt32(bits & 0x8000) << 16
+        let exponent = UInt32((bits >> 10) & 0x1F)
+        let mantissa = UInt32(bits & 0x3FF)
+        if exponent == 0 {
+            if mantissa == 0 { return Float(bitPattern: sign) }
+            // Subnormal: mantissa * 2^-24.
+            let magnitude = Float(mantissa) * Float(sign: .plus, exponent: -24, significand: 1)
+            return sign == 0 ? magnitude : -magnitude
+        }
+        if exponent == 0x1F { return Float(bitPattern: sign | 0x7F80_0000 | (mantissa << 13)) }
+        return Float(bitPattern: sign | ((exponent + 112) << 23) | (mantissa << 13))
     }
 }

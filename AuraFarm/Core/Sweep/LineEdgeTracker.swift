@@ -33,6 +33,17 @@ struct LineEdgeThresholds {
     /// is enough. PLACEHOLDER. Source: the 22:04 dark left edge read 1.5 to 1.9 beyond against 40
     /// to 47 before (about 0.04), the 15:32 bright-field one about 0.01.
     var beyondShareMax = 0.25
+    /// The second way in: the line is also accepted when beyond is at most this share of before AND
+    /// the whole half of the box ahead is nearly empty (`maxAreaAheadShare`) AND the line is within
+    /// `relaxedMaxAngleDegrees` of perpendicular. Bottom edges collect texture (mountant, debris)
+    /// just past the line while the wider area ahead is empty. PLACEHOLDER. Source: 17 Nov 2026
+    /// 21:38 and 22:12 runs: beyond/before at bottom ends 0.33 to 0.88 (top ends 0.01 to 0.14),
+    /// area ahead/behind 0.02 to 0.10 at bottom ends.
+    var relaxedBeyondShareMax = 0.6
+    /// PLACEHOLDER. Source: the replay of both 17 Nov runs (`EdgeReplayTests`): 0.2 and 0.3 confirm
+    /// the same bottom ends with no extra false ones; 0.5 adds false ones in both runs.
+    var maxAreaAheadShare = 0.3
+    var relaxedMaxAngleDegrees = 20.0
     /// A later candidate within this many degrees of a known (or rejected) edge's direction and
     /// within `knownEdgeFields` of its position is the same edge and is ignored. PLACEHOLDER.
     var knownEdgeAngleDegrees = 15.0
@@ -98,6 +109,12 @@ struct LineEdgeMemory: Equatable {
     }
 }
 
+/// Which rule accepted a line as an edge candidate: the strict beyond/before share, or the empty
+/// area ahead. The word written in the CSV's `line_accept` column.
+enum LineAccept: String, Equatable {
+    case strict, area
+}
+
 /// How far a line has got toward being the edge.
 enum LineEdgeState: String, Equatable {
     case none, ahead, attached, confirmed
@@ -132,6 +149,8 @@ struct LineEdgeTracker {
     /// one.
     private(set) var offsetFields: Double?
     private(set) var angleDegrees: Double?
+    /// The rule that accepted the latest usable line; nil without one.
+    private(set) var accept: LineAccept?
     /// "line_attached" or "line_confirmed" on the reading that reached it, else empty.
     private(set) var event = ""
 
@@ -160,10 +179,19 @@ struct LineEdgeTracker {
     }
 
     /// The space past a cover slip's edge is empty or sparse: little texture energy beyond the
-    /// line against before it. Unknown energies pass.
-    private func hasLittleBeyond(_ line: EdgeLine) -> Bool {
-        guard let before = line.beforeEnergy, let beyond = line.beyondEnergy else { return true }
-        return beyond <= thresholds.beyondShareMax * before
+    /// line against before it (strict), or somewhat more but with the whole half ahead nearly
+    /// empty and the line near perpendicular (area). Unknown energies pass as strict; an unknown
+    /// area ahead cannot pass as area. nil when neither holds.
+    private func acceptRule(_ line: EdgeLine, areaAheadShare: Double?) -> LineAccept? {
+        guard let before = line.beforeEnergy, let beyond = line.beyondEnergy else { return .strict }
+        if beyond <= thresholds.beyondShareMax * before { return .strict }
+        if beyond <= thresholds.relaxedBeyondShareMax * before,
+            let area = areaAheadShare, area <= thresholds.maxAreaAheadShare,
+            abs(line.angleDegrees) <= thresholds.relaxedMaxAngleDegrees
+        {
+            return .area
+        }
+        return nil
     }
 
     @discardableResult
@@ -176,9 +204,10 @@ struct LineEdgeTracker {
         if let line = reading.edgeLine, line.isCandidate,
             abs(line.angleDegrees) <= thresholds.maxAngleDegrees,
             line.offsetFields >= -thresholds.maxBehindFields,
-            hasLittleBeyond(line)
+            let rule = acceptRule(line, areaAheadShare: reading.areaAheadShare)
         {
             lastSeen = now
+            accept = rule
             offsetFields = line.offsetFields
             angleDegrees = line.angleDegrees
             let isBehind = line.offsetFields < -thresholds.atCrossFields
@@ -238,6 +267,7 @@ struct LineEdgeTracker {
         attachedCount = 0
         offsetFields = nil
         angleDegrees = nil
+        accept = nil
         recent = []
         lastSeen = nil
         heldSeconds = 0

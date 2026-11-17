@@ -246,6 +246,12 @@
 
     private let previewCentre = CGPoint(x: 195, y: 210)
 
+    /// The edge buttons with fixed values, for the previews.
+    private struct LiveEdgeFeedbackPreview: View {
+        var asks: Bool
+        var body: some View { EdgeFeedbackBar(asks: asks, canMark: true) }
+    }
+
     private func previewModel(
         _ mark: GuideMark, progress: Double? = nil, line: String, finished: Bool = false,
         captured: Bool = false, easeOff: Bool = false
@@ -323,6 +329,24 @@
             .padding(8)
         }
         .frame(width: 390, height: 440)
+    }
+
+    #Preview("Edge should be here. Confirm?") {
+        ZStack {
+            GuidePreviewBackdrop(
+                model: previewModel(
+                    .cross(at: CGPoint(x: 195, y: 330), tone: .move),
+                    line: GuideInstruction.expectedEdge.helperText))
+            LiveEdgeFeedbackPreview(asks: true)
+        }
+        .frame(width: 390, height: 440)
+    }
+
+    #Preview("Last column") {
+        GuidePreviewBackdrop(
+            model: previewModel(
+                .cross(at: CGPoint(x: 195, y: 140), tone: .move),
+                line: "Last column. Bring the cross to the centre"))
     }
 
     #Preview("Finished") {

@@ -35,6 +35,9 @@ struct GuideRunRecord: Codable, Equatable {
     /// The hardware the model ran on (`DetectorUnits.rawValue`: "ne" or "gpu"). Earlier records ran
     /// on the graphics chip.
     var detectorUnits = DetectorUnits.graphics.rawValue
+    /// How the right edge was found: "line", "empty" (the view went empty ahead) or "predicted"
+    /// (the square cover slip's); empty when it was not found. Earlier records have none.
+    var rightEdgeSource = ""
 
     /// The share of the edge span the columns reach; nil unless the span is known and positive.
     static func coverageShare(columns: Int, step: Double, edgeSpanFields: Double?) -> Double? {
@@ -102,6 +105,7 @@ extension GuideRunRecord {
             discDrops: try c.decodeIfPresent(Int.self, forKey: .discDrops) ?? 0,
             bigDrops: try c.decodeIfPresent(Int.self, forKey: .bigDrops) ?? 0,
             detectorUnits: try c.decodeIfPresent(String.self, forKey: .detectorUnits)
-                ?? DetectorUnits.graphics.rawValue)
+                ?? DetectorUnits.graphics.rawValue,
+            rightEdgeSource: try c.decodeIfPresent(String.self, forKey: .rightEdgeSource) ?? "")
     }
 }

@@ -178,7 +178,7 @@
                     case .stage:
                         StageOverlay(progress: values.info.stage)
                     case .done:
-                        PausedOverlay(monitor: values.info.monitor, mapper: Mapper())
+                        PausedOverlay(monitor: values.info.monitor, mapper: Mapper(), onResumeAnyway: {})
                     default:
                         FocusOverlay(
                             info: values.info, reading: values.meter, dial: values.info.focusDial,

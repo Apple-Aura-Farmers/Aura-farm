@@ -57,6 +57,23 @@ struct RunMonitorThresholds {
     /// lookback's. PLACEHOLDER: a real defocus drops far more; a thin patch flickering around
     /// the detail limit (Test 4 soil: 17 to 150 against 200 to 400) does not count.
     var detailDropShare: Double = 0.5
+
+    // Focus, second signal. The focus index alone paused a run for 40% of its time on sharp
+    // frames: it reads 0.15 to 0.59 on sharp frames depending on how much sample is in view.
+    // Box sharpness is judged against the run's own recent sharpness instead.
+    /// A pause also needs box sharpness under this share of the reference. PLACEHOLDER; source:
+    /// the 17 Nov device runs. Run A's real pauses read 585 against a reference of 2244 (0.26);
+    /// Run B's false pauses read 2105 against 1659 (1.27).
+    var sharpnessPauseShare: Double = 0.5
+    /// The reference is the median box sharpness over this many seconds of eligible readings.
+    /// PLACEHOLDER.
+    var referenceSeconds: Double = 20
+    /// Until the reference holds this many seconds, the sharpness check is not made, so the start
+    /// of a run behaves as before. PLACEHOLDER.
+    var referenceMinimumSeconds: Double = 5
+    /// A pause also ends when box sharpness is back to this share of the reference for
+    /// `resumeSeconds`. PLACEHOLDER.
+    var sharpnessResumeShare: Double = 0.8
 }
 
 /// A run of readings without detail, judged against the detail readings just before it.
@@ -94,6 +111,17 @@ struct RunMonitor {
     private var lowSince: Double?
     private var highSince: Double?
     private var baselineSamples: [(seconds: Double, value: Double)] = []
+    /// Box sharpness of eligible readings while the monitor was OK, stamped on `referenceClock`,
+    /// which only runs while it is OK: a long pause does not age the reference away.
+    private var sharpnessHistory: [(seconds: Double, value: Double)] = []
+    private var referenceClock = 0.0
+    private var lastUpdateSeconds: Double?
+    /// The median of `sharpnessHistory`, once it spans `referenceMinimumSeconds`; for the CSV.
+    private(set) var sharpnessReference: Double?
+    /// The latest box sharpness over the reference; nil without either.
+    private(set) var sharpnessShare: Double?
+    /// Why the run is paused: "index_and_sharpness", "detail_lost" or "alignment"; empty while ok.
+    private(set) var pauseCause = ""
 
     init(thresholds: RunMonitorThresholds = RunMonitorThresholds()) {
         self.thresholds = thresholds
@@ -112,8 +140,12 @@ struct RunMonitor {
         boxSharpness: Double? = nil, viewClass: ViewClass, tracking: TrackingState,
         isStill: Bool = true, seconds: Double
     ) -> RunMonitorState {
+        if let last = lastUpdateSeconds, state == .ok { referenceClock += min(max(seconds - last, 0), 1) }
+        lastUpdateSeconds = seconds
         if let alignment { updateAlignment(alignment, confirmedCircle, seconds) }
+        defer { if state == .ok { pauseCause = "" } }
         guard state != .pausedAlignment else {
+            pauseCause = "alignment"
             focusLow = false
             stretch = nil
             stillOnset = false
@@ -132,6 +164,19 @@ struct RunMonitor {
     /// A stretch without detail began while still, after detail that was far sharper: focus or a
     /// bump, not an edge. For the CSV.
     var isStillOnset: Bool { stillOnset && state != .pausedAlignment }
+
+    /// "Resume anyway": back to running at once, and the baseline measured again from the next
+    /// `baselineSeconds` of eligible readings. For a pause for focus only; the sharpness reference
+    /// is kept.
+    mutating func resumeManually() {
+        guard state == .pausedFocus else { return }
+        state = .ok
+        pauseCause = ""
+        stretch = nil
+        stillOnset = false
+        onsetSince = nil
+        setFocusBaseline(nil)
+    }
 
     /// Sets the focus index the run is compared with (from setup's focus step), or nil to
     /// collect it from the first readings.
@@ -192,6 +237,7 @@ struct RunMonitor {
         case .ok, .pausedFocus:
             if let badSince, now - badSince >= thresholds.lostSeconds - 1e-9 {
                 state = .pausedAlignment
+                pauseCause = "alignment"
                 goodSince = nil
                 clearFocusCounts()
             }
@@ -225,6 +271,7 @@ struct RunMonitor {
         }
         detailHistory.append((now, isStill, sharpness))
         detailHistory.removeAll { now - $0.seconds > thresholds.stillOnsetLookbackSeconds }
+        updateReference(sharpness)
         guard isStill else {
             clearFocusCounts()
             return
@@ -242,16 +289,21 @@ struct RunMonitor {
             return
         }
         // Without a baseline a pause for focus resumes on detail plus stillness alone (share 1).
-        focusLow = baseline > 0 && share < thresholds.pauseBelowShareOfBaseline
+        // Both signals must say blurry. Before the reference exists the second is not checked.
+        let sharpnessLow = sharpnessShare.map { $0 < thresholds.sharpnessPauseShare } ?? true
+        focusLow = baseline > 0 && share < thresholds.pauseBelowShareOfBaseline && sharpnessLow
         switch state {
         case .ok:
             lowSince = focusLow ? (lowSince ?? now) : nil
             if let lowSince, now - lowSince >= thresholds.pauseSeconds - 1e-9 {
                 state = .pausedFocus
+                pauseCause = "index_and_sharpness"
                 clearFocusCounts()
             }
         case .pausedFocus:
-            highSince = share >= thresholds.resumeAtShareOfBaseline ? (highSince ?? now) : nil
+            let sharpBack = sharpnessShare.map { $0 >= thresholds.sharpnessResumeShare } ?? false
+            let back = share >= thresholds.resumeAtShareOfBaseline || sharpBack
+            highSince = back ? (highSince ?? now) : nil
             if let highSince, now - highSince >= thresholds.resumeSeconds - 1e-9 {
                 state = .ok
                 clearFocusCounts()
@@ -290,8 +342,26 @@ struct RunMonitor {
         onsetSince = onsetSince ?? now
         if let onsetSince, now - onsetSince >= thresholds.pauseSeconds - 1e-9 {
             state = .pausedFocus
+            pauseCause = "detail_lost"
             self.onsetSince = nil
         }
+    }
+
+    /// Adds an eligible reading to the sharpness reference while the monitor is OK, and works out
+    /// the latest share of it. The reference does not include the reading it is compared with.
+    private mutating func updateReference(_ sharpness: Double?) {
+        let span = (sharpnessHistory.last?.seconds ?? 0) - (sharpnessHistory.first?.seconds ?? 0)
+        sharpnessReference =
+            span >= thresholds.referenceMinimumSeconds - 1e-9
+            ? Self.median(sharpnessHistory.map(\.value)) : nil
+        if let reference = sharpnessReference, reference > 0, let sharpness {
+            sharpnessShare = sharpness / reference
+        } else {
+            sharpnessShare = nil
+        }
+        guard state == .ok, let sharpness else { return }
+        sharpnessHistory.append((referenceClock, sharpness))
+        sharpnessHistory.removeAll { referenceClock - $0.seconds > thresholds.referenceSeconds }
     }
 
     private static func median(_ values: [Double]) -> Double? {

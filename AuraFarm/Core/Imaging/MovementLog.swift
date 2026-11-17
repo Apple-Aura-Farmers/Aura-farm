@@ -208,6 +208,27 @@ struct MovementLogRow: Equatable {
     var iso: Double?
     var thermalState = ""
     var batteryLevel: Double?
+    /// The focus pause's second signal: the rolling box-sharpness reference, the latest sharpness
+    /// over it, and why the run is paused ("index_and_sharpness", "detail_lost", "alignment").
+    var sharpnessRef: Double?
+    var sharpnessShare: Double?
+    var pauseCause = ""
+    /// The detector's result arrives after its frame: when the frame it ran on was taken (run
+    /// seconds), and where its time went: crop and render, the model alone, and decoding.
+    var detFrameSeconds: Double?
+    var detPreMs: Double?
+    var detInferMs: Double?
+    var detDecodeMs: Double?
+    /// Which rule accepted the latest edge line ("strict" or "area"; empty without one), and the
+    /// detail ahead over the detail behind that the area rule used.
+    var lineAccept = ""
+    var areaAheadShare: Double?
+    /// The predicted edge's position along the leg at the column's x, and 1 on the readings where
+    /// "Edge should be here. Confirm?" shows.
+    var predictedEdgeAlong: Double?
+    var expectedEdgeAsk = false
+    /// Frames the camera output dropped as late so far (a running count).
+    var cameraDrops: Int?
 }
 
 enum MovementLog {
@@ -245,6 +266,10 @@ enum MovementLog {
         "det_new_tally", "det_new_map", "det_repeat_map", "count_tally_total", "count_map_total",
         "event_detail", "detector_model", "det_drop_disc", "det_drop_big",
         "det_units", "frame_dt", "camera_fps", "exposure_ms", "iso", "thermal_state", "battery_level",
+        "sharpness_ref", "sharpness_share", "pause_cause", "det_frame_seconds", "det_pre_ms",
+        "det_infer_ms", "det_decode_ms",
+        "line_accept", "area_ahead_share", "predicted_edge_along", "expected_edge_ask",
+        "camera_drops",
     ]
 
     static func csv(_ rows: [MovementLogRow]) -> String {
@@ -318,6 +343,12 @@ enum MovementLog {
             row.detUnits, number(row.frameDt, 3), number(row.cameraFps, 1),
             number(row.exposureMs, 2), number(row.iso, 0), row.thermalState,
             number(row.batteryLevel, 2),
+            number(row.sharpnessRef, 1), number(row.sharpnessShare, 2), row.pauseCause,
+            number(row.detFrameSeconds, 3), number(row.detPreMs, 1), number(row.detInferMs, 1),
+            number(row.detDecodeMs, 1),
+            row.lineAccept, number(row.areaAheadShare, 3), number(row.predictedEdgeAlong, 3),
+            row.lineState.isEmpty ? "" : (row.expectedEdgeAsk ? "1" : "0"),
+            row.cameraDrops.map(String.init) ?? "",
         ]
     }
 

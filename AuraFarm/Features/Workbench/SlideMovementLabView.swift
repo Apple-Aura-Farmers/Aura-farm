@@ -31,6 +31,7 @@
         @AppStorage("slideLab.trackSparse") private var tracksSparse = true
         @AppStorage("slideLab.fullCoverSlip") private var fullCoverSlip = true
         @AppStorage("slideLab.askEdges") private var asksEdges = true
+        @AppStorage("slideLab.coverSlipShape") private var coverSlipName = CoverSlipShape.square.rawValue
         @AppStorage("slideLab.skipAlignFocus") private var skipsAlignFocus = false
         @AppStorage("slideLab.spotMode") private var spotModeName = "briefTouch"
         @AppStorage("slideLab.coverageStep") private var coverageStep = 0.8
@@ -72,6 +73,7 @@
                 model.setTracksSparse(tracksSparse)
                 model.setFullCoverSlip(fullCoverSlip)
                 model.setAsksEdges(asksEdges)
+                model.setCoverSlip(CoverSlipShape(rawValue: coverSlipName) ?? .square)
                 model.setFieldRegion(FieldRegionMode(rawValue: fieldRegionName) ?? .auto)
                 model.setMeasuresHopAgreement(hopAgreement)
                 model.setShowsThumbnail(showsSees)
@@ -99,6 +101,9 @@
             .onChange(of: tracksSparse) { _, tracks in model.setTracksSparse(tracks) }
             .onChange(of: fullCoverSlip) { _, enabled in model.setFullCoverSlip(enabled) }
             .onChange(of: asksEdges) { _, asks in model.setAsksEdges(asks) }
+            .onChange(of: coverSlipName) { _, name in
+                model.setCoverSlip(CoverSlipShape(rawValue: name) ?? .square)
+            }
             .modifier(
                 CountingSettingsSync(
                     model: model, spotModeName: spotModeName, coverageStep: coverageStep,
@@ -403,6 +408,7 @@
                 Toggle("Track sparse sample", isOn: $tracksSparse)
                 Toggle("Full cover slip (line edges)", isOn: $fullCoverSlip)
                 Toggle("Ask me to confirm edges", isOn: $asksEdges)
+                CoverSlipPicker(name: $coverSlipName)
                 Picker("Spot check", selection: $spotModeName) {
                     Text("Brief touch").tag("briefTouch")
                     Text("Hold still").tag("holdStill")
@@ -586,6 +592,25 @@
     #Preview {
         NavigationStack { SlideMovementLabView() }
     }
+
+    /// "Cover slip": Square (the usual 22 x 22 mm) lets the guide predict the right edge.
+    struct CoverSlipPicker: View {
+        @Binding var name: String
+
+        var body: some View {
+            Picker("Cover slip", selection: $name) {
+                ForEach(CoverSlipShape.allCases) { Text($0.title).tag($0.rawValue) }
+            }
+            .pickerStyle(.segmented)
+        }
+    }
+
+    private struct CoverSlipPreview: View {
+        @State private var name = CoverSlipShape.square.rawValue
+        var body: some View { Form { CoverSlipPicker(name: $name) } }
+    }
+
+    #Preview("Cover slip setting") { CoverSlipPreview() }
 
     /// Hands the spot check, coverage and counting settings to the model when they change.
     private struct CountingSettingsSync: ViewModifier {

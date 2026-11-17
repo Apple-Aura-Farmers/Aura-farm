@@ -211,11 +211,20 @@ final class GuideSimulator {
     private var lineOffset: Double?
 
     /// Switches to the full-cover-slip rules (a new guide).
-    func useFullCoverSlip() {
+    func useFullCoverSlip(_ configure: (inout GuidedSweepThresholds) -> Void = { _ in }) {
         var thresholds = GuidedSweepThresholds()
         thresholds.fullCoverSlip = true
+        configure(&thresholds)
         guide = GuidedSweep(thresholds: thresholds)
         lineMode = true
+    }
+
+    /// The helper answers an edge question (✓, ✗ or "Mark edge") at the view's current place.
+    @discardableResult
+    func answerEdge(_ feedback: EdgeFeedback) -> GuideStep {
+        let step = guide.userEdge(feedback, makeReading(index: 0))
+        heading = guide.heading
+        return step
     }
 
     /// The edge line the detector would report: found by walking along the heading from the true
@@ -452,8 +461,10 @@ final class GuideSimulator {
             viewClass: viewClass, speedFraction: speed, isStill: lastMove == 0,
             aheadSharpness: ahead, behindSharpness: behind, aheadFocusRatio: aheadFocus,
             behindFocusRatio: behindFocus, sideSharpnessA: sideA, sideSharpnessB: sideB,
-            lastBlankReturn: lastReturn, blankReturnCount: returnCount, stillSeconds: stillRun,
-            edgeLine: lineMode ? edgeLine() : nil)
+            lastBlankReturn: lastReturn, blankReturnCount: returnCount,
+            quadAheadAway: lineMode ? ahead : nil, quadAheadToward: lineMode ? ahead : nil,
+            quadBehindAway: lineMode ? behind : nil, quadBehindToward: lineMode ? behind : nil,
+            stillSeconds: stillRun, edgeLine: lineMode ? edgeLine() : nil)
     }
 
     /// Whether the view shows enough detail to follow. Over blank glass never; on a soil slide
@@ -589,7 +600,7 @@ final class GuideSimulator {
                 lastMove = 0
             }
         case .aligned, .holding, .captured, .edgeReached, .refocus, .slowDown, .finished,
-            .stageLimit, .paused:
+            .stageLimit, .paused, .expectedEdge:
             lastMove = 0
         }
     }

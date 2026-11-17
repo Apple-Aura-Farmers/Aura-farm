@@ -119,6 +119,8 @@
         @ObservationIgnored private let snapshots = FrameSnapshotWriter()
         @ObservationIgnored private let live = LiveCountSession()
         @ObservationIgnored private var lastCountInfo = LiveCountInfo()
+        @ObservationIgnored private var lastCountingActive = false
+        @ObservationIgnored private var lastCountFrameSize = CGSize.zero
         @ObservationIgnored private var runStartedAt: Date?
         @ObservationIgnored private var runStartSeconds = 0.0
         @ObservationIgnored private var runFinalized = false
@@ -137,6 +139,7 @@
         @ObservationIgnored private var latestGuideInfo = SlideMovementInfo.Guide()
         @ObservationIgnored private var guideCaptured: [CGPoint] = []
         @ObservationIgnored private var guideTarget: CGPoint?
+        @ObservationIgnored private var guidePredicted: [PredictedTrailLine] = []
         @ObservationIgnored private var frameCount = 0
         @ObservationIgnored private var analyzing = false
         /// Analyze every Nth frame: about 10 fps at 30 fps capture.
@@ -183,6 +186,14 @@
         @ObservationIgnored private var showsDetectionsFlag = false
         /// Capture timestamps of the last second, for `camera_fps`.
         @ObservationIgnored private var frameTimes: [Double] = []
+        /// Frames the output dropped as late so far (`camera_drops`); `camera_fps` counts only the
+        /// frames that were delivered, so drops make it read low. Analysis queue.
+        @ObservationIgnored private var lateFrameDrops = 0
+        /// What the device was doing after `applyCameraRate` and on the first frame after it, for the
+        /// console and, once, the CSV (`camera_config` event). Analysis queue.
+        @ObservationIgnored private var cameraConfigText = ""
+        @ObservationIgnored private var cameraConfigPending = false
+        @ObservationIgnored private var reportsRunningConfig = false
         @ObservationIgnored private var lastAnalysedAt: Double?
         @ObservationIgnored private var measureAgreementEnabled = false
 
@@ -210,6 +221,7 @@
                 }
             }
             countThrottle.apply = { [weak self] in self?.countInfo = $0 }
+            live.onResult = { [weak self] in self?.detectionFinished() }
             thumbnailThrottle.apply = { [weak self] image in
                 guard let self, self.showsThumbnail else { return }
                 self.thumbnailImage = image
@@ -280,6 +292,17 @@
                 guard let self, self.guideEnabled else { return }
                 self.dryRun.stageLimitPressed = true
                 self.pendingEventName = "stage_limit"
+            }
+        }
+
+        /// "Resume anyway" on the focus-pause banner. The run goes on and the focus baseline is
+        /// measured again from the next readings.
+        func resumeFocusAnyway() {
+            analysisQueue.async { [weak self] in
+                guard let self, self.setup.resumeFocusManually() else { return }
+                self.pendingEventName = "focus_resume_manual"
+                let info = self.setup.info
+                DispatchQueue.main.async { self.setupInfo = info }
             }
         }
 
@@ -494,6 +517,15 @@
             }
         }
 
+        /// "Cover slip": square lets the guide predict the right edge. Starts the guide afresh.
+        func setCoverSlip(_ shape: CoverSlipShape) {
+            analysisQueue.async { [weak self] in
+                guard let self, self.dryRun.coverSlip != shape else { return }
+                self.dryRun.coverSlip = shape
+                self.resetGuide()
+            }
+        }
+
         /// Saves the current frame into the log's frame folder (the "Save frame" button).
         func saveFrame() {
             analysisQueue.async { [weak self] in self?.snapshotRequested = true }
@@ -553,8 +585,11 @@
             latestGuideInfo = SlideMovementInfo.Guide()
             guideCaptured = []
             guideTarget = nil
+            guidePredicted = []
             // A new run: counting, its snapshots and the summary start afresh.
             live.begin(stamp: Self.stamp())
+            live.setCounting(false)
+            lastCountingActive = false
             lastCountInfo = LiveCountInfo()
             runStartedAt = nil
             runFinalized = false
@@ -837,11 +872,15 @@
                 return
             }
             defer { device.unlockForConfiguration() }
+            // Runs first (defers go backwards), still locked: what the device ended up with.
+            defer { reportCameraConfig("set", device: device, rate: rate) }
             guard let duration = rate.frameDuration, let fps = rate.framesPerSecond else {
                 // 30 fps restores today's settings: the camera's own frame durations, no cap.
                 device.activeVideoMinFrameDuration = .invalid
                 device.activeVideoMaxFrameDuration = .invalid
-                device.activeMaxExposureDuration = device.activeFormat.maxExposureDuration
+                // .invalid is Apple's documented reset of the cap to the default; the format's
+                // maximum would allow long exposures that lower the frame rate in dim light.
+                device.activeMaxExposureDuration = .invalid
                 note("")
                 return
             }
@@ -863,6 +902,32 @@
                 note("20 fps, exposure capped at 1/30 s.")
             } else {
                 note("20 fps; the exposure cap is outside what this format allows, so not set.")
+            }
+        }
+
+        /// What the camera is actually doing, to find out why 20 fps reads 16: the frame durations,
+        /// the exposure cap, the active format's rate ranges and the session preset. Console now; the
+        /// CSV gets it once on the next logged row, and the first frame after it reports again
+        /// ("running") in case a later configuration reset something. Any queue.
+        private func reportCameraConfig(_ stage: String, device: AVCaptureDevice, rate: CameraRate) {
+            func seconds(_ time: CMTime) -> String {
+                time.isValid ? String(format: "%.4f", time.seconds) : "invalid"
+            }
+            let ranges = device.activeFormat.videoSupportedFrameRateRanges
+                .map { String(format: "%.0f-%.0f", $0.minFrameRate, $0.maxFrameRate) }
+                .joined(separator: "|")
+            // No commas or quotes: the text goes into one CSV field as it is.
+            let text =
+                "\(stage) rate=\(rate.rawValue) min_dur=\(seconds(device.activeVideoMinFrameDuration))"
+                + " max_dur=\(seconds(device.activeVideoMaxFrameDuration))"
+                + " max_exposure=\(seconds(device.activeMaxExposureDuration)) ranges=\(ranges)"
+                + " preset=\(session.sessionPreset.rawValue)"
+            print("CAMERA CONFIG \(text)")
+            analysisQueue.async { [weak self] in
+                guard let self else { return }
+                self.cameraConfigText = text
+                self.cameraConfigPending = true
+                if stage == "set" { self.reportsRunningConfig = true }
             }
         }
 
@@ -930,6 +995,9 @@
             logged.circleShiftR = monitor?.circleShift
             logged.circleRadiusChange = monitor?.circleRadiusChange
             logged.focusLow = monitor.map { $0.focusLow } ?? false
+            logged.sharpnessRef = monitor?.sharpnessReference
+            logged.sharpnessShare = monitor?.sharpnessShare
+            logged.pauseCause = monitor?.pauseCause ?? ""
             logged.focusDialOffset = monitor?.dial?.offset
             logged.focusDialSide = monitor?.dial?.csvSide ?? ""
             logged.quadAheadAway = guide?.quadAheadAway
@@ -943,6 +1011,10 @@
             logged.lineState = guide?.lineState ?? ""
             logged.lineAttachedCount = guide?.lineAttachedCount ?? 0
             logged.edgeMode = guide?.edgeMode ?? ""
+            logged.lineAccept = guide?.lineAccept ?? ""
+            logged.areaAheadShare = guide?.areaAheadShare
+            logged.predictedEdgeAlong = guide?.predictedEdgeAlong
+            logged.expectedEdgeAsk = guide?.expectedEdgeAsk ?? false
             logged.sparseSkips = step.tracking.sparseSkips
             logged.edgeFeedback = guide?.edgeFeedback ?? ""
             logged.spotMode = guide?.spotMode ?? ""
@@ -966,6 +1038,7 @@
             let spots = dryRun.spotsTicked
             let elapsed = seconds - runStartSeconds
             let reason = dryRun.finishReason ?? .endedByHelper
+            live.drain()
             let options = live.detectorOptions
             let record = GuideRunRecord(
                 started: runStartedAt ?? .now, ended: .now, finishReason: reason,
@@ -1160,12 +1233,29 @@
     // MARK: - Frame analysis
 
     extension SlideMovementLabModel: AVCaptureVideoDataOutputSampleBufferDelegate {
+        /// The output dropped a frame (`alwaysDiscardsLateVideoFrames`): counted when it was late,
+        /// the analysis still busy with the one before. Delegate queue (the analysis queue).
+        func captureOutput(
+            _ output: AVCaptureOutput, didDrop sampleBuffer: CMSampleBuffer,
+            from connection: AVCaptureConnection
+        ) {
+            let reason = CMGetAttachment(
+                sampleBuffer, key: kCMSampleBufferAttachmentKey_DroppedFrameReason, attachmentModeOut: nil)
+            if (reason as? String) == (kCMSampleBufferDroppedFrameReason_FrameWasLate as String) {
+                lateFrameDrops += 1
+            }
+        }
+
         func captureOutput(
             _ output: AVCaptureOutput,
             didOutput sampleBuffer: CMSampleBuffer,
             from connection: AVCaptureConnection
         ) {
             frameCount += 1
+            if reportsRunningConfig, let device {
+                reportsRunningConfig = false
+                reportCameraConfig("running", device: device, rate: sessionCameraRate)
+            }
             // The camera's own rate, from the capture timestamps of the last second.
             let captured = CMSampleBufferGetPresentationTimeStamp(sampleBuffer).seconds
             frameTimes.append(captured)
@@ -1243,6 +1333,11 @@
                     runStartSeconds = time
                     live.prepare()
                 }
+                if dryRun.countingActive != lastCountingActive {
+                    lastCountingActive = dryRun.countingActive
+                    live.setCounting(lastCountingActive)
+                }
+                lastCountFrameSize = step.frameSize
                 if dryRun.countingActive {
                     let reason = LiveOrganismCounter.skipReason(
                         tracking: step.tracking.trackingState,
@@ -1258,17 +1353,9 @@
                             frameShift: step.tracking.frameShift),
                         trackerPosition: step.position, frameSize: step.frameSize,
                         fieldCircle: step.fieldState?.mask.flatMap { FieldCircle(fitting: $0) },
-                        seconds: time - runStartSeconds, column: dryRun.column,
-                        trackerMilliseconds: step.analysisMilliseconds)
+                        seconds: time - runStartSeconds, column: dryRun.column)
                 }
-                let info = live.info(isActive: dryRun.countingActive, frameSize: step.frameSize)
-                if info != lastCountInfo {
-                    lastCountInfo = info
-                    countThrottle.offer(info)
-                    if showsDetectionsFlag {
-                        DispatchQueue.main.async { [weak self] in self?.liveBoxes = info }
-                    }
-                }
+                publishCount(isActive: dryRun.countingActive, frameSize: step.frameSize)
                 let path = edgeLine.map { $0.isCandidate ? $0.path : [] }
                 let lineState = dryRun.lineState
                 DispatchQueue.main.async { [edgeLineState] in
@@ -1278,6 +1365,7 @@
                 latestGuideInfo = result.info
                 if let point = result.captureTrailPoint { guideCaptured.append(point) }
                 guideTarget = result.targetTrailPoint
+                guidePredicted = result.predictedTrailLines
                 let control = SlideMovementInfo.RunControl(
                     pendingEnd: dryRun.pendingEnd, columnInProgress: dryRun.columnInProgress,
                     isFinished: dryRun.isFinished)
@@ -1287,7 +1375,9 @@
                 }
                 let overlay = result.overlay
                 let captureCount = result.info.captureCount
-                let asks = dryRun.asksEdges && result.fields.lineAtCross
+                // Also the question "Edge should be here. Confirm?": always the helper's call.
+                let asks =
+                    (dryRun.asksEdges && result.fields.lineAtCross) || result.fields.expectedEdgeAsk
                 let canMark = result.fields.canMarkEdge
                 DispatchQueue.main.async { [weak self] in
                     self?.overlayState.update(
@@ -1347,29 +1437,42 @@
                     pendingEventName = pendingEventName.isEmpty ? "edge_auto" : pendingEventName
                 }
                 pendingEdgeFeedback = nil
-                logged.detRan = countLog.ran
+                // This frame's own skip reason, and the oldest result that arrived since the last
+                // row (from an earlier frame: det_frame_seconds says which), each written once.
+                let result = countLog.active ? live.takeCompleted() : nil
                 logged.detSkipReason = countLog.skipReason
-                logged.detMilliseconds = countLog.milliseconds
-                logged.detFound = countLog.found
-                logged.detOutside = countLog.outside
-                logged.detNewTally = countLog.newInTally
-                logged.detNewMap = countLog.newOnMap
-                logged.detRepeatMap = countLog.repeatOnMap
-                logged.countTallyTotal = countLog.tallyTotal
-                logged.countMapTotal = countLog.mapTotal
+                logged.detRan = result?.ran ?? false
+                logged.detMilliseconds = result?.milliseconds
+                logged.detFound = result?.found
+                logged.detOutside = result?.outside
+                logged.detNewTally = result?.newInTally
+                logged.detNewMap = result?.newOnMap
+                logged.detRepeatMap = result?.repeatOnMap
+                logged.countTallyTotal = result?.tallyTotal ?? countLog.tallyTotal
+                logged.countMapTotal = result?.mapTotal ?? countLog.mapTotal
                 logged.detectorModel = countLog.model.isEmpty ? live.model.rawValue : countLog.model
-                logged.detDropDisc = countLog.droppedDisc
-                logged.detDropBig = countLog.droppedBig
+                logged.detDropDisc = result?.droppedDisc
+                logged.detDropBig = result?.droppedBig
                 logged.detUnits = countLog.units
+                logged.detFrameSeconds = result?.frameSeconds
+                logged.detPreMs = result?.preMilliseconds
+                logged.detInferMs = result?.inferMilliseconds
+                logged.detDecodeMs = result?.decodeMilliseconds
                 logged.frameDt = indicators.frameGap
                 logged.cameraFps = Double(frameTimes.count)
+                logged.cameraDrops = lateFrameDrops
                 logged.exposureMs = device.map { $0.exposureDuration.seconds * 1000 }
                 logged.iso = device.map { Double($0.iso) }
                 logged.thermalState = LabDeviceStatus.thermalName
                 logged.batteryLevel = deviceStatus.batteryLevel
-                if !countLog.counted.isEmpty {
-                    logged.eventDetail = countLog.counted.joined(separator: "; ")
+                if let counted = result?.counted, !counted.isEmpty {
+                    logged.eventDetail = counted.joined(separator: "; ")
                     if pendingEventName.isEmpty { pendingEventName = "organism_counted" }
+                }
+                if cameraConfigPending, logged.eventDetail.isEmpty, pendingEventName.isEmpty {
+                    cameraConfigPending = false
+                    pendingEventName = "camera_config"
+                    logged.eventDetail = cameraConfigText
                 }
                 if !pendingEventName.isEmpty { logged.event = pendingEventName }
                 rows.append(logged)
@@ -1384,6 +1487,28 @@
 
             publishHaptics()
             publish(step, time: time)
+        }
+
+        /// Publishes the count when it changed, through the throttle. Analysis queue. Called for
+        /// every analysed frame, and when the detector queue finishes a result.
+        private func publishCount(isActive: Bool, frameSize: CGSize) {
+            let info = live.info(isActive: isActive, frameSize: frameSize)
+            guard info != lastCountInfo else { return }
+            lastCountInfo = info
+            countThrottle.offer(info)
+            if showsDetectionsFlag {
+                DispatchQueue.main.async { [weak self] in self?.liveBoxes = info }
+            }
+        }
+
+        /// A detection finished on the detector queue: the count and the haptics follow at once.
+        private func detectionFinished() {
+            analysisQueue.async { [weak self] in
+                guard let self, self.guideEnabled, self.setup.step == .done else { return }
+                self.publishCount(
+                    isActive: self.lastCountingActive, frameSize: self.lastCountFrameSize)
+                self.publishHaptics()
+            }
         }
 
         /// What the haptics watch, at full rate: pushed when one of them changes.
@@ -1452,7 +1577,8 @@
                 startPoint: startTrailPoint, hopProgress: indicators.hopProgress,
                 hopCount: hopCount, blind: trailBlind,
                 guideCaptured: guideEnabled ? guideCaptured : [],
-                guideTarget: guideEnabled ? guideTarget : nil)
+                guideTarget: guideEnabled ? guideTarget : nil,
+                predicted: guideEnabled ? guidePredicted : [])
             let circle =
                 step.awaitingReview ? step.fieldState?.mask.flatMap { FieldCircle(fitting: $0) } : nil
             let fieldInfo = SlideMovementInfo.Field(

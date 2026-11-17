@@ -358,6 +358,8 @@
     struct PausedOverlay: View {
         var monitor: RunMonitorInfo
         var mapper: (any FrameToView)?
+        /// "Resume anyway", shown while paused for focus.
+        var onResumeAnyway: (() -> Void)?
 
         var body: some View {
             if let reason = monitor.state.pauseReason {
@@ -384,6 +386,12 @@
                             SetupLine(text: dial.message, tone: dial.isGreen ? .green : .orange)
                         } else if !GuideInstruction.paused(reason).helperText.isEmpty {
                             SetupLine(text: GuideInstruction.paused(reason).helperText, tone: .orange)
+                        }
+                        if reason == .focus, let onResumeAnyway {
+                            Button("Resume anyway", action: onResumeAnyway)
+                                .buttonStyle(.borderedProminent)
+                                .tint(.orange)
+                                .foregroundStyle(.black)
                         }
                         Spacer()
                     }

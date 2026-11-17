@@ -21,6 +21,10 @@
         var focusStillOnset = false
         /// While paused for focus with a baseline: the two-sided dial (value: the focus index).
         var dial: FocusDialReading?
+        /// The sharpness reference and the latest reading over it; why the run is paused.
+        var sharpnessReference: Double?
+        var sharpnessShare: Double?
+        var pauseCause = ""
     }
 
     /// What the setup screens draw, published by the lab at its normal throttle.
@@ -396,7 +400,24 @@
                 state: state, focusIndex: index, focusBaseline: monitor.focusBaseline,
                 circleShift: monitor.circleShift, circleRadiusChange: monitor.circleRadiusChange,
                 circle: referenceCircle, focusLow: monitor.isFocusLow,
-                focusStillOnset: monitor.isStillOnset, dial: dial)
+                focusStillOnset: monitor.isStillOnset, dial: dial,
+                sharpnessReference: monitor.sharpnessReference,
+                sharpnessShare: monitor.sharpnessShare, pauseCause: monitor.pauseCause)
+        }
+
+        /// "Resume anyway": the run goes on at once and the focus baseline is measured again from
+        /// the next readings. Analysis queue.
+        @discardableResult
+        func resumeFocusManually() -> Bool {
+            guard monitor.state == .pausedFocus else { return false }
+            monitor.resumeManually()
+            runDial = nil
+            info.monitor.state = .ok
+            info.monitor.focusBaseline = nil
+            info.monitor.focusLow = false
+            info.monitor.dial = nil
+            info.monitor.pauseCause = ""
+            return true
         }
 
         /// Starts afresh when the person marks the start of a run: counts cleared, and with no
