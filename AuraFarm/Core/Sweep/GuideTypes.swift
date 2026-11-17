@@ -241,7 +241,8 @@ enum GuideInstruction: Equatable {
         case .nothingToFollow:
             "Nothing to follow here. Turn back, or move to a patch with more particles"
         case .stageLimit: "Stage limit reached. Turning"
-        case .paused(.alignment): "Phone moved. Put it back so the circle fills the outline"
+        // No words: the orange circle and "Paused" say it, and the picture stays clear.
+        case .paused(.alignment): ""
         case .paused(.focus): "Out of focus. Turn the focus knob slowly until it's sharp"
         case .tooFar, .otherWay: "Turn back toward the cross"
         case .missedSpot: "Missed a spot. Come back a little, slower"

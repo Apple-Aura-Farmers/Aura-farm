@@ -28,6 +28,10 @@ struct LiveOrganismCounter {
     struct FrameResult: Equatable {
         var found = 0
         var outsideField = 0
+        /// Dropped as the eyepiece disc, and as too big for the model's input (see
+        /// `DetectionGuards`).
+        var droppedDisc = 0
+        var droppedBig = 0
         var newInTally = 0
         var newOnMap = 0
         var repeatOnMap = 0
@@ -38,6 +42,9 @@ struct LiveOrganismCounter {
     private(set) var map = SlideOrganismMap()
     /// Drop boxes whose centre is outside the field circle (the dark ring). On by default.
     var dropsOutsideField = true
+    var guards = DetectionGuards()
+    private(set) var discDrops = 0
+    private(set) var bigDrops = 0
 
     private(set) var framesCounted = 0
     private(set) var framesSkippedByReason: [String: Int] = [:]
@@ -81,7 +88,8 @@ struct LiveOrganismCounter {
     @discardableResult
     mutating func update(
         detections: [OrganismDetector.Detection], pictureMoved: CGPoint, trackerPosition: CGPoint,
-        frameSize: CGSize, fieldCircle: FieldCircle?, seconds: Double, column: Int
+        frameSize: CGSize, fieldCircle: FieldCircle?, crop: CGRect? = nil, seconds: Double,
+        column: Int
     ) -> FrameResult {
         let width = Double(frameSize.width)
         let height = Double(frameSize.height)
@@ -95,6 +103,16 @@ struct LiveOrganismCounter {
             {
                 result.outsideField += 1
                 continue
+            }
+            switch guards.drop(box: box.box, crop: crop, circle: fieldCircle) {
+            case .disc?:
+                result.droppedDisc += 1
+                continue
+            case .big?:
+                result.droppedBig += 1
+                continue
+            case nil:
+                break
             }
             found.append(box)
         }
@@ -120,6 +138,8 @@ struct LiveOrganismCounter {
                 result.newOnMap += 1
             }
         }
+        discDrops += result.droppedDisc
+        bigDrops += result.droppedBig
         lastResult = result
         return result
     }
@@ -136,6 +156,8 @@ struct LiveOrganismCounter {
         map.reset()
         framesCounted = 0
         framesSkippedByReason = [:]
+        discDrops = 0
+        bigDrops = 0
         lastResult = FrameResult()
         carriedShift = .zero
         isRepeat = [:]

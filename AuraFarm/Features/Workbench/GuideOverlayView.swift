@@ -50,7 +50,7 @@
                     if model.isFinished {
                         finished
                     } else {
-                        line(model.line)
+                        if !model.line.isEmpty { line(model.line) }
                         if model.easeOff { easeOff }
                     }
                     if captureCount > 0 { count }

@@ -111,6 +111,11 @@ private struct HomeTab: View {
                                 Label("Advice check", systemImage: "checklist")
                             }
                             NavigationLink {
+                                ModelTestLabView()
+                            } label: {
+                                Label("Model test", systemImage: "camera.viewfinder")
+                            }
+                            NavigationLink {
                                 SlideMovementLabView()
                             } label: {
                                 Label("Slide movement lab", systemImage: "move.3d")
