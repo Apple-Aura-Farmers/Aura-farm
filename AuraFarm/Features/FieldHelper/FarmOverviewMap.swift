@@ -27,6 +27,9 @@ struct FarmsOverviewMap: View {
     var body: some View {
         MapReader { proxy in
             Map(position: $camera) {
+                // Where the helper is standing, since the map opens there.
+                UserAnnotation()
+
                 ForEach(farms) { farm in
                     ForEach(farm.plots) { plot in
                         let colour = colour(of: farm)
@@ -54,6 +57,8 @@ struct FarmsOverviewMap: View {
             }
             .mapStyle(.imagery)
             .mapControls {
+                // The way back to where the helper is standing, after they have panned off it.
+                MapUserLocationButton()
                 MapCompass()
             }
             .onTapGesture { point in

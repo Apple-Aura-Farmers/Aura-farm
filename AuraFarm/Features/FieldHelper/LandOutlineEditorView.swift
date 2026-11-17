@@ -18,6 +18,10 @@ import SwiftUI
 struct LandOutlineEditorView: View {
     /// Land already mapped, drawn on the map so the new outline can be kept clear of it.
     let neighbours: [Neighbour]
+    /// What the button that keeps the outline says. "Next" where a form for the farmer and
+    /// the plot's name follows, which is marking a plot from the map with no farm picked yet;
+    /// "Save" where the farm is already known and confirming is the last step.
+    var confirmTitle: String = "Next"
     let onConfirm: ([GeoPoint]) -> Void
     /// Called when the helper leaves without confirming, so whoever opened the editor can put
     /// back whatever was on screen before it.
@@ -36,12 +40,13 @@ struct LandOutlineEditorView: View {
     private let startingCorners: [GeoPoint]
 
     init(
-        corners: [GeoPoint], neighbours: [Neighbour],
+        corners: [GeoPoint], neighbours: [Neighbour], confirmTitle: String = "Next",
         onConfirm: @escaping ([GeoPoint]) -> Void,
         onCancel: (() -> Void)? = nil
     ) {
         self.startingCorners = corners
         self.neighbours = neighbours
+        self.confirmTitle = confirmTitle
         self.onConfirm = onConfirm
         self.onCancel = onCancel
         _corners = State(initialValue: corners)
@@ -169,7 +174,7 @@ struct LandOutlineEditorView: View {
                     onConfirm(corners)
                     dismiss()
                 } label: {
-                    Text("Next")
+                    Text(confirmTitle)
                         .font(.body.weight(.medium))
                         .foregroundStyle(.white)
                         .padding(.horizontal, 16)

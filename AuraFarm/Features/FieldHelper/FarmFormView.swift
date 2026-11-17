@@ -83,18 +83,21 @@ struct FarmFormView: View {
     private var canSave: Bool { !trimmedName.isEmpty && !trimmedFarmerName.isEmpty }
 
     private func save() {
+        let saved: Farm
         if var farm = editing {
             farm.name = trimmedName
             farm.farmerName = trimmedFarmerName
             store.update(farm)
+            saved = farm
         } else {
-            store.add(
-                Farm(
-                    name: trimmedName,
-                    farmerName: trimmedFarmerName,
-                    plots: firstPlot.map { [$0] } ?? []
-                ))
+            saved = Farm(
+                name: trimmedName,
+                farmerName: trimmedFarmerName,
+                plots: firstPlot.map { [$0] } ?? []
+            )
+            store.add(saved)
         }
+        Task { await store.publish(saved) }
         dismiss()
         onSave?()
     }

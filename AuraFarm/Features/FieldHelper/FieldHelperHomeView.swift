@@ -192,6 +192,10 @@ struct FieldHelperHomeView: View {
     private func openJustFiled() {
         guard let filed = justFiled else { return }
         justFiled = nil
+        // On the land that was just marked, not pulled back to take in every other plot too.
+        if let region = LandGeometry.region(fitting: filed.plot.corners) {
+            camera = .region(region)
+        }
         show(filed.farm, filed.plot)
         withAnimation(.snappy) { filedNotice = true }
     }

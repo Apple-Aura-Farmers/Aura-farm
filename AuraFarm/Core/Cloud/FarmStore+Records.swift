@@ -25,6 +25,25 @@ extension FarmStore {
         }
     }
 
+    /// Sends a farm and its plots to the records, after the phone has kept them.
+    ///
+    /// Every screen that changes a farm calls this, so what a helper marks, renames or
+    /// reshapes is in the records straight away rather than waiting on them to remember
+    /// Publish. The phone keeps the change either way: a bad connection is reported in the
+    /// banner, not undone.
+    ///
+    /// A farm with no plots is held back. The records describe a farm by its land, so there
+    /// is nothing to write until the first plot is marked, and it goes up with that plot.
+    func publish(_ farm: Farm) async {
+        guard !farm.plots.isEmpty, let uploader = FarmUploader() else { return }
+        do {
+            try await uploader.upload(farm)
+            report(nil)
+        } catch {
+            report(error.localizedDescription)
+        }
+    }
+
     /// Keeps what the helper measured, on the phone first and in the records after.
     ///
     /// The phone is written to whether or not the sending works, because the measurement is
