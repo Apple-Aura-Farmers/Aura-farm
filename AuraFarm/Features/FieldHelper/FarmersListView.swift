@@ -3,11 +3,13 @@ import SwiftUI
 /// Every farmer the helper looks after, one row each, with the way through to their land and
 /// its test results.
 ///
-/// The same list serves the Results tab and the search tab beside it. On the search tab it
-/// carries the search field, so what is typed into the tab bar filters these rows; everywhere
-/// else it is the plain list.
+/// The same list serves the Results tab and the search tab beside it. Only the search tab
+/// carries a field to type into; Results is the whole list, in order. This screen has the
+/// navigation bar the map has not, so switching role lives here rather than over the land.
 struct FarmersListView: View {
-    /// Set on the search tab, which is the only copy that shows a search field.
+    /// Sends the person back to the role picker.
+    var onSwitchRole: (() -> Void)?
+    /// Set on the search tab, which is the only copy with a field to type into.
     var isSearch = false
 
     @Environment(FarmStore.self) private var store
@@ -22,6 +24,15 @@ struct FarmersListView: View {
                 .navigationTitle("Farmers")
                 .navigationDestination(for: Farm.ID.self) { id in
                     FarmDetailView(farmID: id)
+                }
+                .toolbar {
+                    if let onSwitchRole {
+                        ToolbarItem(placement: .topBarLeading) {
+                            Button("Switch role", systemImage: "arrow.left.arrow.right") {
+                                onSwitchRole()
+                            }
+                        }
+                    }
                 }
         }
     }
@@ -68,10 +79,11 @@ struct FarmersListView: View {
         }
     }
 
-    /// Sorted by the farmer, because that is what the row is read by.
+    /// Sorted by the farmer, because that is what the row is read by. Nothing typed, or no
+    /// field to type into, is the whole list.
     private var shown: [Farm] {
         store.farms
-            .matching(query)
+            .matching(isSearch ? query : "")
             .sorted { $0.farmerName.localizedStandardCompare($1.farmerName) == .orderedAscending }
     }
 
@@ -103,7 +115,7 @@ struct FarmersListView: View {
 }
 
 #Preview {
-    FarmersListView(isSearch: true)
+    FarmersListView(onSwitchRole: {})
         .environment(
             FarmStore(
                 fileURL: nil,

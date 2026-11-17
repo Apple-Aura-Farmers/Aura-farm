@@ -15,6 +15,8 @@ import SwiftUI
 /// no road or place labels, so the land is the only thing drawn on it.
 struct FarmsOverviewMap: View {
     let farms: [Farm]
+    /// Where the map is looking. Held outside, so searching can send it somewhere.
+    @Binding var camera: MapCameraPosition
     /// Called with the plot the helper tapped, and the farm it belongs to.
     let onOpen: (Farm, Plot) -> Void
 
@@ -24,7 +26,7 @@ struct FarmsOverviewMap: View {
 
     var body: some View {
         MapReader { proxy in
-            Map(initialPosition: initialPosition) {
+            Map(position: $camera) {
                 ForEach(farms) { farm in
                     ForEach(farm.plots) { plot in
                         let colour = colour(of: farm)
@@ -98,8 +100,9 @@ struct FarmsOverviewMap: View {
             .map { ($0.farm, $0.plot) }
     }
 
-    /// Opens with every plot in view.
-    private var initialPosition: MapCameraPosition {
+    /// Every plot in view, which is where the map opens and where it goes back to when the
+    /// land changes.
+    static func fitting(_ farms: [Farm]) -> MapCameraPosition {
         guard let region = LandGeometry.region(fitting: farms.flatMap(\.allCorners)) else {
             return .automatic
         }
@@ -108,6 +111,7 @@ struct FarmsOverviewMap: View {
 }
 
 #Preview {
+    @Previewable @State var camera = MapCameraPosition.automatic
     FarmsOverviewMap(
         farms: [
             Farm(
@@ -137,6 +141,7 @@ struct FarmsOverviewMap: View {
                         ])
                 ]),
         ],
+        camera: $camera,
         onOpen: { _, _ in }, onDeselect: {}
     )
     .ignoresSafeArea()

@@ -6,6 +6,11 @@
 	<string>$(AURA_SUPABASE_ANON_KEY)</string>
 	<key>AURA_SUPABASE_PROJECT_REF</key>
 	<string>$(AURA_SUPABASE_PROJECT_REF)</string>
+	<!-- The app encrypts nothing of its own: HTTPS to the records is the system's TLS, and
+	     the one use of CryptoKit hashes a sweep's name into a stable id. Without this key
+	     App Store Connect asks about export compliance on every upload. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>UTExportedTypeDeclarations</key>
 	<array>
 		<dict>

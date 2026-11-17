@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		6C27AD2530A449AC00CBFDD6 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = 5B1E0A9C7D4F42A8B3C6D1E1 /* Supabase */; };
+		6CC87F0230AB0225007CA45E /* Terraloka_App Icon_SF26.icon in Resources */ = {isa = PBXBuildFile; fileRef = 6CC87F0130AB0225007CA45E /* Terraloka_App Icon_SF26.icon */; };
 		87D63309CF8EED96A02FA376 /* AuraFarmKit in Frameworks */ = {isa = PBXBuildFile; productRef = 328C0DD016C1485FB148287C /* AuraFarmKit */; };
 /* End PBXBuildFile section */
 
@@ -23,6 +24,7 @@
 
 /* Begin PBXFileReference section */
 		5FB2731037DECEBE98931F8A /* AuraFarmTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AuraFarmTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		6CC87F0130AB0225007CA45E /* Terraloka_App Icon_SF26.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = "Terraloka_App Icon_SF26.icon"; sourceTree = "<group>"; };
 		73FB7E2E6EAFB81057032C5C /* AuraFarm-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "AuraFarm-Info.plist"; sourceTree = "<group>"; };
 		741176162224DE8C476991CB /* Local.example.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Local.example.xcconfig; sourceTree = "<group>"; };
 		84ED7D0120B576BF6D11D6DA /* AuraFarm.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AuraFarm.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -78,6 +80,7 @@
 				01A668C3D00B28E542C28A57 /* AuraFarmTests */,
 				89B104369EBC5E85E7E43C6B /* Config */,
 				113236722DEE1DC96F378B9D /* Products */,
+				6CC87F0130AB0225007CA45E /* Terraloka_App Icon_SF26.icon */,
 			);
 			sourceTree = "<group>";
 		};
@@ -196,6 +199,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				6CC87F0230AB0225007CA45E /* Terraloka_App Icon_SF26.icon in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -298,13 +302,16 @@
 		D604D612E18D1A0FD2B082A5 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = "Terraloka_App Icon_SF26";
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 38YF89G59F;
+				CURRENT_PROJECT_VERSION = 3;
+				DEVELOPMENT_TEAM = Q7PFUBX7QB;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Config/AuraFarm-Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = "Aura Farm";
+				INFOPLIST_KEY_CFBundleDisplayName = Terraloka;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
 				INFOPLIST_KEY_NSCameraUsageDescription = "The camera looks through the microscope to check image quality and record soil samples.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Your location centres the map and lets you drop a dot where you are standing, to mark out a farmer's land.";
@@ -313,12 +320,13 @@
 				INFOPLIST_KEY_UIFileSharingEnabled = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				IPHONEOS_DEPLOYMENT_TARGET = 26;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = Huy.aurafarm;
+				PRODUCT_BUNDLE_IDENTIFIER = com.terraloka;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
@@ -348,13 +356,16 @@
 		EDE6FC8537F4448F01FBC917 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = "Terraloka_App Icon_SF26";
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 38YF89G59F;
+				CURRENT_PROJECT_VERSION = 3;
+				DEVELOPMENT_TEAM = Q7PFUBX7QB;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Config/AuraFarm-Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = "Aura Farm";
+				INFOPLIST_KEY_CFBundleDisplayName = Terraloka;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
 				INFOPLIST_KEY_NSCameraUsageDescription = "The camera looks through the microscope to check image quality and record soil samples.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Your location centres the map and lets you drop a dot where you are standing, to mark out a farmer's land.";
@@ -363,12 +374,13 @@
 				INFOPLIST_KEY_UIFileSharingEnabled = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				IPHONEOS_DEPLOYMENT_TARGET = 26;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = Huy.aurafarm;
+				PRODUCT_BUNDLE_IDENTIFIER = com.terraloka;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
@@ -425,6 +437,8 @@
 				kind = upToNextMajorVersion;
 				minimumVersion = 2.0.0;
 			};
+			traits = (
+			);
 		};
 /* End XCRemoteSwiftPackageReference section */
 
