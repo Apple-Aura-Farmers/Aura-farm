@@ -10,6 +10,9 @@ import SwiftUI
 struct NewPlotFormView: View {
     /// The outline just marked.
     let corners: [GeoPoint]
+    /// Called with the farm this plot was filed against and the plot itself, so whatever opened
+    /// the form can show the land it has just taken in.
+    var onSaved: ((Farm, Plot) -> Void)?
     /// Called when the helper taps Edit, to go back to the map with these corners. It is handed
     /// what has been typed so far, so the form they come back to still holds it.
     var onEditOutline: ((_ farmer: String, _ plot: String) -> Void)?
@@ -23,9 +26,11 @@ struct NewPlotFormView: View {
 
     init(
         corners: [GeoPoint], farmer: String = "", plot: String = "",
+        onSaved: ((Farm, Plot) -> Void)? = nil,
         onEditOutline: ((String, String) -> Void)? = nil
     ) {
         self.corners = corners
+        self.onSaved = onSaved
         self.onEditOutline = onEditOutline
         _farmerName = State(initialValue: farmer)
         _plotName = State(initialValue: plot)
@@ -138,16 +143,19 @@ struct NewPlotFormView: View {
     private func save() {
         guard canSave else { return }
         let plot = Plot(name: trimmed(plotName), corners: corners)
-        if var farm = existingFarm {
-            farm.plots.append(plot)
-            store.update(farm)
+        let farm: Farm
+        if var existing = existingFarm {
+            existing.plots.append(plot)
+            store.update(existing)
+            farm = existing
         } else {
             // A farmer nobody has recorded before. The farm is named after them until there is
             // somewhere to ask for a name of its own.
-            store.add(
-                Farm(
-                    name: trimmed(farmerName), farmerName: trimmed(farmerName), plots: [plot]))
+            farm = Farm(
+                name: trimmed(farmerName), farmerName: trimmed(farmerName), plots: [plot])
+            store.add(farm)
         }
+        onSaved?(farm, plot)
         dismiss()
     }
 

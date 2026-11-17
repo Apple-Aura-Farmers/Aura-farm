@@ -19,6 +19,12 @@ enum AdviceUpdateNote {
         let before = values(old)
         let after = values(new)
         let changed = order.filter { before[$0] != after[$0] }
+        if changed.isEmpty, old.fertilizerType != new.fertilizerType {
+            return "Updated with the new fertilizer type."
+        }
+        if changed.isEmpty, old.phFieldWater != new.phFieldWater {
+            return "Updated with how the pH was measured."
+        }
         guard changed.count == 1, let name = changed.first else {
             return "Updated with the new soil measurements."
         }

@@ -49,25 +49,17 @@ struct RecommendationCard: View {
                         }
                     }
                 }
-                ForEach(Array(recommendation.steps.enumerated()), id: \.offset) { index, step in
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Text("\(index + 1).")
-                            .monospacedDigit()
-                            .foregroundStyle(.secondary)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(step.text)
-                                .fixedSize(horizontal: false, vertical: true)
-                            if let why = step.why {
-                                Text(why)
-                                    .font(.footnote)
-                                    .foregroundStyle(.secondary)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                            if let timing = step.timing {
-                                Label(timing, systemImage: "clock")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
+                ForEach(groups(of: recommendation.steps), id: \.title) { group in
+                    VStack(alignment: .leading, spacing: 8) {
+                        if let title = group.title {
+                            Text(title)
+                                .font(.caption.weight(.semibold))
+                                .tracking(0.8)
+                                .foregroundStyle(.secondary)
+                                .padding(.top, 4)
+                        }
+                        ForEach(group.indices, id: \.self) { index in
+                            stepRow(recommendation.steps[index], number: index + 1)
                         }
                     }
                 }
@@ -157,6 +149,61 @@ extension RecommendationCard {
 }
 
 /// Says where the advice came from, so generated text is never mistaken for an expert's.
+extension RecommendationCard {
+    /// The steps in runs by where they come from, keeping their order and their numbers. Steps
+    /// with no group (advice written before steps were grouped) form one run with no title.
+    struct StepRun {
+        let title: String?
+        let indices: [Int]
+    }
+
+    func groups(of steps: [Recommendation.Step]) -> [StepRun] {
+        var runs: [StepRun] = []
+        for (index, step) in steps.enumerated() {
+            let title: String? =
+                switch step.group {
+                case .microscope?: "FROM THE MICROSCOPE TEST"
+                case .soil?: "FROM YOUR SOIL MEASUREMENTS"
+                case nil: nil
+                }
+            if let last = runs.last, last.title == title {
+                runs[runs.count - 1] = StepRun(title: title, indices: last.indices + [index])
+            } else {
+                runs.append(StepRun(title: title, indices: [index]))
+            }
+        }
+        return runs
+    }
+
+    func stepRow(_ step: Recommendation.Step, number: Int) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text("\(number).")
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(step.text)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let why = step.why {
+                    Text(why)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if let timing = step.timing {
+                    Label(timing, systemImage: "clock")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                if step.alsoFromSoil {
+                    Text("Also supported by your soil measurements")
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+}
+
 private struct SourceTag: View {
     let source: Recommendation.Source
 
@@ -169,12 +216,7 @@ private struct SourceTag: View {
             .foregroundStyle(.secondary)
     }
 
-    private var text: String {
-        switch source {
-        case .foundationModel: return "Written by Apple Intelligence"
-        case .rules: return "Standard advice"
-        }
-    }
+    private var text: String { source.label }
 
     private var image: String {
         switch source {

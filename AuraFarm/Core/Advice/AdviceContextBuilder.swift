@@ -188,10 +188,126 @@ struct AdviceContextBuilder {
             picked = picked.filter { allowed.contains($0.key) }
         }
 
+        // The soil measurements come after that filter. A sample the microscope cannot be trusted
+        // on says nothing about the measurements, which were taken another way.
+        let soil = soilPicks(for: SoilInputs(result.soil), result: result, enrichedOrClean: enrichedOrClean)
+        for id in soil.removed { picked[id] = nil }
+        let microscopeIDs = Set(picked.keys)
+        for (id, entry) in soil.added {
+            if let existing = picked[id] {
+                // Both the microscope and the measurements call for it. The measurement's reason
+                // goes with it, because it is the more specific of the two.
+                picked[id] = (because: existing.because + "; " + entry.because, reason: entry.reason)
+            } else {
+                picked[id] = entry
+            }
+        }
+        let soilIDs = Set(soil.added.keys)
+        // A step that needs an expert brings the extension officer, unless that step is already
+        // there with the reason that was found first.
+        if picked[.talkExtension] == nil,
+            soilIDs.contains(where: { AdviceActions.action($0)?.review == .must })
+        {
+            add(.talkExtension, "big changes suggested", AdviceReasons.extensionBeforeBiggerChanges)
+        }
+
         return AdviceAction.ID.allCases.compactMap { id in
             guard let entry = picked[id], let action = AdviceActions.action(id) else { return nil }
-            return AdviceContext.SuggestedAction(action: action, because: entry.because, reason: entry.reason)
+            return AdviceContext.SuggestedAction(
+                action: action, because: entry.because, reason: entry.reason, fromSoil: soilIDs.contains(id),
+                fromMicroscope: microscopeIDs.contains(id))
         }
+    }
+
+    /// What the soil measurements the field helper recorded call for. Only the lowest and the
+    /// excessive bands do: a standard or high reading needs nothing done, and a measurement that
+    /// was not recorded is never read as low.
+    ///
+    /// `removed` lists microscope actions the measurements argue against, such as adding carbon to
+    /// soil that already has far too much.
+    ///
+    /// Fertilizer kind: mineral alone calls for one step, to ask about adding organic material.
+    /// Organic and blend need nothing.
+    ///
+    /// PROVISIONAL: the rules follow the team's notes on soil measurements, not an agronomist's
+    /// review. The actions avoid naming products or amounts, as the never-say rules ask.
+    private func soilPicks(
+        for soil: SoilInputs?, result: SoilResult, enrichedOrClean: Bool
+    ) -> (added: [AdviceAction.ID: (because: String, reason: String)], removed: Set<AdviceAction.ID>) {
+        let soil = soil ?? SoilInputs()
+        var added: [AdviceAction.ID: (because: String, reason: String)] = [:]
+        var removed: Set<AdviceAction.ID> = []
+        let bands = Dictionary(
+            soil.readings.map { ($0.name, $0.band) }, uniquingKeysWith: { first, _ in first })
+        let recent = Set(result.recentActions)
+        let stage = result.cropStage
+
+        // A pH from drained or dry soil may not be the pH around the roots once the field is
+        // flooded, so the reason says that instead. Only a low or excessive pH leads to a step,
+        // and that step is always to ask, never a particular amendment.
+        let measuredDry = soil.phFieldWater == .drained
+        switch bands["pH"] {
+        case .low:
+            added[.raisePH] = ("pH low", measuredDry ? AdviceReasons.phMeasuredDry : AdviceReasons.phLow)
+        case .excessive:
+            added[.lowerPH] = (
+                "pH excessive", measuredDry ? AdviceReasons.phMeasuredDry : AdviceReasons.phHigh
+            )
+        default: break
+        }
+        switch bands["nitrogen"] {
+        case .low: added[.boostNitrogen] = ("nitrogen low", AdviceReasons.nitrogenLow)
+        case .excessive: added[.reduceNitrogen] = ("nitrogen excessive", AdviceReasons.nitrogenExcess)
+        default: break
+        }
+        switch bands["phosphorus"] {
+        case .low: added[.unlockPhosphorus] = ("phosphorus low", AdviceReasons.phosphorusLow)
+        case .excessive: added[.reducePhosphorus] = ("phosphorus excessive", AdviceReasons.phosphorusExcess)
+        default: break
+        }
+        switch bands["potassium"] {
+        case .low: added[.boostPotassium] = ("potassium low", AdviceReasons.potassiumLow)
+        case .excessive: added[.reducePotassium] = ("potassium excessive", AdviceReasons.potassiumExcess)
+        default: break
+        }
+
+        switch bands["organic carbon"] {
+        case .low:
+            // The same guards as the microscope's own straw and compost steps: more organic matter
+            // is no help to nutrient-rich or clean-water signs, a seedling, or work just done.
+            if !enrichedOrClean {
+                if stage != .seedling && !recent.contains(.addedStraw) {
+                    added[.returnStraw] = ("organic carbon low", AdviceReasons.carbonLowStraw)
+                }
+                if !recent.contains(.addedCompost) {
+                    added[.addCompost] = ("organic carbon low", AdviceReasons.carbonLowCompost)
+                }
+            }
+        case .excessive:
+            added[.keepStrawOnTop] = ("organic carbon excessive", AdviceReasons.carbonExcessStraw)
+            if stage != .flowering && result.moisture != .drained && !recent.contains(.drained) {
+                added[.alternateWetDry] = ("organic carbon excessive", AdviceReasons.carbonExcessAir)
+            }
+            removed.formUnion([.returnStraw, .addCompost, .greenManure])
+        default: break
+        }
+
+        // Mineral fertilizer alone: paddy research favours organic material beside it. Skipped when
+        // organic matter was just added or the soil already has far too much carbon.
+        if result.soil?.fertilizerType == .inorganic, bands["organic carbon"] != .excessive,
+            recent.isDisjoint(with: [.addedStraw, .addedCompost])
+        {
+            added[.addOrganicInput] = ("inorganic fertilizer only", AdviceReasons.fertilizerInorganicOnly)
+        }
+
+        // Nitrogen, phosphorus and potassium work together: two of them off, or one short while
+        // another is high, is worth an expert's eye before anything more is added.
+        let npk = ["nitrogen", "phosphorus", "potassium"].compactMap { bands[$0] }
+        let offBalance = npk.filter { $0 == .low || $0 == .excessive }.count
+        if offBalance >= 2 || (npk.contains(.low) && npk.contains(.high)) {
+            added[.checkNutrientBalance] = ("nutrients out of balance", AdviceReasons.nutrientImbalance)
+        }
+        return (added, removed)
     }
 }
 

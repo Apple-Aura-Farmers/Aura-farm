@@ -312,7 +312,7 @@ struct FarmDetailView: View {
     @ViewBuilder
     private func adviceSection(for farm: Farm) -> some View {
         if let latest = tests?.first {
-            FarmAdvice(test: latest, soil: farm.soil)
+            FarmAdvice(farm: farm, test: latest, history: tests ?? [])
                 // A new test, or different soil measurements, is new advice, so a fresh view model
                 // for it. It then shows the saved advice if that still fits, and writes it again
                 // if it doesn't.
@@ -334,29 +334,67 @@ private struct AdviceKey: Hashable {
     let soil: SoilInputs?
 }
 
-/// "What to do next" for one test. Owns the view model so it survives redraws.
+/// "What to do next" for one test, and a way to export it. Owns the view model so it survives
+/// redraws.
 private struct FarmAdvice: View {
     @State private var viewModel: SoilResultViewModel
+    private let farm: Farm
+    private let test: FarmTest
+    /// Every counted test of this farm, for the report's trend.
+    private let history: [FarmTest]
     private let testedOn: Date
     private let usesSoil: Bool
 
-    init(test: FarmTest, soil: SoilMeasurements?) {
+    init(farm: Farm, test: FarmTest, history: [FarmTest]) {
+        self.farm = farm
+        self.test = test
+        self.history = history
         testedOn = test.result.recordedAt
-        usesSoil = SoilInputs(soil) != nil
+        usesSoil = SoilInputs(farm.soil) != nil
         var result = test.result
-        result.soil = soil
+        result.soil = farm.soil
         _viewModel = State(wrappedValue: SoilResultViewModel(result: result))
     }
 
     var body: some View {
-        WhatToDoNextSection(
-            viewModel: viewModel,
-            footer: "From the microscope test on "
-                + "\(testedOn.formatted(date: .abbreviated, time: .omitted))"
-                + (usesSoil
-                    ? ", with the soil measurements above. They don't change which steps are suggested yet."
-                    : " only.")
-        )
+        Group {
+            WhatToDoNextSection(
+                viewModel: viewModel,
+                footer: "From the microscope test on "
+                    + "\(testedOn.formatted(date: .abbreviated, time: .omitted))"
+                    + (usesSoil
+                        ? ", with the soil measurements above."
+                        : " only.")
+            )
+            exportSection
+        }
+    }
+
+    /// Offered once the advice is written, so the PDF never shows an advice that is still loading.
+    /// The PDF is written when a place to send it to is chosen, not before.
+    @ViewBuilder
+    private var exportSection: some View {
+        if case .ready(let recommendation) = viewModel.recommendationState {
+            Section {
+                ShareLink(
+                    // The report carries the advice exactly as it is on screen: the same
+                    // recommendation, "Based on" line, step labels and note. It is rebuilt from the
+                    // view model each time this redraws, so it never holds advice that was replaced.
+                    item: ExportableAdvice(
+                        report: AdviceReport.make(
+                            farm: farm, test: test, recommendation: recommendation,
+                            basis: viewModel.adviceBasis,
+                            adviceNote: viewModel.modelUnavailableReason, history: history)),
+                    preview: SharePreview("Field report for \(farm.name)")
+                ) {
+                    Label("Export field report as PDF", systemImage: "square.and.arrow.up")
+                }
+            } footer: {
+                Text(
+                    "A field report of this test, the soil measurements, the fertilizer and the advice above, to share or print."
+                )
+            }
+        }
     }
 }
 

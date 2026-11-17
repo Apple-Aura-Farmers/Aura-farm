@@ -19,6 +19,10 @@ enum NeverSay {
         "Never say an organism \"was not found\" unless it is listed as interpreted.",
         "Never call nematodes good or bad.",
         "Never blame the farmer.",
+        "Never say a soil measurement proves a crop problem, and never call a reading a diagnosis.",
+        "Never say a high reading is always bad, or that more organic carbon is always better.",
+        "Never recommend a fertilizer product, brand, amount or rate, and never call a kind of fertilizer banned or harmful.",
+        "Never call a microscope count a laboratory soil test.",
     ]
 
     /// Matched as whole words, ignoring case. PLACEHOLDER list for the team to extend.
@@ -30,6 +34,7 @@ enum NeverSay {
 
     /// Matched ignoring case. PLACEHOLDER list for the team to extend.
     static let bannedPhrases: [String] = [
-        "will improve", "will increase", "no doubt", "safe to drink", "safe to eat",
+        "will improve", "will increase", "no doubt", "safe to drink", "safe to eat", "diagnos",
+        "always better", "always bad",
     ]
 }

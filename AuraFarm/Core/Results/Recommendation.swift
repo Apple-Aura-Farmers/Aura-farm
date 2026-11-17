@@ -11,9 +11,18 @@ struct Recommendation: Equatable, Codable {
         /// The model's short reason. nil for standard advice.
         var why: String?
         var timing: String?
+        /// Where the step comes from. nil for advice written before steps were grouped.
+        var group: Group? = nil
+        /// For a microscope step the soil measurements also support.
+        var alsoFromSoil = false
+
+        enum Group: String, Equatable, Codable {
+            case microscope
+            case soil
+        }
 
         enum CodingKeys: String, CodingKey {
-            case actionID, text, why, timing
+            case actionID, text, why, timing, group, alsoFromSoil
         }
     }
 
@@ -42,6 +51,10 @@ extension Recommendation.Step {
         text = try container.decode(String.self, forKey: .text)
         why = try container.decodeIfPresent(String.self, forKey: .why)
         timing = try container.decodeIfPresent(String.self, forKey: .timing)
+        group = (try? container.decodeIfPresent(String.self, forKey: .group)).flatMap {
+            $0.flatMap { Group(rawValue: $0) }
+        }
+        alsoFromSoil = (try? container.decodeIfPresent(Bool.self, forKey: .alsoFromSoil)) ?? false
     }
 }
 

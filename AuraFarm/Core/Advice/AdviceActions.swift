@@ -66,14 +66,74 @@ enum AdviceActions {
             id: .keepNotes,
             wording: "Write down what you did in this field, so the next sample can be compared fairly.",
             cost: "None", effort: "Low", timing: "Now", review: .light),
+
+        // From the soil measurements the field helper recorded. Written in the same voice as the
+        // rows above, and without naming products or amounts, as the never-say rules ask: the
+        // extension officer says what the soil needs and how much. The pH steps never name an
+        // amendment: a reading outside the provisional flooded-rice range is a reason to ask, not
+        // to treat, because flooding, soil type and how it was measured all change it.
+        AdviceAction(
+            id: .raisePH,
+            wording: "Ask your extension officer whether this low pH needs any change for flooded rice.",
+            cost: "Low", effort: "Medium", timing: "Before next planting", review: .must),
+        AdviceAction(
+            id: .lowerPH,
+            wording: "Ask your extension officer whether this high pH needs any change for flooded rice.",
+            cost: "Low", effort: "Medium", timing: "Before next planting", review: .must),
+        AdviceAction(
+            id: .boostNitrogen,
+            wording:
+                "Between seasons, grow beans as a cover crop to keep living roots in the soil and add nitrogen.",
+            cost: "Low", effort: "Medium", timing: "Next fallow", review: .should),
+        AdviceAction(
+            id: .reduceNitrogen,
+            wording: "Hold back on nitrogen fertilizer, and keep straw on the surface to slow nitrogen "
+                + "release.",
+            cost: "Saves money", effort: "Low", timing: "Before next application", review: .should),
+        AdviceAction(
+            id: .unlockPhosphorus,
+            wording: "Add well-rotted compost so the phosphorus already in the soil can be used by plants.",
+            cost: "Low", effort: "Medium", timing: "Before planting", review: .should),
+        AdviceAction(
+            id: .reducePhosphorus,
+            wording: "Stop adding manure and other phosphorus-rich inputs for now, and keep the ground "
+                + "covered.",
+            cost: "Saves money", effort: "Low", timing: "Before next application", review: .should),
+        AdviceAction(
+            id: .boostPotassium,
+            wording: "Leave crop straw on the field after harvest to return potassium to the soil.",
+            cost: "None", effort: "Low", timing: "After harvest", review: .should),
+        AdviceAction(
+            id: .reducePotassium,
+            wording: "Pause potassium-rich inputs, such as wood ash, for a while.",
+            cost: "Saves money", effort: "Low", timing: "Before next application", review: .should),
+        AdviceAction(
+            id: .keepStrawOnTop,
+            wording: "Leave fresh straw on the surface as mulch instead of digging it into wet soil.",
+            cost: "None", effort: "Low", timing: "After harvest", review: .should),
+        AdviceAction(
+            id: .checkNutrientBalance,
+            wording: "Ask your extension officer to check the balance of nitrogen, phosphorus and potassium "
+                + "before adding more.",
+            cost: "None", effort: "Low", timing: "Before next application", review: .should),
+        AdviceAction(
+            id: .addOrganicInput,
+            wording: "Move toward organic fertilizer, such as compost, by replacing part of your mineral "
+                + "fertilizer over the next seasons. Ask your extension officer how much to change.",
+            cost: "Low", effort: "Medium", timing: "Before next application", review: .should),
     ]
 
     /// The order used when the app, not the model, chooses actions: for standard advice, and
     /// to fill in when the model picked too few. Sampling again comes first.
     ///
-    /// PLACEHOLDER: an order for the team to review.
+    /// PLACEHOLDER: an order for the team to review. The soil measurement actions sit after the
+    /// ones the microscope alone can call for, and are kept by the trimming whatever their rank
+    /// (see `AdvicePromptBuilder.trimmed`); the rank only orders them among themselves and
+    /// against the rest when standard advice is chosen.
     static let fallbackPriority: [AdviceAction.ID] = [
         .resampleTrust, .resampleFresh, .resampleFlooded, .checkRootPests, .refreshWater, .reviewFertilizer,
+        .raisePH, .lowerPH, .checkNutrientBalance, .reduceNitrogen, .reducePhosphorus, .reducePotassium,
+        .boostNitrogen, .unlockPhosphorus, .boostPotassium, .keepStrawOnTop, .addOrganicInput,
         .alternateWetDry, .returnStraw, .addCompost, .stopBurning, .greenManure, .keepPractice,
         .resampleLater,
         .labTest, .talkExtension, .keepNotes,

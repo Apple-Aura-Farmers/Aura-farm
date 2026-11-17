@@ -174,10 +174,18 @@ struct SoilMeasurementsView: View {
             if draft.ph != nil {
                 Button("Clear", role: .destructive) { draft.ph = nil }
             }
+            Picker("Field at the time", selection: $draft.phFieldWater) {
+                Text("Not recorded").tag(PHFieldWater?.none)
+                ForEach(PHFieldWater.allCases) { Text($0.label).tag(PHFieldWater?.some($0)) }
+            }
         } header: {
             Text("Acidity (pH)")
         } footer: {
-            Text("Standard: \(SoilStandards.ph.description). Drag the slider to record one.")
+            Text(
+                "Provisional target for flooded rice: about pH \(SoilStandards.ph.description). "
+                    + "Flooding often moves pH toward neutral, so a reading from dry soil may "
+                    + "differ from the pH around the roots once the field is flooded."
+            )
         }
     }
 
@@ -193,8 +201,18 @@ struct SoilMeasurementsView: View {
 
     private var fertilizer: some View {
         Section {
+            // Picked from a short list, not typed, so the same answer always reads the same.
+            Picker("Type", selection: $draft.fertilizerType) {
+                Text("Choose…").tag(FertilizerType?.none)
+                ForEach(FertilizerType.allCases) { Text($0.label).tag(FertilizerType?.some($0)) }
+            }
+            if let fertilizerType = draft.fertilizerType {
+                Text(fertilizerType.definition)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
             TextField(
-                "Product, such as urea or compost",
+                "Product name (optional)",
                 text: Binding(
                     get: { draft.fertilizerProduct ?? "" },
                     set: { draft.fertilizerProduct = $0.isEmpty ? nil : $0 })

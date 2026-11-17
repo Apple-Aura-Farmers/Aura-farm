@@ -261,9 +261,10 @@ final class AdvicePromptBuilderTests: XCTestCase {
 
         XCTAssertEqual(
             lines[3],
-            "Soil measurements the helper recorded (not from the microscope; background only, do not "
-                + "give advice from them): nitrogen 100 mg/kg (standard), pH 7.9 (excessive), "
-                + "organic carbon 2.5 % (standard).")
+            "Soil measurements the helper recorded (not from the microscope): nitrogen 100 mg/kg (standard), "
+                + "pH 7.9 (excessive), organic carbon 2.5 % (standard). "
+                + "The soil steps listed at the end come from them. pH targets for flooded rice are provisional."
+        )
         XCTAssertTrue(lines[2].hasPrefix("This sample:"))
         XCTAssertEqual(prompt.components(separatedBy: "Soil measurements").count, 2)
     }
@@ -293,18 +294,22 @@ final class AdvicePromptBuilderTests: XCTestCase {
                     soil: SoilMeasurements(fertilizerProduct: "Urea", fertilizerKilogramsPerHectare: 50))))
     }
 
-    func testMeasurementsDoNotChangeTheEstimatePatternsOrActions() {
+    func testMeasurementsAddActionsOfTheirOwnAndChangeNothingTheMicroscopeSaid() {
         let counts = ["euglena": 30, "phacus": 8, "paramecium": 3]
         let without = context(counts, level: .poor, stage: .tillering)
         let with = context(counts, level: .poor, stage: .tillering, soil: fullSoil)
 
         XCTAssertEqual(with.estimate, without.estimate)
         XCTAssertEqual(with.patterns, without.patterns)
-        XCTAssertEqual(with.actions, without.actions)
         XCTAssertEqual(with.cautions, without.cautions)
-        XCTAssertEqual(
-            AdvicePromptBuilder.offeredActions(for: with).map(\.action.id),
-            AdvicePromptBuilder.offeredActions(for: without).map(\.action.id))
+        // The pH is excessive, so the one new action is the pH step. Nitrogen and organic carbon
+        // are standard and add nothing.
+        XCTAssertEqual(with.actions.filter(\.fromSoil).map(\.action.id), [.lowerPH])
+        XCTAssertEqual(with.actions.filter { !$0.fromSoil }, without.actions)
+        // The model is not asked to pick it: the app adds soil steps itself, and lists them.
+        XCTAssertFalse(
+            AdvicePromptBuilder.offeredActions(for: with).map(\.action.id).contains(.lowerPH))
+        XCTAssertEqual(AdvicePromptBuilder.soilOnlyActions(for: with).map(\.action.id), [.lowerPH])
     }
 
     func testTheSoilLineIsSmallEnoughNotToThreatenTheBudget() {
