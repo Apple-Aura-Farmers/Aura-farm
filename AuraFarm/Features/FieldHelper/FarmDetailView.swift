@@ -157,9 +157,12 @@ struct FarmDetailView: View {
         Section {
             ForEach(farm.plots) { plot in
                 NavigationLink {
+                    // The farm is already known here, so confirming is the last step and the
+                    // button says so.
                     LandOutlineEditorView(
                         corners: plot.corners,
-                        neighbours: store.farms.neighbours(excluding: plot.id)
+                        neighbours: store.farms.neighbours(excluding: plot.id),
+                        confirmTitle: "Save"
                     ) { corners in
                         replace(plot, with: corners, in: farm)
                     }
@@ -177,7 +180,7 @@ struct FarmDetailView: View {
 
             NavigationLink {
                 LandOutlineEditorView(
-                    corners: [], neighbours: store.farms.neighbours()
+                    corners: [], neighbours: store.farms.neighbours(), confirmTitle: "Save"
                 ) { corners in
                     add(corners, to: farm)
                 }
@@ -219,6 +222,7 @@ struct FarmDetailView: View {
         var changed = farm
         changed.plots.append(Plot(corners: corners))
         store.update(changed)
+        Task { await store.publish(changed) }
     }
 
     private func replace(_ plot: Plot, with corners: [GeoPoint], in farm: Farm) {
@@ -226,6 +230,7 @@ struct FarmDetailView: View {
         var changed = farm
         changed.plots[index].corners = corners
         store.update(changed)
+        Task { await store.publish(changed) }
     }
 
     /// Takes the plot out of the records first, so one deleted here but left there does not

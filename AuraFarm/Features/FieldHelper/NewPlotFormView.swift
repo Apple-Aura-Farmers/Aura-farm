@@ -155,6 +155,7 @@ struct NewPlotFormView: View {
                 name: trimmed(farmerName), farmerName: trimmed(farmerName), plots: [plot])
             store.add(farm)
         }
+        Task { await store.publish(farm) }
         onSaved?(farm, plot)
         dismiss()
     }
