@@ -338,6 +338,7 @@ final class SlideTracker {
         let nearEmpty =
             anchor != nil && detail.hasDetail && box != nil
             && (features?.cells ?? Int.max) < ghostThresholds.minFeatureCellsToRegister
+            && boxStats.sharpness < ghostThresholds.maxSharpnessForSparseSkip
         if nearEmpty {
             sparseSkips += 1
             sparseRun += 1

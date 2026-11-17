@@ -562,7 +562,8 @@ final class GuideSimulator {
                 pending = toward
             }
             move(toward)
-        case .edgeGoBack(let toward), .stillNoDetail(let toward), .checkEdge(let toward):
+        case .edgeGoBack(let toward), .stillNoDetail(let toward), .checkEdge(let toward),
+            .edgeBehind(let toward):
             // A person who has not found the sample after 3 s of going back turns toward it.
             goBackReadings += 1
             if goBackReadings > 30, let centre = drop.centre {

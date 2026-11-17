@@ -373,7 +373,7 @@
     /// blank box's "Step back until the edge line is in view".
     struct LineEdgePreviewPanel: View {
         enum Kind: CaseIterable {
-            case ahead, attached, confirmed, blank
+            case ahead, attached, confirmed, blank, behind
 
             var title: String {
                 switch self {
@@ -381,6 +381,7 @@
                 case .attached: "Line attached (green)"
                 case .confirmed: "Line confirmed (\"edge\")"
                 case .blank: "Blank box: step back until the line is in view"
+                case .behind: "Edge just behind you: come back (arrow)"
                 }
             }
 
@@ -390,6 +391,7 @@
                 case .attached: "attached"
                 case .confirmed: "confirmed"
                 case .blank: "none"
+                case .behind: "behind"
                 }
             }
         }
@@ -406,8 +408,12 @@
             var edge = EdgeDiagnostics()
             edge.edgeMode = "line"
             edge.lineState = kind.state
-            let instruction: GuideInstruction =
-                kind == .blank ? .checkEdge(toward: CGPoint(x: 0, y: 1)) : .lineAhead
+            let instruction: GuideInstruction
+            switch kind {
+            case .blank: instruction = .checkEdge(toward: CGPoint(x: 0, y: 1))
+            case .behind: instruction = .edgeBehind(toward: CGPoint(x: 0, y: 1))
+            default: instruction = .lineAhead
+            }
             let step = GuideStep(
                 instruction: instruction, target: CGPoint(x: 0, y: -0.8), capture: nil,
                 stateName: "column 1 up", column: 1, isFinished: false, edge: edge)
@@ -477,6 +483,7 @@
     #Preview("Line attached") { LineEdgePreviewPanel(kind: .attached) }
     #Preview("Line confirmed") { LineEdgePreviewPanel(kind: .confirmed) }
     #Preview("Blank: step back to the line") { LineEdgePreviewPanel(kind: .blank) }
+    #Preview("Edge just behind: come back") { LineEdgePreviewPanel(kind: .behind) }
     #Preview("Edge buttons: ask and mark") {
         ZStack {
             Color(white: 0.2)

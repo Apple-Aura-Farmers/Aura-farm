@@ -8,7 +8,14 @@ struct LineEdgeThresholds {
     /// A line more than this far from perpendicular to the heading (a side edge running along
     /// the column, for one) is not the edge for this leg. The 16 Nov corner band ran at about 45
     /// to 50 degrees.
-    var maxAngleDegrees = 45.0
+    var maxAngleDegrees = 60.0
+    /// A line that passes the rule but sits this far (or less) behind the cross is "behind": the
+    /// helper went past it and is told to come back. PLACEHOLDER. Source: 16 Nov 2026 22:56, the
+    /// top-edge line sat at offset -0.23 to -0.38 after the helper overshot.
+    var maxBehindFields = 0.8
+    /// While a valid line was seen this recently, "refocus" and "nothing to follow" are not shown
+    /// in line mode; the line's own instruction is. PLACEHOLDER: the 22:56 gaps were about 2 s.
+    var lineMemorySeconds = 2.0
     /// |slide residual| at most this counts as the line moving with the slide.
     var attachedResidualFields = 0.15
     /// At least this many of the last `attachedWindow` moving readings with a candidate line must
@@ -22,9 +29,10 @@ struct LineEdgeThresholds {
     var lostLineSeconds = 0.5
     /// The line is accepted as the edge only if the texture energy beyond it is at most this
     /// share of the energy before it (the space past a cover slip's edge is empty or sparse).
-    /// PLACEHOLDER. Source: the 16 Nov 2026 15:32 real edge, whose empty side read about 6
-    /// against about 500 in the box halves (about 0.05 in `EdgeLine`'s bands).
-    var beyondShareMax = 0.5
+    /// This is the second factor of the line rule: with the strength it must hold, neither alone
+    /// is enough. PLACEHOLDER. Source: the 22:04 dark left edge read 1.5 to 1.9 beyond against 40
+    /// to 47 before (about 0.04), the 15:32 bright-field one about 0.01.
+    var beyondShareMax = 0.25
     /// A later candidate within this many degrees of a known (or rejected) edge's direction and
     /// within `knownEdgeFields` of its position is the same edge and is ignored. PLACEHOLDER.
     var knownEdgeAngleDegrees = 15.0
@@ -93,6 +101,8 @@ struct LineEdgeMemory: Equatable {
 /// How far a line has got toward being the edge.
 enum LineEdgeState: String, Equatable {
     case none, ahead, attached, confirmed
+    /// A valid line just behind the cross: the helper must come back to it.
+    case behind
 
     /// The word written in the CSV's `line_state` column.
     var csvName: String { rawValue }
@@ -165,13 +175,21 @@ struct LineEdgeTracker {
 
         if let line = reading.edgeLine, line.isCandidate,
             abs(line.angleDegrees) <= thresholds.maxAngleDegrees,
-            line.offsetFields >= -thresholds.atCrossFields,
+            line.offsetFields >= -thresholds.maxBehindFields,
             hasLittleBeyond(line)
         {
             lastSeen = now
             offsetFields = line.offsetFields
             angleDegrees = line.angleDegrees
-            if state == .none { state = .ahead }
+            let isBehind = line.offsetFields < -thresholds.atCrossFields
+            if state == .none || state == .ahead || state == .attached, isBehind {
+                state = .behind
+                event = "edge_behind"
+            } else if state == .behind, !isBehind {
+                state = .ahead
+            } else if state == .none {
+                state = .ahead
+            }
             if !reading.isStill {
                 let attached = line.slideResidualFields.map {
                     abs($0) <= thresholds.attachedResidualFields

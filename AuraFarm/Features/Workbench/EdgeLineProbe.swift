@@ -39,12 +39,20 @@
         private var counter = 0
         private var previous: EdgeLine?
         private var previousPosition: CGPoint?
+        private var previousLive = false
+        /// The frame-to-frame shifts (px) since the last line reading: the chain that proves
+        /// "moves with the slide" while the tracked position is frozen.
+        private var chainShift = CGPoint.zero
+        private var chainFrames = 0
         private var step = EdgeLineProbe.fineStep
 
         func reset() {
             counter = 0
             previous = nil
             previousPosition = nil
+            previousLive = false
+            chainShift = .zero
+            chainFrames = 0
         }
 
         /// The result on a frame it ran on, else nil. `direction` is the heading's frame vector.
@@ -55,6 +63,10 @@
             guard let direction, let box = tracked.registrationRect else {
                 reset()
                 return nil
+            }
+            if let shake = tracked.shake {
+                chainShift = CGPoint(x: chainShift.x + shake.x, y: chainShift.y + shake.y)
+                chainFrames += 1
             }
             guard counter % Self.everyNthFrame == 0 else { return nil }
             let started = ContinuousClock.now
@@ -67,18 +79,33 @@
             }
             guard let grid = EdgeLineGrid.sample(of: buffer, in: box, step: step) else { return nil }
             let length = max(hypot(Double(direction.x), Double(direction.y)), 1e-9)
+            // The tracked position while it is live (now and at the last reading); else the chain
+            // of frame shifts, which still moves when the position is frozen (no detail, paused,
+            // matching, a skip). No shift in the window: neither, and no residual.
+            let live = tracked.tracking.trackingState == .tracking && previousLive
             var change: Double?
-            if let previousPosition {
+            var source = ""
+            if live, let previousPosition {
                 let moved = CGPoint(
                     x: tracked.positionFields.x - previousPosition.x,
                     y: tracked.positionFields.y - previousPosition.y)
                 change = (Double(moved.x * direction.x) + Double(moved.y * direction.y)) / length
+                source = "tracker"
+            } else if chainFrames > 0, tracked.boxSide > 0 {
+                change =
+                    (Double(chainShift.x * direction.x) + Double(chainShift.y * direction.y))
+                    / length / tracked.boxSide
+                source = "chain"
             }
-            let line = EdgeLineDetector.detect(
+            var line = EdgeLineDetector.detect(
                 grid: grid, box: box, normal: direction, previous: previous,
                 trackedChangeFields: change)
+            if line?.slideResidualFields != nil { line?.attachSource = source }
             previous = line
             previousPosition = tracked.positionFields
+            previousLive = tracked.tracking.trackingState == .tracking
+            chainShift = .zero
+            chainFrames = 0
             return line
         }
     }

@@ -34,7 +34,15 @@ final class EdgeLineFixtureTests: XCTestCase {
                 + "residual - before %.1f beyond %.1f candidate %d",
             name, normal, line.strength, line.coverage, line.longestRun, line.angleDegrees,
             line.offsetFields, line.beforeEnergy ?? -1, line.beyondEnergy ?? -1,
-            line.isCandidate ? 1 : 0)
+            twoFactor(line) ? 1 : 0)
+    }
+
+    /// The line rule's candidate: the detector's (strength and coverage or run) AND little
+    /// texture beyond the line (`LineEdgeThresholds.beyondShareMax`).
+    private func twoFactor(_ line: EdgeLine) -> Bool {
+        guard line.isCandidate, let before = line.beforeEnergy, let beyond = line.beyondEnergy
+        else { return false }
+        return beyond <= LineEdgeThresholds().beyondShareMax * before
     }
 
     func testTheCoverSlipEdgeIsACandidateTowardTheEmptySideWithLittleBeyondIt() throws {
@@ -46,7 +54,8 @@ final class EdgeLineFixtureTests: XCTestCase {
             XCTAssertLessThanOrEqual(abs(line.angleDegrees), 15, name)
             let before = try XCTUnwrap(line.beforeEnergy)
             let beyond = try XCTUnwrap(line.beyondEnergy)
-            XCTAssertLessThanOrEqual(beyond, 0.5 * before, name)
+            XCTAssertLessThanOrEqual(
+                beyond, LineEdgeThresholds().beyondShareMax * before, name)
         }
     }
 
@@ -62,7 +71,7 @@ final class EdgeLineFixtureTests: XCTestCase {
         for normal in [towardEmpty, along] {
             let line = try detect("ghost-b", normal: normal)
             print(describe("ghost-b", normal == towardEmpty ? "+y" : "+x", line))
-            XCTAssertFalse(line.isCandidate)
+            XCTAssertFalse(twoFactor(line))
         }
     }
 
@@ -74,5 +83,35 @@ final class EdgeLineFixtureTests: XCTestCase {
             let line = try detect("edge-weak", normal: normal)
             print(describe("edge-weak", normal == towardEmpty ? "+y" : "+x", line))
         }
+    }
+
+    // MARK: Phase 2q part E: the dark-lighting frames the helper marked by hand (16 Nov 22:04)
+
+    /// Prints every fixture on both normals so the next phase can set thresholds from them.
+    func testTableOfEveryFixtureOnBothNormals() throws {
+        let table: [(String, [(String, CGPoint)])] = [
+            ("edge-a", [("+y", towardEmpty), ("+x", along)]),
+            ("edge-b", [("+y", towardEmpty), ("+x", along)]),
+            ("edge-c", [("+y", towardEmpty), ("+x", along)]),
+            ("edge-weak", [("+y", towardEmpty), ("+x", along)]),
+            ("ghost-b", [("+y", towardEmpty), ("+x", along)]),
+            ("edge-dark-051-46", [("+y", CGPoint(x: 0, y: 1)), ("-y", CGPoint(x: 0, y: -1))]),
+            ("edge-dark-194-61", [("+x", CGPoint(x: 1, y: 0)), ("-x", CGPoint(x: -1, y: 0))]),
+        ]
+        for (name, normals) in table {
+            for (label, normal) in normals {
+                print(describe(name, label, try detect(name, normal: normal)))
+            }
+        }
+    }
+
+    /// Frame 194.61 (top-left corner): sample on the right, less detail on the left (-x), which
+    /// reads stronger (7.2 against 6.2). Frame 051.46 (left edge, sample above, less detail below)
+    /// does NOT: +y 2.9 against -y 3.1, reported in the table and not asserted. The dark
+    /// thresholds are for the next phase.
+    func testTheNormalTowardTheLessDetailSideReadsStrongerOnTheCornerFrame() throws {
+        let toward = try detect("edge-dark-194-61", normal: CGPoint(x: -1, y: 0))
+        let away = try detect("edge-dark-194-61", normal: CGPoint(x: 1, y: 0))
+        XCTAssertGreaterThan(toward.strength, away.strength)
     }
 }

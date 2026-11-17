@@ -140,39 +140,65 @@ final class EdgeLineDetectorTests: XCTestCase {
     }
 
     func testALineAtTheSearchLimitIsNotACandidateItIsOutsideTheRangeSearched() throws {
-        // The side edge of a column read -40.5 at the 45 degree limit on 16 Nov 2026: within one
-        // 4.5 degree step of the limit means a line the search could not place.
-        let line = try XCTUnwrap(
+        // Phase 2r: the limit is 60. A side edge at about 90 degrees lands at the search limit
+        // (within one 4.5 degree step of it), which is a line the search could not place.
+        XCTAssertEqual(EdgeLineThresholds().maxAngleDegrees, 60)
+        XCTAssertEqual(LineEdgeThresholds().maxAngleDegrees, 60)
+        let side = try XCTUnwrap(
             EdgeLineDetector.detect(
-                grid: grid(edge: straight(offsetCells: 0, degrees: 40.5)), box: box, normal: normal))
-        XCTAssertEqual(abs(line.angleDegrees), 40.5, accuracy: 4.6)
-        XCTAssertFalse(line.isCandidate, "angle \(line.angleDegrees)")
-        // The same edge at 31.5 degrees is found.
-        let inside = try XCTUnwrap(
-            EdgeLineDetector.detect(
-                grid: grid(edge: straight(offsetCells: 0, degrees: 31.5)), box: box, normal: normal))
-        XCTAssertTrue(inside.isCandidate, "angle \(inside.angleDegrees) strength \(inside.strength)")
+                grid: grid(edge: straight(offsetCells: 0, degrees: 90)), box: box, normal: normal))
+        XCTAssertFalse(side.isCandidate, "angle \(side.angleDegrees)")
     }
 
-    func testAWeakFullWidthLineOfStrengthAboutSevenIsNoLongerACandidate() throws {
-        // The 16 Nov 2026 15:32 run read every false candidate at 6.1 to 7.0 and the real edge at
-        // 26 to 53, so the strength limit is 20.
-        for contrast: Float in [10, 14, 20] {
+    func testALineAtFiftyDegreesIsACandidate() throws {
+        // The 22:56 wavy top edge read -40.5 to -45 and was dropped at the old 45 limit.
+        let line = try XCTUnwrap(
+            EdgeLineDetector.detect(
+                grid: grid(edge: straight(offsetCells: 0, degrees: 50)), box: box, normal: normal))
+        XCTAssertEqual(abs(line.angleDegrees), 50, accuracy: 4.6)
+        XCTAssertTrue(line.isCandidate, "angle \(line.angleDegrees) strength \(line.strength)")
+    }
+
+    /// Reports the cost of the search: 21 angles (45 degrees) against 27 (60 degrees).
+    func testTheWiderSearchCostIsReported() throws {
+        var old = EdgeLineThresholds()
+        old.maxAngleDegrees = 45
+        let picture = grid(edge: straight(offsetCells: 0, degrees: 20))
+        func milliseconds(_ thresholds: EdgeLineThresholds) -> Double {
+            let start = ContinuousClock.now
+            for _ in 0..<20 {
+                _ = EdgeLineDetector.detect(
+                    grid: picture, box: box, normal: normal, thresholds: thresholds)
+            }
+            let taken = ContinuousClock.now - start
+            let total = Double(taken.components.seconds) * 1000
+            return (total + Double(taken.components.attoseconds) / 1e15) / 20
+        }
+        print(
+            String(
+                format: "DETECTORMS 45 degrees %.2f ms, 60 degrees %.2f ms", milliseconds(old),
+                milliseconds(EdgeLineThresholds())))
+    }
+
+    func testAFullWidthLineIsACandidateOnlyFromTheStrengthLimitUp() throws {
+        // Phase 2q: the limit is 8 (real edges 8.8 to 12.1 dark, 26 to 53 bright field; others
+        // at most 4.4 dark and 7.03 bright field). The old 20 would still reject the same lines.
+        let limit = EdgeLineThresholds().candidateStrength
+        XCTAssertEqual(limit, 8)
+        for contrast: Float in [10, 12, 14, 20] {
             let line = try XCTUnwrap(
                 EdgeLineDetector.detect(
                     grid: grid(contrast: contrast, edge: straight()), box: box, normal: normal))
-            print("WEAK contrast \(contrast): strength \(line.strength) coverage \(line.coverage)")
-            if line.strength < 20 {
-                XCTAssertFalse(line.isCandidate, "strength \(line.strength)")
-            }
+            XCTAssertGreaterThanOrEqual(line.coverage, 0.75)
+            XCTAssertEqual(line.isCandidate, line.strength >= limit, "strength \(line.strength)")
+            var old = EdgeLineThresholds()
+            old.candidateStrength = 20
+            let before = try XCTUnwrap(
+                EdgeLineDetector.detect(
+                    grid: grid(contrast: contrast, edge: straight()), box: box, normal: normal,
+                    thresholds: old))
+            XCTAssertEqual(before.isCandidate, before.strength >= 20)
         }
-        let weak = try XCTUnwrap(
-            EdgeLineDetector.detect(
-                grid: grid(contrast: 12, edge: straight()), box: box, normal: normal))
-        XCTAssertLessThan(weak.strength, 20)
-        XCTAssertGreaterThanOrEqual(weak.coverage, 0.75)
-        XCTAssertGreaterThanOrEqual(weak.strength, 6, "the old limit would have taken it")
-        XCTAssertFalse(weak.isCandidate)
     }
 
     func testTheTextureBeyondALineIsMeasuredSoAnEmptySideCanBeTold() throws {

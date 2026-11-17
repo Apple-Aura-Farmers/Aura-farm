@@ -53,7 +53,8 @@ final class LineRuleTests: XCTestCase {
         XCTAssertEqual(route.last.stateName, "column 1 up")
         XCTAssertNil(route.guide.edgeHeading, "the inset trip: the view is not on the column yet")
         route.feed(move: right, times: 6)
-        XCTAssertNil(route.guide.edgeHeading, "holding on the first spot")
+        XCTAssertEqual(
+            route.guide.edgeHeading, CGPoint(x: 0, y: -1), "holding on the first spot: the leg")
         route.feed(ScriptedRoute.Frame(still: true), times: 14)
         XCTAssertEqual(route.guide.edgeHeading, CGPoint(x: 0, y: -1), "along the up leg")
     }
@@ -148,8 +149,9 @@ final class LineRuleTests: XCTestCase {
 
     func testALineWithMuchBeyondItIsRejectedAndOneWithLittleIsAccepted() {
         XCTAssertEqual(attachedTracker(before: 500, beyond: 300).state, .none, "300 against 500")
+        XCTAssertEqual(attachedTracker(before: 500, beyond: 150).state, .none, "0.3 of before")
         XCTAssertEqual(attachedTracker(before: 500, beyond: 20).state, .attached, "20 against 500")
-        XCTAssertEqual(attachedTracker(before: 500, beyond: 250).state, .attached, "exactly half")
+        XCTAssertEqual(attachedTracker(before: 500, beyond: 125).state, .attached, "exactly 0.25")
     }
 
     func testConfirmationNeedsTwoSecondsStillInARowAndNotOneNineSeconds() {
@@ -239,10 +241,10 @@ final class LineRuleTests: XCTestCase {
         route.feed(move: right, times: 6)
         route.feed(ScriptedRoute.Frame(still: true), times: 14)
         XCTAssertEqual(route.last.stateName, "column 1 up")
-        // Drifted 0.5 field sideways: the guide says to turn back toward the cross, and the view is
-        // off the column, where no line is looked for.
+        // Drifted 0.5 field sideways: the guide says to turn back toward the cross; the line is
+        // still looked for along the leg.
         route.feed(move: CGPoint(x: 0.1, y: 0), times: 5)
-        XCTAssertNil(route.guide.edgeHeading)
+        XCTAssertEqual(route.guide.edgeHeading, CGPoint(x: 0, y: -1))
         XCTAssertTrue(route.last.edge.canMarkEdge, "the button is still there")
         let before = route.guide.edgesReached
         let step = route.answer(.mark)
@@ -264,5 +266,63 @@ final class LineRuleTests: XCTestCase {
         legacy.feed(move: left, times: 10)
         legacy.answer(.mark)
         XCTAssertEqual(legacy.guide.edgesReached, 0)
+    }
+
+    // MARK: Phase 2q parts B and D
+
+    /// Column 1 is under way and the view has gone past the first spot: the guide says too far.
+    private func columnOnePastTheTarget() -> ScriptedRoute {
+        let route = ScriptedRoute(fullCoverSlip: true, asksEdges: true)
+        leftEdge(route)
+        route.feed(move: right, times: 6)
+        route.feed(ScriptedRoute.Frame(still: true), times: 14)
+        route.feed(move: up, times: 12)
+        return route
+    }
+
+    func testTheLineIsLookedForWhileTheGuideSaysTooFarAndCanReachTheConfirmStage() {
+        let route = columnOnePastTheTarget()
+        XCTAssertNotNil(route.guide.edgeHeading, "whatever the instruction")
+        let before = route.guide.edgesReached
+        approach(route, from: 1.0, to: 0.1, move: up, residual: 0.05)
+        rest(route, 0.1, readings: 24)
+        XCTAssertEqual(route.last.edge.lineState, "attached")
+        XCTAssertTrue(route.last.edge.lineAtCross, "the stage where the helper is asked")
+        XCTAssertEqual(route.guide.edgesReached, before, "asked, not confirmed alone")
+    }
+
+    func testALineWhileTheTrackerHasNothingToFollowIsAttachedFromTheChain() {
+        // The tracker is paused (no detail): the residual comes from the frame shifts.
+        let route = columnOnePastTheTarget()
+        var offset = 1.0
+        while offset >= 0.1 - 1e-9 {
+            var frame = ScriptedRoute.Frame(tracking: .paused, line: line(offset, residual: 0.05))
+            frame.line?.attachSource = "chain"
+            route.feed(frame, move: up)
+            offset -= 0.1
+        }
+        route.feed(
+            ScriptedRoute.Frame(tracking: .paused, still: true, line: line(0.1, residual: nil)),
+            times: 24)
+        XCTAssertEqual(route.last.edge.lineState, "attached")
+        XCTAssertTrue(route.last.edge.lineAtCross)
+    }
+
+    func testALineFixedOnScreenWhileTheFrameShiftsShowMovementIsNeverAttached() {
+        let route = columnOnePastTheTarget()
+        for _ in 0..<12 {
+            var frame = ScriptedRoute.Frame(tracking: .paused, line: line(0.1, residual: 0.1 + 0.3))
+            frame.line?.attachSource = "chain"
+            route.feed(frame, move: up)
+        }
+        route.feed(
+            ScriptedRoute.Frame(tracking: .paused, still: true, line: line(0.1, residual: nil)),
+            times: 24)
+        XCTAssertNotEqual(route.last.edge.lineState, "attached")
+        XCTAssertNotEqual(route.last.edge.lineState, "confirmed")
+    }
+
+    func testTheCsvEndsWithTheLineAttachSource() {
+        XCTAssertEqual(MovementLog.header.last, "line_attach_source")
     }
 }
