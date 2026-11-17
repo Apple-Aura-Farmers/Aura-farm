@@ -164,26 +164,14 @@ struct LandOutlineEditorView: View {
                 .accessibilityLabel("Close")
             }
             ToolbarItem(placement: .topBarTrailing) {
-                // Grey until there is an area to name, then the blue of a real way on.
-                //
-                // Drawn here rather than left to `.borderedProminent`: the bar has no
-                // background of its own over the map, so the system reads no appearance off
-                // it and gave the label the same dark in light mode and in dark. White on
-                // the accent is what a filled button carries in either one.
-                Button {
+                // Plain until there is an area to name, then the accent of a real way on. The
+                // system draws the one capsule: a background of its own under the bar's own
+                // left two stacked on top of each other.
+                Button(confirmTitle) {
                     onConfirm(corners)
                     dismiss()
-                } label: {
-                    Text(confirmTitle)
-                        .font(.body.weight(.medium))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 7)
-                        .background(
-                            canConfirm ? Color.accentColor : Color.secondary.opacity(0.5),
-                            in: .capsule)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.borderedProminent)
                 .disabled(!canConfirm)
             }
         }
