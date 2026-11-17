@@ -59,7 +59,7 @@
                             let mapper = FramePreviewConverter(
                                 layer: previewLayer, frameSize: model.fieldInfo.frameSize,
                                 display: display)
-                            DetectionBoxes(info: model.countInfo) { mapper?.viewPolygon(of: $0) ?? [] }
+                            DetectionBoxes(info: model.liveBoxes) { mapper?.viewPolygon(of: $0) ?? [] }
                         }
                         LiveGuideOverlay(state: model.overlayState)
                         LiveEdgeFeedback(model: model, state: model.overlayState)
@@ -85,6 +85,7 @@
                             // The picture stays clear while the guide is drawing on it.
                             if !model.guideDryRun { LiveStatusBanner(model: model) }
                             Spacer()
+                            ThermalBadge(state: model.thermalState)
                             LiveRecBadge(model: model)
                         }
                         Spacer()
@@ -167,14 +168,14 @@
 
     struct LiveStatusBanner: View {
         var model: SlideMovementLabModel
-        var body: some View { StatusBanner(status: model.statusInfo.status) }
+        var body: some View { StatusBanner(status: model.speedState.status) }
     }
 
     struct LiveSpeedMeter: View {
         var model: SlideMovementLabModel
         var body: some View {
             SpeedMeter(
-                speedFraction: model.statusInfo.speedFraction,
+                speedFraction: model.speedState.speedFraction,
                 touchMarker: model.guideDryRun && model.spotMode == .briefTouch
                     ? BriefTouchThresholds().maxTouchSpeedFraction : nil)
         }
@@ -186,6 +187,32 @@
         var mirrored: Bool
         var body: some View {
             SlideMovementTrail(info: model.trailInfo, mapping: mapping, mirrored: mirrored)
+        }
+    }
+
+    /// The phone's thermal state, a small badge: nothing depends on it yet (no heat guard).
+    struct ThermalBadge: View {
+        var state: String
+
+        private var colour: Color {
+            switch state {
+            case "fair": .yellow
+            case "serious": .orange
+            case "critical": .red
+            default: .green
+            }
+        }
+
+        var body: some View {
+            HStack(spacing: 4) {
+                Image(systemName: "thermometer.medium")
+                Text(state)
+            }
+            .font(.caption2.bold())
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(.black.opacity(0.6), in: Capsule())
+            .foregroundStyle(colour)
         }
     }
 
@@ -728,5 +755,13 @@
     #Preview("Too fast") { PreviewStrip(status: .tooFast, speed: 0.22, mapping: .rotateRight) }
     #Preview("Lost") {
         PreviewStrip(status: .lost, speed: 0.02, mapping: .asIs, mirrored: true)
+    }
+
+    #Preview("Thermal badge: each state") {
+        VStack(alignment: .trailing, spacing: 8) {
+            ForEach(["nominal", "fair", "serious", "critical"], id: \.self) { ThermalBadge(state: $0) }
+        }
+        .padding()
+        .background(.gray)
     }
 #endif

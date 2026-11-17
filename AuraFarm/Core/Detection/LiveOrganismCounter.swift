@@ -170,6 +170,13 @@ struct LiveCountThresholds {
     /// box sharpness at speed_fraction 0.10 to 0.15 was about 66% of still. Calibrate from the
     /// `det_ran` and `det_found` CSV columns against `speed_fraction`.
     var countMaxSpeedFraction = 0.15
+    /// A view that has not moved for this long, and was looked at less than `refreshSeconds` ago,
+    /// is not sent to the detector again. PLACEHOLDER; source: the guide's own stillness (edge
+    /// holds are 2 s of it) and `MovementIndicators.stillSeconds`.
+    var stillSecondsBeforeSkip = 0.3
+    /// A still view is looked at again this often, so anything swimming into it is found.
+    /// PLACEHOLDER.
+    var refreshSeconds = 1.0
 }
 
 extension LiveOrganismCounter {
@@ -177,7 +184,8 @@ extension LiveOrganismCounter {
     /// reasons are checked in this order.
     static func skipReason(
         tracking: TrackingState, isGhostOrSparseSkip: Bool, monitorPaused: Bool,
-        viewClass: ViewClass, speedFraction: Double,
+        viewClass: ViewClass, speedFraction: Double, stillSeconds: Double = 0,
+        secondsSinceLastDetection: Double? = nil,
         thresholds: LiveCountThresholds = LiveCountThresholds()
     ) -> String? {
         if tracking != .tracking { return "not_tracking" }
@@ -185,6 +193,11 @@ extension LiveOrganismCounter {
         if monitorPaused { return "paused" }
         if viewClass != .sample && viewClass != .thin { return "no_sample" }
         if speedFraction > thresholds.countMaxSpeedFraction { return "too_fast" }
+        if stillSeconds >= thresholds.stillSecondsBeforeSkip - 1e-9,
+            let since = secondsSinceLastDetection, since < thresholds.refreshSeconds - 1e-9
+        {
+            return "unchanged"
+        }
         return nil
     }
 }

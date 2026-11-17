@@ -323,7 +323,7 @@ final class LineRuleTests: XCTestCase {
     }
 
     func testTheLineAttachSourceIsFollowedOnlyByTheSpotAndCountingColumns() {
-        // 17 columns (spot check, coverage, counting, event detail) are appended after it.
-        XCTAssertEqual(MovementLog.header[MovementLog.header.count - 18], "line_attach_source")
+        // 27 columns (spot check, coverage, counting, event detail, model, units, camera, phone) follow it.
+        XCTAssertEqual(MovementLog.header[MovementLog.header.count - 28], "line_attach_source")
     }
 }

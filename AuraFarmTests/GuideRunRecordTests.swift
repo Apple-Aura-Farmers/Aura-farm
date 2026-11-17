@@ -47,4 +47,31 @@ final class GuideRunRecordTests: XCTestCase {
         XCTAssertNotNil(span)
         XCTAssertEqual(span ?? 0, 2.8, accuracy: 0.6)
     }
+
+    func testARecordFromBeforeTheDetectorModelWasSavedStillDecodes() throws {
+        let old = """
+            {"started":"2026-11-16T15:47:00Z","ended":"2026-11-16T15:52:00Z","finishReason":"rightEdge",
+            "spotMode":"brief_touch","coverageStep":0.8,"columns":3,"spotsTicked":20,"missedSpots":1,
+            "elapsedSeconds":300,"countsByLabel":{"Volvox":7},"tallyCountsByLabel":{"Volvox":9},
+            "totalCount":7,"minimumConfidence":0.3,"cropToEyepiece":false,"classNames":["Volvox"],
+            "framesCounted":100,"framesSkippedByReason":{"too_fast":12}}
+            """
+        let record = try GuideRunRecord.decoder().decode(GuideRunRecord.self, from: Data(old.utf8))
+        XCTAssertEqual(record.detectorModel, "v1")
+        XCTAssertEqual(record.discDrops, 0)
+        XCTAssertEqual(record.bigDrops, 0)
+        XCTAssertEqual(record.detectorUnits, "gpu", "earlier records ran on the graphics chip")
+        XCTAssertNil(record.secondsPerSpot)
+        XCTAssertEqual(record.totalCount, 7)
+    }
+
+    func testTheModelAndDropsRoundTrip() throws {
+        var original = record()
+        original.detectorModel = "v2"
+        original.discDrops = 4
+        original.bigDrops = 2
+        original.detectorUnits = "ne"
+        let data = try GuideRunRecord.encoder().encode(original)
+        XCTAssertEqual(try GuideRunRecord.decoder().decode(GuideRunRecord.self, from: data), original)
+    }
 }

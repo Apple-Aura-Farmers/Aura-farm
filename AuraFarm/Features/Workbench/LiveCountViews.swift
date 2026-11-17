@@ -59,9 +59,11 @@
                     path.closeSubpath()
                     let colour = Self.colour(box.status)
                     context.stroke(path, with: .color(colour), lineWidth: 2)
-                    let caption = Text("\(box.id) \(box.label) \(Int(box.confidence * 100))%")
-                        .font(.caption2.bold())
-                        .foregroundStyle(colour)
+                    let caption = Text(
+                        "\(box.id) \(OrganismDisplayName.label(box.label)) \(Int(box.confidence * 100))%"
+                    )
+                    .font(.caption2.bold())
+                    .foregroundStyle(colour)
                     context.draw(caption, at: CGPoint(x: first.x, y: first.y - 8), anchor: .bottomLeading)
                 }
             }
@@ -88,7 +90,7 @@
                     }
                     ForEach(info.labels) { row in
                         GridRow {
-                            Text(row.label)
+                            Text(row.display)
                             Text("\(row.map)")
                             Text("\(row.tally)")
                         }
@@ -99,6 +101,11 @@
                         Text("\(info.tallyTotal)").bold()
                     }
                 }
+                Text(
+                    "Model \(DetectorModel(rawValue: info.detectorModel)?.displayName ?? info.detectorModel)"
+                        + (info.loadMilliseconds.map { " · opened in \(Int($0)) ms" } ?? "")
+                        + (info.isLoadingModel ? " · opening…" : ""))
+                Text("Dropped: disc \(info.discDrops) · too big \(info.bigDrops)")
                 Text("Frames counted \(info.framesCounted) · skipped \(skipped)")
                 if info.runsEverySecondFrame {
                     Text("Analysis was slow: detecting every second frame.").foregroundStyle(.orange)
@@ -146,8 +153,11 @@
                 Text(LiveCountInfo.organisms(record.totalCount)).font(.title3)
                 let perType = record.countsByLabel.sorted { $0.value > $1.value }
                 if !perType.isEmpty {
-                    Text(perType.map { "\($0.key) \($0.value)" }.joined(separator: " · "))
-                        .font(.subheadline)
+                    Text(
+                        perType.map { "\(OrganismDisplayName.label($0.key)) \($0.value)" }.joined(
+                            separator: " · ")
+                    )
+                    .font(.subheadline)
                 }
                 Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 4) {
                     row("Columns", "\(record.columns)")
@@ -202,6 +212,23 @@
         VStack(spacing: 12) {
             ForEach([380.0, 250.0, 150.0], id: \.self) { width in
                 HelperCountChip(info: previewInfo()).frame(width: width)
+            }
+        }
+        .padding()
+        .background(.gray)
+    }
+
+    #Preview("Count chip with a long type name: wide, medium, narrow") {
+        let info = LiveCountInfo(
+            isActive: true, total: 9,
+            labels: [
+                .init(label: "Didinium_Phacus_Collodictyon", map: 4, tally: 4),
+                .init(label: "Paramecium_Coleps", map: 3, tally: 3),
+                .init(label: "Stentor", map: 2, tally: 2),
+            ])
+        VStack(spacing: 12) {
+            ForEach([390.0, 300.0, 150.0], id: \.self) { width in
+                HelperCountChip(info: info).frame(width: width)
             }
         }
         .padding()
@@ -273,5 +300,27 @@
 
     #Preview("Summary: reached the right edge") {
         RunSummaryCard(record: previewRecord(.rightEdge, share: 0.92), shareItems: [])
+    }
+
+    #Preview("Model chip and Camera pickers") {
+        Form {
+            Picker("Model chip", selection: .constant(DetectorUnits.neuralEngine.rawValue)) {
+                ForEach(DetectorUnits.allCases) { Text($0.displayName).tag($0.rawValue) }
+            }
+            .pickerStyle(.segmented)
+            Picker("Camera", selection: .constant(CameraRate.fps20.rawValue)) {
+                ForEach(CameraRate.allCases) { Text($0.displayName).tag($0.rawValue) }
+            }
+            .pickerStyle(.segmented)
+            Text("20 fps, exposure capped at 1/30 s.").font(.caption).foregroundStyle(.secondary)
+            Picker("Camera", selection: .constant(CameraRate.fps20.rawValue)) {
+                ForEach(CameraRate.allCases) { Text($0.displayName).tag($0.rawValue) }
+            }
+            .pickerStyle(.segmented)
+            .disabled(true)
+            Text("The model, chip and camera can change before Mark start or after a finish.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
     }
 #endif

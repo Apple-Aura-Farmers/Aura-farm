@@ -1,5 +1,6 @@
 #if DEBUG
     import CoreGraphics
+    import Observation
 
     /// What the lab publishes to its screen, in separate pieces so each small view reads only
     /// what it shows and a change to the text readouts does not redraw the trail.
@@ -99,6 +100,36 @@
             /// A column is being swept: "End after this column" is offered.
             var columnInProgress = false
             var spotMode = SpotConfirmMode.briefTouch
+        }
+
+        /// The speed bar and the status banner, which the helper steers by: full rate.
+        @Observable
+        final class SpeedState {
+            var speedFraction = 0.0
+            var status = MovementIndicators.Status.starting
+        }
+
+        /// What the haptics watch. Published at full rate, only when one of them changes, so a tap
+        /// is never held back by the throttled panels.
+        struct Haptics: Equatable {
+            var hops = 0
+            var lost = 0
+            var captures = 0
+            var edges = 0
+            var wrongWays = 0
+            var edgesReached = 0
+            var stageLimits = 0
+            var organisms = 0
+            var monitor = RunMonitorState.ok
+            var stopReached = false
+        }
+
+        /// What End run depends on, at full rate: the run is ending after this column, a column is
+        /// being swept, the run is finished.
+        struct RunControl: Equatable {
+            var pendingEnd = false
+            var columnInProgress = false
+            var isFinished = false
         }
 
         /// For the cards and outlines drawn on the camera preview, in frame pixels.

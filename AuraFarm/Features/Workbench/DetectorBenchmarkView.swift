@@ -5,6 +5,7 @@ import SwiftUI
 /// Numbers from the simulator say nothing about a phone — the simulator has no Neural Engine
 /// and runs the model on the Mac. Run this on the phone itself.
 struct DetectorBenchmarkView: View {
+    @State private var model = DetectorModel.v1
     @State private var hardware = DetectorBenchmark.Hardware.all
     @State private var runs = 30
     @State private var outcome: DetectorBenchmark.Outcome?
@@ -13,6 +14,13 @@ struct DetectorBenchmarkView: View {
 
     var body: some View {
         Form {
+            Section("Model") {
+                Picker("Model", selection: $model) {
+                    ForEach(DetectorModel.allCases) { Text($0.displayName).tag($0) }
+                }
+                .pickerStyle(.segmented)
+            }
+
             Section("Hardware") {
                 Picker("Run on", selection: $hardware) {
                     ForEach(DetectorBenchmark.Hardware.allCases) { Text($0.rawValue).tag($0) }
@@ -78,12 +86,13 @@ struct DetectorBenchmarkView: View {
         isRunning = true
         problem = nil
         outcome = nil
+        let model = model
         let hardware = hardware
         let runs = runs
         Task {
             do {
                 outcome = try await Task.detached(priority: .userInitiated) {
-                    try DetectorBenchmark.run(hardware: hardware, runs: runs)
+                    try DetectorBenchmark.run(model: model, hardware: hardware, runs: runs)
                 }.value
             } catch {
                 problem = error.localizedDescription

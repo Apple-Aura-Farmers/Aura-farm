@@ -91,6 +91,8 @@ struct OrganismDetector {
     /// Which model this is, its class names (slot 0 the background or no-object) and its name.
     let kind: DetectorModel
     let classNames: [String]
+    /// The hardware it was opened for.
+    let computeUnits: MLComputeUnits
     var modelName: String { kind.resourceName }
 
     private let network: MLModel
@@ -109,6 +111,7 @@ struct OrganismDetector {
         guard let name = network.modelDescription.inputDescriptionsByName.keys.first
         else { throw Failure.notInTheBundle }
         self.kind = kind
+        self.computeUnits = computeUnits
         self.network = network
         inputName = name
         classNames = Self.names(for: kind, in: network)

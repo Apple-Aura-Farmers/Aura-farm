@@ -5,11 +5,11 @@
     /// label on every detection, the model and the confidence to try. No setup.
     struct ModelTestLabView: View {
         @State private var model = ModelTestLabModel()
-        @AppStorage("modelTest.detectorModel") private var modelName = DetectorModel.v2.rawValue
+        /// V2 with the crop on EVERY time the lab opens (V1 can still be picked for that visit):
+        /// V2 calls the bright eyepiece disc an organism without a crop. Not remembered.
+        @State private var detectorModel = ModelTestLabDefaults.model
+        @State private var cropsToCentre = ModelTestLabDefaults.cropsToCentre
         @AppStorage("modelTest.confidence") private var confidence = 0.3
-        @AppStorage("modelTest.cropCentre") private var cropsToCentre = false
-
-        private var detectorModel: DetectorModel { DetectorModel(rawValue: modelName) ?? .v2 }
 
         var body: some View {
             ScrollView {
@@ -39,7 +39,7 @@
                 model.start()
             }
             .onDisappear { model.stop() }
-            .onChange(of: modelName) { model.setModel(detectorModel) }
+            .onChange(of: detectorModel) { _, picked in model.setModel(picked) }
             .onChange(of: confidence) { _, value in model.setMinimumConfidence(Float(value)) }
             .onChange(of: cropsToCentre) { _, crops in model.setCropsToCentre(crops) }
         }
@@ -64,8 +64,8 @@
 
         private var controls: some View {
             VStack(alignment: .leading, spacing: 8) {
-                Picker("Model", selection: $modelName) {
-                    ForEach(DetectorModel.allCases) { Text($0.displayName).tag($0.rawValue) }
+                Picker("Model", selection: $detectorModel) {
+                    ForEach(DetectorModel.allCases) { Text($0.displayName).tag($0) }
                 }
                 .pickerStyle(.segmented)
                 .disabled(model.isLoading)
@@ -83,7 +83,13 @@
         }
     }
 
-    #Preview {
+    /// What the lab opens on, every time.
+    enum ModelTestLabDefaults {
+        static let model = DetectorModel.v2
+        static let cropsToCentre = true
+    }
+
+    #Preview("Opens on V2 with the crop on") {
         NavigationStack { ModelTestLabView() }
     }
 #endif

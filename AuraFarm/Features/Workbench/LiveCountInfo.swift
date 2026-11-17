@@ -12,6 +12,8 @@
             var map: Int
             var tally: Int
             var id: String { label }
+            /// What is shown on screen; `label` stays the data.
+            var display: String { OrganismDisplayName.label(label) }
         }
 
         struct Box: Equatable, Identifiable {
@@ -40,12 +42,20 @@
         var problem: String?
         /// Every other eligible frame goes to the detector, because the analysis was too slow.
         var runsEverySecondFrame = false
+        /// The model counting ("v1" or "v2"), the boxes the guards dropped, how long the model took
+        /// to open, and whether it is still opening.
+        var detectorModel = DetectorModel.v2.rawValue
+        var detectorUnits = DetectorUnits.neuralEngine.rawValue
+        var discDrops = 0
+        var bigDrops = 0
+        var loadMilliseconds: Double?
+        var isLoadingModel = false
 
         /// "Nematode 5 · Volvox 7 · Euglenoid 2", most first.
         static func line(_ labels: [LabelCount], limit: Int? = nil) -> String {
             let shown = labels.filter { $0.map > 0 }
             let top = limit.map { Array(shown.prefix($0)) } ?? shown
-            var text = top.map { "\($0.label) \($0.map)" }.joined(separator: " · ")
+            var text = top.map { "\($0.display) \($0.map)" }.joined(separator: " · ")
             if shown.count > top.count { text += " · +\(shown.count - top.count) more" }
             return text
         }

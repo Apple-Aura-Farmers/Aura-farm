@@ -36,7 +36,11 @@
         @AppStorage("slideLab.coverageStep") private var coverageStep = 0.8
         @AppStorage("slideLab.countOrganisms") private var countsOrganisms = true
         @AppStorage("slideLab.showDetections") private var showsDetections = false
-        @AppStorage("slideLab.cropEyepiece") private var cropsToEyepiece = false
+        @AppStorage("slideLab.cropEyepiece") private var cropsToEyepiece = true
+        @AppStorage("slideLab.detectorModel") private var detectorModelName = DetectorModel.v2.rawValue
+        @AppStorage("slideLab.detectorUnits") private var detectorUnitsName = DetectorUnits.neuralEngine
+            .rawValue
+        @AppStorage("slideLab.cameraRate") private var cameraRateName = CameraRate.fps20.rawValue
         @AppStorage("slideLab.confidence") private var confidence = 0.3
         @State private var noteText = ""
 
@@ -77,6 +81,9 @@
                 model.setShowsDetections(showsDetections)
                 model.setCropsToEyepiece(cropsToEyepiece)
                 model.setMinimumConfidence(Float(confidence))
+                model.setDetectorModel(DetectorModel(rawValue: detectorModelName) ?? .v2)
+                model.setDetectorUnits(DetectorUnits(rawValue: detectorUnitsName) ?? .neuralEngine)
+                model.setCameraRate(CameraRate(rawValue: cameraRateName) ?? .fps20)
                 model.setGuideDryRun(guideDryRun)
                 model.setScreenMapping(mapping, mirrored: mirrored)
                 if mode == .live { model.start() }
@@ -96,7 +103,9 @@
                 CountingSettingsSync(
                     model: model, spotModeName: spotModeName, coverageStep: coverageStep,
                     countsOrganisms: countsOrganisms, showsDetections: showsDetections,
-                    cropsToEyepiece: cropsToEyepiece, confidence: confidence)
+                    cropsToEyepiece: cropsToEyepiece, confidence: confidence,
+                    detectorModelName: detectorModelName, detectorUnitsName: detectorUnitsName,
+                    cameraRateName: cameraRateName)
             )
             .onChange(of: mappingName) { model.setScreenMapping(mapping, mirrored: mirrored) }
             .onChange(of: mirrored) { model.setScreenMapping(mapping, mirrored: mirrored) }
@@ -405,6 +414,29 @@
                     Text("Every 3rd").tag(2.4)
                 }
                 .pickerStyle(.segmented)
+                Picker("Model", selection: $detectorModelName) {
+                    ForEach(DetectorModel.allCases) { Text($0.displayName).tag($0.rawValue) }
+                }
+                .pickerStyle(.segmented)
+                .disabled(model.modelLocked)
+                Picker("Model chip", selection: $detectorUnitsName) {
+                    ForEach(DetectorUnits.allCases) { Text($0.displayName).tag($0.rawValue) }
+                }
+                .pickerStyle(.segmented)
+                .disabled(model.modelLocked)
+                Picker("Camera", selection: $cameraRateName) {
+                    ForEach(CameraRate.allCases) { Text($0.displayName).tag($0.rawValue) }
+                }
+                .pickerStyle(.segmented)
+                .disabled(model.modelLocked)
+                if !model.cameraNote.isEmpty {
+                    Text(model.cameraNote).font(.caption).foregroundStyle(.secondary)
+                }
+                if model.modelLocked {
+                    Text("The model, chip and camera can change before Mark start or after a finish.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 Toggle("Count organisms", isOn: $countsOrganisms)
                 Toggle("Show detections", isOn: $showsDetections)
                 Toggle("Crop to eyepiece circle", isOn: $cropsToEyepiece)
@@ -564,17 +596,41 @@
         var showsDetections: Bool
         var cropsToEyepiece: Bool
         var confidence: Double
+        var detectorModelName: String
+        var detectorUnitsName: String
+        var cameraRateName: String
 
         func body(content: Content) -> some View {
+            third(second(first(content)))
+        }
+
+        private func first(_ content: Content) -> some View {
             content
                 .onChange(of: spotModeName) { _, name in
                     model.setSpotMode(name == "holdStill" ? .holdStill : .briefTouch)
                 }
                 .onChange(of: coverageStep) { _, step in model.setCoverageStep(step) }
                 .onChange(of: countsOrganisms) { _, counts in model.setCountsOrganisms(counts) }
+        }
+
+        private func second<V: View>(_ view: V) -> some View {
+            view
                 .onChange(of: showsDetections) { _, shown in model.setShowsDetections(shown) }
                 .onChange(of: cropsToEyepiece) { _, crops in model.setCropsToEyepiece(crops) }
                 .onChange(of: confidence) { _, value in model.setMinimumConfidence(Float(value)) }
+                .onChange(of: detectorModelName) { _, name in
+                    model.setDetectorModel(DetectorModel(rawValue: name) ?? .v2)
+                }
+        }
+
+        private func third<V: View>(_ view: V) -> some View {
+            view
+                .onChange(of: detectorUnitsName) { _, name in
+                    model.setDetectorUnits(DetectorUnits(rawValue: name) ?? .neuralEngine)
+                }
+                .onChange(of: cameraRateName) { _, name in
+                    model.setCameraRate(CameraRate(rawValue: name) ?? .fps20)
+                }
         }
     }
 #endif

@@ -24,6 +24,8 @@ struct MovementIndicators {
     private(set) var stillSeconds = 0.0
     /// Where Mark start was pressed, in fields.
     private(set) var startPosition: CGPoint?
+    /// Seconds since the previous update, as it was; nil on the first.
+    private(set) var frameGap: Double?
 
     private var speeds: [Double] = []
     private var hasShake = false
@@ -63,7 +65,17 @@ struct MovementIndicators {
         latestPosition = positionFields
 
         if shake != nil { hasShake = true }
-        let speed = shake.map { hypot(Double($0.x), Double($0.y)) / max(referenceSide, 1) } ?? 0
+        // Shift per `referenceIntervalSeconds`, whatever the gap: the first reading, and any gap
+        // within a rounding error of the reference, scale by 1.
+        frameGap = lastSeconds.map { seconds - $0 }
+        let reference = max(thresholds.referenceIntervalSeconds, 1e-6)
+        var scale = 1.0
+        if let frameGap {
+            let gap = min(max(frameGap, thresholds.minIntervalSeconds), thresholds.maxIntervalSeconds)
+            if abs(gap - reference) > 1e-6 { scale = reference / gap }
+        }
+        let speed =
+            shake.map { hypot(Double($0.x), Double($0.y)) / max(referenceSide, 1) * scale } ?? 0
         speeds.append(speed)
         if speeds.count > max(thresholds.speedWindow, 1) {
             speeds.removeFirst(speeds.count - max(thresholds.speedWindow, 1))

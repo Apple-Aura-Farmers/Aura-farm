@@ -27,6 +27,14 @@ struct GuideRunRecord: Codable, Equatable {
     var classNames: [String]
     var framesCounted: Int
     var framesSkippedByReason: [String: Int]
+    /// The model the counts came from ("v1" or "v2"; `DetectorModel.rawValue`) and the boxes the
+    /// guards dropped as the eyepiece disc and as too big. Earlier records have none: V1, 0, 0.
+    var detectorModel = DetectorModel.v1.rawValue
+    var discDrops = 0
+    var bigDrops = 0
+    /// The hardware the model ran on (`DetectorUnits.rawValue`: "ne" or "gpu"). Earlier records ran
+    /// on the graphics chip.
+    var detectorUnits = DetectorUnits.graphics.rawValue
 
     /// The share of the edge span the columns reach; nil unless the span is known and positive.
     static func coverageShare(columns: Int, step: Double, edgeSpanFields: Double?) -> Double? {
@@ -62,5 +70,38 @@ struct GuideRunRecord: Codable, Equatable {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         return decoder
+    }
+}
+
+extension GuideRunRecord {
+    /// Records saved before the detector model and the guard drops were added still decode.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            started: try c.decode(Date.self, forKey: .started),
+            ended: try c.decode(Date.self, forKey: .ended),
+            finishReason: try c.decode(SweepFinishReason.self, forKey: .finishReason),
+            spotMode: try c.decode(String.self, forKey: .spotMode),
+            coverageStep: try c.decode(Double.self, forKey: .coverageStep),
+            columns: try c.decode(Int.self, forKey: .columns),
+            spotsTicked: try c.decode(Int.self, forKey: .spotsTicked),
+            missedSpots: try c.decode(Int.self, forKey: .missedSpots),
+            elapsedSeconds: try c.decode(Double.self, forKey: .elapsedSeconds),
+            secondsPerSpot: try c.decodeIfPresent(Double.self, forKey: .secondsPerSpot),
+            coverageShare: try c.decodeIfPresent(Double.self, forKey: .coverageShare),
+            countsByLabel: try c.decode([String: Int].self, forKey: .countsByLabel),
+            tallyCountsByLabel: try c.decode([String: Int].self, forKey: .tallyCountsByLabel),
+            totalCount: try c.decode(Int.self, forKey: .totalCount),
+            minimumConfidence: try c.decode(Double.self, forKey: .minimumConfidence),
+            cropToEyepiece: try c.decode(Bool.self, forKey: .cropToEyepiece),
+            classNames: try c.decode([String].self, forKey: .classNames),
+            framesCounted: try c.decode(Int.self, forKey: .framesCounted),
+            framesSkippedByReason: try c.decode([String: Int].self, forKey: .framesSkippedByReason),
+            detectorModel: try c.decodeIfPresent(String.self, forKey: .detectorModel)
+                ?? DetectorModel.v1.rawValue,
+            discDrops: try c.decodeIfPresent(Int.self, forKey: .discDrops) ?? 0,
+            bigDrops: try c.decodeIfPresent(Int.self, forKey: .bigDrops) ?? 0,
+            detectorUnits: try c.decodeIfPresent(String.self, forKey: .detectorUnits)
+                ?? DetectorUnits.graphics.rawValue)
     }
 }

@@ -193,6 +193,21 @@ struct MovementLogRow: Equatable {
     /// More about an event row: an organism counted (label, id, slide position, column) or the
     /// run's summary.
     var eventDetail = ""
+    /// The detector model counting ("v1" or "v2") and the boxes the guards dropped on this frame
+    /// as the eyepiece disc and as too big.
+    var detectorModel = ""
+    var detDropDisc: Int?
+    var detDropBig: Int?
+    /// The hardware the counting model runs on ("ne" or "gpu"), seconds since the previous analysed
+    /// frame, and what the camera and the phone were doing: the camera's measured rate, the
+    /// exposure and the ISO, the thermal state and the battery level (0 to 1).
+    var detUnits = ""
+    var frameDt: Double?
+    var cameraFps: Double?
+    var exposureMs: Double?
+    var iso: Double?
+    var thermalState = ""
+    var batteryLevel: Double?
 }
 
 enum MovementLog {
@@ -228,7 +243,8 @@ enum MovementLog {
         "spot_mode", "spot_window", "touch_seconds", "missed_spots", "coverage_step",
         "counting_active", "det_ran", "det_skip_reason", "det_ms", "det_found", "det_outside",
         "det_new_tally", "det_new_map", "det_repeat_map", "count_tally_total", "count_map_total",
-        "event_detail",
+        "event_detail", "detector_model", "det_drop_disc", "det_drop_big",
+        "det_units", "frame_dt", "camera_fps", "exposure_ms", "iso", "thermal_state", "battery_level",
     ]
 
     static func csv(_ rows: [MovementLogRow]) -> String {
@@ -297,7 +313,11 @@ enum MovementLog {
             row.detOutside.map(String.init) ?? "", row.detNewTally.map(String.init) ?? "",
             row.detNewMap.map(String.init) ?? "", row.detRepeatMap.map(String.init) ?? "",
             row.countTallyTotal.map(String.init) ?? "", row.countMapTotal.map(String.init) ?? "",
-            row.eventDetail,
+            row.eventDetail, row.detectorModel, row.detDropDisc.map(String.init) ?? "",
+            row.detDropBig.map(String.init) ?? "",
+            row.detUnits, number(row.frameDt, 3), number(row.cameraFps, 1),
+            number(row.exposureMs, 2), number(row.iso, 0), row.thermalState,
+            number(row.batteryLevel, 2),
         ]
     }
 

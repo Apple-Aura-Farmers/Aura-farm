@@ -49,13 +49,13 @@ final class MovementLogTests: XCTestCase {
         XCTAssertEqual(fields[index("position_x_frames")], "0.014")
         XCTAssertEqual(fields[index("frame_width")], "1280")
         XCTAssertEqual(
-            MovementLog.header.suffix(90).prefix(7),
+            MovementLog.header.suffix(100).prefix(7),
             [
                 "box_brightness", "box_sharpness", "box_contrast", "reading", "predicted_streak",
                 "no_detail", "blind_stretches",
             ])
         XCTAssertEqual(
-            MovementLog.header.suffix(83).prefix(27),
+            MovementLog.header.suffix(93).prefix(27),
             [
                 "start_match_x_px", "start_match_y_px", "true_off_start_fields",
                 "tracker_error_fields", "blank_returns_matched", "blank_returns_unmatched",
@@ -89,7 +89,7 @@ final class MovementLogTests: XCTestCase {
         XCTAssertEqual(fields[index("focus_top")], "1.200")
         XCTAssertEqual(fields[index("focus_bottom")], "", "a half with no ratio is empty")
         XCTAssertEqual(
-            MovementLog.header.suffix(55).prefix(5),
+            MovementLog.header.suffix(65).prefix(5),
             ["focus_index", "focus_baseline", "circle_shift_r", "circle_radius_change", "focus_low"],
             "the run monitor's columns are appended after every column")
         XCTAssertEqual(fields[index("monitor_state")], "")
@@ -186,8 +186,13 @@ final class MovementLogTests: XCTestCase {
 
     func testTheSpotAndCountingColumnsAreAppendedLast() {
         XCTAssertEqual(
-            MovementLog.header.suffix(17).prefix(3), ["spot_mode", "spot_window", "touch_seconds"])
-        XCTAssertEqual(MovementLog.header.last, "event_detail")
+            MovementLog.header.suffix(27).prefix(3), ["spot_mode", "spot_window", "touch_seconds"])
+        XCTAssertEqual(
+            MovementLog.header.suffix(11),
+            [
+                "event_detail", "detector_model", "det_drop_disc", "det_drop_big", "det_units",
+                "frame_dt", "camera_fps", "exposure_ms", "iso", "thermal_state", "battery_level",
+            ])
         var logged = row()
         logged.spotMode = "brief_touch"
         logged.spotWindow = "in"
@@ -201,6 +206,16 @@ final class MovementLogTests: XCTestCase {
         logged.countMapTotal = 7
         logged.event = "organism_counted"
         logged.eventDetail = "Volvox id=7"
+        logged.detectorModel = "v2"
+        logged.detDropDisc = 1
+        logged.detDropBig = 0
+        logged.detUnits = "ne"
+        logged.frameDt = 0.1234
+        logged.cameraFps = 19.6
+        logged.exposureMs = 18.5
+        logged.iso = 160
+        logged.thermalState = "fair"
+        logged.batteryLevel = 0.874
         let fields = MovementLog.csv([logged]).split(separator: "\n")[1].split(
             separator: ",", omittingEmptySubsequences: false
         ).map(String.init)
@@ -216,6 +231,16 @@ final class MovementLogTests: XCTestCase {
         XCTAssertEqual(fields[index("det_found")], "3")
         XCTAssertEqual(fields[index("count_map_total")], "7")
         XCTAssertEqual(fields[index("event_detail")], "Volvox id=7")
+        XCTAssertEqual(fields[index("detector_model")], "v2")
+        XCTAssertEqual(fields[index("det_drop_disc")], "1")
+        XCTAssertEqual(fields[index("det_drop_big")], "0")
+        XCTAssertEqual(fields[index("det_units")], "ne")
+        XCTAssertEqual(fields[index("frame_dt")], "0.123")
+        XCTAssertEqual(fields[index("camera_fps")], "19.6")
+        XCTAssertEqual(fields[index("exposure_ms")], "18.50")
+        XCTAssertEqual(fields[index("iso")], "160")
+        XCTAssertEqual(fields[index("thermal_state")], "fair")
+        XCTAssertEqual(fields[index("battery_level")], "0.87")
         XCTAssertEqual(fields.count, MovementLog.header.count)
     }
 }
