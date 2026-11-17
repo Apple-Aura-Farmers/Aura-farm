@@ -86,6 +86,8 @@
             var isFinished = false
             /// Entries into too far / other way, for the haptic warning.
             var wrongWayCount = 0
+            /// Entries into "A little further" with a nudge, for the haptic.
+            var nudgeCount = 0
             /// Edges found with the edge at the centre of the view, for the success haptic.
             var edgeReachedCount = 0
             /// "Axes from preview match: Rotate 90° left"; empty without preview axes.
@@ -119,6 +121,7 @@
             var captures = 0
             var edges = 0
             var wrongWays = 0
+            var nudges = 0
             var edgesReached = 0
             var stageLimits = 0
             var organisms = 0

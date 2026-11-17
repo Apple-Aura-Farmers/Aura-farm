@@ -342,6 +342,14 @@
         .frame(width: 390, height: 440)
     }
 
+    #Preview("A little further, to the line") {
+        GuidePreviewBackdrop(
+            model: previewModel(
+                .pinnedArrow(
+                    at: CGPoint(x: 195, y: 350), angle: .pi / 2, tone: .move, distanceFields: nil),
+                line: GuideInstruction.lineLead(direction: CGPoint(x: 0, y: 1), nudge: false).helperText))
+    }
+
     #Preview("Last column") {
         GuidePreviewBackdrop(
             model: previewModel(

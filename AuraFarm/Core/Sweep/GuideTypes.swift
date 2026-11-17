@@ -196,6 +196,10 @@ enum GuideInstruction: Equatable {
     /// Full-cover-slip mode: a line that passes the rule is just behind the cross (the helper went
     /// past it): come back along the leg until it is on the cross; unit vector or the way back.
     case edgeBehind(toward: CGPoint)
+    /// An accepted edge line is a little ahead (0 to `lineLeadFields`) but the spot rules call the
+    /// view too far or the wrong way: keep going along the leg. `nudge` after the helper has been
+    /// still for a while with the line beyond the at-cross band.
+    case lineLead(direction: CGPoint, nudge: Bool)
     /// The view passed the predicted edge with nothing ahead and no edge found: ✓ takes it as the
     /// edge, ✗ keeps going.
     case expectedEdge
@@ -229,6 +233,7 @@ enum GuideInstruction: Equatable {
         case .lineAhead: "Edge line ahead"
         case .edgeDetected: "Stay still, edge detected"
         case .edgeBehind: "Edge just behind, come back"
+        case .lineLead: "A little further, to the line"
         case .expectedEdge: "Edge should be here. Confirm?"
         case .notAnEdge: "Not an edge, keep going"
         case .nothingToFollow: "Nothing to follow here"
@@ -260,6 +265,7 @@ enum GuideInstruction: Equatable {
         case .lineAhead: "Edge line ahead. Keep going until it reaches the centre cross"
         case .edgeDetected: "Stay still, edge detected"
         case .edgeBehind: "Edge just behind you. Come back until it's on the cross"
+        case .lineLead: "A little further, to the line"
         case .expectedEdge: "Edge should be here. Confirm?"
         case .notAnEdge: "Not an edge. Keep going"
         case .nothingToFollow:
@@ -301,6 +307,7 @@ enum GuideInstruction: Equatable {
         case .lineAhead: "line_ahead"
         case .edgeDetected: "edge_detected"
         case .edgeBehind: "edge_behind"
+        case .lineLead: "line_ahead"
         case .expectedEdge: "expected_edge"
         case .notAnEdge: "not_an_edge"
         case .nothingToFollow: "nothing_to_follow"

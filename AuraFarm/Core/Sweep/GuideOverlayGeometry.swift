@@ -111,7 +111,7 @@ struct GuideOverlayModel: Equatable {
         case .paused:
             // The picture is not where the route thinks: nothing to point at.
             return .none
-        case .travel(let direction):
+        case .travel(let direction), .lineLead(let direction, _):
             vector = CGPoint(
                 x: direction.x * thresholds.travelArrowFields,
                 y: direction.y * thresholds.travelArrowFields)

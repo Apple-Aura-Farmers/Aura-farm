@@ -175,6 +175,10 @@
         private(set) var captureCount = 0
         private(set) var edgeCount = 0
         private(set) var wrongWayCount = 0
+        /// Entries into "A little further" with a nudge (the haptic), and how the right edge was
+        /// found, for the run record.
+        private(set) var nudgeCount = 0
+        private(set) var rightEdgeSource = ""
         private(set) var edgeReachedCount = 0
         private var lastInstruction: GuideInstruction?
         /// Where the guide last sent the view (a screen unit vector), to work out which half of
@@ -314,7 +318,11 @@
             if Self.isWrongWay(result.instruction), !Self.isWrongWay(lastInstruction) {
                 wrongWayCount += 1
             }
+            if case .lineLead(_, true) = result.instruction {
+                if case .lineLead(_, true)? = lastInstruction {} else { nudgeCount += 1 }
+            }
             lastInstruction = result.instruction
+            rightEdgeSource = guide.rightEdgeSource
             isFinished = guide.isFinished
             finishReason = guide.finishReason
             countingActive = guide.countingActive
@@ -399,7 +407,8 @@
                     isOn: true, instruction: result.instruction.debugText, state: result.stateName,
                     targetDx: dx, targetDy: dy, viewClass: viewClass.rawValue, captures: captures,
                     captureCount: captureCount, edgeCount: edgeCount, isFinished: result.isFinished,
-                    wrongWayCount: wrongWayCount, edgeReachedCount: edgeReachedCount, axesLine: axesLine,
+                    wrongWayCount: wrongWayCount, nudgeCount: nudgeCount,
+                    edgeReachedCount: edgeReachedCount, axesLine: axesLine,
                     axesDiffer: differs, showsStageLimitHint: showsHint,
                     stageLimitCount: stageLimitCount, pendingEnd: guide.pendingEnd,
                     columnInProgress: guide.columnInProgress, spotMode: spotMode),
@@ -498,6 +507,8 @@
             captureCount = 0
             edgeCount = 0
             wrongWayCount = 0
+            nudgeCount = 0
+            rightEdgeSource = ""
             edgeReachedCount = 0
             lastHeading = nil
             lastInstruction = nil

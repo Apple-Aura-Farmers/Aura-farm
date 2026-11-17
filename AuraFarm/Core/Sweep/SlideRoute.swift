@@ -707,10 +707,10 @@ struct SlideRoute {
     // MARK: Predicted edges
 
     /// The predicted edge for the leg of `column`, along the leg axis; nil with fewer than two
-    /// points on that side.
+    /// points on that side, or when the fit is not trusted (`predictionTrustFields`).
     private func predictedEdge(for column: Column) -> Double? {
         guard thresholds.fullCoverSlip else { return nil }
-        return prediction.along(column.legDirection < 0 ? .top : .bottom, at: column.x)
+        return prediction.trustedAlong(column.legDirection < 0 ? .top : .bottom, at: column.x)
     }
 
     /// The right edge's x predicted from the left edge and the slip's height; nil unless the slip
@@ -766,6 +766,33 @@ struct SlideRoute {
             }
         }
         aim(at: CGPoint(x: column.x, y: y), from: position, kind: .leg, holds: true)
+    }
+
+    /// Spot alignment must not contradict an edge line that is still ahead. With an accepted line
+    /// 0 to `lineLeadFields` ahead, too far, the wrong way and a missed spot become "a little
+    /// further" (or "stay still" at the cross), and past the leg's last ordinary spot (seeking the
+    /// edge) they become the arrow along the leg. Still `nudgeStillSeconds` with the line beyond
+    /// the at-cross band is the same instruction with a nudge.
+    private func edgeLeadInstruction(
+        _ instruction: GuideInstruction, _ reading: GuideReading, legDirection: Double
+    ) -> GuideInstruction {
+        let direction = CGPoint(x: 0, y: legDirection)
+        let lineEdgeThresholds = thresholds.lineEdge
+        let lead = lineEdge.leadFields
+        let nudge =
+            (lead ?? 0) > lineEdgeThresholds.atCrossFields
+            && reading.isStill(for: lineEdgeThresholds.nudgeStillSeconds)
+        switch instruction {
+        case .tooFar, .otherWay, .missedSpot:
+            if lead != nil {
+                return lineEdge.atCross ? .edgeDetected : .lineLead(direction: direction, nudge: nudge)
+            }
+            return approachingEdge ? .travel(direction: direction) : instruction
+        case .move, .farAway, .aligned:
+            return nudge ? .lineLead(direction: direction, nudge: true) : instruction
+        default:
+            return instruction
+        }
     }
 
     /// The expected-edge ask: the view is more than `overshootFields` past the predicted edge with
@@ -1065,7 +1092,15 @@ struct SlideRoute {
                 angleDegrees: lineEdge.angleDegrees ?? 0)
         case .mark:
             guard let along = markHeading else { return lastOutput }
-            output = takeLineEdge(reading, offsetFields: 0, angleDegrees: 0, along: along)
+            // The edge is where the accepted line is when one is near, not where the helper stood
+            // (run C mark 2: the line was 0.38 field from the view).
+            let lead = thresholds.lineEdge.lineLeadFields
+            var offset = 0.0
+            if lineEdge.state != .none, let seen = lineEdge.offsetFields, abs(seen) <= lead {
+                offset = seen
+            }
+            output = takeLineEdge(
+                reading, offsetFields: offset, angleDegrees: lineEdge.angleDegrees ?? 0, along: along)
         case .no:
             if expectedEdgeAsking {
                 // Not the edge: carry on for the rest of this leg.
@@ -1357,6 +1392,9 @@ struct SlideRoute {
         }
 
         var instruction = alignment.update(reading)
+        if thresholds.fullCoverSlip, kind == .leg, let column = current {
+            instruction = edgeLeadInstruction(instruction, reading, legDirection: column.legDirection)
+        }
         if thresholds.fullCoverSlip, kind == .leg || kind == .step, let heading = edgeHeading {
             let back = CGPoint(x: -heading.x, y: -heading.y)
             if lineEdge.state == .behind, instruction != .captured {
@@ -1500,6 +1538,8 @@ struct SlideRoute {
             return plain(.finished)
         }
         if column.isLast {
+            // The last column keeps how its edge was found; one placed from the prediction says so.
+            if rightEdgeSource.isEmpty { rightEdgeSource = "predicted" }
             finish(reason: .rightEdge)
             return plain(.finished)
         }
@@ -1564,6 +1604,7 @@ struct SlideRoute {
         guard let index = stepBase else { return plain(.aligned) }
         if thresholds.fullCoverSlip {
             // No inward probing: the sample fills the cover slip, so blank here is its right edge.
+            rightEdgeSource = "probe"
             finish(reason: .rightEdge)
             return plain(.finished)
         }

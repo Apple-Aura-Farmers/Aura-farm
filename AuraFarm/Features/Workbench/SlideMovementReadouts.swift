@@ -222,6 +222,7 @@
                 .sensoryFeedback(.impact(weight: .light), trigger: haptics.captures)
                 .sensoryFeedback(.impact(weight: .light), trigger: haptics.edges)
                 .sensoryFeedback(.warning, trigger: haptics.wrongWays)
+                .sensoryFeedback(.impact(weight: .medium), trigger: haptics.nudges)
                 .sensoryFeedback(.impact(flexibility: .soft, intensity: 0.6), trigger: haptics.organisms)
                 .sensoryFeedback(.impact(weight: .medium), trigger: model.endActionCount)
                 .sensoryFeedback(.success, trigger: haptics.edgesReached)

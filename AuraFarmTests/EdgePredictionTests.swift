@@ -36,6 +36,22 @@ final class EdgePredictionTests: XCTestCase {
         XCTAssertGreaterThan(fit.slope, 0, "all three points are fitted")
     }
 
+    func testAFitWithALargeErrorIsNotTrustedAndAGoodOneIs() {
+        var scattered = EdgePrediction()
+        for (x, along) in [(0.0, 9.6), (1.0, 8.4), (2.0, 9.6), (3.0, 8.4)] {
+            scattered.record(.bottom, x: x, along: along)
+        }
+        XCTAssertGreaterThan(scattered.rmsError(.bottom) ?? 0, 0.4)
+        XCTAssertNil(scattered.trustedAlong(.bottom, at: 4))
+        XCTAssertNotNil(scattered.along(.bottom, at: 4), "still a fit, just not trusted")
+
+        var steady = EdgePrediction()
+        for (x, along) in [(0.0, 9.0), (1.6, 9.1), (3.2, 8.9)] { steady.record(.bottom, x: x, along: along) }
+        XCTAssertLessThanOrEqual(steady.rmsError(.bottom) ?? 1, 0.4)
+        XCTAssertNotNil(steady.trustedAlong(.bottom, at: 4.8))
+        XCTAssertNil(EdgePrediction().rmsError(.top))
+    }
+
     func testMeanHeightIsTheTopToBottomDistanceOverTheColumns() throws {
         var prediction = EdgePrediction()
         prediction.record(.top, x: 0.6, along: 0)

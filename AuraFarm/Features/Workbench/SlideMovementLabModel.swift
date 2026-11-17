@@ -1056,7 +1056,8 @@
                 framesCounted: live.counter.framesCounted,
                 framesSkippedByReason: live.counter.framesSkippedByReason,
                 detectorModel: live.model.rawValue, discDrops: live.counter.discDrops,
-                bigDrops: live.counter.bigDrops, detectorUnits: live.units.rawValue)
+                bigDrops: live.counter.bigDrops, detectorUnits: live.units.rawValue,
+                rightEdgeSource: dryRun.rightEdgeSource)
             var items: [URL] = []
             if let json = Self.writeRun(record) { items.append(json) }
             if logging, var last = rows.last {
@@ -1519,6 +1520,7 @@
             current.captures = latestGuideInfo.captureCount
             current.edges = latestGuideInfo.edgeCount
             current.wrongWays = latestGuideInfo.wrongWayCount
+            current.nudges = latestGuideInfo.nudgeCount
             current.edgesReached = latestGuideInfo.edgeReachedCount
             current.stageLimits = latestGuideInfo.stageLimitCount
             current.organisms = lastCountInfo.hapticCount

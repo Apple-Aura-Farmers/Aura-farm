@@ -44,6 +44,24 @@ struct LineEdgeThresholds {
     /// the same bottom ends with no extra false ones; 0.5 adds false ones in both runs.
     var maxAreaAheadShare = 0.3
     var relaxedMaxAngleDegrees = 20.0
+    /// The third way in: a strong, straight line (strength and coverage at least these, within
+    /// `relaxedMaxAngleDegrees`) with the area ahead clearly empty (at most `strongAreaShare`) is
+    /// accepted whatever beyond/before is. PLACEHOLDER. Source: 17 Nov 2026 22:51 run C, column 5
+    /// bottom edge: strength 8 to 57, angle 0 to 4.5 degrees, area ahead 0.04 to 0.11, beyond/before
+    /// 0.76 to 1.03 (the first two rules never accepted it). `strongAreaShare`: the largest of 0.10,
+    /// 0.15 and 0.20 with no more false confirmations than before on the replay of the three runs
+    /// (`EdgeReplayTests`); 0.15 and 0.20 confirm the same legs, 0.10 misses run C's column 5.
+    var strongAreaShare = 0.20
+    var strongMinStrength = 8.0
+    var strongMinCoverage = 0.875
+    /// A line this far (or less) ahead of the cross along the leg, once accepted, is "a little
+    /// further": spot alignment must not call the view too far or the wrong way. PLACEHOLDER. Source:
+    /// run C column 6: the helper stood still 2.8 s with a line 0.27 ahead while the guide said
+    /// too far.
+    var lineLeadFields = 0.6
+    /// Still this long with an accepted line beyond the at-cross band but within `lineLeadFields`
+    /// ahead: "A little further" with a nudge. PLACEHOLDER: the brief's 2 s.
+    var nudgeStillSeconds = 2.0
     /// A later candidate within this many degrees of a known (or rejected) edge's direction and
     /// within `knownEdgeFields` of its position is the same edge and is ignored. PLACEHOLDER.
     var knownEdgeAngleDegrees = 15.0
@@ -113,6 +131,8 @@ struct LineEdgeMemory: Equatable {
 /// area ahead. The word written in the CSV's `line_accept` column.
 enum LineAccept: String, Equatable {
     case strict, area
+    /// A strong straight line with the area ahead clearly empty (the third rule).
+    case strongArea = "strong_area"
 }
 
 /// How far a line has got toward being the edge.
@@ -191,7 +211,23 @@ struct LineEdgeTracker {
         {
             return .area
         }
+        if let area = areaAheadShare, area <= thresholds.strongAreaShare,
+            line.strength >= thresholds.strongMinStrength,
+            line.coverage >= thresholds.strongMinCoverage,
+            abs(line.angleDegrees) <= thresholds.relaxedMaxAngleDegrees
+        {
+            return .strongArea
+        }
         return nil
+    }
+
+    /// How far ahead of the cross an accepted line is, when it is ahead or attached and within
+    /// `lineLeadFields` (0 or more): the view is on its way to it. nil otherwise.
+    var leadFields: Double? {
+        guard state == .ahead || state == .attached, let offsetFields, offsetFields >= 0,
+            offsetFields <= thresholds.lineLeadFields
+        else { return nil }
+        return offsetFields
     }
 
     @discardableResult

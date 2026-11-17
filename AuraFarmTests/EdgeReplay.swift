@@ -125,9 +125,17 @@ struct EdgeReplay {
     }
 
     /// The rule as it was before Phase 2u: only the strict beyond/before share.
-    static var todaysRule: LineEdgeThresholds {
+    static var strictRule: LineEdgeThresholds {
         var thresholds = LineEdgeThresholds()
         thresholds.maxAreaAheadShare = -1
+        thresholds.strongAreaShare = -1
+        return thresholds
+    }
+
+    /// The rule as it was after Phase 2u: strict, or the empty area ahead; no strong-line rule.
+    static var todaysRule: LineEdgeThresholds {
+        var thresholds = LineEdgeThresholds()
+        thresholds.strongAreaShare = -1
         return thresholds
     }
 

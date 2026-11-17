@@ -536,7 +536,7 @@ final class GuideSimulator {
         }
         if stopsAtEdge, edgeAtCentre, Self.isEdgeBound(output.stateName) {
             switch output.instruction {
-            case .travel, .move, .farAway, .lineAhead:
+            case .travel, .move, .farAway, .lineAhead, .lineLead:
                 // A person who stopped at what looks like the edge but is still told to carry
                 // on does so after 2 s.
                 stoppedAtEdge += 1
@@ -553,7 +553,7 @@ final class GuideSimulator {
         switch output.instruction {
         case .findSample:
             move(CGPoint(x: searchTarget.x - truePosition.x, y: searchTarget.y - truePosition.y))
-        case .travel(let direction), .farAway(let direction):
+        case .travel(let direction), .farAway(let direction), .lineLead(let direction, _):
             move(direction)
         case .edgeDetected:
             lastMove = 0

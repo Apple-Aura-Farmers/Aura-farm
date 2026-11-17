@@ -198,4 +198,142 @@ final class EdgePredictionRouteTests: XCTestCase {
         let record = try GuideRunRecord.decoder().decode(GuideRunRecord.self, from: Data(old.utf8))
         XCTAssertEqual(record.rightEdgeSource, "")
     }
+
+    // MARK: Phase 3a part B: never too far with the line ahead
+
+    /// Column 5 (down) just captured; the view is `past` fields beyond its next spot, with an
+    /// accepted line `line` fields ahead of the cross when given.
+    private func pastTheSpot(
+        past: Double = 0.8, line: Double? = nil, still: Double = 0
+    ) -> GuideStep {
+        let sim = simulator(width: 4.6, height: 2.4)
+        _ = sim.run(until: { $0.stateName == "column 5 down" && $0.capture != nil })
+        let last = sim.guide.placements.last?.position ?? .zero
+        func reading(y: Double) -> GuideReading {
+            GuideReading(
+                seconds: sim.guideSeconds + 1, position: CGPoint(x: 3.8, y: y), tracking: .tracking,
+                unconfirmedGaps: 0, viewClass: .sample, speedFraction: 0.05, isStill: still > 0,
+                quadAheadAway: 90, quadAheadToward: 90, quadBehindAway: 100, quadBehindToward: 100,
+                stillSeconds: still,
+                edgeLine: line.map {
+                    EdgeLine(
+                        strength: 12, coverage: 1, longestRun: 8, angleDegrees: 0, offsetFields: $0,
+                        sign: 1, slideResidualFields: 0.05, path: [], isCandidate: true)
+                })
+        }
+        let target = sim.guide.update(reading(y: Double(last.y))).target?.y ?? 0
+        return sim.guide.update(reading(y: Double(target) + past))
+    }
+
+    func testPastASpotWithNoLineTheViewIsStillTooFar() {
+        let step = pastTheSpot(past: 0.8)
+        XCTAssertEqual(step.instruction, .tooFar, "away from an edge line nothing changed")
+    }
+
+    func testWithAnAcceptedLineAheadTheViewIsNeverTooFar() {
+        for line in [0.1, 0.3, 0.5] {
+            let step = pastTheSpot(past: 0.8, line: line)
+            if case .tooFar = step.instruction { XCTFail("too far with a line \(line) ahead") }
+            if case .otherWay = step.instruction { XCTFail("other way with a line \(line) ahead") }
+        }
+        guard case .lineLead(let direction, false) = pastTheSpot(past: 0.8, line: 0.4).instruction
+        else { return XCTFail("a little further expected") }
+        XCTAssertEqual(Double(direction.y), 1, "along the down leg")
+    }
+
+    func testStillWithTheLineAheadBeyondTheCrossBandNudges() {
+        guard case .lineLead(_, true) = pastTheSpot(past: 0.8, line: 0.4, still: 2.5).instruction
+        else { return XCTFail("nudge expected") }
+        if case .lineLead(_, true) = pastTheSpot(past: 0.8, line: 0.4, still: 1.0).instruction {
+            XCTFail("a nudge needs 2 s")
+        }
+        if case .lineLead(_, true) = pastTheSpot(past: 0.8, line: 0.2, still: 2.5).instruction {
+            XCTFail("no nudge inside the at-cross band")
+        }
+    }
+
+    /// A slip whose bottom is 1 field lower from x = 2.6 on: the bottom edge predicted from the
+    /// first columns is 1 field short of the real one at column 5.
+    func testALegWhosePredictedEdgeIsOneFieldShortStillReachesTheRealLine() {
+        let drop = SimulatedDrop(
+            circles: [],
+            rects: [
+                CGRect(x: 0, y: 0, width: 2.6, height: 2.4), CGRect(x: 2.6, y: 0, width: 2.4, height: 3.4),
+            ])
+        let sim = GuideSimulator(drop: drop, start: CGPoint(x: 1.5, y: 1.2))
+        sim.useFullCoverSlip()
+        let result = sim.run()
+        XCTAssertEqual(result.finishReason, .rightEdge)
+        XCTAssertFalse(result.instructions.contains(.tooFar))
+        let five = column(5, in: result)
+        XCTAssertFalse(five.isEmpty)
+        // Column 6 starts 0.6 inside the bottom edge column 5 ended on: the real line at 3.4.
+        let six = column(6, in: result)
+        if let first = six.first {
+            XCTAssertEqual(Double(first.position.y), 3.4 - 0.6, accuracy: 0.35, "\(six)")
+        }
+    }
+
+    // MARK: Phase 3a part C: a mark goes to the line
+
+    func testMarkEdgePutsTheEdgeAtTheAcceptedLineNotWhereTheHelperStood() {
+        let sim = simulator(width: 4.6, height: 2.4)
+        _ = sim.run(until: { $0.stateName == "column 5 down" && $0.capture != nil })
+        let at = Double(sim.guide.placements.last?.position.y ?? 0)
+        let line = EdgeLine(
+            strength: 12, coverage: 1, longestRun: 8, angleDegrees: 0, offsetFields: 0.3, sign: 1,
+            slideResidualFields: 0.05, path: [], isCandidate: true)
+        let reading = GuideReading(
+            seconds: sim.guideSeconds + 1, position: CGPoint(x: 3.8, y: at), tracking: .tracking,
+            unconfirmedGaps: 0, viewClass: .sample, speedFraction: 0.05, isStill: false,
+            quadAheadAway: 90, quadAheadToward: 90, quadBehindAway: 100, quadBehindToward: 100,
+            edgeLine: line)
+        _ = sim.guide.update(reading)
+        _ = sim.guide.userEdge(.mark, reading)
+        var stepTarget: Double?
+        var finishedLeg = reading
+        finishedLeg.edgeLine = nil
+        for _ in 0..<80 where stepTarget == nil {
+            finishedLeg.seconds += 0.1
+            let step = sim.guide.update(finishedLeg)
+            if step.stateName == "step right" { stepTarget = step.target.map { Double($0.y) } }
+        }
+        // The edge is the line 0.3 below the view; the next column starts 0.6 up from it.
+        XCTAssertEqual(stepTarget ?? .nan, at + 0.3 - 0.6, accuracy: 0.05)
+    }
+
+    // MARK: Phase 3a part D: the right-edge source is always recorded
+
+    func testALastColumnPlacedFromAnEmptyViewKeepsItsSourceWhenItFinishes() {
+        let (sim, _) = emptyStep(past: 1.0, seconds: 1.3)
+        XCTAssertFalse(sim.guide.isFinished)
+        let result = sim.run()
+        XCTAssertTrue(result.finished)
+        XCTAssertEqual(sim.guide.finishReason, .rightEdge)
+        XCTAssertEqual(sim.guide.rightEdgeSource, "empty")
+    }
+
+    func testEveryRightEdgeFinishInTheSimulatedRunsNamesItsSource() {
+        for square in [true, false] {
+            let (sim, result) = squareRun(square: square)
+            XCTAssertEqual(result.finishReason, .rightEdge)
+            XCTAssertFalse(sim.guide.rightEdgeSource.isEmpty)
+        }
+    }
+
+    func testTheRunRecordCarriesTheRightEdgeSource() throws {
+        let json = """
+            {"started":"2026-11-16T15:47:00Z","ended":"2026-11-16T15:52:00Z","finishReason":"rightEdge",
+            "spotMode":"brief_touch","coverageStep":1.6,"columns":3,"spotsTicked":20,"missedSpots":1,
+            "elapsedSeconds":300,"countsByLabel":{},"tallyCountsByLabel":{},"totalCount":0,
+            "minimumConfidence":0.3,"cropToEyepiece":false,"classNames":[],"framesCounted":1,
+            "framesSkippedByReason":{},"rightEdgeSource":"predicted"}
+            """
+        var record = try GuideRunRecord.decoder().decode(GuideRunRecord.self, from: Data(json.utf8))
+        XCTAssertEqual(record.rightEdgeSource, "predicted")
+        record.rightEdgeSource = "line"
+        let data = try GuideRunRecord.encoder().encode(record)
+        XCTAssertEqual(
+            try GuideRunRecord.decoder().decode(GuideRunRecord.self, from: data).rightEdgeSource, "line")
+    }
 }

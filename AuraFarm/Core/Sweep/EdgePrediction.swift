@@ -12,6 +12,11 @@ struct EdgePredictionThresholds: Equatable {
     /// With three or more points, the one furthest from the fit is dropped when it is more than
     /// this off, and the line is fitted again.
     var outlierFields = 0.8
+    /// The prediction is used (for the spot margin and the expected-edge ask) only when the fit's
+    /// root-mean-square error is at most this; otherwise the leg runs to the edge with no margin.
+    /// PLACEHOLDER: the Phase 3a brief. Source: run C, whose bottom edge points scatter about 0.5
+    /// field.
+    var predictionTrustFields = 0.4
 }
 
 /// A straight edge in guide coordinates: its position along the leg axis (y) is
@@ -44,8 +49,8 @@ struct EdgePrediction: Equatable {
         }
     }
 
-    /// The fitted line for a side; nil with fewer than two points.
-    func fit(_ side: EdgeSide) -> EdgeFit? {
+    /// The fitted line for a side and the points it was fitted to; nil with fewer than two points.
+    private func fitted(_ side: EdgeSide) -> (line: EdgeFit, points: [CGPoint])? {
         var points = side == .top ? top : bottom
         guard points.count >= 2, var line = Self.leastSquares(points) else { return nil }
         if points.count >= 3 {
@@ -57,7 +62,23 @@ struct EdgePrediction: Equatable {
                 line = Self.leastSquares(points) ?? line
             }
         }
-        return line
+        return (line, points)
+    }
+
+    /// The fitted line for a side; nil with fewer than two points.
+    func fit(_ side: EdgeSide) -> EdgeFit? { fitted(side)?.line }
+
+    /// The root-mean-square distance of the fitted points from their line, in fields.
+    func rmsError(_ side: EdgeSide) -> Double? {
+        guard let (line, points) = fitted(side) else { return nil }
+        let squares = points.map { pow(Double($0.y) - line.along(at: Double($0.x)), 2) }
+        return (squares.reduce(0, +) / Double(squares.count)).squareRoot()
+    }
+
+    /// `along`, only when the fit's error is within `predictionTrustFields`.
+    func trustedAlong(_ side: EdgeSide, at x: Double) -> Double? {
+        guard let error = rmsError(side), error <= thresholds.predictionTrustFields else { return nil }
+        return along(side, at: x)
     }
 
     /// The predicted edge position along the leg for a column at `x`; nil without a fit.
