@@ -44,6 +44,8 @@ struct GuideOverlayModel: Equatable {
     var justReachedEdge = false
     /// 0...1 while the edge is being checked (the white ring).
     var checkProgress: Double?
+    /// Brief-touch mode: near the cross and faster than a touch allows ("Ease off at the cross").
+    var easeOff = false
 
     /// - Parameters:
     ///   - step: the guide's answer for this reading.
@@ -87,7 +89,7 @@ struct GuideOverlayModel: Equatable {
         switch instruction {
         case .aligned, .holding: .onTarget
         case .paused, .stageLimit: .warning
-        case .tooFar, .otherWay: .wrongWay
+        case .tooFar, .otherWay, .missedSpot: .wrongWay
         case .slowDown, .refocus: .warning
         default: .move
         }

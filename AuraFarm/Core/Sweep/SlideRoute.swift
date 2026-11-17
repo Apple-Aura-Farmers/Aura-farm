@@ -164,6 +164,28 @@ struct SlideRoute {
     private(set) var edgesReached = 0
     private(set) var edgesGoneBack = 0
     private(set) var limits = StageLimits()
+    /// Set once the first spot of column 1 is ticked: live counting starts there.
+    private(set) var countingStarted = false
+    /// The helper asked to end after the current column.
+    private(set) var pendingEnd = false
+
+    /// Brief touch: where the view is against the current spot's window, how long it has been
+    /// inside, and how many spots were passed without a touch.
+    var spotWindow: SpotWindow? { alignment.window }
+    var touchElapsed: Double { alignment.touchElapsed }
+    var missedSpots: Int { alignment.missedCount }
+    /// How far the view is from the current spot, in fields; infinity without one.
+    var distanceToSpot: Double { alignment.distance }
+
+    /// The width between the left edge (column 1 less its inset) and the right edge (a recorded
+    /// stage limit, or where a step right found the line), in fields; nil unless both are known.
+    var edgeSpanFields: Double? {
+        guard let first = columns.first ?? current else { return nil }
+        let left = first.x - thresholds.columnInsetFields
+        let right = limits.maxX ?? (finishReason == .rightEdge ? Double(lastPosition.x) : nil)
+        guard let right, right > left else { return nil }
+        return right - left
+    }
 
     private var alignment: SpotAlignment
     /// Tells a real edge from a blur. Called once per reading; see `confirm`.
@@ -259,6 +281,33 @@ struct SlideRoute {
     mutating func finish(reason: SweepFinishReason) {
         phase = .finished
         finishReason = finishReason ?? reason
+    }
+
+    /// Whether a column is being swept: its legs, or the spot at the end of one.
+    var columnInProgress: Bool {
+        switch phase {
+        case .spot(.leg), .spot(.edgeSpot), .returning(.legEnd): return current != nil
+        default: return false
+        }
+    }
+
+    /// Ends the run at once, from any phase. Does nothing once finished.
+    mutating func endNow() {
+        guard !isFinished else { return }
+        pendingEnd = false
+        finish(reason: .endedByHelper)
+    }
+
+    /// Ends when the current column finishes (at its far edge or a stage limit), instead of
+    /// stepping right. With no column in progress it ends at once.
+    mutating func endAfterColumn() {
+        guard !isFinished else { return }
+        if columnInProgress { pendingEnd = true } else { endNow() }
+    }
+
+    mutating func cancelEndAfterColumn() {
+        guard !isFinished else { return }
+        pendingEnd = false
     }
 
     var stateName: String {
@@ -1018,16 +1067,15 @@ struct SlideRoute {
             number: columns.count + 1, x: x,
             minY: Double(reading.position.y), maxY: Double(reading.position.y),
             legDirection: firstLeg, gapsAtStart: reading.unconfirmedGaps)
+        // The first spot may be here (inset 0): `aim` finds no direction then, so the view is sent
+        // along the leg.
+        if inset == 0 { heading = CGPoint(x: 0, y: firstLeg) }
         aim(at: CGPoint(x: x, y: reading.position.y), from: reading.position, kind: .leg, holds: true)
-        if inset == 0 {
-            // The first spot is here, so `aim` found no direction: the view is sent along the leg.
-            heading = CGPoint(x: 0, y: firstLeg)
-        }
         return spot(.leg, reading)
     }
 
     private mutating func aim(at point: CGPoint, from start: CGPoint, kind: SpotKind, holds: Bool) {
-        alignment.setTarget(point, from: start, holds: holds)
+        alignment.setTarget(point, from: start, holds: holds, axis: heading)
         phase = .spot(kind)
         // A low-detail stretch from the last spot says nothing about the way to this one.
         lowDetailSince = nil
@@ -1114,7 +1162,7 @@ struct SlideRoute {
             }
         }
         switch instruction {
-        case .refocus, .slowDown, .tooFar, .otherWay:
+        case .refocus, .slowDown, .tooFar, .otherWay, .missedSpot:
             return Output(instruction: instruction, target: target, capture: nil)
         default:
             break
@@ -1200,6 +1248,7 @@ struct SlideRoute {
             column: column.number, order: placements.count + 1, position: reading.position,
             uncertain: reading.unconfirmedGaps > column.gapsAtStart)
         placements.append(placement)
+        if column.number == 1 { countingStarted = true }
         return placement
     }
 
@@ -1237,6 +1286,10 @@ struct SlideRoute {
     }
 
     private mutating func finishColumn(_ column: Column, _ reading: GuideReading) -> Output {
+        if pendingEnd {
+            endNow()
+            return plain(.finished)
+        }
         let leftmost = columns.map(\.x).min() ?? column.x
         let middle = (column.minY + column.maxY) / 2
         let allowedRechecks = thresholds.fullCoverSlip ? 0 : thresholds.maxLeftRechecks

@@ -84,6 +84,10 @@ struct OrganismDetector {
     /// is finding things without yet being asked to guess.
     static let leastConfidence: Float = 0.3
 
+    /// The confidence a query needs to count as a find. Defaults to `leastConfidence`, so only a
+    /// caller that sets it sees anything different.
+    var minimumConfidence = OrganismDetector.leastConfidence
+
     private let model: MLModel
     private let inputName: String
     private let context = CIContext(options: [.useSoftwareRenderer: false])
@@ -108,16 +112,42 @@ struct OrganismDetector {
         square = buffer
     }
 
-    func detections(in image: CGImage) throws -> [Detection] {
-        try detections(in: CIImage(cgImage: image))
+    /// - Parameter crop: a square in frame pixels, origin at the top left; only it is squashed to
+    ///   the model's input, and the boxes come back as shares of the WHOLE frame. nil feeds the
+    ///   whole frame, as the model was trained.
+    func detections(in image: CGImage, crop: CGRect? = nil) throws -> [Detection] {
+        try detections(in: CIImage(cgImage: image), crop: crop)
     }
 
     /// The live path: a camera frame, with no copy out of it.
-    func detections(in buffer: CVPixelBuffer) throws -> [Detection] {
-        try detections(in: CIImage(cvPixelBuffer: buffer))
+    func detections(in buffer: CVPixelBuffer, crop: CGRect? = nil) throws -> [Detection] {
+        try detections(in: CIImage(cvPixelBuffer: buffer), crop: crop)
     }
 
-    private func detections(in image: CIImage) throws -> [Detection] {
+    /// A box that is a share of `crop` (Vision's axes: origin bottom left) as a share of the
+    /// whole frame. `crop` is in frame pixels with the origin at the top left.
+    static func boxInFrame(_ box: CGRect, crop: CGRect, frameSize: CGSize) -> CGRect {
+        let width = Double(frameSize.width)
+        let height = Double(frameSize.height)
+        let originX = crop.minX / width
+        let originY = (height - crop.maxY) / height
+        let shareWidth = crop.width / width
+        let shareHeight = crop.height / height
+        return CGRect(
+            x: originX + box.minX * shareWidth, y: originY + box.minY * shareHeight,
+            width: box.width * shareWidth, height: box.height * shareHeight)
+    }
+
+    private func detections(in whole: CIImage, crop: CGRect?) throws -> [Detection] {
+        var image = whole
+        if let crop {
+            // Core Image counts from the bottom left; the crop from the top left.
+            let rect = CGRect(
+                x: crop.minX, y: whole.extent.height - crop.maxY, width: crop.width,
+                height: crop.height)
+            image = whole.cropped(to: rect).transformed(
+                by: CGAffineTransform(translationX: -rect.minX, y: -rect.minY))
+        }
         // Training squashed whole frames into a square, so feed the model the same way
         // rather than cropping the middle out.
         let side = Double(Self.inputSide)
@@ -132,7 +162,14 @@ struct OrganismDetector {
         guard let logits = output.featureValue(for: "logits")?.multiArrayValue,
             let boxes = output.featureValue(for: "boxes")?.multiArrayValue
         else { return [] }
-        return Self.decode(logits: logits, boxes: boxes)
+        var found = Self.decode(logits: logits, boxes: boxes, minimumConfidence: minimumConfidence)
+        if let crop {
+            let frame = whole.extent.size
+            for index in found.indices {
+                found[index].box = Self.boxInFrame(found[index].box, crop: crop, frameSize: frame)
+            }
+        }
+        return found
     }
 
     /// Turns the model's three hundred queries into the finds worth keeping.
@@ -140,7 +177,9 @@ struct OrganismDetector {
     /// Each query carries one box and a logit per class. The best class wins, slot 0 aside,
     /// and its sigmoid is the confidence. The box is the middle and the size, counted from
     /// the top left; everything downstream counts from the bottom left, as Vision did.
-    static func decode(logits: MLMultiArray, boxes: MLMultiArray) -> [Detection] {
+    static func decode(
+        logits: MLMultiArray, boxes: MLMultiArray, minimumConfidence: Float = leastConfidence
+    ) -> [Detection] {
         let queries = logits.shape[1].intValue
         let classes = logits.shape[2].intValue
         guard classes > 1 else { return [] }
@@ -157,7 +196,7 @@ struct OrganismDetector {
                 }
             }
             let confidence = 1 / (1 + exp(-best))
-            guard confidence >= leastConfidence else { continue }
+            guard confidence >= minimumConfidence else { continue }
 
             let centreX = boxes[[0, query, 0] as [NSNumber]].doubleValue
             let centreY = boxes[[0, query, 1] as [NSNumber]].doubleValue

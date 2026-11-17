@@ -57,6 +57,7 @@
     /// the crosshairs; this only reads out.
     struct GuideReadout: View {
         var model: SlideMovementLabModel
+        @State private var isEnding = false
 
         var body: some View {
             let info = model.guideInfo
@@ -79,6 +80,14 @@
                     showsHint: info.showsStageLimitHint, onTap: { model.stageLimit() }
                 )
                 .frame(maxWidth: .infinity)
+                if info.pendingEnd {
+                    EndingBanner(onKeepGoing: { model.endRun(.cancel) })
+                }
+                if !info.isFinished {
+                    Button("End run", role: .destructive) { isEnding = true }
+                        .buttonStyle(.bordered)
+                        .frame(maxWidth: .infinity)
+                }
             }
             .font(.footnote.monospaced())
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -86,6 +95,13 @@
             .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 10))
             .padding(.horizontal)
             .padding(.bottom, 4)
+            .confirmationDialog("End run", isPresented: $isEnding, titleVisibility: .visible) {
+                Button("End now", role: .destructive) { model.endRun(.now) }
+                if info.columnInProgress {
+                    Button("End after this column") { model.endRun(.afterColumn) }
+                }
+                Button("Cancel", role: .cancel) {}
+            }
         }
     }
 
@@ -205,6 +221,10 @@
                 .sensoryFeedback(.impact(weight: .light), trigger: model.guideInfo.captureCount)
                 .sensoryFeedback(.impact(weight: .light), trigger: model.guideInfo.edgeCount)
                 .sensoryFeedback(.warning, trigger: model.guideInfo.wrongWayCount)
+                .sensoryFeedback(
+                    .impact(flexibility: .soft, intensity: 0.6), trigger: model.countInfo.hapticCount
+                )
+                .sensoryFeedback(.impact(weight: .medium), trigger: model.endActionCount)
                 .sensoryFeedback(.success, trigger: model.guideInfo.edgeReachedCount)
                 .sensoryFeedback(.success, trigger: stopReached) { _, reached in reached }
                 // Align passed, focus found, field confirmed: a step forward.

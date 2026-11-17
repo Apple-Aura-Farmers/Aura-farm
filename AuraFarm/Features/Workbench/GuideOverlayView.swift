@@ -51,6 +51,7 @@
                         finished
                     } else {
                         line(model.line)
+                        if model.easeOff { easeOff }
                     }
                     if captureCount > 0 { count }
                 }
@@ -151,6 +152,20 @@
             }
         }
 
+        /// Brief touch: near the cross, faster than a touch counts.
+        private var easeOff: some View {
+            VStack {
+                Spacer()
+                Text("Ease off at the cross")
+                    .font(.headline)
+                    .foregroundStyle(.black)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 6)
+                    .background(.orange, in: Capsule())
+                    .padding(.bottom, 64)
+            }
+        }
+
         private var count: some View {
             VStack {
                 Text("✓ \(captureCount)")
@@ -232,11 +247,14 @@
     private let previewCentre = CGPoint(x: 195, y: 210)
 
     private func previewModel(
-        _ mark: GuideMark, progress: Double? = nil, line: String, finished: Bool = false
+        _ mark: GuideMark, progress: Double? = nil, line: String, finished: Bool = false,
+        captured: Bool = false, easeOff: Bool = false
     ) -> GuideOverlayModel {
-        GuideOverlayModel(
+        var model = GuideOverlayModel(
             centre: previewCentre, toleranceRadius: 26, mark: mark, holdProgress: progress,
-            justCaptured: false, line: line, isFinished: finished)
+            justCaptured: captured, line: line, isFinished: finished)
+        model.easeOff = easeOff
+        return model
     }
 
     #Preview("Cross moving") {
@@ -271,6 +289,40 @@
             model: previewModel(
                 .pinnedArrow(at: CGPoint(x: 75, y: 210), angle: .pi, tone: .move, distanceFields: nil),
                 line: "Follow the arrow until the sample ends"))
+    }
+
+    #Preview("Brief touch: touching the cross") {
+        GuidePreviewBackdrop(
+            model: previewModel(
+                .cross(at: CGPoint(x: 205, y: 222), tone: .move), line: "Bring the cross to the centre"))
+    }
+
+    #Preview("Brief touch: ticked") {
+        GuidePreviewBackdrop(
+            model: previewModel(
+                .cross(at: CGPoint(x: 195, y: 100), tone: .move), line: "Captured", captured: true))
+    }
+
+    #Preview("Brief touch: missed spot") {
+        GuidePreviewBackdrop(
+            model: previewModel(
+                .cross(at: CGPoint(x: 195, y: 290), tone: .wrongWay),
+                line: "Missed a spot. Come back a little, slower"))
+    }
+
+    #Preview("Brief touch: ease off at the cross, with the speed bar") {
+        ZStack(alignment: .bottomLeading) {
+            GuidePreviewBackdrop(
+                model: previewModel(
+                    .cross(at: CGPoint(x: 195, y: 250), tone: .move),
+                    line: "Bring the cross to the centre", easeOff: true))
+            SpeedMeter(
+                speedFraction: 0.14, touchMarker: BriefTouchThresholds().maxTouchSpeedFraction
+            )
+            .frame(width: 140)
+            .padding(8)
+        }
+        .frame(width: 390, height: 440)
     }
 
     #Preview("Finished") {

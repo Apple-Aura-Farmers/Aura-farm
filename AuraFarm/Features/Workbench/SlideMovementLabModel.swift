@@ -23,6 +23,15 @@
         /// The guide dry run's block (see `GuideDryRun`).
         private(set) var guideInfo = SlideMovementInfo.Guide()
         private(set) var guideDryRun = false
+        /// Live organism counting: the count, the boxes and the settings that shape them.
+        private(set) var countInfo = LiveCountInfo()
+        private(set) var showsDetections = false
+        private(set) var spotMode = SpotConfirmMode.briefTouch
+        /// What the run came to, once the route finishes; with the files to share.
+        private(set) var runSummary: GuideRunRecord?
+        private(set) var summaryItems: [URL] = []
+        /// Counts the haptic for "End now" and "End after this column".
+        private(set) var endActionCount = 0
         /// The setup's state: align, focus, field, done. See `LabSetupSession`.
         private(set) var setupInfo = LabSetupInfo()
         /// The focus meter's value, on every analyzed frame.
@@ -90,6 +99,11 @@
         @ObservationIgnored private let dryRun = GuideDryRun()
         @ObservationIgnored private let edgeProbe = EdgeLineProbe()
         @ObservationIgnored private let snapshots = FrameSnapshotWriter()
+        @ObservationIgnored private let live = LiveCountSession()
+        @ObservationIgnored private var lastCountInfo = LiveCountInfo()
+        @ObservationIgnored private var runStartedAt: Date?
+        @ObservationIgnored private var runStartSeconds = 0.0
+        @ObservationIgnored private var runFinalized = false
         @ObservationIgnored private var snapshotTrigger = SnapshotTrigger()
         @ObservationIgnored private var snapshotRequested = false
         /// A tap on an edge button waiting for the next logged row: it names the row, saves a
@@ -461,7 +475,82 @@
             latestGuideInfo = SlideMovementInfo.Guide()
             guideCaptured = []
             guideTarget = nil
+            // A new run: counting, its snapshots and the summary start afresh.
+            live.begin(stamp: Self.stamp())
+            lastCountInfo = LiveCountInfo()
+            runStartedAt = nil
+            runFinalized = false
+            DispatchQueue.main.async { [weak self] in
+                self?.countInfo = LiveCountInfo()
+                self?.runSummary = nil
+                self?.summaryItems = []
+            }
         }
+
+        private static func stamp() -> String {
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.dateFormat = "yyyyMMdd-HHmmss"
+            return formatter.string(from: .now)
+        }
+
+        // MARK: Spot check, coverage, counting, ending
+
+        /// "Spot check": brief touch or hold still. Starts the guide afresh.
+        func setSpotMode(_ mode: SpotConfirmMode) {
+            spotMode = mode
+            analysisQueue.async { [weak self] in
+                guard let self, self.dryRun.spotMode != mode else { return }
+                self.dryRun.spotMode = mode
+                self.resetGuide()
+            }
+        }
+
+        /// "Coverage": fields between columns (0.8, 1.6 or 2.4). Starts the guide afresh.
+        func setCoverageStep(_ fields: Double) {
+            analysisQueue.async { [weak self] in
+                guard let self, self.dryRun.coverageStep != fields else { return }
+                self.dryRun.coverageStep = fields
+                self.resetGuide()
+            }
+        }
+
+        func setCountsOrganisms(_ counts: Bool) {
+            analysisQueue.async { [weak self] in self?.live.isEnabled = counts }
+        }
+
+        func setShowsDetections(_ shown: Bool) { showsDetections = shown }
+
+        func setCropsToEyepiece(_ crops: Bool) {
+            analysisQueue.async { [weak self] in self?.live.cropsToEyepiece = crops }
+        }
+
+        func setMinimumConfidence(_ confidence: Float) {
+            analysisQueue.async { [weak self] in self?.live.minimumConfidence = confidence }
+        }
+
+        /// Ends the run now, or after the current column; or takes "after" back. Each is a CSV
+        /// event and the next guide update shows the answer.
+        func endRun(_ action: EndRunAction) {
+            endActionCount += 1
+            analysisQueue.async { [weak self] in
+                guard let self, self.guideEnabled else { return }
+                switch action {
+                case .now:
+                    self.dryRun.endNow()
+                    self.pendingEventName = "end_now"
+                case .afterColumn:
+                    self.dryRun.endAfterColumn()
+                    self.pendingEventName = self.dryRun.isFinished ? "end_now" : "end_after_column"
+                case .cancel:
+                    self.dryRun.cancelEnd()
+                    self.pendingEventName = "end_cancelled"
+                }
+            }
+        }
+
+        /// Closes the summary card.
+        func dismissSummary() { runSummary = nil }
 
         /// The preview's own axes and sizes for the guide overlay (nil without a preview).
         /// Changing the direction of the axes or the size of a field in frame pixels starts the dry
@@ -684,6 +773,12 @@
             logged.edgeMode = guide?.edgeMode ?? ""
             logged.sparseSkips = step.tracking.sparseSkips
             logged.edgeFeedback = guide?.edgeFeedback ?? ""
+            logged.spotMode = guide?.spotMode ?? ""
+            logged.spotWindow = guide?.spotWindow ?? ""
+            logged.touchSeconds = guide?.touchSeconds
+            logged.missedSpots = guide?.missedSpots
+            logged.coverageStep = guide.map { $0.coverageStep }
+            logged.countingActive = guide?.countingActive ?? false
             logged.ghostFrames = step.tracking.ghostFrames
             logged.ghostFallbacks = step.tracking.ghostFallbacks
             logged.featureCells = step.tracking.featureCells
@@ -691,6 +786,56 @@
             logged.sparseTracking = step.tracking.sparse
             logged.focusStillOnset = monitor.map { $0.focusStillOnset } ?? false
             return logged
+        }
+
+        /// The route has finished, for any reason: writes the run record (JSON, in the Files app)
+        /// and the summary row of the CSV, and shows the summary card. Analysis queue only.
+        private func finalizeRun(seconds: Double) {
+            let spots = dryRun.spotsTicked
+            let elapsed = seconds - runStartSeconds
+            let reason = dryRun.finishReason ?? .endedByHelper
+            let options = live.detectorOptions
+            let record = GuideRunRecord(
+                started: runStartedAt ?? .now, ended: .now, finishReason: reason,
+                spotMode: dryRun.spotMode == .briefTouch ? "brief_touch" : "hold_still",
+                coverageStep: dryRun.coverageStep, columns: dryRun.column, spotsTicked: spots,
+                missedSpots: dryRun.missedSpots, elapsedSeconds: elapsed,
+                secondsPerSpot: spots > 0 ? elapsed / Double(spots) : nil,
+                coverageShare: GuideRunRecord.coverageShare(
+                    columns: dryRun.column, step: dryRun.coverageStep,
+                    edgeSpanFields: dryRun.edgeSpanFields),
+                countsByLabel: live.counter.helperCountByLabel,
+                tallyCountsByLabel: live.counter.tallyCountByLabel,
+                totalCount: live.counter.helperTotal, minimumConfidence: Double(options.confidence),
+                cropToEyepiece: options.crop, classNames: options.classes,
+                framesCounted: live.counter.framesCounted,
+                framesSkippedByReason: live.counter.framesSkippedByReason)
+            var items: [URL] = []
+            if let json = Self.writeRun(record) { items.append(json) }
+            if logging, var last = rows.last {
+                last.event = "summary"
+                last.eventDetail =
+                    "\(record.title); \(record.totalCount) organisms; \(record.columns) columns; \(spots) spots"
+                rows.append(last)
+                if let csv = Self.write(rows, test: currentTest) { items.append(csv) }
+            }
+            DispatchQueue.main.async { [weak self] in
+                self?.runSummary = record
+                self?.summaryItems = items
+            }
+        }
+
+        /// Documents/SlideLab/Runs/run-<timestamp>.json, which the Files app shows.
+        private static func writeRun(_ record: GuideRunRecord) -> URL? {
+            let folder = DetectionSnapshotWriter.documents.appending(path: "SlideLab/Runs")
+            do {
+                try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+                let url = folder.appending(path: "run-\(stamp()).json")
+                try GuideRunRecord.encoder().encode(record).write(to: url, options: .atomic)
+                return url
+            } catch {
+                return nil
+            }
         }
 
         private static func writeSetupLog(_ rows: [SetupLogRow]) -> URL? {
@@ -896,6 +1041,7 @@
                 referenceSide: step.boxSide, seconds: time, hopDistance: step.hopLimit,
                 hasDetail: step.hasDetail)
             var edgeLine: EdgeLine?
+            var countLog = LiveCountFrameLog()
             if guideEnabled, setup.step == .done {
                 dryRun.pauseReason =
                     pausesOnMonitorFlag ? setup.monitorState.pauseReason : nil
@@ -905,6 +1051,30 @@
                 let result = dryRun.update(
                     step: step, indicators: indicators, seconds: time, edgeLine: edgeLine)
                 latestGuide = result.fields
+                if runStartedAt == nil {
+                    runStartedAt = Date()
+                    runStartSeconds = time
+                }
+                if dryRun.countingActive {
+                    let reason = LiveOrganismCounter.skipReason(
+                        tracking: step.tracking.trackingState,
+                        isGhostOrSparseSkip: step.reading == "ghost" || step.reading == "sparse_skip",
+                        monitorPaused: dryRun.pauseReason != nil, viewClass: dryRun.lastViewClass,
+                        speedFraction: indicators.speedFraction)
+                    countLog = live.process(
+                        buffer: buffer, skipReason: reason,
+                        pictureMoved: LiveOrganismCounter.pictureMoved(
+                            frameShift: step.tracking.frameShift),
+                        trackerPosition: step.position, frameSize: step.frameSize,
+                        fieldCircle: step.fieldState?.mask.flatMap { FieldCircle(fitting: $0) },
+                        seconds: time - runStartSeconds, column: dryRun.column,
+                        trackerMilliseconds: step.analysisMilliseconds)
+                }
+                let info = live.info(isActive: dryRun.countingActive, frameSize: step.frameSize)
+                if info != lastCountInfo {
+                    lastCountInfo = info
+                    DispatchQueue.main.async { [weak self] in self?.countInfo = info }
+                }
                 let path = edgeLine.map { $0.isCandidate ? $0.path : [] }
                 let lineState = dryRun.lineState
                 DispatchQueue.main.async { [edgeLineState] in
@@ -976,12 +1146,30 @@
                     pendingEventName = pendingEventName.isEmpty ? "edge_auto" : pendingEventName
                 }
                 pendingEdgeFeedback = nil
+                logged.detRan = countLog.ran
+                logged.detSkipReason = countLog.skipReason
+                logged.detMilliseconds = countLog.milliseconds
+                logged.detFound = countLog.found
+                logged.detOutside = countLog.outside
+                logged.detNewTally = countLog.newInTally
+                logged.detNewMap = countLog.newOnMap
+                logged.detRepeatMap = countLog.repeatOnMap
+                logged.countTallyTotal = countLog.tallyTotal
+                logged.countMapTotal = countLog.mapTotal
+                if !countLog.counted.isEmpty {
+                    logged.eventDetail = countLog.counted.joined(separator: "; ")
+                    if pendingEventName.isEmpty { pendingEventName = "organism_counted" }
+                }
                 if !pendingEventName.isEmpty { logged.event = pendingEventName }
                 rows.append(logged)
                 if !currentLabel.isEmpty { labelledRows.append(logged) }
                 refreshStatistics(at: time)
             }
             pendingEventName = ""
+            if guideEnabled, dryRun.isFinished, !runFinalized {
+                runFinalized = true
+                finalizeRun(seconds: time)
+            }
 
             guard time - lastPublishAt >= publishEverySeconds else { return }
             lastPublishAt = time

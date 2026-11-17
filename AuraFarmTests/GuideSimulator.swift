@@ -571,7 +571,7 @@ final class GuideSimulator {
             } else {
                 move(toward)
             }
-        case .tooFar, .otherWay:
+        case .tooFar, .otherWay, .missedSpot:
             if let target = output.target {
                 move(CGPoint(x: target.x - frozen.x, y: target.y - frozen.y))
             } else {

@@ -14,7 +14,7 @@
 
         @State private var model = SlideMovementLabModel()
         @State private var mode = Mode.live
-        @AppStorage("slideLab.mapping") private var mappingName = ScreenMapping.asIs.rawValue
+        @AppStorage("slideLab.mapping") private var mappingName = ScreenMapping.rotateRight.rawValue
         @AppStorage("slideLab.mirror") private var mirrored = false
         @State private var isAskingDistance = false
         @State private var distanceText = ""
@@ -32,6 +32,12 @@
         @AppStorage("slideLab.fullCoverSlip") private var fullCoverSlip = true
         @AppStorage("slideLab.askEdges") private var asksEdges = true
         @AppStorage("slideLab.skipAlignFocus") private var skipsAlignFocus = false
+        @AppStorage("slideLab.spotMode") private var spotModeName = "briefTouch"
+        @AppStorage("slideLab.coverageStep") private var coverageStep = 0.8
+        @AppStorage("slideLab.countOrganisms") private var countsOrganisms = true
+        @AppStorage("slideLab.showDetections") private var showsDetections = false
+        @AppStorage("slideLab.cropEyepiece") private var cropsToEyepiece = false
+        @AppStorage("slideLab.confidence") private var confidence = 0.3
         @State private var noteText = ""
 
         // Recorded video.
@@ -39,6 +45,7 @@
         @State private var startMinutes = 0.0
 
         private var mapping: ScreenMapping { ScreenMapping(rawValue: mappingName) ?? .asIs }
+        private var spotMode: SpotConfirmMode { spotModeName == "holdStill" ? .holdStill : .briefTouch }
 
         var body: some View {
             VStack(spacing: 0) {
@@ -64,6 +71,12 @@
                 model.setFieldRegion(FieldRegionMode(rawValue: fieldRegionName) ?? .auto)
                 model.setMeasuresHopAgreement(hopAgreement)
                 model.setShowsThumbnail(showsSees)
+                model.setSpotMode(spotMode)
+                model.setCoverageStep(coverageStep)
+                model.setCountsOrganisms(countsOrganisms)
+                model.setShowsDetections(showsDetections)
+                model.setCropsToEyepiece(cropsToEyepiece)
+                model.setMinimumConfidence(Float(confidence))
                 model.setGuideDryRun(guideDryRun)
                 model.setScreenMapping(mapping, mirrored: mirrored)
                 if mode == .live { model.start() }
@@ -79,6 +92,12 @@
             .onChange(of: tracksSparse) { _, tracks in model.setTracksSparse(tracks) }
             .onChange(of: fullCoverSlip) { _, enabled in model.setFullCoverSlip(enabled) }
             .onChange(of: asksEdges) { _, asks in model.setAsksEdges(asks) }
+            .modifier(
+                CountingSettingsSync(
+                    model: model, spotModeName: spotModeName, coverageStep: coverageStep,
+                    countsOrganisms: countsOrganisms, showsDetections: showsDetections,
+                    cropsToEyepiece: cropsToEyepiece, confidence: confidence)
+            )
             .onChange(of: mappingName) { model.setScreenMapping(mapping, mirrored: mirrored) }
             .onChange(of: mirrored) { model.setScreenMapping(mapping, mirrored: mirrored) }
             .onDisappear { model.stop() }
@@ -152,6 +171,7 @@
                         if showsSees { seesThumbnail }
                         BigReadouts(model: model)
                         if model.guideDryRun { GuideReadout(model: model) }
+                        if model.guideDryRun, showsDetections { DetectionPanel(info: model.countInfo) }
                         analyzingControls
                     } else {
                         setupControls
@@ -160,6 +180,18 @@
             }
             .background(SlideLabHaptics(model: model))
             .sheet(isPresented: $isShowingTrail) { fullTrail }
+            .sheet(
+                isPresented: Binding(
+                    get: { model.runSummary != nil }, set: { if !$0 { model.dismissSummary() } })
+            ) {
+                if let record = model.runSummary {
+                    RunSummaryCard(
+                        record: record, shareItems: model.summaryItems,
+                        onDone: { model.dismissSummary() }
+                    )
+                    .presentationDetents([.medium])
+                }
+            }
         }
 
         /// "What the app sees": the grid the analysis uses, in the frame's raw orientation.
@@ -362,6 +394,24 @@
                 Toggle("Track sparse sample", isOn: $tracksSparse)
                 Toggle("Full cover slip (line edges)", isOn: $fullCoverSlip)
                 Toggle("Ask me to confirm edges", isOn: $asksEdges)
+                Picker("Spot check", selection: $spotModeName) {
+                    Text("Brief touch").tag("briefTouch")
+                    Text("Hold still").tag("holdStill")
+                }
+                .pickerStyle(.segmented)
+                Picker("Coverage", selection: $coverageStep) {
+                    Text("Every column").tag(0.8)
+                    Text("Every 2nd").tag(1.6)
+                    Text("Every 3rd").tag(2.4)
+                }
+                .pickerStyle(.segmented)
+                Toggle("Count organisms", isOn: $countsOrganisms)
+                Toggle("Show detections", isOn: $showsDetections)
+                Toggle("Crop to eyepiece circle", isOn: $cropsToEyepiece)
+                VStack(alignment: .leading) {
+                    Text("Confidence \(confidence, specifier: "%.2f")").font(.caption)
+                    Slider(value: $confidence, in: 0.1...0.6, step: 0.05)
+                }
                 Text("Red tint: treated as the eyepiece. Yellow box: where movement is measured.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -503,5 +553,28 @@
 
     #Preview {
         NavigationStack { SlideMovementLabView() }
+    }
+
+    /// Hands the spot check, coverage and counting settings to the model when they change.
+    private struct CountingSettingsSync: ViewModifier {
+        var model: SlideMovementLabModel
+        var spotModeName: String
+        var coverageStep: Double
+        var countsOrganisms: Bool
+        var showsDetections: Bool
+        var cropsToEyepiece: Bool
+        var confidence: Double
+
+        func body(content: Content) -> some View {
+            content
+                .onChange(of: spotModeName) { _, name in
+                    model.setSpotMode(name == "holdStill" ? .holdStill : .briefTouch)
+                }
+                .onChange(of: coverageStep) { _, step in model.setCoverageStep(step) }
+                .onChange(of: countsOrganisms) { _, counts in model.setCountsOrganisms(counts) }
+                .onChange(of: showsDetections) { _, shown in model.setShowsDetections(shown) }
+                .onChange(of: cropsToEyepiece) { _, crops in model.setCropsToEyepiece(crops) }
+                .onChange(of: confidence) { _, value in model.setMinimumConfidence(Float(value)) }
+        }
     }
 #endif

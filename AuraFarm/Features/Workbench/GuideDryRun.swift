@@ -34,6 +34,14 @@
         var canMarkEdge = false
         /// "auto" when the rule confirmed an edge by itself.
         var edgeFeedback = ""
+        /// Spot confirmation (see `BriefTouchThresholds`) and the coverage step, for the CSV.
+        var spotMode = ""
+        var spotWindow = ""
+        var touchSeconds: Double?
+        var missedSpots = 0
+        var coverageStep = 0.8
+        var countingActive = false
+        var column = 0
     }
 
     /// How the preview shows the box, measured from the live preview layer on the main thread.
@@ -103,6 +111,8 @@
 
         private var classifier = ViewClassifier()
         private var guide = GuidedSweep()
+
+        init() { reset() }
         /// Full-cover-slip mode (edges from the line only); changing it starts the guide afresh.
         var fullCoverSlip = false {
             didSet { if fullCoverSlip != oldValue { reset() } }
@@ -111,6 +121,26 @@
         var asksEdges = true {
             didSet { if asksEdges != oldValue { reset() } }
         }
+        /// How a spot is ticked: the lab's default is the brief touch; changing it starts afresh.
+        var spotMode = SpotConfirmMode.briefTouch {
+            didSet { if spotMode != oldValue { reset() } }
+        }
+        /// Fields between columns (0.8, 1.6 or 2.4); changing it starts afresh.
+        var coverageStep = GuidedSweepThresholds().columnSpacingFields {
+            didSet { if coverageStep != oldValue { reset() } }
+        }
+        /// The guide's answer to the last update, for the lab's run summary and counting.
+        private(set) var isFinished = false
+        private(set) var finishReason: SweepFinishReason?
+        private(set) var countingActive = false
+        private(set) var column = 0
+        private(set) var pendingEnd = false
+        private(set) var columnInProgress = false
+        private(set) var missedSpots = 0
+        private(set) var spotsTicked = 0
+        private(set) var edgeSpanFields: Double?
+        /// The reading fed to the guide last: where counting needs the view.
+        private(set) var lastGuidePosition = CGPoint.zero
         /// The edge line's state after the last update, for the overlay.
         private(set) var lineState = ""
         private let alignTolerance = GuidedSweepThresholds().alignment.alignToleranceFields
@@ -232,6 +262,7 @@
                 quadBehindToward: quads?.behindToward, stillSeconds: indicators.stillSeconds,
                 edgeLine: edgeLine, edgeLineHeading: lastEdgeHeading)
             lastReading = guideReading
+            lastGuidePosition = position
             let result: GuideStep
             if stageLimitPressed {
                 stageLimitPressed = false
@@ -256,6 +287,15 @@
                 wrongWayCount += 1
             }
             lastInstruction = result.instruction
+            isFinished = guide.isFinished
+            finishReason = guide.finishReason
+            countingActive = guide.countingActive
+            column = guide.columnNumber
+            pendingEnd = guide.pendingEnd
+            columnInProgress = guide.columnInProgress
+            missedSpots = guide.missedSpots
+            spotsTicked = guide.placements.count
+            edgeSpanFields = guide.edgeSpanFields
             lineState = result.edge.lineState
             lastEdgeHeading = guide.edgeHeading
 
@@ -280,6 +320,11 @@
                     step: result, position: position, tracking: tracking, centre: geometry.centre,
                     pointsPerField: pointsPerField, fieldRadius: geometry.fieldRadius,
                     alignToleranceFields: alignTolerance, heading: guide.heading ?? lastHeading)
+                // Brief touch: close to the cross but faster than a touch counts.
+                overlay?.easeOff =
+                    spotMode == .briefTouch && !result.isFinished
+                    && guide.distanceToSpot <= Self.easeOffFields
+                    && indicators.speedFraction > briefThresholds.maxTouchSpeedFraction
             }
             var targetPoint: CGPoint?
             if let target = result.target,
@@ -306,17 +351,51 @@
                     cornerBoxShare: result.edge.cornerBoxShare, lineState: result.edge.lineState,
                     lineAttachedCount: result.edge.lineAttachedCount, edgeMode: result.edge.edgeMode,
                     lineAtCross: result.edge.lineAtCross, canMarkEdge: result.edge.canMarkEdge,
-                    edgeFeedback: result.edge.feedback),
+                    edgeFeedback: result.edge.feedback, spotMode: spotModeName,
+                    spotWindow: spotMode == .briefTouch ? (guide.spotWindow?.rawValue ?? "") : "",
+                    touchSeconds: spotMode == .briefTouch ? guide.touchElapsed : nil,
+                    missedSpots: guide.missedSpots, coverageStep: coverageStep,
+                    countingActive: guide.countingActive, column: guide.columnNumber),
                 info: SlideMovementInfo.Guide(
                     isOn: true, instruction: result.instruction.debugText, state: result.stateName,
                     targetDx: dx, targetDy: dy, viewClass: viewClass.rawValue, captures: captures,
                     captureCount: captureCount, edgeCount: edgeCount, isFinished: result.isFinished,
                     wrongWayCount: wrongWayCount, edgeReachedCount: edgeReachedCount, axesLine: axesLine,
                     axesDiffer: differs, showsStageLimitHint: showsHint,
-                    stageLimitCount: stageLimitCount),
+                    stageLimitCount: stageLimitCount, pendingEnd: guide.pendingEnd,
+                    columnInProgress: guide.columnInProgress, spotMode: spotMode),
                 overlay: overlay,
                 captureTrailPoint: result.capture == nil ? nil : step.positionFields,
                 targetTrailPoint: targetPoint)
+        }
+
+        /// Within this of the cross, a speed above the touch limit shows "Ease off at the cross".
+        /// PLACEHOLDER: 0.5 field, half the spot spacing's reach.
+        private static let easeOffFields = 0.5
+        private let briefThresholds = BriefTouchThresholds()
+
+        private var spotModeName: String { spotMode == .briefTouch ? "brief_touch" : "hold_still" }
+
+        /// End the run now, or when the current column finishes; or take that back. The next
+        /// update shows the answer.
+        func endNow() {
+            guide.endNow()
+            refreshEnding()
+        }
+        func endAfterColumn() {
+            guide.endAfterColumn()
+            refreshEnding()
+        }
+        func cancelEnd() {
+            guide.cancelEndAfterColumn()
+            refreshEnding()
+        }
+
+        private func refreshEnding() {
+            isFinished = guide.isFinished
+            finishReason = guide.finishReason
+            pendingEnd = guide.pendingEnd
+            countingActive = guide.countingActive
         }
 
         private static func isWrongWay(_ instruction: GuideInstruction?) -> Bool {
@@ -339,7 +418,18 @@
             var thresholds = GuidedSweepThresholds()
             thresholds.fullCoverSlip = fullCoverSlip
             thresholds.asksEdges = asksEdges
+            thresholds.alignment.spotMode = spotMode
+            thresholds.columnSpacingFields = coverageStep
             guide = GuidedSweep(thresholds: thresholds)
+            isFinished = false
+            finishReason = nil
+            countingActive = false
+            column = 0
+            pendingEnd = false
+            columnInProgress = false
+            missedSpots = 0
+            spotsTicked = 0
+            edgeSpanFields = nil
             lastEdgeHeading = nil
             lastReading = nil
             lineState = ""

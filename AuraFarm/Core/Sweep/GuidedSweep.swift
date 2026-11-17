@@ -57,6 +57,26 @@ struct GuidedSweep {
     /// column leg or a step right; nil otherwise. See `SlideRoute.edgeHeading`.
     var edgeHeading: CGPoint? { route.edgeHeading }
 
+    /// Live counting runs from the first ticked spot of column 1 until the route finishes.
+    var countingActive: Bool { route.countingStarted && !route.isFinished }
+    var pendingEnd: Bool { route.pendingEnd }
+    /// A column is being swept: "End after this column" means something.
+    var columnInProgress: Bool { route.columnInProgress }
+    var spotWindow: SpotWindow? { route.spotWindow }
+    var touchElapsed: Double { route.touchElapsed }
+    var missedSpots: Int { route.missedSpots }
+    var distanceToSpot: Double { route.distanceToSpot }
+    var columnNumber: Int { route.columnNumber }
+    /// Left edge to right edge, in fields, when both are known.
+    var edgeSpanFields: Double? { route.edgeSpanFields }
+    var columnSpacingFields: Double { route.thresholds.columnSpacingFields }
+
+    /// Ends the run now (`.endedByHelper`). Idempotent; nothing after a finish.
+    mutating func endNow() { route.endNow() }
+    /// Ends when the current column finishes; at once if none is in progress.
+    mutating func endAfterColumn() { route.endAfterColumn() }
+    mutating func cancelEndAfterColumn() { route.cancelEndAfterColumn() }
+
     /// Why the run is paused, nil while it runs.
     private(set) var pauseReason: GuidePauseReason?
     /// When the last pause ended, in the readings' seconds.

@@ -183,6 +183,8 @@ enum GuideInstruction: Equatable {
     case nothingToFollow
     case tooFar
     case otherWay
+    /// Brief-touch mode: the view went past a spot without touching it; unit vector back to it.
+    case missedSpot(toward: CGPoint)
     case refocus
     case slowDown
     case finished
@@ -211,6 +213,7 @@ enum GuideInstruction: Equatable {
         case .paused(let reason): reason == .alignment ? "Paused: alignment" : "Paused: focus"
         case .tooFar: "Too far, come back a little"
         case .otherWay: "Other way"
+        case .missedSpot: "Missed spot"
         case .refocus: "Refocus"
         case .slowDown: "Slow down"
         case .finished: "Sample finished"
@@ -241,6 +244,7 @@ enum GuideInstruction: Equatable {
         case .paused(.alignment): "Phone moved. Put it back so the circle fills the outline"
         case .paused(.focus): "Out of focus. Turn the focus knob slowly until it's sharp"
         case .tooFar, .otherWay: "Turn back toward the cross"
+        case .missedSpot: "Missed a spot. Come back a little, slower"
         case .refocus: "Refocus"
         case .slowDown: "Slow down"
         case .finished: "Sample finished"
@@ -278,6 +282,7 @@ enum GuideInstruction: Equatable {
         case .paused(let reason): reason == .alignment ? "paused_alignment" : "paused_focus"
         case .tooFar: "too_far"
         case .otherWay: "other_way"
+        case .missedSpot: "missed_spot"
         case .refocus: "refocus"
         case .slowDown: "slow_down"
         case .finished: "finished"

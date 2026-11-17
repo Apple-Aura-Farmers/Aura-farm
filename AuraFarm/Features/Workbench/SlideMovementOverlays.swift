@@ -55,8 +55,20 @@
                 } else {
                     if model.guideDryRun {
                         GuideGeometryHost(model: model, previewLayer: previewLayer, display: display)
+                        if model.showsDetections {
+                            let mapper = FramePreviewConverter(
+                                layer: previewLayer, frameSize: model.fieldInfo.frameSize,
+                                display: display)
+                            DetectionBoxes(info: model.countInfo) { mapper?.viewPolygon(of: $0) ?? [] }
+                        }
                         LiveGuideOverlay(state: model.overlayState)
                         LiveEdgeFeedback(model: model, state: model.overlayState)
+                        // Below the ✓ count at the top of the guide area.
+                        VStack {
+                            HelperCountChip(info: model.countInfo).padding(.top, 40)
+                            Spacer()
+                        }
+                        .allowsHitTesting(false)
                         EdgeLineOverlay(
                             state: model.edgeLineState,
                             mapper: FramePreviewConverter(
@@ -160,7 +172,12 @@
 
     struct LiveSpeedMeter: View {
         var model: SlideMovementLabModel
-        var body: some View { SpeedMeter(speedFraction: model.statusInfo.speedFraction) }
+        var body: some View {
+            SpeedMeter(
+                speedFraction: model.statusInfo.speedFraction,
+                touchMarker: model.guideDryRun && model.spotMode == .briefTouch
+                    ? BriefTouchThresholds().maxTouchSpeedFraction : nil)
+        }
     }
 
     struct LiveTrail: View {
@@ -449,10 +466,12 @@
     }
 
     /// A bar with green, orange and red zones and a needle. The scale ends at twice the
-    /// too-fast speed.
+    /// too-fast speed. `touchMarker` (brief-touch mode) marks the fastest speed that still counts
+    /// as touching a spot.
     struct SpeedMeter: View {
         var speedFraction: Double
         var thresholds = MovementIndicatorThresholds()
+        var touchMarker: Double?
 
         var body: some View {
             let end = thresholds.tooFastSpeedFraction * 2
@@ -470,6 +489,11 @@
                             Rectangle().fill(.red)
                         }
                         .clipShape(Capsule())
+                        if let touchMarker {
+                            Rectangle().fill(.black.opacity(0.85))
+                                .frame(width: 3, height: 22)
+                                .offset(x: width * min(max(touchMarker / end, 0), 1) - 1.5)
+                        }
                         Rectangle().fill(.white)
                             .frame(width: 4, height: 22)
                             .shadow(radius: 1)

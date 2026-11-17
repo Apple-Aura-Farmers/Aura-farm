@@ -94,6 +94,11 @@
             var showsStageLimitHint = false
             /// Times the Stage limit button was used, for the haptic.
             var stageLimitCount = 0
+            /// "End after this column" was chosen and the run waits for the column to finish.
+            var pendingEnd = false
+            /// A column is being swept: "End after this column" is offered.
+            var columnInProgress = false
+            var spotMode = SpotConfirmMode.briefTouch
         }
 
         /// For the cards and outlines drawn on the camera preview, in frame pixels.

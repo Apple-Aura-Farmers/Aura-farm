@@ -49,13 +49,13 @@ final class MovementLogTests: XCTestCase {
         XCTAssertEqual(fields[index("position_x_frames")], "0.014")
         XCTAssertEqual(fields[index("frame_width")], "1280")
         XCTAssertEqual(
-            MovementLog.header.suffix(73).prefix(7),
+            MovementLog.header.suffix(90).prefix(7),
             [
                 "box_brightness", "box_sharpness", "box_contrast", "reading", "predicted_streak",
                 "no_detail", "blind_stretches",
             ])
         XCTAssertEqual(
-            MovementLog.header.suffix(66).prefix(27),
+            MovementLog.header.suffix(83).prefix(27),
             [
                 "start_match_x_px", "start_match_y_px", "true_off_start_fields",
                 "tracker_error_fields", "blank_returns_matched", "blank_returns_unmatched",
@@ -89,7 +89,7 @@ final class MovementLogTests: XCTestCase {
         XCTAssertEqual(fields[index("focus_top")], "1.200")
         XCTAssertEqual(fields[index("focus_bottom")], "", "a half with no ratio is empty")
         XCTAssertEqual(
-            MovementLog.header.suffix(38).prefix(5),
+            MovementLog.header.suffix(55).prefix(5),
             ["focus_index", "focus_baseline", "circle_shift_r", "circle_radius_change", "focus_low"],
             "the run monitor's columns are appended after every column")
         XCTAssertEqual(fields[index("monitor_state")], "")
@@ -182,5 +182,40 @@ final class MovementLogTests: XCTestCase {
     func testTextFieldsAreQuoted() {
         let csv = MovementLog.csv([row(label: "a, \"b\"")])
         XCTAssertTrue(csv.contains("\"a, \"\"b\"\"\""))
+    }
+
+    func testTheSpotAndCountingColumnsAreAppendedLast() {
+        XCTAssertEqual(
+            MovementLog.header.suffix(17).prefix(3), ["spot_mode", "spot_window", "touch_seconds"])
+        XCTAssertEqual(MovementLog.header.last, "event_detail")
+        var logged = row()
+        logged.spotMode = "brief_touch"
+        logged.spotWindow = "in"
+        logged.touchSeconds = 0.2
+        logged.missedSpots = 2
+        logged.coverageStep = 1.6
+        logged.countingActive = true
+        logged.detRan = true
+        logged.detMilliseconds = 5.14
+        logged.detFound = 3
+        logged.countMapTotal = 7
+        logged.event = "organism_counted"
+        logged.eventDetail = "Volvox id=7"
+        let fields = MovementLog.csv([logged]).split(separator: "\n")[1].split(
+            separator: ",", omittingEmptySubsequences: false
+        ).map(String.init)
+        let index = { MovementLog.header.firstIndex(of: $0)! }
+        XCTAssertEqual(fields[index("spot_mode")], "brief_touch")
+        XCTAssertEqual(fields[index("spot_window")], "in")
+        XCTAssertEqual(fields[index("touch_seconds")], "0.20")
+        XCTAssertEqual(fields[index("missed_spots")], "2")
+        XCTAssertEqual(fields[index("coverage_step")], "1.6")
+        XCTAssertEqual(fields[index("counting_active")], "1")
+        XCTAssertEqual(fields[index("det_ran")], "1")
+        XCTAssertEqual(fields[index("det_ms")], "5.1")
+        XCTAssertEqual(fields[index("det_found")], "3")
+        XCTAssertEqual(fields[index("count_map_total")], "7")
+        XCTAssertEqual(fields[index("event_detail")], "Volvox id=7")
+        XCTAssertEqual(fields.count, MovementLog.header.count)
     }
 }

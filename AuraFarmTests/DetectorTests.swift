@@ -36,6 +36,31 @@ final class DetectorTests: XCTestCase {
         XCTAssertTrue(OrganismDetector.decode(logits: logits, boxes: boxes).isEmpty)
     }
 
+    func testALowerMinimumConfidenceKeepsAQuietQueryAndTheDefaultStillDropsIt() throws {
+        // sigmoid(-1) is about 0.27: under 0.3, over 0.2.
+        let (logits, boxes) = try queries([(slot: 4, logit: -1.0, box: (0.5, 0.5, 0.1, 0.1))])
+        XCTAssertTrue(OrganismDetector.decode(logits: logits, boxes: boxes).isEmpty)
+        XCTAssertEqual(
+            OrganismDetector.decode(logits: logits, boxes: boxes, minimumConfidence: 0.2).count, 1)
+    }
+
+    func testABoxFoundInACropMapsBackToTheRightPlaceInTheWholeFrame() {
+        // A 200 px square at (100, 50) from the top left of a 640 x 480 frame; the model saw
+        // only that square. A box in the middle of it is at frame pixel (200, 150).
+        let crop = CGRect(x: 100, y: 50, width: 200, height: 200)
+        let inCrop = CGRect(x: 0.45, y: 0.45, width: 0.1, height: 0.1)
+        let box = OrganismDetector.boxInFrame(inCrop, crop: crop, frameSize: CGSize(width: 640, height: 480))
+        XCTAssertEqual(box.midX * 640, 200, accuracy: 1e-6)
+        XCTAssertEqual((1 - box.midY) * 480, 150, accuracy: 1e-6, "Vision axes: from the bottom left")
+        XCTAssertEqual(box.width * 640, 20, accuracy: 1e-6)
+        XCTAssertEqual(box.height * 480, 20, accuracy: 1e-6)
+        // The top left of the crop is the frame's (100, 50).
+        let corner = OrganismDetector.boxInFrame(
+            CGRect(x: 0, y: 1, width: 0, height: 0), crop: crop, frameSize: CGSize(width: 640, height: 480))
+        XCTAssertEqual(corner.minX * 640, 100, accuracy: 1e-6)
+        XCTAssertEqual((1 - corner.minY) * 480, 50, accuracy: 1e-6)
+    }
+
     /// Builds the two tensors the model hands back, one row per query.
     private func queries(
         _ rows: [(slot: Int, logit: Float, box: (Double, Double, Double, Double))]

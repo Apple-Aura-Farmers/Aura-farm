@@ -1,9 +1,37 @@
 import CoreGraphics
 import Foundation
 
+/// How a spot is ticked: a brief touch while moving, or holding still (the original rule).
+enum SpotConfirmMode: Equatable {
+    case briefTouch, holdStill
+}
+
+/// Where the view is against a spot's window (brief-touch mode), for the CSV.
+enum SpotWindow: String, Equatable {
+    case inside = "in"
+    case ahead, behind
+}
+
+/// The numbers brief-touch mode decides with. Data, not logic. All PLACEHOLDER; source: the 16 Nov
+/// 2026 23:47 full-cover run (124 captures in 671 s; box sharpness 3012 still, 2414 (80%) at
+/// speed_fraction 0.06 to 0.10, 1985 (66%) at 0.10 to 0.15).
+struct BriefTouchThresholds {
+    /// Along the travel direction: |along - spot| at most this, in fields.
+    var windowFields: Double = 0.25
+    /// Across it, in fields.
+    var sideToleranceFields: Double = 0.20
+    /// How long the view must stay in the window, without a break (about 3 frames at 10 fps).
+    var touchSeconds: Double = 0.3
+    /// Fastest speed that counts as a touch (about 0.7 fields/s; sharpness about 80% of still).
+    var maxTouchSpeedFraction: Double = 0.10
+}
+
 /// The numbers `SpotAlignment` decides with. Data, not logic. All PLACEHOLDER: not
 /// calibrated.
 struct SpotAlignmentThresholds {
+    /// The core default keeps the hold-still rule; the lab picks brief touch.
+    var spotMode = SpotConfirmMode.holdStill
+    var brief = BriefTouchThresholds()
     /// How close to the target counts as on it, in fields.
     var alignToleranceFields: Double = 0.15
     /// How long to hold still on the target before it is captured. Stop settling time was not
@@ -37,6 +65,15 @@ struct SpotAlignment {
     /// The distance to the target at the last reading, in fields.
     private(set) var distance = Double.infinity
     private var direction = CGPoint.zero
+    /// Brief touch: the travel axis when the target is where the view started (no direction).
+    private var fallbackDirection = CGPoint.zero
+    private var touchStartedAt: Double?
+    private var isMissed = false
+    /// Brief touch: where the view is against the window, how long it has been inside, and how
+    /// many spots were passed without a touch (a running count, kept across targets).
+    private(set) var window: SpotWindow?
+    private(set) var touchElapsed = 0.0
+    private(set) var missedCount = 0
     private var holds = true
     private var leastDistance = Double.infinity
     private var holdStartedAt: Double?
@@ -57,7 +94,15 @@ struct SpotAlignment {
     /// Aims at `target`, recording the travel direction (start to target), and starts the
     /// least distance and the hold timer afresh.
     /// - Parameter holds: false for a target to pass through; it is never captured.
-    mutating func setTarget(_ target: CGPoint, from start: CGPoint, holds: Bool = true) {
+    /// - Parameter axis: the travel direction to use when `target` is at `start`.
+    mutating func setTarget(
+        _ target: CGPoint, from start: CGPoint, holds: Bool = true, axis: CGPoint = .zero
+    ) {
+        fallbackDirection = axis
+        touchStartedAt = nil
+        isMissed = false
+        window = nil
+        touchElapsed = 0
         self.target = target
         self.holds = holds
         let dx = Double(target.x - start.x)
@@ -75,6 +120,8 @@ struct SpotAlignment {
     mutating func clearHold() {
         holdStartedAt = nil
         blurrySince = nil
+        touchStartedAt = nil
+        touchElapsed = 0
     }
 
     mutating func clearTarget() {
@@ -105,6 +152,9 @@ struct SpotAlignment {
     }
 
     mutating func update(_ reading: GuideReading) -> GuideInstruction {
+        if thresholds.spotMode == .briefTouch, holds, let target {
+            return briefUpdate(reading, target: target)
+        }
         if let warning = warning(reading) {
             holdStartedAt = nil
             return warning
@@ -145,6 +195,69 @@ struct SpotAlignment {
 
         holdStartedAt = nil
         if along <= 0, grew > thresholds.wrongWayFields { return .otherWay }
+        if remaining >= thresholds.farAwayFields {
+            return .farAway(direction: CGPoint(x: dx / remaining, y: dy / remaining))
+        }
+        return .move(toward: CGPoint(x: dx, y: dy))
+    }
+
+    /// Brief touch: ticks the spot once the view has stayed in its window for `touchSeconds`,
+    /// tracking, and no faster than `maxTouchSpeedFraction`. Leaving the window ahead without a
+    /// touch is a missed spot; the spot stays the target.
+    private mutating func briefUpdate(_ reading: GuideReading, target: CGPoint) -> GuideInstruction {
+        let b = thresholds.brief
+        let dx = Double(target.x - reading.position.x)
+        let dy = Double(target.y - reading.position.y)
+        let remaining = hypot(dx, dy)
+        distance = remaining
+        let grew = remaining - leastDistance
+        leastDistance = min(leastDistance, remaining)
+        let warning = warning(reading)
+        if hasCaptured { return .aligned }
+
+        // Along the travel direction, positive once past the target; side is across it.
+        var axis = direction
+        if hypot(Double(axis.x), Double(axis.y)) < 0.5 { axis = fallbackDirection }
+        let along = -(dx * Double(axis.x) + dy * Double(axis.y))
+        let side =
+            hypot(Double(axis.x), Double(axis.y)) < 0.5
+            ? remaining : abs(dx * Double(axis.y) - dy * Double(axis.x))
+        let inside = abs(along) <= b.windowFields && side <= b.sideToleranceFields
+        window = inside ? .inside : (along > b.windowFields ? .ahead : .behind)
+
+        if along > b.windowFields {
+            touchStartedAt = nil
+            touchElapsed = 0
+            if !isMissed {
+                isMissed = true
+                missedCount += 1
+            }
+            if warning == .refocus { return .refocus }
+            let back = remaining > 1e-9 ? CGPoint(x: dx / remaining, y: dy / remaining) : .zero
+            return .missedSpot(toward: back)
+        }
+        isMissed = false
+        if let warning {
+            touchStartedAt = nil
+            touchElapsed = 0
+            return warning
+        }
+        if inside, reading.tracking == .tracking, !reading.focusLow,
+            reading.speedFraction <= b.maxTouchSpeedFraction
+        {
+            let started = touchStartedAt ?? reading.seconds
+            touchStartedAt = started
+            touchElapsed = reading.seconds - started
+            if touchElapsed >= b.touchSeconds - 1e-9 {
+                hasCaptured = true
+                touchStartedAt = nil
+                return .captured
+            }
+            return .move(toward: CGPoint(x: dx, y: dy))
+        }
+        touchStartedAt = nil
+        touchElapsed = 0
+        if !inside, along <= 0, grew > thresholds.wrongWayFields { return .otherWay }
         if remaining >= thresholds.farAwayFields {
             return .farAway(direction: CGPoint(x: dx / remaining, y: dy / remaining))
         }

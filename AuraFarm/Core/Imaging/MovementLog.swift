@@ -169,6 +169,30 @@ struct MovementLogRow: Equatable {
     /// "yes", "no" or "mark" on the row of a tap on an edge button, "auto" when the rule confirmed
     /// an edge by itself, else empty.
     var edgeFeedback = ""
+    /// Brief-touch mode: "brief_touch" or "hold_still", where the view is against the spot's window
+    /// ("in", "ahead", "behind" or empty), how long it has been inside, and the running count of
+    /// spots passed without a touch; the coverage step in fields. Empty without the guide.
+    var spotMode = ""
+    var spotWindow = ""
+    var touchSeconds: Double?
+    var missedSpots: Int?
+    var coverageStep: Double?
+    /// Live counting: whether it is on, whether the detector ran on this frame (else why not), how
+    /// long it took, and what it found and counted. Totals are running.
+    var countingActive = false
+    var detRan = false
+    var detSkipReason = ""
+    var detMilliseconds: Double?
+    var detFound: Int?
+    var detOutside: Int?
+    var detNewTally: Int?
+    var detNewMap: Int?
+    var detRepeatMap: Int?
+    var countTallyTotal: Int?
+    var countMapTotal: Int?
+    /// More about an event row: an organism counted (label, id, slide position, column) or the
+    /// run's summary.
+    var eventDetail = ""
 }
 
 enum MovementLog {
@@ -201,6 +225,10 @@ enum MovementLog {
         "ghost_frames", "ghost_fallbacks", "line_state", "line_attached_count", "edge_mode",
         "sparse_skips", "line_before_energy", "line_beyond_energy",
         "edge_feedback", "line_attach_source",
+        "spot_mode", "spot_window", "touch_seconds", "missed_spots", "coverage_step",
+        "counting_active", "det_ran", "det_skip_reason", "det_ms", "det_found", "det_outside",
+        "det_new_tally", "det_new_map", "det_repeat_map", "count_tally_total", "count_map_total",
+        "event_detail",
     ]
 
     static func csv(_ rows: [MovementLogRow]) -> String {
@@ -261,6 +289,15 @@ enum MovementLog {
             String(row.sparseSkips), number(row.edgeLine?.beforeEnergy, 2),
             number(row.edgeLine?.beyondEnergy, 2), row.edgeFeedback,
             row.edgeLine?.attachSource ?? "",
+            row.spotMode, row.spotWindow, number(row.touchSeconds, 2),
+            row.missedSpots.map(String.init) ?? "", number(row.coverageStep, 1),
+            row.spotMode.isEmpty ? "" : (row.countingActive ? "1" : "0"),
+            row.countingActive ? (row.detRan ? "1" : "0") : "", row.detSkipReason,
+            number(row.detMilliseconds, 1), row.detFound.map(String.init) ?? "",
+            row.detOutside.map(String.init) ?? "", row.detNewTally.map(String.init) ?? "",
+            row.detNewMap.map(String.init) ?? "", row.detRepeatMap.map(String.init) ?? "",
+            row.countTallyTotal.map(String.init) ?? "", row.countMapTotal.map(String.init) ?? "",
+            row.eventDetail,
         ]
     }
 
