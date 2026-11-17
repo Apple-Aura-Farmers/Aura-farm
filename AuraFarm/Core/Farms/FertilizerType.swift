@@ -103,7 +103,7 @@ enum FertilizerType: String, Codable, CaseIterable, Identifiable {
                 "Slow organic nutrients with ready mineral ones. Paddy trials often find steadier yields and more soil carbon than mineral fertilizer alone."
         case .inorganic:
             return
-                "Feeds the crop quickly but adds no organic carbon. Used alone for many seasons, it can leave paddy soil lower in carbon and more acidic."
+                "Feeds the crop quickly but adds no organic carbon. Used alone for many seasons, it can leave paddy soil lower in carbon and more acidic. Moving toward organic fertilizer generally suits paddies better."
         case .notSure, .noneRecorded: return nil
         }
     }

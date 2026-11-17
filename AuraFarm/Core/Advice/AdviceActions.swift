@@ -117,9 +117,9 @@ enum AdviceActions {
             cost: "None", effort: "Low", timing: "Before next application", review: .should),
         AdviceAction(
             id: .addOrganicInput,
-            wording: "Ask your extension officer about adding composted organic material, such as compost or "
-                + "rice straw worked back in, alongside your fertilizer.",
-            cost: "Low", effort: "Medium", timing: "Before next planting", review: .should),
+            wording: "Move toward organic fertilizer, such as compost, by replacing part of your mineral "
+                + "fertilizer over the next seasons. Ask your extension officer how much to change.",
+            cost: "Low", effort: "Medium", timing: "Before next application", review: .should),
     ]
 
     /// The order used when the app, not the model, chooses actions: for standard advice, and

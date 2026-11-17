@@ -66,7 +66,7 @@ enum AdviceReasons {
         "Organic carbon is very high, so fresh straw is better left on the surface."
     static let carbonExcessAir = "Organic carbon is very high, which can leave wet soil short of air."
     static let fertilizerInorganicOnly =
-        "Paddy research generally finds organic material with fertilizer keeps soil carbon and yields steadier than fertilizer alone."
+        "Paddy research generally finds organic fertilizer, even replacing part of the mineral kind, keeps soil carbon and yields steadier."
     static let nutrientImbalance =
         "Nitrogen, phosphorus and potassium need to be in balance, and these readings are not."
 
