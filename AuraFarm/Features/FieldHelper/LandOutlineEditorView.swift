@@ -19,11 +19,16 @@ struct LandOutlineEditorView: View {
     /// Land already mapped, drawn on the map so the new outline can be kept clear of it.
     let neighbours: [Neighbour]
     let onConfirm: ([GeoPoint]) -> Void
+    /// Called when the helper leaves without confirming, so whoever opened the editor can put
+    /// back whatever was on screen before it.
+    var onCancel: (() -> Void)?
 
     @State private var corners: [GeoPoint]
     @State private var position: MapCameraPosition
     @State private var location = LocationProvider()
     @State private var confirmDiscard = false
+    /// Whether this phone has ever marked a corner. The coach mark is for the first time only.
+    @AppStorage("hasMarkedAPlotCorner") private var hasMarkedACorner = false
     /// The corner being dragged, and where it sat on screen when the drag began.
     @State private var drag: (index: Int, start: CGPoint)?
     @Environment(\.dismiss) private var dismiss
@@ -32,11 +37,13 @@ struct LandOutlineEditorView: View {
 
     init(
         corners: [GeoPoint], neighbours: [Neighbour],
-        onConfirm: @escaping ([GeoPoint]) -> Void
+        onConfirm: @escaping ([GeoPoint]) -> Void,
+        onCancel: (() -> Void)? = nil
     ) {
         self.startingCorners = corners
         self.neighbours = neighbours
         self.onConfirm = onConfirm
+        self.onCancel = onCancel
         _corners = State(initialValue: corners)
         // Editing opens on the existing land; a new outline opens on where the phone is.
         if let region = LandGeometry.region(fitting: corners) {
@@ -86,8 +93,8 @@ struct LandOutlineEditorView: View {
                         Text("\(index + 1)")
                             .font(.caption2.bold())
                             .foregroundStyle(.white)
-                            .frame(width: 22, height: 22)
-                            .background(.orange, in: Circle())
+                            .frame(width: 23, height: 23)
+                            .background(Self.dot, in: Circle())
                             .overlay(Circle().stroke(.white, lineWidth: 2))
                             .scaleEffect(isDragging ? 1.35 : 1)
                             .animation(.spring(duration: 0.2), value: isDragging)
@@ -123,33 +130,108 @@ struct LandOutlineEditorView: View {
                 }
                 if !onADot, let coordinate = proxy.convert(point, from: .local) {
                     corners.append(GeoPoint(coordinate))
+                    hasMarkedACorner = true
                 }
             }
         }
+        // Nothing to look at until the first tap, so the land is put out of focus behind what
+        // the coach mark is asking for.
+        .blur(radius: showsCoachMark ? 14 : 0)
+        .overlay { coachMark }
+        .animation(.snappy, value: showsCoachMark)
         .safeAreaInset(edge: .bottom) { controls }
-        .navigationTitle("Mark the land")
+        .navigationTitle(corners.isEmpty ? "" : "New Plot")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
+        // The land takes the whole screen while it is being marked.
+        .toolbar(.hidden, for: .tabBar)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
-                Button("Cancel") {
+                Button {
                     if corners == startingCorners {
-                        dismiss()
+                        leave()
                     } else {
                         confirmDiscard = true
                     }
+                } label: {
+                    Image(systemName: corners.isEmpty ? "xmark" : "chevron.left")
                 }
+                .accessibilityLabel("Close")
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                // Plain until there is an area to name, then the blue of a real way on.
+                Button("Next") {
+                    onConfirm(corners)
+                    dismiss()
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!canConfirm)
             }
         }
         .confirmationDialog(
             "Discard your changes to the outline?", isPresented: $confirmDiscard,
             titleVisibility: .visible
         ) {
-            Button("Discard changes", role: .destructive) { dismiss() }
+            Button("Discard changes", role: .destructive) { leave() }
             Button("Keep editing", role: .cancel) {}
         }
         .onAppear { location.start() }
         .onDisappear { location.stop() }
+    }
+
+    /// Leaving without keeping the outline. The handler goes first and the pop second, the way
+    /// confirming does, so what it brings back is already there as the editor slides away.
+    private func leave() {
+        onCancel?()
+        dismiss()
+    }
+
+    // MARK: The first time
+
+    /// Only before the very first corner this phone has ever marked.
+    private var showsCoachMark: Bool { corners.isEmpty && !hasMarkedACorner }
+
+    @ViewBuilder
+    private var coachMark: some View {
+        if showsCoachMark {
+            GeometryReader { proxy in
+                ZStack {
+                    Color.black.opacity(0.25)
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Tap Anywhere")
+                            .font(.headline)
+                        Text("Try tapping to start plotting the boundary points of the farm")
+                            .font(.subheadline)
+                    }
+                    .foregroundStyle(.white)
+                    .shadow(radius: 8)
+                    .frame(width: 210, alignment: .leading)
+                    .position(x: 24 + 105, y: proxy.size.height * 0.47)
+
+                    target
+                        .position(x: proxy.size.width * 0.75, y: proxy.size.height * 0.5)
+                }
+            }
+            .ignoresSafeArea()
+            // The tap underneath is the point of it.
+            .allowsHitTesting(false)
+            .transition(.opacity)
+        }
+    }
+
+    /// The ringed dot the mockup puts on the map: what a corner will look like.
+    private var target: some View {
+        Circle()
+            .fill(Self.dot)
+            .frame(width: 23, height: 23)
+            .overlay(Circle().stroke(.white, lineWidth: 1).frame(width: 31, height: 31))
+            .overlay(Circle().stroke(.white, lineWidth: 1).frame(width: 38, height: 38))
+            .phaseAnimator([false, true]) { rings, grown in
+                rings.scaleEffect(grown ? 1.08 : 0.92)
+            } animation: { _ in
+                .easeInOut(duration: 1).repeatForever()
+            }
     }
 
     // MARK: Dragging corners
@@ -175,77 +257,57 @@ struct LandOutlineEditorView: View {
 
     // MARK: Controls
 
+    /// What the land adds up to, anything wrong with it, and the one way to start again. They
+    /// float over the map rather than sitting on a panel, so the land stays the screen.
+    @ViewBuilder
     private var controls: some View {
-        VStack(spacing: 12) {
-            Text(status)
-                .font(.subheadline)
-                .multilineTextAlignment(.center)
-                .foregroundStyle(crossesItself ? Color.orange : Color.primary)
-
-            if !corners.isEmpty {
-                Text("Drag a dot to move it.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-
-            if !overlapping.isEmpty {
-                Text(overlapWarning)
-                    .font(.footnote)
+        if !showsCoachMark {
+            VStack(spacing: 10) {
+                Text(status)
+                    .font(.subheadline)
                     .multilineTextAlignment(.center)
-                    .foregroundStyle(.orange)
-            }
+                    .foregroundStyle(crossesItself ? Color.orange : Color.primary)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(.regularMaterial, in: .capsule)
 
-            if location.isDenied {
-                Text("Location is off, so the map will not open where you are.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                if let settings = URL(string: UIApplication.openSettingsURLString) {
-                    Link("Open Settings", destination: settings)
-                        .font(.footnote)
+                if !overlapping.isEmpty {
+                    note(overlapWarning, .orange)
                 }
-            }
 
-            HStack(spacing: 10) {
-                Button {
-                    corners.removeLast()
-                } label: {
-                    Label("Undo", systemImage: "arrow.uturn.backward")
+                if location.isDenied {
+                    note("Location is off, so the map will not open where you are.", .secondary)
                 }
-                .disabled(corners.isEmpty)
 
-                Button {
-                    if let here = location.location {
-                        corners.append(GeoPoint(here.coordinate))
-                    }
-                } label: {
-                    Label("Dot here", systemImage: "location.fill")
-                }
-                .disabled(location.location == nil)
-
-                Button(role: .destructive) {
+                Button("Clear All", role: .destructive) {
                     corners.removeAll()
-                } label: {
-                    Label("Clear", systemImage: "trash")
                 }
+                .buttonStyle(.borderedProminent)
+                .buttonBorderShape(.capsule)
+                .tint(Self.clearAll)
                 .disabled(corners.isEmpty)
             }
-            .buttonStyle(.bordered)
-
-            Button {
-                onConfirm(corners)
-                dismiss()
-            } label: {
-                Text(overlapping.isEmpty ? "Confirm outline" : "Confirm anyway")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .disabled(!canConfirm)
+            .padding(.horizontal, 24)
+            .padding(.bottom, 20)
+            .frame(maxWidth: .infinity)
         }
-        .padding()
-        .frame(maxWidth: .infinity)
-        .background(.regularMaterial)
     }
+
+    private func note(_ text: String, _ colour: some ShapeStyle) -> some View {
+        Text(text)
+            .font(.footnote)
+            .multilineTextAlignment(.center)
+            .foregroundStyle(colour)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(.regularMaterial, in: .rect(cornerRadius: 14))
+    }
+
+    // MARK: The design's own colours
+
+    /// A corner, and the only way to start again. Taken from the design.
+    private static let dot = Color(red: 1, green: 0.573, blue: 0.459)
+    private static let clearAll = Color(red: 1, green: 0.22, blue: 0.235)
 
     private var crossesItself: Bool { LandGeometry.crossesItself(corners) }
 
