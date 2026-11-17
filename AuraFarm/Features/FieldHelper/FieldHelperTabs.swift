@@ -45,6 +45,8 @@ struct FieldHelperTabs: View {
                 FieldHelperHomeView(camera: $camera, isSearch: true)
             }
         }
+        // The selected tab takes the accent, which the bar does not pick up from the app.
+        .tint(.aura)
         // What makes the search tab the prominent one, and so draws it as that trailing
         // circle: without it the system puts search back in the capsule as an ordinary tab.
         .tabViewSearchActivation(.searchTabSelection)

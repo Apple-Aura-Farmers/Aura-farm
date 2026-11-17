@@ -328,7 +328,7 @@ struct FieldHelperHomeView: View {
                 .foregroundStyle(.white)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
-                .background(.green, in: .capsule)
+                .background(.aura, in: .capsule)
                 .padding(.top, 8)
                 .transition(.move(edge: .top).combined(with: .opacity))
                 .task {

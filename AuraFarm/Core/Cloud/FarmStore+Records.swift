@@ -32,9 +32,24 @@ extension FarmStore {
     /// Publish. The phone keeps the change either way: a bad connection is reported in the
     /// banner, not undone.
     ///
-    /// A farm with no plots is held back. The records describe a farm by its land, so there
-    /// is nothing to write until the first plot is marked, and it goes up with that plot.
-    func publish(_ farm: Farm) async {
+    /// Sends queue behind each other instead of racing. A send carries the whole farm, and
+    /// finishes by taking away the plot rows it did not carry, so a slow send of the farm as
+    /// it was one plot ago would otherwise land last and delete the plot marked after it.
+    /// Waiting means the last send to finish is always the last change made. The cost is that
+    /// a slow send holds up the ones behind it, which is the better way round: they are
+    /// seconds apart, and the alternative is land going missing from the records.
+    @MainActor
+    func publish(_ farm: Farm) {
+        let earlier = publishing
+        publishing = Task {
+            await earlier?.value
+            await send(farm)
+        }
+    }
+
+    /// One send. A farm with no plots is held back: the records describe a farm by its land,
+    /// so there is nothing to write until the first plot is marked, and it goes up with it.
+    private func send(_ farm: Farm) async {
         guard !farm.plots.isEmpty, let uploader = FarmUploader() else { return }
         do {
             try await uploader.upload(farm)

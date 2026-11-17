@@ -208,7 +208,7 @@ struct FarmDetailView: View {
         var changed = farm
         changed.plots.append(Plot(corners: corners))
         store.update(changed)
-        Task { await store.publish(changed) }
+        store.publish(changed)
     }
 
     private func replace(_ plot: Plot, with corners: [GeoPoint], in farm: Farm) {
@@ -216,7 +216,7 @@ struct FarmDetailView: View {
         var changed = farm
         changed.plots[index].corners = corners
         store.update(changed)
-        Task { await store.publish(changed) }
+        store.publish(changed)
     }
 
     /// Takes the plot out of the records first, so one deleted here but left there does not
