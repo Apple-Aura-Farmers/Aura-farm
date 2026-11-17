@@ -18,7 +18,8 @@ enum AdviceComposer {
     static func combined(_ recommendation: Recommendation, context: AdviceContext) -> Recommendation {
         guard context.estimate.level != .notCounted else { return recommendation }
         var recommendation = recommendation
-        if let readings = SoilInputs(context.result.soil)?.readings, readings.allSatisfy({ $0.band == .standard }),
+        if let readings = SoilInputs(context.result.soil)?.readings,
+            readings.allSatisfy({ $0.band == .standard }),
             context.result.soil?.fertilizerType?.tone != .watch,
             !recommendation.summary.contains(soilAllGood)
         {
@@ -67,7 +68,8 @@ enum AdviceComposer {
         }
 
         var soil: [Recommendation.Step] = soilOnly.map { suggested in
-            var step = modelWording[suggested.action.id]
+            var step =
+                modelWording[suggested.action.id]
                 ?? AdviceStepRules.step(for: suggested, why: nil)
             step.group = .soil
             step.alsoFromSoil = false

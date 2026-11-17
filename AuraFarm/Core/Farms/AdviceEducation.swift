@@ -70,9 +70,12 @@ struct AdviceEducation: Equatable, Sendable {
                     context: row.context, number: row.number ?? 0, standard: standard))
         }
         let fertilizer = soil.fertilizerType.map { type in
-            let details = [soil.fertilizerProduct, soil.fertilizerKilogramsPerHectare.map {
-                "\($0.formatted(.number.precision(.fractionLength(0...2)))) kg/ha"
-            }].compactMap { $0 }
+            let details = [
+                soil.fertilizerProduct,
+                soil.fertilizerKilogramsPerHectare.map {
+                    "\($0.formatted(.number.precision(.fractionLength(0...2)))) kg/ha"
+                },
+            ].compactMap { $0 }
             return Fertilizer(
                 label: type.label, definition: type.definition,
                 education: type.education.map { $0 + " " + FertilizerType.sharedNote },

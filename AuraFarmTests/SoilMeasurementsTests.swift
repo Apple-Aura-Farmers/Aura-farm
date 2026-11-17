@@ -70,6 +70,43 @@ final class SoilMeasurementsTests: XCTestCase {
         XCTAssertEqual(loaded, farm)
     }
 
+    /// Soil saved before a measurement had an id of its own, or an alert on it.
+    func testSoilSavedBeforeIdsAndAlertsStillLoads() throws {
+        let json = """
+            {"nitrogen":100,"ph":6.5,"updatedAt":0}
+            """
+        let soil = try JSONDecoder().decode(SoilMeasurements.self, from: Data(json.utf8))
+
+        XCTAssertEqual(soil.nitrogen, 100)
+        XCTAssertNil(soil.scientistAlertedAt)
+        // An id is made for it rather than the whole reading being lost.
+        XCTAssertFalse(soil.isEmpty)
+    }
+
+    func testTheNutrientBarReadsWhatTheBandsMeanAndNotTheNumbers() {
+        // In range on all three: as good as it gets.
+        let good = SoilMeasurements(nitrogen: 100, phosphorus: 20, potassium: 130)
+        XCTAssertEqual(good.npkHealth ?? 0, 0.9, accuracy: 0.0001)
+
+        // Nothing filled in has nowhere to sit.
+        XCTAssertNil(SoilMeasurements().npkHealth)
+
+        // Far too little nitrogen reads worse than the same soil with it in range.
+        let starved = SoilMeasurements(nitrogen: 1, phosphorus: 20, potassium: 130)
+        XCTAssertLessThan(starved.npkHealth ?? 1, good.npkHealth ?? 0)
+    }
+
+    func testSoilWaitingOnAScientistIsNotNothingToKeep() {
+        var soil = SoilMeasurements()
+        XCTAssertTrue(soil.isEmpty)
+        XCTAssertTrue(soil.isUnrecorded)
+
+        soil.scientistAlertedAt = Date()
+        // Still no numbers, but the asking is worth keeping.
+        XCTAssertTrue(soil.isEmpty)
+        XCTAssertFalse(soil.isUnrecorded)
+    }
+
     /// Farms saved before soil measurements existed have no `soil` key.
     func testOlderFarmWithoutSoilStillLoads() throws {
         let json = """

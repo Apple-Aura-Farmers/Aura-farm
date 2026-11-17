@@ -60,7 +60,8 @@ enum AdviceReasons {
     static let potassiumLow = "Potassium is low, and plants use it for strong stems and to save water."
     static let potassiumExcess =
         "There is more potassium than plants need, and it can crowd out other nutrients."
-    static let carbonLowStraw = "Organic carbon is low, and returned straw feeds the soil life that builds it up."
+    static let carbonLowStraw =
+        "Organic carbon is low, and returned straw feeds the soil life that builds it up."
     static let carbonLowCompost = "Organic carbon is low, and compost builds it up."
     static let carbonExcessStraw =
         "Organic carbon is very high, so fresh straw is better left on the surface."
@@ -77,7 +78,8 @@ enum AdviceReasons {
         sampleVaries, misidentified, plentyOfLife, strawLowAbundance, strawLowDiversity, burning, compost,
         coverCropLowAbundance, coverCropLowDiversity, stillWater, airInSoil, fertilizerAfterFertilizing,
         fertilizer, rootPests, extensionAfterPoor, extensionBeforeBiggerChanges, lowTwice, notes, notCounted,
-        phLow, phHigh, phMeasuredDry, nitrogenLow, nitrogenExcess, phosphorusLow, phosphorusExcess, potassiumLow,
+        phLow, phHigh, phMeasuredDry, nitrogenLow, nitrogenExcess, phosphorusLow, phosphorusExcess,
+        potassiumLow,
         potassiumExcess, carbonLowStraw, carbonLowCompost, carbonExcessStraw, carbonExcessAir,
         nutrientImbalance, fertilizerInorganicOnly,
     ]

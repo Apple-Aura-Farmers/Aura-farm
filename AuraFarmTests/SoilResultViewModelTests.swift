@@ -590,7 +590,8 @@ final class SoilResultViewModelTests: XCTestCase {
                 return XCTFail("Expected advice, got \(viewModel.recommendationState)")
             }
             XCTAssertEqual(shown.source, .rules, "\(failure)")
-            XCTAssertEqual(viewModel.modelUnavailableReason, SoilResultViewModel.measurementsChangedNote, "\(failure)")
+            XCTAssertEqual(
+                viewModel.modelUnavailableReason, SoilResultViewModel.measurementsChangedNote, "\(failure)")
             XCTAssertNil(viewModel.updateNote, "\(failure)")
             XCTAssertEqual(store.saveCount, savesBefore, "\(failure)")
             XCTAssertEqual(store.load(for: sweep), earlier, "\(failure)")

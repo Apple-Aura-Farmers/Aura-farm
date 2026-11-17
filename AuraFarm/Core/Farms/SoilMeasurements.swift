@@ -16,6 +16,9 @@ import Foundation
 /// a soil lab report usually gives; if the team reports in others, change them here and in the
 /// form together.
 struct SoilMeasurements: Codable, Equatable {
+    /// This measurement's own id, so the records can hold one row per farm's soil and replace
+    /// it rather than collecting a row for every save.
+    var id = UUID()
     var nitrogen: Double?
     var phosphorus: Double?
     var potassium: Double?
@@ -36,14 +39,65 @@ struct SoilMeasurements: Codable, Equatable {
     /// Shown on the farm's page and in the report, and never sent to Apple Intelligence, so the
     /// model is never tempted to repeat it as a dose.
     var fertilizerKilogramsPerHectare: Double?
+    /// When the helper asked a scientist to look at this soil, if they have. Until then there
+    /// is nobody to send the sample to; after it, the helper is waiting on them.
+    var scientistAlertedAt: Date?
     /// When these were last saved.
     var updatedAt = Date()
 
-    /// True when nothing has been filled in.
+    /// True when nothing has been filled in. The alert does not count: a soil nobody has
+    /// measured can still be waiting on a scientist.
     var isEmpty: Bool {
         nitrogen == nil && phosphorus == nil && potassium == nil && ph == nil
             && organicCarbonPercent == nil && phMethod == nil && phFieldWater == nil
             && fertilizerType == nil && fertilizerProduct == nil && fertilizerKilogramsPerHectare == nil
+    }
+
+    /// True when there is nothing at all to keep, so the farm can go back to having no soil.
+    var isUnrecorded: Bool { isEmpty && scientistAlertedAt == nil }
+
+    /// Read so that soil saved before this had an id, or an alert, still loads: a phone that
+    /// upgrades keeps what it recorded rather than losing the lot to one missing key.
+    init(from decoder: any Decoder) throws {
+        let stored = try decoder.container(keyedBy: CodingKeys.self)
+        id = try stored.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        nitrogen = try stored.decodeIfPresent(Double.self, forKey: .nitrogen)
+        phosphorus = try stored.decodeIfPresent(Double.self, forKey: .phosphorus)
+        potassium = try stored.decodeIfPresent(Double.self, forKey: .potassium)
+        ph = try stored.decodeIfPresent(Double.self, forKey: .ph)
+        organicCarbonPercent = try stored.decodeIfPresent(
+            Double.self, forKey: .organicCarbonPercent)
+        phMethod = try stored.decodeIfPresent(PHMethod.self, forKey: .phMethod)
+        phFieldWater = try stored.decodeIfPresent(PHFieldWater.self, forKey: .phFieldWater)
+        fertilizerType = try stored.decodeIfPresent(FertilizerType.self, forKey: .fertilizerType)
+        fertilizerProduct = try stored.decodeIfPresent(String.self, forKey: .fertilizerProduct)
+        fertilizerKilogramsPerHectare = try stored.decodeIfPresent(
+            Double.self, forKey: .fertilizerKilogramsPerHectare)
+        scientistAlertedAt = try stored.decodeIfPresent(Date.self, forKey: .scientistAlertedAt)
+        updatedAt = try stored.decodeIfPresent(Date.self, forKey: .updatedAt) ?? Date()
+    }
+
+    init(
+        id: UUID = UUID(), nitrogen: Double? = nil, phosphorus: Double? = nil,
+        potassium: Double? = nil, ph: Double? = nil, organicCarbonPercent: Double? = nil,
+        phMethod: PHMethod? = nil, phFieldWater: PHFieldWater? = nil,
+        fertilizerType: FertilizerType? = nil,
+        fertilizerProduct: String? = nil, fertilizerKilogramsPerHectare: Double? = nil,
+        scientistAlertedAt: Date? = nil, updatedAt: Date = Date()
+    ) {
+        self.id = id
+        self.nitrogen = nitrogen
+        self.phosphorus = phosphorus
+        self.potassium = potassium
+        self.ph = ph
+        self.organicCarbonPercent = organicCarbonPercent
+        self.phMethod = phMethod
+        self.phFieldWater = phFieldWater
+        self.fertilizerType = fertilizerType
+        self.fertilizerProduct = fertilizerProduct
+        self.fertilizerKilogramsPerHectare = fertilizerKilogramsPerHectare
+        self.scientistAlertedAt = scientistAlertedAt
+        self.updatedAt = updatedAt
     }
 
     /// What is wrong with the numbers, in words, for the form to show. Empty when all is well.
@@ -60,6 +114,32 @@ struct SoilMeasurements: Codable, Equatable {
             if let value, value < 0 { found.append("\(name) cannot be negative.") }
         }
         return found
+    }
+
+    /// How the three nutrients read together, from 0 for soil that needs acting on to 1 for
+    /// soil that is where it should be. nil until one of them is filled in.
+    ///
+    /// It is the average of what each nutrient's band means rather than of the numbers
+    /// themselves, which cannot be averaged: 120 mg/kg of nitrogen and of potassium are not
+    /// the same news. Too much reads as badly as too little, so the bar cannot be gamed by
+    /// pouring on fertilizer.
+    var npkHealth: Double? {
+        let readings = [
+            (nitrogen, SoilStandards.nitrogen),
+            (phosphorus, SoilStandards.phosphorus),
+            (potassium, SoilStandards.potassium),
+        ]
+        let scores = readings.compactMap { value, standard -> Double? in
+            guard let value else { return nil }
+            switch standard.note(for: standard.band(for: value))?.tone {
+            case .good: return 0.9
+            case .watch: return 0.5
+            case .act: return 0.1
+            case nil: return nil
+            }
+        }
+        guard !scores.isEmpty else { return nil }
+        return scores.reduce(0, +) / Double(scores.count)
     }
 
     /// One filled-in value, ready to show.

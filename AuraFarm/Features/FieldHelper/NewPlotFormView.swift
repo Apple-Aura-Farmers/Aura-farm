@@ -10,15 +10,31 @@ import SwiftUI
 struct NewPlotFormView: View {
     /// The outline just marked.
     let corners: [GeoPoint]
-    /// Called when the helper taps Edit, to go back to the map with these corners.
-    var onEditOutline: (() -> Void)?
+    /// Called with the farm this plot was filed against and the plot itself, so whatever opened
+    /// the form can show the land it has just taken in.
+    var onSaved: ((Farm, Plot) -> Void)?
+    /// Called when the helper taps Edit, to go back to the map with these corners. It is handed
+    /// what has been typed so far, so the form they come back to still holds it.
+    var onEditOutline: ((_ farmer: String, _ plot: String) -> Void)?
 
     @Environment(FarmStore.self) private var store
     @Environment(\.dismiss) private var dismiss
 
-    @State private var farmerName = ""
-    @State private var plotName = ""
+    @State private var farmerName: String
+    @State private var plotName: String
     @FocusState private var focus: Field?
+
+    init(
+        corners: [GeoPoint], farmer: String = "", plot: String = "",
+        onSaved: ((Farm, Plot) -> Void)? = nil,
+        onEditOutline: ((String, String) -> Void)? = nil
+    ) {
+        self.corners = corners
+        self.onSaved = onSaved
+        self.onEditOutline = onEditOutline
+        _farmerName = State(initialValue: farmer)
+        _plotName = State(initialValue: plot)
+    }
 
     private enum Field {
         case farmer, plot
@@ -26,23 +42,56 @@ struct NewPlotFormView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(alignment: .leading, spacing: 16) {
-                farmerField
-                plotField
-                preview
-                Spacer(minLength: 0)
-                doneButton
+            // A Form, so the rows, the grouping and the scroll out from under the keyboard are
+            // all the system's. Nothing here draws a field of its own.
+            Form {
+                Section("Farmer") {
+                    TextField("Farmer's name", text: $farmerName)
+                        .textContentType(.name)
+                        .textInputAutocapitalization(.words)
+                        .autocorrectionDisabled()
+                        .focused($focus, equals: .farmer)
+                        .submitLabel(.next)
+                        .onSubmit { focus = .plot }
+
+                    // A Picker rather than a list under the field: the control iOS already has
+                    // for choosing one of a few things, so it opens, scrolls and closes itself.
+                    if !known.isEmpty {
+                        Picker("Already on this phone", selection: $farmerName) {
+                            ForEach(known, id: \.self) { name in
+                                Text(name).tag(name)
+                            }
+                        }
+                    }
+                }
+
+                Section {
+                    TextField("Plot's name", text: $plotName)
+                        .textInputAutocapitalization(.words)
+                        .autocorrectionDisabled()
+                        .focused($focus, equals: .plot)
+                } header: {
+                    Text("Plot")
+                } footer: {
+                    // The Form's own footer, which makes room for itself as it appears.
+                    if isNameTaken {
+                        Text("\(trimmed(farmerName)) already has a plot called that.")
+                            .foregroundStyle(.red)
+                    }
+                }
+
+                Section("The land") { preview }
             }
-            .padding(20)
+            .animation(.snappy, value: isNameTaken)
             .navigationTitle("New Plot")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Label("Back", systemImage: "chevron.left")
-                    }
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    // In the bar, so the keyboard can never cover the way out of the form.
+                    Button("Done", action: save).disabled(!canSave)
                 }
             }
         }
@@ -50,82 +99,10 @@ struct NewPlotFormView: View {
 
     // MARK: The farmer
 
-    private var farmerField: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                TextField("Farmer's name", text: $farmerName)
-                    .textContentType(.name)
-                    .textInputAutocapitalization(.words)
-                    .autocorrectionDisabled()
-                    .focused($focus, equals: .farmer)
-                    .submitLabel(.next)
-                    .onSubmit { focus = .plot }
-                Image(systemName: "chevron.down.circle")
-                    .foregroundStyle(.secondary)
-                    .accessibilityHidden(true)
-            }
-            .padding(16)
-            .background(.fill.tertiary, in: RoundedRectangle(cornerRadius: 14))
-
-            // Only while the field is being typed in, so the suggestions do not sit over the
-            // plot name once the farmer has been chosen.
-            if focus == .farmer, !suggestions.isEmpty {
-                VStack(alignment: .leading, spacing: 0) {
-                    ForEach(Array(suggestions.enumerated()), id: \.element) { index, name in
-                        if index > 0 { Divider() }
-                        Button {
-                            farmerName = name
-                            focus = .plot
-                        } label: {
-                            Text(name)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 12)
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
-                .padding(.top, 4)
-                .transition(.opacity)
-            }
-        }
-        .animation(.easeOut(duration: 0.15), value: suggestions)
-    }
-
-    /// Farmers already on the phone whose name contains what has been typed. Everything, while
-    /// nothing has been.
-    private var suggestions: [String] {
-        let typed = trimmed(farmerName)
-        let names = Set(store.farms.map(\.farmerName))
-        return
-            names
-            .filter { typed.isEmpty || ($0.localizedStandardContains(typed) && $0 != typed) }
+    /// Every farmer the phone knows, for the picker.
+    private var known: [String] {
+        Set(store.farms.map(\.farmerName))
             .sorted { $0.localizedStandardCompare($1) == .orderedAscending }
-    }
-
-    // MARK: The plot
-
-    private var plotField: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            TextField("Plot's name", text: $plotName)
-                .textInputAutocapitalization(.words)
-                .autocorrectionDisabled()
-                .focused($focus, equals: .plot)
-                .padding(16)
-                .background(.fill.tertiary, in: RoundedRectangle(cornerRadius: 14))
-                .overlay {
-                    if isNameTaken {
-                        RoundedRectangle(cornerRadius: 14).stroke(.red, lineWidth: 1)
-                    }
-                }
-            if isNameTaken {
-                Text("This name is taken")
-                    .font(.footnote)
-                    .foregroundStyle(.red)
-            }
-        }
     }
 
     private var isNameTaken: Bool {
@@ -137,30 +114,15 @@ struct NewPlotFormView: View {
     private var preview: some View {
         LandMapView(corners: corners)
             .frame(height: 180)
-            .clipShape(RoundedRectangle(cornerRadius: 14))
+            .listRowInsets(EdgeInsets())
             .overlay(alignment: .topTrailing) {
                 if let onEditOutline {
-                    Button("Edit") { onEditOutline() }
-                        .font(.subheadline.weight(.semibold))
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 7)
-                        .background(.blue, in: Capsule())
-                        .foregroundStyle(.white)
+                    Button("Edit") { onEditOutline(farmerName, plotName) }
+                        .buttonStyle(.borderedProminent)
+                        .buttonBorderShape(.capsule)
                         .padding(10)
                 }
             }
-    }
-
-    private var doneButton: some View {
-        Button(action: save) {
-            Text("Done")
-                .font(.headline)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 14)
-        }
-        .buttonStyle(.borderedProminent)
-        .controlSize(.large)
-        .disabled(!canSave)
     }
 
     // MARK: Saving
@@ -181,16 +143,19 @@ struct NewPlotFormView: View {
     private func save() {
         guard canSave else { return }
         let plot = Plot(name: trimmed(plotName), corners: corners)
-        if var farm = existingFarm {
-            farm.plots.append(plot)
-            store.update(farm)
+        let farm: Farm
+        if var existing = existingFarm {
+            existing.plots.append(plot)
+            store.update(existing)
+            farm = existing
         } else {
             // A farmer nobody has recorded before. The farm is named after them until there is
             // somewhere to ask for a name of its own.
-            store.add(
-                Farm(
-                    name: trimmed(farmerName), farmerName: trimmed(farmerName), plots: [plot]))
+            farm = Farm(
+                name: trimmed(farmerName), farmerName: trimmed(farmerName), plots: [plot])
+            store.add(farm)
         }
+        onSaved?(farm, plot)
         dismiss()
     }
 
@@ -206,7 +171,7 @@ struct NewPlotFormView: View {
             GeoPoint(latitude: -8.4095, longitude: 115.1900),
             GeoPoint(latitude: -8.4105, longitude: 115.1900),
         ],
-        onEditOutline: {}
+        onEditOutline: { _, _ in }
     )
     .environment(
         FarmStore(

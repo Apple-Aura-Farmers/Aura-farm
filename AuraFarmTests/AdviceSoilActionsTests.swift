@@ -24,7 +24,8 @@ final class AdviceSoilActionsTests: XCTestCase {
 
     private func ids(_ context: AdviceContext) -> [AdviceAction.ID] { context.actions.map(\.action.id) }
 
-    private func suggested(_ context: AdviceContext, _ id: AdviceAction.ID) -> AdviceContext.SuggestedAction? {
+    private func suggested(_ context: AdviceContext, _ id: AdviceAction.ID) -> AdviceContext.SuggestedAction?
+    {
         context.actions.first { $0.action.id == id }
     }
 
@@ -98,7 +99,8 @@ final class AdviceSoilActionsTests: XCTestCase {
 
     func testLowCarbonCallsForStrawAndCompost() {
         let soil = SoilMeasurements(organicCarbonPercent: 1.5)
-        let context = context(["paramecium": 40, "amoeba": 40, "vorticella": 30, "arcellinida": 20], level: .good, soil: soil)
+        let context = context(
+            ["paramecium": 40, "amoeba": 40, "vorticella": 30, "arcellinida": 20], level: .good, soil: soil)
 
         XCTAssertEqual(suggested(context, .returnStraw)?.reason, AdviceReasons.carbonLowStraw)
         XCTAssertEqual(suggested(context, .addCompost)?.reason, AdviceReasons.carbonLowCompost)
@@ -120,7 +122,8 @@ final class AdviceSoilActionsTests: XCTestCase {
 
     func testBothTheMicroscopeAndTheCarbonCallingForAnActionIsOneActionWithBothReasonsNoted() {
         let lowLife = context(
-            ["paramecium": 2], level: .poor, stage: .fallow, soil: SoilMeasurements(organicCarbonPercent: 1.5))
+            ["paramecium": 2], level: .poor, stage: .fallow, soil: SoilMeasurements(organicCarbonPercent: 1.5)
+        )
 
         let compost = suggested(lowLife, .addCompost)
         XCTAssertEqual(ids(lowLife).filter { $0 == .addCompost }.count, 1)
@@ -149,9 +152,11 @@ final class AdviceSoilActionsTests: XCTestCase {
     func testAirIsOnlyAskedForOnWetSoilOutsideFlowering() {
         let soil = SoilMeasurements(organicCarbonPercent: 7)
 
-        XCTAssertNil(suggested(context(quiet, level: .good, moisture: .drained, soil: soil), .alternateWetDry))
+        XCTAssertNil(
+            suggested(context(quiet, level: .good, moisture: .drained, soil: soil), .alternateWetDry))
         XCTAssertNil(suggested(context(quiet, level: .good, stage: .flowering, soil: soil), .alternateWetDry))
-        XCTAssertNil(suggested(context(quiet, level: .good, recent: [.drained], soil: soil), .alternateWetDry))
+        XCTAssertNil(
+            suggested(context(quiet, level: .good, recent: [.drained], soil: soil), .alternateWetDry))
     }
 
     // MARK: Balance
@@ -174,7 +179,8 @@ final class AdviceSoilActionsTests: XCTestCase {
 
     func testOneReadingOffAloneDoesNot() {
         XCTAssertNil(
-            suggested(context(quiet, level: .good, soil: SoilMeasurements(nitrogen: 60)), .checkNutrientBalance))
+            suggested(
+                context(quiet, level: .good, soil: SoilMeasurements(nitrogen: 60)), .checkNutrientBalance))
         XCTAssertNil(
             suggested(
                 context(quiet, level: .good, soil: SoilMeasurements(nitrogen: 130, potassium: 200)),
@@ -224,7 +230,9 @@ final class AdviceSoilActionsTests: XCTestCase {
         for id in [AdviceAction.ID.raisePH, .checkNutrientBalance, .reducePhosphorus, .boostPotassium] {
             XCTAssertTrue(soilSteps.contains(id), "\(id)")
         }
-        XCTAssertEqual(soilSteps.filter { $0 == .talkExtension }.count + combined.steps.filter { $0.actionID == .talkExtension }.count > 0, true)
+        XCTAssertEqual(
+            soilSteps.filter { $0 == .talkExtension }.count
+                + combined.steps.filter { $0.actionID == .talkExtension }.count > 0, true)
         XCTAssertEqual(combined.steps.filter { $0.actionID == .talkExtension }.count, 1)
         XCTAssertLessThanOrEqual(soilSteps.count, AdviceComposer.maxSoilSteps + 1)
     }
@@ -249,7 +257,8 @@ final class AdviceSoilActionsTests: XCTestCase {
         ] {
             let sentences = Set(AdviceReasons.allSentences)
             for suggested in context(quiet, level: .good, soil: soil).actions {
-                XCTAssertTrue(sentences.contains(suggested.reason), "\(suggested.action.id): \(suggested.reason)")
+                XCTAssertTrue(
+                    sentences.contains(suggested.reason), "\(suggested.action.id): \(suggested.reason)")
             }
         }
     }
@@ -282,13 +291,16 @@ final class AdviceSoilActionsTests: XCTestCase {
         XCTAssertTrue(prompt.contains("- \(AdviceActions.action(.raisePH)?.wording ?? "") (why:"))
         // The model is not asked to pick it.
         XCTAssertFalse(prompt.contains("- raise_ph:"))
-        XCTAssertTrue(AdvicePromptBuilder.instructions().contains("Soil steps come from the helper's soil measurements"))
+        XCTAssertTrue(
+            AdvicePromptBuilder.instructions().contains("Soil steps come from the helper's soil measurements")
+        )
     }
 
     // MARK: Standard advice
 
     func testStandardAdviceUsesTheSoilActionsAndSaysSo() {
-        let context = context(["paramecium": 2], level: .poor, stage: .fallow, soil: SoilMeasurements(ph: 5.5))
+        let context = context(
+            ["paramecium": 2], level: .poor, stage: .fallow, soil: SoilMeasurements(ph: 5.5))
         let recommendation = AdviceComposer.combined(
             RuleBasedRecommender.recommendation(for: context), context: context)
 

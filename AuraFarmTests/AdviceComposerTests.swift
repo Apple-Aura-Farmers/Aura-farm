@@ -12,7 +12,8 @@ final class AdviceComposerTests: XCTestCase {
         let result = SoilResult(
             sampleID: "A12", recordedAt: .now, framesKept: 10, moisture: .flooded, countsByClass: counts,
             sweep: nil, cropStage: .fallow, recentActions: [], stoppedEarly: false, soil: soil)
-        let estimate = SoilHealthEstimate(level: level, score: nil, confidence: .low, reasons: [], followUp: "Again.")
+        let estimate = SoilHealthEstimate(
+            level: level, score: nil, confidence: .low, reasons: [], followUp: "Again.")
         return AdviceContextBuilder().context(for: result, estimate: estimate, history: [])
     }
 
@@ -24,18 +25,21 @@ final class AdviceComposerTests: XCTestCase {
         nitrogen: 60, phosphorus: 60, potassium: 100, ph: 5.5, organicCarbonPercent: 7)
 
     func testSummaryTellsTheFarmerToKeepGoingOnlyWhenEverySoilReadingIsStandard() {
-        let good = context(quiet, level: .good, soil: SoilMeasurements(nitrogen: 100, phosphorus: 20, ph: 6.5))
+        let good = context(
+            quiet, level: .good, soil: SoilMeasurements(nitrogen: 100, phosphorus: 20, ph: 6.5))
         let once = AdviceComposer.combined(standard(good), context: good)
         XCTAssertTrue(once.summary.contains(AdviceComposer.soilAllGood))
         XCTAssertEqual(AdviceComposer.combined(once, context: good).summary, once.summary)
 
         let off = context(quiet, level: .good, soil: SoilMeasurements(nitrogen: 100, ph: 5.5))
-        XCTAssertFalse(AdviceComposer.combined(standard(off), context: off).summary.contains(AdviceComposer.soilAllGood))
+        XCTAssertFalse(
+            AdviceComposer.combined(standard(off), context: off).summary.contains(AdviceComposer.soilAllGood))
     }
 
     func testInorganicOnlyFertilizerAddsAnOrganicStepAndBlocksTheAllGoodLine() {
         func rec(_ type: FertilizerType) -> Recommendation {
-            let ctx = context(quiet, level: .good, soil: SoilMeasurements(nitrogen: 100, fertilizerType: type))
+            let ctx = context(
+                quiet, level: .good, soil: SoilMeasurements(nitrogen: 100, fertilizerType: type))
             return AdviceComposer.combined(standard(ctx), context: ctx)
         }
         let inorganic = rec(.inorganic)
@@ -153,9 +157,12 @@ final class AdviceComposerTests: XCTestCase {
         XCTAssertNil(step.group)
         XCTAssertFalse(step.alsoFromSoil)
         let round = try JSONDecoder().decode(
-            Recommendation.Step.self, from: JSONEncoder().encode(AdviceComposer.combined(
-                Recommendation(summary: "", noticed: [], steps: [step], source: .rules),
-                context: context(["paramecium": 2], soil: manySoil)).steps[0]))
+            Recommendation.Step.self,
+            from: JSONEncoder().encode(
+                AdviceComposer.combined(
+                    Recommendation(summary: "", noticed: [], steps: [step], source: .rules),
+                    context: context(["paramecium": 2], soil: manySoil)
+                ).steps[0]))
         XCTAssertEqual(round.group, .microscope)
     }
 }

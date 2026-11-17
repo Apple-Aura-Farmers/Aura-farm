@@ -356,7 +356,8 @@ private struct SummaryPage: View {
                 }
                 if report.organisms.count > 6 || report.moreKinds > 0 {
                     let extra = report.organisms.dropFirst(6).map(\.name)
-                    let names = extra.isEmpty ? "\(report.moreKinds) more kinds" : extra.joined(separator: ", ")
+                    let names =
+                        extra.isEmpty ? "\(report.moreKinds) more kinds" : extra.joined(separator: ", ")
                     Text("Also counted: \(names).")
                         .font(Style.body(8.5))
                         .foregroundStyle(Style.muted)
@@ -371,7 +372,8 @@ private struct SummaryPage: View {
 
     private var countLine: String {
         guard let total = report.totalCount else { return "" }
-        return "\(total == 1 ? "1 organism" : "\(total) organisms") counted across \(report.framesKept) frames."
+        return
+            "\(total == 1 ? "1 organism" : "\(total) organisms") counted across \(report.framesKept) frames."
     }
 
     private func organismCard(_ organism: AdviceReport.Organism) -> some View {
@@ -814,7 +816,8 @@ private struct NextStepsPage: View {
         for (index, step) in report.recommendation.steps.enumerated() {
             if !started || step.group != last {
                 if let group = step.group {
-                    let title = group == .microscope ? "From the microscope test" : "From your soil measurements"
+                    let title =
+                        group == .microscope ? "From the microscope test" : "From your soil measurements"
                     rows.append(.header(title))
                 }
                 last = step.group
@@ -948,7 +951,8 @@ private struct NotesBlock: View {
     }
 
     private var madeLine: String {
-        var text = "The app's fixed rules chose every step from the microscope test and the soil measurements. "
+        var text =
+            "The app's fixed rules chose every step from the microscope test and the soil measurements. "
         text +=
             report.recommendation.source == .foundationModel
             ? "Apple Intelligence on the phone only wrote the wording, which was checked first. "
@@ -963,7 +967,8 @@ private struct NotesBlock: View {
                 VStack(alignment: .leading, spacing: 5) {
                     note(
                         "Standards",
-                        "A provisional first draft for flooded rice paddies. No agronomist has reviewed it yet.")
+                        "A provisional first draft for flooded rice paddies. No agronomist has reviewed it yet."
+                    )
                     note("pH in flooded rice", SoilEducation.phCaveat + " " + phLine)
                     note(
                         "Using this report",
@@ -1097,7 +1102,8 @@ private struct TrendChart: View {
                     "Nitrogen in the soil is low, and plants need it for leaves and stems.", "Next fallow",
                     .soil),
                 step(
-                    .raisePH, "Ask your extension officer whether this low pH needs any change for flooded rice.",
+                    .raisePH,
+                    "Ask your extension officer whether this low pH needs any change for flooded rice.",
                     "This pH was measured on drained soil, and flooding often moves pH toward neutral, so it is worth checking first.",
                     "Before next planting", .soil),
                 step(
@@ -1106,7 +1112,8 @@ private struct TrendChart: View {
                     "Nitrogen, phosphorus and potassium need to be in balance, and these readings are not.",
                     "Before next application", .soil),
                 step(
-                    .boostPotassium, "Leave crop straw on the field after harvest to return potassium to the soil.",
+                    .boostPotassium,
+                    "Leave crop straw on the field after harvest to return potassium to the soil.",
                     "Potassium is low, and plants use it for strong stems.", "After harvest", .soil),
                 step(
                     .keepStrawOnTop,

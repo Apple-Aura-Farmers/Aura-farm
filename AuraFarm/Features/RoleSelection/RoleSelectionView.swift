@@ -15,33 +15,35 @@ struct RoleSelectionView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 16) {
-                ForEach(UserRole.allCases) { role in
-                    Button {
-                        onSelect(role)
-                    } label: {
-                        card(for: role)
+            List {
+                Section {
+                    ForEach(UserRole.allCases) { role in
+                        Button {
+                            onSelect(role)
+                        } label: {
+                            row(for: role)
+                        }
+                        .foregroundStyle(.primary)
                     }
-                    .buttonStyle(.plain)
+                } footer: {
+                    Text("You can switch role later.")
                 }
             }
-            .padding(20)
-            .frame(maxHeight: .infinity)
             .navigationTitle("User Selection")
             .navigationBarTitleDisplayMode(.large)
         }
     }
 
-    private func card(for role: UserRole) -> some View {
+    private func row(for role: UserRole) -> some View {
         HStack(spacing: 16) {
             Image(systemName: role.systemImage)
-                .font(.system(size: 34))
+                .font(.largeTitle)
                 .foregroundStyle(.tint)
                 .frame(width: 52)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 4) {
                 Text(role.title)
-                    .font(.title3.bold())
+                    .font(.headline)
                 Text(role.summary)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
@@ -49,13 +51,13 @@ struct RoleSelectionView: View {
             }
             Spacer(minLength: 0)
             Image(systemName: "chevron.right")
+                .font(.footnote.weight(.semibold))
                 .foregroundStyle(.tertiary)
                 .accessibilityHidden(true)
         }
-        .padding(20)
-        .frame(maxWidth: .infinity, minHeight: 120, alignment: .leading)
-        .background(.fill.tertiary, in: RoundedRectangle(cornerRadius: 16))
-        .contentShape(RoundedRectangle(cornerRadius: 16))
+        // Big targets so it can be answered with a thumb in the field.
+        .padding(.vertical, 12)
+        .contentShape(.rect)
         .accessibilityElement(children: .combine)
         .accessibilityHint("Opens the \(role.title) screens")
     }

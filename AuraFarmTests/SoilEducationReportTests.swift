@@ -13,19 +13,25 @@ final class SoilEducationReportTests: XCTestCase {
 
     private let quiet = ["paramecium": 20, "amoeba": 20]
 
-    private func result(_ soil: SoilMeasurements?, counts: [String: Int]? = nil, recent: [SampleDetails.RecentAction] = [])
+    private func result(
+        _ soil: SoilMeasurements?, counts: [String: Int]? = nil, recent: [SampleDetails.RecentAction] = []
+    )
         -> SoilResult
     {
         SoilResult(
             sampleID: "A12", recordedAt: Date(timeIntervalSince1970: 1_794_787_200), framesKept: 10,
-            moisture: .flooded, countsByClass: counts ?? quiet, sweep: nil, cropStage: nil, recentActions: recent,
+            moisture: .flooded, countsByClass: counts ?? quiet, sweep: nil, cropStage: nil,
+            recentActions: recent,
             stoppedEarly: false, soil: soil)
     }
 
-    private func context(_ soil: SoilMeasurements?, counts: [String: Int]? = nil, recent: [SampleDetails.RecentAction] = [])
+    private func context(
+        _ soil: SoilMeasurements?, counts: [String: Int]? = nil, recent: [SampleDetails.RecentAction] = []
+    )
         -> AdviceContext
     {
-        let estimate = SoilHealthEstimate(level: .good, score: nil, confidence: .low, reasons: [], followUp: "Again.")
+        let estimate = SoilHealthEstimate(
+            level: .good, score: nil, confidence: .low, reasons: [], followUp: "Again.")
         return AdviceContextBuilder().context(
             for: result(soil, counts: counts, recent: recent), estimate: estimate, history: [])
     }
@@ -34,7 +40,8 @@ final class SoilEducationReportTests: XCTestCase {
         var availability: RecommenderAvailability { .unavailable(reason: "Off in tests.") }
         func prewarm() {}
         func recommend(
-            for context: AdviceContext, freshWording: Bool, onProgress: @escaping @Sendable (AdviceProgress) -> Void
+            for context: AdviceContext, freshWording: Bool,
+            onProgress: @escaping @Sendable (AdviceProgress) -> Void
         ) async throws -> Recommendation {
             XCTFail("The model must not be asked")
             throw CancellationError()
@@ -47,7 +54,9 @@ final class SoilEducationReportTests: XCTestCase {
             recommender: Unavailable(), historyProvider: { _ in [] }, adviceStore: nil, feedbackStore: nil)
     }
 
-    private func farmAndTest(_ soil: SoilMeasurements?, frames: [URL] = [], date: Date? = nil) -> (Farm, FarmTest) {
+    private func farmAndTest(_ soil: SoilMeasurements?, frames: [URL] = [], date: Date? = nil) -> (
+        Farm, FarmTest
+    ) {
         var farm = Farm(name: "Subak Jatiluwih", farmerName: "Pak Wayan", plots: [])
         farm.soil = soil
         var testResult = result(soil, counts: ["paramecium": 40, "amoeba": 30, "vorticella": 20])
@@ -98,7 +107,8 @@ final class SoilEducationReportTests: XCTestCase {
                 standard.education.detail(for: $0).meaning
             }
             XCTAssertEqual(meanings.count, 4, standard.education.name)
-            XCTAssertEqual(Set(meanings).count, 4, "Each band says something different: \(standard.education.name)")
+            XCTAssertEqual(
+                Set(meanings).count, 4, "Each band says something different: \(standard.education.name)")
             XCTAssertNotNil(standard.education.action[.low], standard.education.name)
             XCTAssertNotNil(standard.education.action[.excessive], standard.education.name)
         }
@@ -122,7 +132,8 @@ final class SoilEducationReportTests: XCTestCase {
 
     func testPHWordingIsForFloodedRiceAndNeverUniversal() {
         let caveat = SoilEducation.phCaveat
-        XCTAssertTrue(caveat.contains("A provisional target range for flooded rice soils is around pH 6.0–7.0."))
+        XCTAssertTrue(
+            caveat.contains("A provisional target range for flooded rice soils is around pH 6.0–7.0."))
         XCTAssertTrue(caveat.contains("Flooding can move acidic or alkaline soils toward near-neutral pH"))
         XCTAssertTrue(caveat.contains("air-dried"))
         for word in ["universal", "perfect", "ideal"] {
@@ -172,10 +183,12 @@ final class SoilEducationReportTests: XCTestCase {
             XCTAssertEqual(decoded.fertilizerType, type)
             XCTAssertFalse(decoded.isEmpty, "\(type)")
         }
-        XCTAssertEqual(FertilizerType.allCases.map(\.label), [
-            "Organic fertilizer", "Inorganic fertilizer", "Organic–inorganic blend", "Not sure",
-            "No fertilizer recorded",
-        ])
+        XCTAssertEqual(
+            FertilizerType.allCases.map(\.label),
+            [
+                "Organic fertilizer", "Inorganic fertilizer", "Organic–inorganic blend", "Not sure",
+                "No fertilizer recorded",
+            ])
     }
 
     func testNoFertilizerRecordedIsNotTheSameAsNeverAsked() {
@@ -199,7 +212,9 @@ final class SoilEducationReportTests: XCTestCase {
     func testFertilizerEducationIsShown() {
         let education = AdviceEducation(SoilMeasurements(fertilizerType: .organic))
         XCTAssertEqual(education?.fertilizer?.education?.contains(FertilizerType.sharedNote), true)
-        XCTAssertTrue(education?.fertilizer?.education?.hasPrefix("Organic fertilizers can release nutrients gradually") ?? false)
+        XCTAssertTrue(
+            education?.fertilizer?.education?.hasPrefix("Organic fertilizers can release nutrients gradually")
+                ?? false)
         XCTAssertNil(AdviceEducation(SoilMeasurements(fertilizerType: .notSure))?.fertilizer?.education)
         // Neither kind is called better.
         for type in FertilizerType.allCases {
@@ -219,7 +234,8 @@ final class SoilEducationReportTests: XCTestCase {
             }
             // Beside a standard reading, only the inorganic one adds a step.
             XCTAssertEqual(
-                context(SoilMeasurements(nitrogen: 100, fertilizerType: type)).actions.contains(where: \.fromSoil),
+                context(SoilMeasurements(nitrogen: 100, fertilizerType: type)).actions.contains(
+                    where: \.fromSoil),
                 type == .inorganic, "\(type)")
         }
     }
@@ -233,8 +249,10 @@ final class SoilEducationReportTests: XCTestCase {
         XCTAssertFalse(prompt.contains("250"))
         XCTAssertFalse(prompt.contains("kg/ha"))
         XCTAssertFalse(prompt.contains("Brandname"))
-        XCTAssertTrue(prompt.contains("Fertilizer kind recorded (background only, not advice): inorganic fertilizer."))
-        XCTAssertTrue(AdvicePromptBuilder.instructions().contains("Do not judge it, and do not suggest a fertilizer"))
+        XCTAssertTrue(
+            prompt.contains("Fertilizer kind recorded (background only, not advice): inorganic fertilizer."))
+        XCTAssertTrue(
+            AdvicePromptBuilder.instructions().contains("Do not judge it, and do not suggest a fertilizer"))
     }
 
     func testTheKindAloneIsNotSentWithoutAReading() {
@@ -244,7 +262,8 @@ final class SoilEducationReportTests: XCTestCase {
 
     func testRecentFertilizingStillShapesTheMicroscopeAdvice() {
         let counts = ["euglena": 40, "phacus": 20, "paramecium": 2]
-        let withType = context(SoilMeasurements(nitrogen: 100, fertilizerType: .organic), counts: counts, recent: [.fertilized])
+        let withType = context(
+            SoilMeasurements(nitrogen: 100, fertilizerType: .organic), counts: counts, recent: [.fertilized])
         XCTAssertEqual(
             withType.actions.first { $0.action.id == .reviewFertilizer }?.reason,
             AdviceReasons.fertilizerAfterFertilizing)
@@ -254,7 +273,8 @@ final class SoilEducationReportTests: XCTestCase {
         let organic = SoilInputs(SoilMeasurements(nitrogen: 60, fertilizerType: .organic))
         let inorganic = SoilInputs(SoilMeasurements(nitrogen: 60, fertilizerType: .inorganic))
         XCTAssertNotEqual(organic, inorganic)
-        XCTAssertEqual(AdviceUpdateNote.text(from: organic, to: inorganic), "Updated with the new fertilizer type.")
+        XCTAssertEqual(
+            AdviceUpdateNote.text(from: organic, to: inorganic), "Updated with the new fertilizer type.")
     }
 
     // MARK: Combined advice
@@ -281,7 +301,9 @@ final class SoilEducationReportTests: XCTestCase {
 
     func testTheNewNeverSayRulesCatchDiagnosisAndAlwaysClaims() {
         let ctx = context(nil)
-        for text in ["This reading is a diagnosis.", "More carbon is always better.", "High pH is always bad."] {
+        for text in [
+            "This reading is a diagnosis.", "More carbon is always better.", "High pH is always bad.",
+        ] {
             XCTAssertFalse(AdviceOutputChecker.problems(in: text, context: ctx, wordLimit: 40).isEmpty, text)
         }
     }
@@ -291,11 +313,14 @@ final class SoilEducationReportTests: XCTestCase {
     func testAReportWithoutMeasurementsExports() throws {
         let (farm, test) = farmAndTest(nil)
         let report = AdviceReport.make(
-            farm: farm, test: test, recommendation: AdviceReport.sample().recommendation, basis: "Based on it.")
+            farm: farm, test: test, recommendation: AdviceReport.sample().recommendation,
+            basis: "Based on it.")
         let (pages, text) = try pdfText(report)
 
         XCTAssertEqual(pages, AdviceReportPages.titles(for: report).count)
-        XCTAssertTrue(squash(text).contains(squash("No soil measurements or fertilizer information have been recorded")))
+        XCTAssertTrue(
+            squash(text).contains(squash("No soil measurements or fertilizer information have been recorded"))
+        )
         XCTAssertEqual(AdviceReportPages.titles(for: report), ["Field summary", "What to do next"])
         XCTAssertTrue(squash(text).contains(squash("More samples are needed before a trend can be shown.")))
     }
@@ -307,7 +332,8 @@ final class SoilEducationReportTests: XCTestCase {
 
         XCTAssertEqual(pages, AdviceReportPages.titles(for: report).count)
         for needle in [
-            "60 mg/kg", "Low", 5.6.formatted(.number.precision(.fractionLength(0...2))), SoilEducation.nitrogen.whatItDoes, SoilEducation.nitrogen.meaning[.low]!,
+            "60 mg/kg", "Low", 5.6.formatted(.number.precision(.fractionLength(0...2))),
+            SoilEducation.nitrogen.whatItDoes, SoilEducation.nitrogen.meaning[.low]!,
             "Organic fertilizer", "Compost", "500 kg/ha", SoilEducation.phCaveat,
             report.basis!, report.recommendation.summary, "From the microscope test",
             "From your soil measurements", "About your soil measurements", "not a diagnosis",
@@ -354,7 +380,8 @@ final class SoilEducationReportTests: XCTestCase {
         XCTAssertNotEqual(first, second)
         XCTAssertTrue(second.steps.contains { $0.actionID == .reduceNitrogen })
         let (farm, test) = farmAndTest(SoilMeasurements(nitrogen: 200))
-        let text = try pdfText(AdviceReport.make(farm: farm, test: test, recommendation: second, basis: nil)).text
+        let text = try pdfText(AdviceReport.make(farm: farm, test: test, recommendation: second, basis: nil))
+            .text
         XCTAssertTrue(squash(text).contains(squash(AdviceActions.action(.reduceNitrogen)!.wording)))
         XCTAssertTrue(text.contains("Excessive"))
     }
@@ -364,8 +391,10 @@ final class SoilEducationReportTests: XCTestCase {
         var changed = farm
         changed.soil = SoilMeasurements(fertilizerType: .inorganic)
         let recommendation = AdviceReport.sample().recommendation
-        let first = try pdfText(AdviceReport.make(farm: farm, test: test, recommendation: recommendation, basis: nil))
-        let second = try pdfText(AdviceReport.make(farm: changed, test: test, recommendation: recommendation, basis: nil))
+        let first = try pdfText(
+            AdviceReport.make(farm: farm, test: test, recommendation: recommendation, basis: nil))
+        let second = try pdfText(
+            AdviceReport.make(farm: changed, test: test, recommendation: recommendation, basis: nil))
         XCTAssertTrue(first.text.contains("Organic fertilizer"))
         XCTAssertTrue(second.text.contains("Inorganic fertilizer"))
         XCTAssertFalse(second.text.contains("Organic fertilizer"))
@@ -375,7 +404,8 @@ final class SoilEducationReportTests: XCTestCase {
         let short = AdviceReport.sample(soil: SoilMeasurements(ph: 6.5), steps: 3)
         let long = AdviceReport.sample(steps: 9)
         XCTAssertEqual(
-            AdviceReportPages.titles(for: short), ["Field summary", "Your soil measurements", "What to do next"])
+            AdviceReportPages.titles(for: short),
+            ["Field summary", "Your soil measurements", "What to do next"])
         XCTAssertEqual(AdviceReportPages.titles(for: long).last, "Trends and notes")
     }
 
@@ -425,7 +455,8 @@ final class SoilEducationReportTests: XCTestCase {
             return url
         }
         let (farm, test) = farmAndTest(SoilMeasurements(ph: 6.5), frames: urls)
-        let report = AdviceReport.make(farm: farm, test: test, recommendation: AdviceReport.sample().recommendation, basis: nil)
+        let report = AdviceReport.make(
+            farm: farm, test: test, recommendation: AdviceReport.sample().recommendation, basis: nil)
 
         XCTAssertEqual(report.frameSources.map(\.url), [urls[0], urls[2]])
         XCTAssertEqual(AdvicePDFExporter.withFrames(report).frames.count, 2)
@@ -467,7 +498,9 @@ final class SoilEducationReportTests: XCTestCase {
         withFrame.frames = [
             AdviceReport.Frame(
                 jpeg: image.jpegData(compressionQuality: 0.8)!,
-                caption: "Microscope frame 1 of 12 from this sample, chosen by its place in the sweep, not by what it shows.")
+                caption:
+                    "Microscope frame 1 of 12 from this sample, chosen by its place in the sweep, not by what it shows."
+            )
         ]
         let reports: [(String, AdviceReport)] = [
             ("empty", AdviceReport.sample(soil: nil, steps: 2)),
@@ -486,26 +519,13 @@ final class SoilEducationReportTests: XCTestCase {
         print("REPORT_PAGES_FOLDER=\(folder.path)")
     }
 
-    // MARK: Home
-
-    func testExportingLeavesHomeAbleToRaiseItsList() {
-        // On the farm's page, export or not, the list stays down.
-        XCTAssertFalse(
-            FieldHelperHomeView.shouldRaiseList(hasFarms: true, farmOpen: true, markingPlot: false, formOpen: false))
-        // Back on Home after exporting or cancelling, it comes back.
-        XCTAssertTrue(
-            FieldHelperHomeView.shouldRaiseList(hasFarms: true, farmOpen: false, markingPlot: false, formOpen: false))
-        XCTAssertFalse(
-            FieldHelperHomeView.shouldRaiseList(hasFarms: false, farmOpen: false, markingPlot: false, formOpen: false))
-        XCTAssertFalse(
-            FieldHelperHomeView.shouldRaiseList(hasFarms: true, farmOpen: false, markingPlot: false, formOpen: true))
-    }
-
     func testWritingAReportChangesNoFarmData() throws {
         let store = FarmStore(fileURL: nil, farms: [farmAndTest(SoilMeasurements(ph: 6.5)).0])
         let before = store.farms
         let (farm, test) = farmAndTest(SoilMeasurements(ph: 6.5))
-        _ = try pdfText(AdviceReport.make(farm: farm, test: test, recommendation: AdviceReport.sample().recommendation, basis: nil))
+        _ = try pdfText(
+            AdviceReport.make(
+                farm: farm, test: test, recommendation: AdviceReport.sample().recommendation, basis: nil))
         XCTAssertEqual(store.farms, before)
     }
 }

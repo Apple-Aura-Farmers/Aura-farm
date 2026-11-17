@@ -15,14 +15,18 @@ import SwiftUI
 /// no road or place labels, so the land is the only thing drawn on it.
 struct FarmsOverviewMap: View {
     let farms: [Farm]
+    /// Where the map is looking. Held outside, so searching can send it somewhere.
+    @Binding var camera: MapCameraPosition
     /// Called with the plot the helper tapped, and the farm it belongs to.
     let onOpen: (Farm, Plot) -> Void
+
+    var onDeselect: () -> Void
     /// Drawn thicker and brighter than the rest.
     var selected: Plot.ID?
 
     var body: some View {
         MapReader { proxy in
-            Map(initialPosition: initialPosition) {
+            Map(position: $camera) {
                 ForEach(farms) { farm in
                     ForEach(farm.plots) { plot in
                         let colour = colour(of: farm)
@@ -37,7 +41,9 @@ struct FarmsOverviewMap: View {
                                 Button {
                                     onOpen(farm, plot)
                                 } label: {
-                                    number(farm.number(of: plot), in: colour)
+                                    number(
+                                        farm.number(of: plot), in: colour,
+                                        isSelected: plot.id == selected)
                                 }
                                 .buttonStyle(.plain)
                             }
@@ -53,7 +59,10 @@ struct FarmsOverviewMap: View {
             .onTapGesture { point in
                 guard let coordinate = proxy.convert(point, from: .local),
                     let hit = plot(at: GeoPoint(coordinate))
-                else { return }
+                else {
+                    onDeselect()
+                    return
+                }
                 onOpen(hit.farm, hit.plot)
             }
         }
@@ -66,7 +75,7 @@ struct FarmsOverviewMap: View {
 
     /// The plot's number on its own land. Big enough to tap, and in the farmer's colour so it
     /// reads as part of the shape under it rather than as a pin dropped on top.
-    private func number(_ value: Int, in colour: Color) -> some View {
+    private func number(_ value: Int, in colour: Color, isSelected: Bool) -> some View {
         Text(value, format: .number)
             .font(.headline)
             .foregroundStyle(.white)
@@ -74,6 +83,8 @@ struct FarmsOverviewMap: View {
             .background(colour, in: Circle())
             .overlay(Circle().stroke(.white.opacity(0.9), lineWidth: 2))
             .shadow(radius: 2)
+            .scaleEffect(isSelected ? 1.2 : 1)
+            .animation(.snappy, value: isSelected)
     }
 
     /// The plot containing the spot. Where plots overlap, the smaller one wins, so a small
@@ -89,8 +100,9 @@ struct FarmsOverviewMap: View {
             .map { ($0.farm, $0.plot) }
     }
 
-    /// Opens with every plot in view.
-    private var initialPosition: MapCameraPosition {
+    /// Every plot in view, which is where the map opens and where it goes back to when the
+    /// land changes.
+    static func fitting(_ farms: [Farm]) -> MapCameraPosition {
         guard let region = LandGeometry.region(fitting: farms.flatMap(\.allCorners)) else {
             return .automatic
         }
@@ -99,6 +111,7 @@ struct FarmsOverviewMap: View {
 }
 
 #Preview {
+    @Previewable @State var camera = MapCameraPosition.automatic
     FarmsOverviewMap(
         farms: [
             Farm(
@@ -128,7 +141,8 @@ struct FarmsOverviewMap: View {
                         ])
                 ]),
         ],
-        onOpen: { _, _ in }
+        camera: $camera,
+        onOpen: { _, _ in }, onDeselect: {}
     )
     .ignoresSafeArea()
 }

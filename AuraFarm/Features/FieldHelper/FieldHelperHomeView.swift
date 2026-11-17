@@ -1,34 +1,53 @@
+import MapKit
 import SwiftUI
 
-/// The Field Helper's home: a full-screen map of every farm they look after, with the list of
-/// farms in a sheet that pulls up from the bottom.
+/// The Plots tab: a map of every plot the helper looks after, under a bar carrying the one
+/// control it needs, which is marking new land.
 ///
-/// The map runs edge to edge with no navigation bar over it; the one control that bar held,
-/// switching role, floats on the map instead.
-///
-/// The sheet is always up while this screen is showing. SwiftUI can only show one sheet at a
-/// time from a screen, and a sheet would sit on top of any page pushed from here, so anything
-/// that opens something else (a farm's page, the add form) asks the sheet to close first and
-/// does its work once it has gone. The sheet comes back when this screen reappears.
+/// SwiftUI can only show one sheet at a time from a screen, and a sheet would sit on top of
+/// any page pushed from here, so the one sheet slot carries whichever form is wanted and the
+/// card for a tapped plot closes itself before opening that plot's farm.
 struct FieldHelperHomeView: View {
-    /// Sends the person back to the role picker.
-    var onSwitchRole: () -> Void
+    /// Where the map is looking. Owned by the tabs, so the Plots tab and the search tab beside
+    /// it show the same land and a search can send both somewhere.
+    @Binding var camera: MapCameraPosition
+    /// Set on the copy behind the search tab, which is the only one with a field to type into.
+    var isSearch = false
 
     @Environment(FarmStore.self) private var store
 
-    @State private var showFarmList = false
+    /// What has been typed into the search field, on the copy that has one.
+    @State private var query = ""
+    /// A plot just filed, waiting for its form to finish closing so its card can open.
+    @State private var justFiled: Selection?
+    /// Whether the "Plot is Created" note is showing.
+    @State private var filedNotice = false
     /// The one sheet slot this screen has for its forms. It carries what to show rather than
     /// a flag, because a sheet reads a flag before the value beside it has arrived.
     @State private var formSheet: FormSheet?
-    /// Whether the outline editor is pushed, for marking a plot before picking its farm.
-    @State private var markingPlot = false
+    /// The outline editor, when it is pushed. It carries the land to open on, so Edit from the
+    /// New Plot form shows the dots already placed rather than an empty map.
+    @State private var outline: Outline?
     /// Set to open a farm's page.
     @State private var openedFarmID: UUID?
-    /// Something to do as soon as the list sheet has finished closing.
-    @State private var pending: Pending?
-    @State private var listDetent = FieldHelperHomeView.collapsed
     /// The plot whose card is showing over the map, if any.
     @State private var selection: Selection?
+
+    /// Land marked on the map and what has been typed about it so far. It travels between the
+    /// form and the outline editor, so a trip to the map and back loses neither.
+    private struct Draft: Hashable, Identifiable {
+        var id = UUID()
+        var corners: [GeoPoint] = []
+        var farmer = ""
+        var plot = ""
+    }
+
+    /// A push of the outline editor: the draft it opens on, and whether the helper came from
+    /// the New Plot form, which is where leaving the editor has to put them back.
+    private struct Outline: Hashable {
+        var draft = Draft()
+        var fromForm = false
+    }
 
     /// A plot the helper tapped, kept with its farm so the card can name the farmer.
     private struct Selection: Equatable {
@@ -41,63 +60,87 @@ struct FieldHelperHomeView: View {
         /// Naming a farm that has no land marked yet.
         case addFarm
         /// Land marked on the map, waiting to be filed against a farm.
-        case filePlot(Plot)
+        case filePlot(Draft)
+        /// A plot the helper tapped on the map.
+        case plot(Selection)
 
         var id: String {
             switch self {
             case .addFarm: "add"
-            case .filePlot(let plot): plot.id.uuidString
+            case .filePlot(let draft): draft.id.uuidString
+            case .plot(let selection): selection.plot.id.uuidString
             }
         }
     }
 
-    private enum Pending {
-        case add
-        case markPlot
-        case open(UUID)
-    }
-
-    /// Just the title row showing, so the map has the room.
-    private static let collapsed = PresentationDetent.height(88)
-
     var body: some View {
         NavigationStack {
-            Group {
-                if store.farms.isEmpty {
-                    emptyState
-                } else {
-                    mapScreen
+            withSearch(
+                Group {
+                    if store.farms.isEmpty {
+                        emptyState
+                    } else {
+                        mapScreen
+                    }
+                }
+            )
+            .overlay(alignment: .top) { searchResults }
+            .overlay(alignment: .top) { problemBanner }
+            .overlay(alignment: .top) { filedBanner }
+            // On the screen rather than on the map, because a phone with no farms yet shows no
+            // map, and that is exactly the phone with everything to read.
+            .task { await store.pull() }
+            .navigationBarTitleDisplayMode(.inline)
+            // There is nothing scrolling under these bars, only the map, so the system has no
+            // edge to fade against and draws a hard band of tinted blur across the land. The
+            // bars float over it instead, which is what the design has.
+            .toolbarBackgroundVisibility(.hidden, for: .navigationBar)
+            .toolbarBackgroundVisibility(.hidden, for: .tabBar)
+            .toolbar {
+                // Not on the search copy, where the bar belongs to the field.
+                if !isSearch {
+                    ToolbarItem(placement: .topBarTrailing) { addButton }
                 }
             }
-            .overlay(alignment: .topLeading) { switchRoleButton }
-            .overlay(alignment: .top) { problemBanner }
-            .overlay(alignment: .bottomTrailing) { addPlotButton }
-            .overlay(alignment: .bottom) { plotCard }
-            .toolbar(.hidden, for: .navigationBar)
-            .onChange(of: store.farms.isEmpty) { _, isEmpty in
-                // Deleting the last farm removes the map this sheet hangs from.
-                if isEmpty { showFarmList = false }
-            }
-            .sheet(item: $formSheet, onDismiss: { showFarmList = true }) { sheet in
+            .sheet(item: $formSheet, onDismiss: openJustFiled) { sheet in
                 switch sheet {
                 case .addFarm:
                     FarmFormView()
-                case .filePlot(let plot):
-                    NewPlotFormView(corners: plot.corners) {
+                case .filePlot(let draft):
+                    NewPlotFormView(
+                        corners: draft.corners, farmer: draft.farmer, plot: draft.plot,
+                        // Filing a plot ends on that plot's card, the same card tapping the
+                        // land opens, rather than on a map with nothing picked out on it.
+                        onSaved: { farm, plot in justFiled = Selection(farm: farm, plot: plot) }
+                    ) { farmer, plot in
                         // Back to the map with these corners, rather than starting again.
                         formSheet = nil
-                        markingPlot = true
+                        outline = Outline(
+                            draft: Draft(corners: draft.corners, farmer: farmer, plot: plot),
+                            fromForm: true)
                     }
+                case .plot(let selection):
+                    plotCard(selection)
+                        // Only as tall as it needs to be, so the land stays in view behind it.
+                        .presentationDetents([.height(240)])
+                        .presentationDragIndicator(.visible)
+                        .presentationBackgroundInteraction(.enabled)
                 }
             }
             .navigationDestination(item: $openedFarmID) { id in
                 FarmDetailView(farmID: id)
             }
-            .navigationDestination(isPresented: $markingPlot) {
-                LandOutlineEditorView(corners: [], neighbours: store.farms.neighbours()) { corners in
-                    // Set before the editor pops, so reappearing here leaves the list sheet
-                    // closed and shows the picker instead.
-                    formSheet = .filePlot(Plot(corners: corners))
+            .navigationDestination(item: $outline) { outline in
+                LandOutlineEditorView(
+                    corners: outline.draft.corners, neighbours: store.farms.neighbours()
+                ) { corners in
+                    var draft = outline.draft
+                    draft.corners = corners
+                    formSheet = .filePlot(draft)
+                } onCancel: {
+                    // Editing land that was already marked: leaving goes back to the form it
+                    // was being named in, with the outline as it was before Edit.
+                    if outline.fromForm { formSheet = .filePlot(outline.draft) }
                 }
             }
         }
@@ -106,45 +149,11 @@ struct FieldHelperHomeView: View {
     // MARK: Screens
 
     private var mapScreen: some View {
-        FarmsOverviewMap(farms: store.farms, onOpen: show, selected: selection?.plot.id)
-            // A new map when farms are added, deleted or reshaped, so it refits to them.
-            .id(store.farms.flatMap(\.allCorners))
-            .ignoresSafeArea()
-            // Reads the records once when the map appears; after that it is the pull on the list.
-            .task { await refresh() }
-            // Runs on first showing, whenever a pushed page is popped back, and again whenever the
-            // map is rebuilt for a change to the farms. Only the first two should raise the sheet:
-            // editing a plot changes the farms while the farm's page is still open, and the sheet
-            // must not slide up over it.
-            .onAppear { raiseListIfIdle() }
-            // Coming back from a farm's page or the outline editor raises the list again from the
-            // navigation state itself, not only from `onAppear`. A share sheet or file exporter
-            // shown on the farm's page (exporting the PDF) can take the appearance callback the
-            // map relies on, and the list then never came back, leaving Home without its sheet.
-            .onChange(of: openedFarmID) { _, id in
-                if id == nil { raiseListIfIdle() }
-            }
-            .onChange(of: markingPlot) { _, marking in
-                if !marking { raiseListIfIdle() }
-            }
-            .sheet(isPresented: $showFarmList, onDismiss: runPending) {
-                FarmListSheet(
-                    farms: sortedFarms,
-                    onOpen: { request(.open($0.id)) },
-                    onAdd: { request(.add) },
-                    onMarkPlot: { request(.markPlot) },
-                    onRefresh: refresh,
-                    onDelete: delete
-                )
-                .presentationDetents([Self.collapsed, .medium, .large], selection: $listDetent)
-                // The map stays tappable until the sheet is pulled past half height.
-                .presentationBackgroundInteraction(.enabled(upThrough: .medium))
-                .presentationDragIndicator(.visible)
-                // At half height, dragging the list scrolls it instead of resizing the sheet. The
-                // sheet is still resized by dragging its title row or the handle.
-                .presentationContentInteraction(.scrolls)
-                .interactiveDismissDisabled()
-            }
+        FarmsOverviewMap(
+            farms: store.farms, camera: $camera, onOpen: show, onDeselect: deselect,
+            selected: selection?.plot.id
+        )
+        .ignoresSafeArea()
     }
 
     private var emptyState: some View {
@@ -156,198 +165,193 @@ struct FieldHelperHomeView: View {
             VStack(spacing: 12) {
                 Button("Add a farm") { formSheet = .addFarm }
                     .buttonStyle(.borderedProminent)
-                Button("Mark a plot on the map") { markingPlot = true }
+                Button("Mark a plot on the map") { outline = Outline() }
             }
         }
-    }
-
-    /// Shows the list unless something else is on screen over the map. Only ever raises it: the
-    /// farms, the selected plot and what is pushed are left as they are.
-    private func raiseListIfIdle() {
-        if Self.shouldRaiseList(
-            hasFarms: !store.farms.isEmpty, farmOpen: openedFarmID != nil, markingPlot: markingPlot,
-            formOpen: formSheet != nil)
-        {
-            showFarmList = true
-        }
-    }
-
-    /// Whether the list sheet should be up: only when Home itself is showing, with nothing pushed
-    /// or presented over the map. Exporting a report from a farm's page changes none of these, so
-    /// the list comes back as soon as that page is closed.
-    static func shouldRaiseList(hasFarms: Bool, farmOpen: Bool, markingPlot: Bool, formOpen: Bool) -> Bool {
-        hasFarms && !farmOpen && !markingPlot && !formOpen
     }
 
     // MARK: The plot the helper tapped
 
-    /// Opens the card for a plot, and gets the list out of the way so the card can be seen.
+    /// Opens the card for a plot.
     private func show(_ farm: Farm, _ plot: Plot) {
-        showFarmList = false
-        selection = Selection(farm: farm, plot: plot)
+        let selection = Selection(farm: farm, plot: plot)
+        self.selection = selection
+        formSheet = .plot(selection)
     }
 
+    /// Tapping empty map puts the card away.
+    private func deselect() {
+        guard selection != nil else { return }
+        selection = nil
+        if case .plot = formSheet { formSheet = nil }
+    }
+
+    /// Opens the card for the plot that was just filed, once its form has finished closing. A
+    /// sheet cannot be swapped for another while it is still on screen, so this waits for the
+    /// form's dismissal rather than running at the moment the plot is saved.
+    private func openJustFiled() {
+        guard let filed = justFiled else { return }
+        justFiled = nil
+        show(filed.farm, filed.plot)
+        withAnimation(.snappy) { filedNotice = true }
+    }
+
+    // MARK: Searching
+
+    /// The field, on the copy of this screen behind the search tab. The other copy is the same
+    /// map with no field over it, so moving between the two leaves the land where it is.
     @ViewBuilder
-    private var plotCard: some View {
-        if let selection {
-            VStack(alignment: .leading, spacing: 10) {
-                Text("\(selection.farm.farmerName) · \(selection.farm.title(of: selection.plot))")
-                    .font(.title3.bold())
-                if !selection.plot.name.isEmpty {
-                    Text(selection.plot.name)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+    private func withSearch(_ content: some View) -> some View {
+        if isSearch {
+            content.searchable(text: $query, prompt: "Farmers or Locations")
+        } else {
+            content
+        }
+    }
+
+    /// What has been typed matches, over the map rather than on a screen of its own. Nothing
+    /// typed shows nothing, so expanding the field leaves the land in view.
+    @ViewBuilder
+    private var searchResults: some View {
+        if isSearch, !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let found = store.farms.matching(query)
+            ScrollView {
+                if found.isEmpty {
+                    ContentUnavailableView.search(text: query)
+                        .padding(.top, 60)
+                } else {
+                    LazyVStack(spacing: 0) {
+                        ForEach(found) { farm in
+                            Button {
+                                focus(on: farm)
+                            } label: {
+                                resultRow(farm)
+                            }
+                            .buttonStyle(.plain)
+                            Divider()
+                        }
+                    }
                 }
-                if let area = selection.plot.areaSquareMetres {
-                    Text(LandGeometry.areaDescription(squareMetres: area))
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-                Button {
-                    let id = selection.farm.id
-                    self.selection = nil
-                    openedFarmID = id
-                } label: {
-                    Text("View Test Results")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(
-                    FarmerColour.colour(
-                        for: selection.farm.farmerName, among: store.farms.map(\.farmerName)))
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(20)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20))
-            .padding(.horizontal, 12)
-            .padding(.bottom, 12)
-            .transition(.move(edge: .bottom).combined(with: .opacity))
-            // Tapping the land again puts the card away.
-            .onTapGesture {}
+            .background(.regularMaterial)
         }
     }
 
-    // MARK: Floating controls
+    private func resultRow(_ farm: Farm) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(farm.farmerName)
+                .font(.headline)
+            Text(farm.locationLine)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(.rect)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
+    }
 
-    /// Starts a plot the way the map does: walk the edge first, name it afterwards.
-    private var addPlotButton: some View {
-        Button {
+    /// Sends the map to all of one farmer's land, and puts the results away so it can be seen.
+    private func focus(on farm: Farm) {
+        query = ""
+        selection = nil
+        camera = FarmsOverviewMap.fitting([farm])
+        // The keyboard would otherwise sit over half the land that was just searched for.
+        UIApplication.shared.sendAction(
+            #selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+    }
+
+    /// What a tapped plot says for itself: whose it is, which of theirs, how big, and the way
+    /// through to its tests. The sheet it sits in gives it the drag and the dismiss, so there
+    /// is no card chrome of its own here.
+    private func plotCard(_ selection: Selection) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("\(selection.farm.farmerName) · \(selection.farm.title(of: selection.plot))")
+                .font(.title2.bold())
+            if !selection.plot.name.isEmpty {
+                Text(selection.plot.name)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            if let area = selection.plot.areaSquareMetres {
+                Text(LandGeometry.areaDescription(squareMetres: area))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer(minLength: 0)
+
+            Button {
+                // The sheet goes first: pushing out from under a sheet leaves it hanging over
+                // the page that was pushed.
+                formSheet = nil
+                openedFarmID = selection.farm.id
+            } label: {
+                Text("View Test Results")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 20)
+        .padding(.top, 24)
+        .padding(.bottom, 20)
+    }
+
+    // MARK: Controls
+
+    /// Land is marked the way the map does it: drop the dots first, name it afterwards.
+    ///
+    /// In the navigation bar, because the trailing end of the tab bar is the system's search
+    /// button and nothing can take its place there.
+    private var addButton: some View {
+        Button("Mark a plot on the map", systemImage: "plus") {
             selection = nil
-            request(.markPlot)
-        } label: {
-            Image(systemName: "plus")
-                .font(.title2.weight(.semibold))
-                .frame(width: 56, height: 56)
-                .glassCircle()
+            outline = Outline()
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Mark a plot on the map")
-        .padding(.trailing, 16)
-        .padding(.bottom, 108)
+        .labelStyle(.iconOnly)
     }
 
-    private var switchRoleButton: some View {
-        Button(action: onSwitchRole) {
-            Image(systemName: "arrow.left.arrow.right")
-                .font(.body.weight(.semibold))
-                .frame(width: 44, height: 44)
-                .glassCircle()
+    /// Says the land was filed, for as long as it takes to read. It goes on its own, because
+    /// the card underneath it is the thing to look at.
+    @ViewBuilder
+    private var filedBanner: some View {
+        if filedNotice {
+            Label("Plot is Created", systemImage: "checkmark.circle.fill")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(.green, in: .capsule)
+                .padding(.top, 8)
+                .transition(.move(edge: .top).combined(with: .opacity))
+                .task {
+                    try? await Task.sleep(for: .seconds(2))
+                    withAnimation(.snappy) { filedNotice = false }
+                }
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Switch role")
-        .padding(.leading, 16)
-        .padding(.top, 8)
     }
 
     @ViewBuilder
     private var problemBanner: some View {
         if let problem = store.problem {
-            Text(problem)
+            Label(problem, systemImage: "exclamationmark.triangle.fill")
                 .font(.footnote)
                 .foregroundStyle(.orange)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
-                .padding(.horizontal, 72)
+                .background(.regularMaterial, in: .capsule)
+                .padding(.horizontal, 24)
                 .padding(.top, 8)
-        }
-    }
-
-    // MARK: The records
-
-    /// Reads the farms back, for the pull on the list and for opening the screen.
-    private func refresh() async {
-        guard let uploader = FarmUploader() else { return }
-        do {
-            store.merge(try await uploader.fetch())
-            store.report(nil)
-        } catch {
-            store.report(error.localizedDescription)
-        }
-    }
-
-    /// Takes a farm out of the records first, and off this phone only once that has gone
-    /// through: a farm deleted here but left there would come back with the next pull.
-    private func delete(_ farm: Farm) async -> String? {
-        if let uploader = FarmUploader() {
-            do {
-                try await uploader.delete(farm)
-            } catch {
-                return error.localizedDescription
-            }
-        }
-        store.delete(farm)
-        return nil
-    }
-
-    // MARK: Closing the sheet before doing something else
-
-    private func request(_ action: Pending) {
-        if showFarmList {
-            pending = action
-            showFarmList = false
-        } else {
-            run(action)
-        }
-    }
-
-    private func runPending() {
-        guard let action = pending else { return }
-        pending = nil
-        run(action)
-    }
-
-    private func run(_ action: Pending) {
-        switch action {
-        case .add: formSheet = .addFarm
-        case .markPlot: markingPlot = true
-        case .open(let id): openedFarmID = id
-        }
-    }
-
-    private var sortedFarms: [Farm] {
-        store.farms.sorted {
-            $0.name.localizedStandardCompare($1.name) == .orderedAscending
-        }
-    }
-}
-
-extension View {
-    /// Liquid Glass circle where the system has it (iOS 26), frosted material before that.
-    @ViewBuilder
-    fileprivate func glassCircle() -> some View {
-        if #available(iOS 26, *) {
-            glassEffect(.regular.interactive(), in: .circle)
-        } else {
-            background(.regularMaterial, in: Circle())
         }
     }
 }
 
 #Preview {
-    FieldHelperHomeView(onSwitchRole: {})
+    @Previewable @State var camera = MapCameraPosition.automatic
+    FieldHelperHomeView(camera: $camera)
         .environment(
             FarmStore(
                 fileURL: nil,

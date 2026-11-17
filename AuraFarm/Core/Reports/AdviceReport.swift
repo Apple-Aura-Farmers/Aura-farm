@@ -173,7 +173,8 @@ extension AdviceReport {
             FrameSource(
                 url: urls[index],
                 caption:
-                    "Microscope frame \(index + 1) of \(urls.count) from this sample, chosen by its place in the sweep, not by what it shows.")
+                    "Microscope frame \(index + 1) of \(urls.count) from this sample, chosen by its place in the sweep, not by what it shows."
+            )
         }
     }
 }

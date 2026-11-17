@@ -263,7 +263,8 @@ final class AdvicePromptBuilderTests: XCTestCase {
             lines[3],
             "Soil measurements the helper recorded (not from the microscope): nitrogen 100 mg/kg (standard), "
                 + "pH 7.9 (excessive), organic carbon 2.5 % (standard). "
-                + "The soil steps listed at the end come from them. pH targets for flooded rice are provisional.")
+                + "The soil steps listed at the end come from them. pH targets for flooded rice are provisional."
+        )
         XCTAssertTrue(lines[2].hasPrefix("This sample:"))
         XCTAssertEqual(prompt.components(separatedBy: "Soil measurements").count, 2)
     }

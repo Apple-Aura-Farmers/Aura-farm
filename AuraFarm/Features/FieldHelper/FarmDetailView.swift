@@ -24,7 +24,6 @@ struct FarmDetailView: View {
 
     private enum Presentation: String, Identifiable {
         case editFarm
-        case soilMeasurements
 
         var id: String { rawValue }
     }
@@ -45,8 +44,6 @@ struct FarmDetailView: View {
                         switch presentation {
                         case .editFarm:
                             FarmFormView(editing: farm)
-                        case .soilMeasurements:
-                            SoilMeasurementsForm(farm: farm)
                         }
                     }
                     .confirmationDialog(
@@ -123,11 +120,12 @@ struct FarmDetailView: View {
                 Text("Nothing recorded yet.")
                     .foregroundStyle(.secondary)
             }
-            Button(
-                farm.soil?.isEmpty == false ? "Edit measurements" : "Add measurements",
-                systemImage: "square.and.pencil"
-            ) {
-                presented = .soilMeasurements
+            NavigationLink {
+                SoilMeasurementsView(farmID: farm.id)
+            } label: {
+                Label(
+                    farm.soil?.isEmpty == false ? "Edit measurements" : "Add measurements",
+                    systemImage: "square.and.pencil")
             }
         } header: {
             Text("Soil measurements")

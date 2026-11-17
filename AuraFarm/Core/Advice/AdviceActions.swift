@@ -82,7 +82,8 @@ enum AdviceActions {
             cost: "Low", effort: "Medium", timing: "Before next planting", review: .must),
         AdviceAction(
             id: .boostNitrogen,
-            wording: "Between seasons, grow beans as a cover crop to keep living roots in the soil and add nitrogen.",
+            wording:
+                "Between seasons, grow beans as a cover crop to keep living roots in the soil and add nitrogen.",
             cost: "Low", effort: "Medium", timing: "Next fallow", review: .should),
         AdviceAction(
             id: .reduceNitrogen,

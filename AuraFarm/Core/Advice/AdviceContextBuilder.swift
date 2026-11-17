@@ -237,7 +237,8 @@ struct AdviceContextBuilder {
         let soil = soil ?? SoilInputs()
         var added: [AdviceAction.ID: (because: String, reason: String)] = [:]
         var removed: Set<AdviceAction.ID> = []
-        let bands = Dictionary(soil.readings.map { ($0.name, $0.band) }, uniquingKeysWith: { first, _ in first })
+        let bands = Dictionary(
+            soil.readings.map { ($0.name, $0.band) }, uniquingKeysWith: { first, _ in first })
         let recent = Set(result.recentActions)
         let stage = result.cropStage
 
@@ -249,7 +250,9 @@ struct AdviceContextBuilder {
         case .low:
             added[.raisePH] = ("pH low", measuredDry ? AdviceReasons.phMeasuredDry : AdviceReasons.phLow)
         case .excessive:
-            added[.lowerPH] = ("pH excessive", measuredDry ? AdviceReasons.phMeasuredDry : AdviceReasons.phHigh)
+            added[.lowerPH] = (
+                "pH excessive", measuredDry ? AdviceReasons.phMeasuredDry : AdviceReasons.phHigh
+            )
         default: break
         }
         switch bands["nitrogen"] {

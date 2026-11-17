@@ -74,7 +74,9 @@ enum AdvicePDFExporter {
                 ] as CFDictionary)
         else { return nil }
         let data = NSMutableData()
-        guard let destination = CGImageDestinationCreateWithData(data, UTType.jpeg.identifier as CFString, 1, nil)
+        guard
+            let destination = CGImageDestinationCreateWithData(
+                data, UTType.jpeg.identifier as CFString, 1, nil)
         else { return nil }
         CGImageDestinationAddImage(
             destination, image, [kCGImageDestinationLossyCompressionQuality: 0.8] as CFDictionary)

@@ -1,0 +1,708 @@
+#if DEBUG
+    import AVFoundation
+    import SwiftUI
+
+    /// The colour a label is shown in, on its chip and its button.
+    func slideLabLabelColor(_ label: String) -> Color {
+        switch label {
+        case "sample": .green
+        case "blank": .blue
+        case "blurry": .orange
+        default: .gray
+        }
+    }
+
+    /// Everything drawn over the lab's camera strip. Each piece is a small view of its own that
+    /// reads only what it shows from the model, so the trail and the outlines are not redrawn
+    /// when only the text readouts change.
+    struct SlideMovementOverlays: View {
+        var model: SlideMovementLabModel
+        var mapping: ScreenMapping
+        var mirrored: Bool
+        var previewLayer: AVCaptureVideoPreviewLayer?
+        /// How the picture is shown (the field centred); every mark anchored to the picture is
+        /// drawn through it. The text and the trail are not.
+        var display = CGAffineTransform.identity
+        /// The picture is shown as the field's square: everything outside the circle is dark.
+        var centred = false
+        var onTapTrail: () -> Void = {}
+
+        var body: some View {
+            ZStack {
+                LiveFieldOutlines(
+                    model: model, previewLayer: previewLayer, display: display,
+                    darkensOutside: centred)
+                LiveFieldCard(model: model)
+                if model.setupInfo.step == .align || model.setupInfo.step == .focus {
+                    // Steps 1 and 2: nothing is learned or tracked yet.
+                    LiveSetupOverlay(model: model, previewLayer: previewLayer)
+                } else if model.fieldInfo.awaitingReview {
+                    FieldReview(
+                        info: model.fieldInfo,
+                        converter: FramePreviewConverter(
+                            layer: previewLayer, frameSize: model.fieldInfo.frameSize),
+                        onConfirm: { model.confirmField() },
+                        onAdjust: { model.adjustField(to: $0) })
+                    VStack {
+                        SetupStepIndicator(step: .field).padding(8)
+                        Spacer()
+                    }
+                } else if model.setupInfo.step == .stage {
+                    // Step 4: the axes are measured from the guide's own position, so the
+                    // geometry is hosted even with the dry run off.
+                    GuideGeometryHost(model: model, previewLayer: previewLayer, display: display)
+                    LiveSetupOverlay(model: model, previewLayer: previewLayer)
+                } else {
+                    if model.guideDryRun {
+                        GuideGeometryHost(model: model, previewLayer: previewLayer, display: display)
+                        LiveGuideOverlay(state: model.overlayState)
+                        LiveEdgeFeedback(model: model, state: model.overlayState)
+                        EdgeLineOverlay(
+                            state: model.edgeLineState,
+                            mapper: FramePreviewConverter(
+                                layer: previewLayer, frameSize: model.fieldInfo.frameSize,
+                                display: display))
+                    }
+                    PausedOverlay(
+                        monitor: model.setupInfo.monitor,
+                        mapper: FramePreviewConverter(
+                            layer: previewLayer, frameSize: model.fieldInfo.frameSize,
+                            display: display))
+                    VStack {
+                        HStack(alignment: .top) {
+                            // The picture stays clear while the guide is drawing on it.
+                            if !model.guideDryRun { LiveStatusBanner(model: model) }
+                            Spacer()
+                            LiveRecBadge(model: model)
+                        }
+                        Spacer()
+                        HStack(alignment: .bottom) {
+                            // Stays on with the guide: it says whether the speed is right.
+                            LiveSpeedMeter(model: model)
+                                .frame(width: 140)
+                            Spacer()
+                            LiveTrail(model: model, mapping: mapping, mirrored: mirrored)
+                                .frame(width: 140, height: 140)
+                                .onTapGesture(perform: onTapTrail)
+                        }
+                        // Leaves room for the guide's line along the bottom.
+                        .padding(.bottom, model.guideDryRun ? 56 : 0)
+                    }
+                    .padding(8)
+                    if model.setupInfo.step == .field {
+                        VStack {
+                            SetupStepIndicator(step: .field).padding(8)
+                            Spacer()
+                        }
+                    }
+                }
+                if let toast = model.markToast {
+                    Text(toast)
+                        .font(.subheadline.bold())
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(.black.opacity(0.75), in: Capsule())
+                        .foregroundStyle(.white)
+                        .transition(.opacity)
+                }
+            }
+            .animation(.default, value: model.markToast)
+        }
+    }
+
+    // MARK: - Pieces that read the model
+
+    /// The edge buttons, from values: "✓ Edge" and "✗ Not an edge" while an attached line is at the
+    /// cross and the helper is asked, and "Mark edge here" while an edge is looked for.
+    struct EdgeFeedbackBar: View {
+        var asks: Bool
+        var canMark: Bool
+        var onAnswer: (EdgeFeedback) -> Void = { _ in }
+
+        var body: some View {
+            VStack(spacing: 8) {
+                Spacer()
+                if asks {
+                    HStack(spacing: 12) {
+                        Button("✓ Edge") { onAnswer(.yes) }.tint(.green)
+                        Button("✗ Not an edge") { onAnswer(.no) }.tint(.red)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                }
+                if canMark {
+                    Button("Mark edge here") { onAnswer(.mark) }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .tint(.white)
+                }
+            }
+            .padding(.bottom, 64)
+        }
+    }
+
+    /// Reads the guide overlay's state and answers to the model.
+    struct LiveEdgeFeedback: View {
+        var model: SlideMovementLabModel
+        var state: GuideOverlayState
+
+        var body: some View {
+            EdgeFeedbackBar(
+                asks: state.asksEdge, canMark: state.canMarkEdge,
+                onAnswer: { model.edgeFeedback($0) })
+        }
+    }
+
+    struct LiveStatusBanner: View {
+        var model: SlideMovementLabModel
+        var body: some View { StatusBanner(status: model.statusInfo.status) }
+    }
+
+    struct LiveSpeedMeter: View {
+        var model: SlideMovementLabModel
+        var body: some View { SpeedMeter(speedFraction: model.statusInfo.speedFraction) }
+    }
+
+    struct LiveTrail: View {
+        var model: SlideMovementLabModel
+        var mapping: ScreenMapping
+        var mirrored: Bool
+        var body: some View {
+            SlideMovementTrail(info: model.trailInfo, mapping: mapping, mirrored: mirrored)
+        }
+    }
+
+    struct LiveRecBadge: View {
+        var model: SlideMovementLabModel
+        var body: some View {
+            if model.isLogging {
+                RecBadge(
+                    elapsed: model.readouts.elapsedLogSeconds, rowCount: model.rowCount,
+                    label: model.label)
+            }
+        }
+    }
+
+    struct LiveFieldOutlines: View {
+        var model: SlideMovementLabModel
+        var previewLayer: AVCaptureVideoPreviewLayer?
+        var display = CGAffineTransform.identity
+        /// The picture is shown as the field's square: everything outside the circle is dark.
+        var darkensOutside = false
+        var body: some View {
+            FieldOutlines(
+                info: model.fieldInfo,
+                converter: FramePreviewConverter(
+                    layer: previewLayer, frameSize: model.fieldInfo.frameSize, display: display),
+                darkensOutside: darkensOutside)
+        }
+    }
+
+    // MARK: - Drawing from values
+
+    /// The learned eyepiece mask as a faint red tint (or, when the picture is shown as the
+    /// field's square, everything outside the circle dark: an even-odd fill of the view less the
+    /// circle), and the rectangle registration looks in as a thin yellow outline that turns with
+    /// the picture, drawn over the preview with the preview layer's own conversion from frame
+    /// pixels. Nothing is drawn without a converter (a preview with no camera).
+    struct FieldOutlines: View {
+        var info: SlideMovementInfo.Field
+        var converter: FramePreviewConverter?
+        var darkensOutside = false
+
+        var body: some View {
+            Canvas { context, size in
+                guard let converter else { return }
+                if darkensOutside, let mask = info.state?.mask, let circle = FieldCircle(fitting: mask) {
+                    var outside = Path(CGRect(origin: .zero, size: size))
+                    let box = converter.layerRect(
+                        of: CGRect(
+                            x: circle.centre.x - circle.radius, y: circle.centre.y - circle.radius,
+                            width: circle.radius * 2, height: circle.radius * 2))
+                    outside.addPath(Path(ellipseIn: box).applying(converter.display))
+                    context.fill(outside, with: .color(.black), style: FillStyle(eoFill: true))
+                } else {
+                    for rect in info.state?.mask?.eyepieceRects() ?? [] {
+                        context.fill(
+                            Path(converter.viewRect(of: rect)), with: .color(.red.opacity(0.35)))
+                    }
+                }
+                if let rect = info.registrationRect {
+                    var outline = Path()
+                    outline.addLines(converter.viewPolygon(of: rect))
+                    outline.closeSubpath()
+                    context.stroke(outline, with: .color(.yellow), lineWidth: 1)
+                }
+            }
+            .allowsHitTesting(false)
+        }
+    }
+
+    /// Measures the preview's axes and sizes for the guide overlay and hands them to the model.
+    /// Draws nothing. Rebuilds when the box, the frame size or the view size changes.
+    struct GuideGeometryHost: View {
+        var model: SlideMovementLabModel
+        var previewLayer: AVCaptureVideoPreviewLayer?
+        /// The centring transform: the axes, the centre and the size of a field are measured in
+        /// the displayed space, the one the marks are drawn in.
+        var display = CGAffineTransform.identity
+
+        private struct Key: Equatable {
+            var box: CGRect?
+            var frameSize: CGSize
+            var viewSize: CGSize
+            var hasLayer: Bool
+            var openShare: Double?
+            var display: CGAffineTransform
+        }
+
+        /// The length, in frame pixels, of the two probe vectors the axes are measured with.
+        static let probePixels = 100.0
+
+        var body: some View {
+            GeometryReader { proxy in
+                let info = model.fieldInfo
+                Color.clear
+                    .task(
+                        id: Key(
+                            box: info.registrationRect, frameSize: info.frameSize,
+                            viewSize: proxy.size, hasLayer: previewLayer != nil,
+                            openShare: info.state?.openShare, display: display)
+                    ) {
+                        model.setGuideGeometry(geometry(for: info))
+                    }
+            }
+            .allowsHitTesting(false)
+        }
+
+        private func geometry(for info: SlideMovementInfo.Field) -> GuideScreenGeometry? {
+            guard
+                let converter = FramePreviewConverter(
+                    layer: previewLayer, frameSize: info.frameSize, display: display)
+            else { return nil }
+            var circle: FieldCircle?
+            if case .ready(let mask)? = info.state { circle = FieldCircle(fitting: mask) }
+            return Self.geometry(
+                using: converter, box: info.registrationRect ?? CGRect(origin: .zero, size: info.frameSize),
+                circle: circle)
+        }
+
+        /// How the preview shows the box. The size of a field and of the field's radius come from
+        /// the lengths of the probe vectors (`FrameToView.scale`), not from the bounding box of
+        /// a rectangle, which grows when the picture is turned or sheared.
+        static func geometry(
+            using mapper: any FrameToView, box: CGRect, circle: FieldCircle?
+        ) -> GuideScreenGeometry? {
+            let middle = CGPoint(x: box.midX, y: box.midY)
+            let probe = probePixels
+            let origin = mapper.viewPoint(of: middle)
+            guard
+                let axes = GuideScreenAxes(
+                    origin: origin,
+                    xUnit: mapper.viewPoint(of: CGPoint(x: middle.x + probe, y: middle.y)),
+                    yUnit: mapper.viewPoint(of: CGPoint(x: middle.x, y: middle.y + probe)),
+                    framePixels: probe)
+            else { return nil }
+            let scale = mapper.scale(at: middle, probe: probe)
+            let side = Double(min(box.width, box.height)) * scale
+            guard side > 0 else { return nil }
+            let radius = circle.map { mapper.viewRadius(of: $0) } ?? side / 2
+            return GuideScreenGeometry(
+                axes: axes, centre: origin, pointsPerField: side, fieldRadius: radius)
+        }
+    }
+
+    struct LiveFieldCard: View {
+        var model: SlideMovementLabModel
+        var body: some View { FieldCard(state: model.fieldInfo.state) }
+    }
+
+    /// Says what the eyepiece field is up to: learning, or not found.
+    struct FieldCard: View {
+        var state: FieldState?
+
+        var body: some View {
+            switch state {
+            case .learning(let progress):
+                card(colour: .black.opacity(0.7)) {
+                    Text("Finding the eyepiece field…").font(.headline)
+                    Text("Slowly move the slide around so every part of the field is lit")
+                        .font(.caption)
+                    ProgressView(value: progress).tint(.white)
+                }
+            case .untrusted:
+                card(colour: .orange) {
+                    Text("Couldn't find the eyepiece field.").font(.headline)
+                    Text(
+                        "Using the centre of the frame. Check the light and tap Re-detect field."
+                    )
+                    .font(.caption)
+                }
+            default:
+                EmptyView()
+            }
+        }
+
+        private func card<Content: View>(
+            colour: Color, @ViewBuilder content: () -> Content
+        ) -> some View {
+            VStack(spacing: 6, content: content)
+                .multilineTextAlignment(.center)
+                .foregroundStyle(.white)
+                .padding(12)
+                .frame(maxWidth: 260)
+                .background(colour, in: RoundedRectangle(cornerRadius: 12))
+                .allowsHitTesting(false)
+        }
+    }
+
+    struct RecBadge: View {
+        var elapsed: Double
+        var rowCount: Int
+        var label: String
+
+        var body: some View {
+            VStack(alignment: .trailing, spacing: 4) {
+                HStack(spacing: 6) {
+                    Circle().fill(.red).frame(width: 10, height: 10)
+                    Text("REC \(clock) · \(rowCount) rows")
+                        .font(.footnote.bold().monospacedDigit())
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(.black.opacity(0.65), in: Capsule())
+                .foregroundStyle(.white)
+                if !label.isEmpty {
+                    Text(label.uppercased())
+                        .font(.caption.bold())
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 3)
+                        .background(slideLabLabelColor(label), in: Capsule())
+                        .foregroundStyle(.white)
+                }
+            }
+        }
+
+        private var clock: String {
+            let total = Int(elapsed)
+            return String(format: "%02d:%02d", total / 60, total % 60)
+        }
+    }
+
+    struct StatusBanner: View {
+        var status: MovementIndicators.Status
+
+        var body: some View {
+            HStack(spacing: 8) {
+                Image(systemName: symbol).font(.title2)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(word).font(.title3.weight(.heavy))
+                    if let subtitle {
+                        Text(subtitle).font(.caption.bold())
+                    }
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(colour, in: Capsule())
+            .foregroundStyle(.white)
+        }
+
+        private var word: String {
+            switch status {
+            case .starting: "Starting"
+            case .tracking: "TRACKING"
+            case .tooFast: "TOO FAST"
+            case .lost: "LOST"
+            case .noDetail: "NO DETAIL"
+            }
+        }
+
+        private var symbol: String {
+            switch status {
+            case .starting: "hourglass"
+            case .tracking: "checkmark.circle.fill"
+            case .tooFast: "tortoise.fill"
+            case .lost: "exclamationmark.triangle.fill"
+            case .noDetail: "eye.slash"
+            }
+        }
+
+        private var subtitle: String? {
+            switch status {
+            case .tooFast: "Slow down"
+            case .lost: "Move slowly back"
+            case .noDetail: "Nothing to follow here. Move back over the sample."
+            default: nil
+            }
+        }
+
+        private var colour: Color {
+            switch status {
+            case .starting: .gray
+            case .tracking: .green
+            case .tooFast: .orange
+            case .lost: .red
+            case .noDetail: Color(red: 0.36, green: 0.45, blue: 0.58)
+            }
+        }
+    }
+
+    /// A bar with green, orange and red zones and a needle. The scale ends at twice the
+    /// too-fast speed.
+    struct SpeedMeter: View {
+        var speedFraction: Double
+        var thresholds = MovementIndicatorThresholds()
+
+        var body: some View {
+            let end = thresholds.tooFastSpeedFraction * 2
+            let comfortable = min(thresholds.comfortableSpeedFraction / end, 1)
+            let tooFast = min(thresholds.tooFastSpeedFraction / end, 1)
+            let needle = min(max(speedFraction / end, 0), 1)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Speed").font(.caption2.bold()).foregroundStyle(.white)
+                GeometryReader { proxy in
+                    let width = proxy.size.width
+                    ZStack(alignment: .leading) {
+                        HStack(spacing: 0) {
+                            Rectangle().fill(.green).frame(width: width * comfortable)
+                            Rectangle().fill(.orange).frame(width: width * (tooFast - comfortable))
+                            Rectangle().fill(.red)
+                        }
+                        .clipShape(Capsule())
+                        Rectangle().fill(.white)
+                            .frame(width: 4, height: 22)
+                            .shadow(radius: 1)
+                            .offset(x: width * needle - 2)
+                    }
+                }
+                .frame(height: 22)
+            }
+            .padding(8)
+            .background(.black.opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
+        }
+    }
+
+    /// The recent position as a line with a dot at the current one, drawn through the chosen
+    /// screen mapping, with a hop ring, the start marker and its home zone, the hops that were
+    /// tracked and where tracking was lost, a one-frame grid, and a legend showing where the
+    /// frame's axes point on screen.
+    struct SlideMovementTrail: View {
+        var info: SlideMovementInfo.Trail
+        var mapping: ScreenMapping
+        var mirrored: Bool
+        var thresholds = MovementIndicatorThresholds()
+
+        @State private var flashing = false
+
+        /// The frames from the centre to the edge of the box. Grows when the view travels far,
+        /// so the whole move stays on screen.
+        private var reach: Double {
+            TrailScale.reach(for: info.trail + [info.startPoint].compactMap { $0 })
+        }
+
+        var body: some View {
+            ZStack {
+                RoundedRectangle(cornerRadius: 10).fill(.black.opacity(0.5))
+                Canvas { context, size in draw(&context, size) }
+                RoundedRectangle(cornerRadius: 10)
+                    .trim(from: 0, to: info.hopProgress)
+                    .stroke(flashing ? .white : .cyan, style: StrokeStyle(lineWidth: 5, lineCap: .round))
+                    .padding(2)
+            }
+            .task(id: info.hopCount) {
+                guard info.hopCount > 0 else { return }
+                flashing = true
+                try? await Task.sleep(for: .milliseconds(200))
+                flashing = false
+            }
+        }
+
+        private func draw(_ context: inout GraphicsContext, _ size: CGSize) {
+            let reach = reach
+            let centre = CGPoint(x: size.width / 2, y: size.height / 2)
+            let scale = min(size.width, size.height) / 2 / reach
+            func place(_ point: CGPoint) -> CGPoint {
+                let moved = mapping.onScreen(point, mirrored: mirrored)
+                return CGPoint(x: centre.x + moved.x * scale, y: centre.y + moved.y * scale)
+            }
+
+            // One line per whole frame in each direction, so a distance can be counted.
+            let whole = Int(reach.rounded(.down))
+            var grid = Path()
+            for k in -whole...whole {
+                let offset = Double(k) * scale
+                grid.move(to: CGPoint(x: centre.x + offset, y: 0))
+                grid.addLine(to: CGPoint(x: centre.x + offset, y: size.height))
+                grid.move(to: CGPoint(x: 0, y: centre.y + offset))
+                grid.addLine(to: CGPoint(x: size.width, y: centre.y + offset))
+            }
+            context.stroke(grid, with: .color(.white.opacity(0.2)), lineWidth: 1)
+            var axes = Path()
+            axes.move(to: CGPoint(x: 0, y: centre.y))
+            axes.addLine(to: CGPoint(x: size.width, y: centre.y))
+            axes.move(to: CGPoint(x: centre.x, y: 0))
+            axes.addLine(to: CGPoint(x: centre.x, y: size.height))
+            context.stroke(axes, with: .color(.white.opacity(0.5)), lineWidth: 1)
+            context.draw(
+                Text("grid = 1 field").font(.system(size: 9, weight: .bold)).foregroundColor(.white),
+                at: CGPoint(x: size.width - 38, y: 10))
+
+            // The guide's captured spots (green dots) and its current target (yellow ring).
+            for point in info.guideCaptured {
+                let spot = place(point)
+                context.fill(
+                    Path(ellipseIn: CGRect(x: spot.x - 3.5, y: spot.y - 3.5, width: 7, height: 7)),
+                    with: .color(.green))
+            }
+            if let target = info.guideTarget {
+                let spot = place(target)
+                context.stroke(
+                    Path(ellipseIn: CGRect(x: spot.x - 6, y: spot.y - 6, width: 12, height: 12)),
+                    with: .color(.yellow), lineWidth: 2)
+            }
+
+            if let start = info.startPoint {
+                let home = place(start)
+                let radius = thresholds.homeZoneFields * scale
+                context.stroke(
+                    Path(
+                        ellipseIn: CGRect(
+                            x: home.x - radius, y: home.y - radius, width: radius * 2,
+                            height: radius * 2)),
+                    with: .color(.green), style: StrokeStyle(lineWidth: 1.5, dash: [4, 3]))
+                context.fill(
+                    Path(ellipseIn: CGRect(x: home.x - 4, y: home.y - 4, width: 8, height: 8)),
+                    with: .color(.green))
+            }
+
+            // Where a hop was tracked: a white dot. Where tracking was lost: a red cross.
+            for point in info.hopPoints {
+                let spot = place(point)
+                context.fill(
+                    Path(ellipseIn: CGRect(x: spot.x - 2.5, y: spot.y - 2.5, width: 5, height: 5)),
+                    with: .color(.white))
+            }
+            for point in info.lostPoints {
+                let spot = place(point)
+                var cross = Path()
+                cross.move(to: CGPoint(x: spot.x - 4, y: spot.y - 4))
+                cross.addLine(to: CGPoint(x: spot.x + 4, y: spot.y + 4))
+                cross.move(to: CGPoint(x: spot.x + 4, y: spot.y - 4))
+                cross.addLine(to: CGPoint(x: spot.x - 4, y: spot.y + 4))
+                context.stroke(cross, with: .color(.red), lineWidth: 2)
+            }
+
+            if let last = info.trail.last {
+                // Followed stretches are solid; stretches over nothing to track are dashed.
+                var solid = Path()
+                var dashed = Path()
+                for index in info.trail.indices.dropFirst() {
+                    let blind = info.blind.indices.contains(index) && info.blind[index]
+                    if blind {
+                        dashed.move(to: place(info.trail[index - 1]))
+                        dashed.addLine(to: place(info.trail[index]))
+                    } else {
+                        solid.move(to: place(info.trail[index - 1]))
+                        solid.addLine(to: place(info.trail[index]))
+                    }
+                }
+                context.stroke(solid, with: .color(.yellow), lineWidth: 2)
+                context.stroke(
+                    dashed, with: .color(.yellow.opacity(0.7)),
+                    style: StrokeStyle(lineWidth: 2, dash: [3, 4]))
+                let dot = place(last)
+                context.fill(
+                    Path(ellipseIn: CGRect(x: dot.x - 5, y: dot.y - 5, width: 10, height: 10)),
+                    with: .color(.red))
+            }
+
+            legend(&context, size)
+        }
+
+        /// Short arrows from the bottom-left corner, drawn through the mapping.
+        private func legend(_ context: inout GraphicsContext, _ size: CGSize) {
+            let origin = CGPoint(x: 22, y: size.height - 22)
+            for (axis, name) in [(CGPoint(x: 1, y: 0), "x"), (CGPoint(x: 0, y: 1), "y")] {
+                let direction = mapping.onScreen(axis, mirrored: mirrored)
+                let tip = CGPoint(x: origin.x + direction.x * 14, y: origin.y + direction.y * 14)
+                var arrow = Path()
+                arrow.move(to: origin)
+                arrow.addLine(to: tip)
+                context.stroke(arrow, with: .color(.white), lineWidth: 1.5)
+                context.draw(
+                    Text(name).font(.system(size: 9, weight: .bold)).foregroundColor(.white),
+                    at: CGPoint(x: origin.x + direction.x * 20, y: origin.y + direction.y * 20))
+            }
+        }
+    }
+
+    // MARK: - Previews
+
+    private enum PreviewData {
+        /// A mask learned from one synthetic frame: a bright disc inside a dark ring.
+        static var field: SlideMovementInfo.Field {
+            let width = 160
+            let height = 90
+            var builder = FieldMaskBuilder(
+                width: 1280, height: 720, thresholds: .init(framesToLearn: 1))
+            let luma = (0..<(width * height)).map { index -> UInt8 in
+                let dx = Double(index % width) - 80
+                let dy = Double(index / width) - 45
+                return hypot(dx, dy) <= 41 ? 180 : 4
+            }
+            builder.add(luma: luma, gridWidth: width, gridHeight: height)
+            guard let mask = builder.result() else { return .init() }
+            return .init(
+                state: .ready(mask), registrationRect: mask.registrationRect,
+                frameSize: CGSize(width: 1280, height: 720))
+        }
+    }
+
+    /// The overlays driven by fixed fake values, so they can be checked without a camera.
+    private struct PreviewStrip: View {
+        var status: MovementIndicators.Status
+        var speed: Double
+        var mapping: ScreenMapping
+        var mirrored = false
+
+        var body: some View {
+            ZStack {
+                FieldOutlines(info: PreviewData.field, converter: nil)
+                if status == .lost { FieldCard(state: .learning(progress: 0.4)) }
+                VStack {
+                    HStack(alignment: .top) {
+                        StatusBanner(status: status)
+                        Spacer()
+                        RecBadge(elapsed: 83, rowCount: 812, label: "sample")
+                    }
+                    Spacer()
+                    HStack(alignment: .bottom) {
+                        SpeedMeter(speedFraction: speed).frame(width: 140)
+                        Spacer()
+                        SlideMovementTrail(
+                            info: .init(
+                                trail: (0..<60).map {
+                                    CGPoint(x: Double($0) * 0.04, y: sin(Double($0) / 8) * 0.3)
+                                },
+                                hopPoints: [CGPoint(x: 0.6, y: 0.2), CGPoint(x: 1.4, y: 0.3)],
+                                lostPoints: status == .lost ? [CGPoint(x: 2.0, y: -0.2)] : [],
+                                startPoint: .zero, hopProgress: 0.6, hopCount: 2),
+                            mapping: mapping, mirrored: mirrored
+                        )
+                        .frame(width: 140, height: 140)
+                    }
+                }
+                .padding(8)
+            }
+            .frame(height: 340)
+            .background(Color.gray)
+        }
+    }
+
+    #Preview("Tracking") { PreviewStrip(status: .tracking, speed: 0.05, mapping: .asIs) }
+    #Preview("Too fast") { PreviewStrip(status: .tooFast, speed: 0.22, mapping: .rotateRight) }
+    #Preview("Lost") {
+        PreviewStrip(status: .lost, speed: 0.02, mapping: .asIs, mirrored: true)
+    }
+#endif

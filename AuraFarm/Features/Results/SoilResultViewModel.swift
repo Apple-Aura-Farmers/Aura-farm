@@ -187,7 +187,8 @@ final class SoilResultViewModel {
                     let context = await buildContext()
                     guard !Task.isCancelled else { return }
                     adviceContext = context
-                    await showStandardAdvice(note: Self.measurementsChangedNote + " \(reason)", context: context)
+                    await showStandardAdvice(
+                        note: Self.measurementsChangedNote + " \(reason)", context: context)
                     return
                 }
                 modelUnavailableReason = reason
