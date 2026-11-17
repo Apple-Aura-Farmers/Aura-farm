@@ -97,7 +97,7 @@ struct FarmFormView: View {
             )
             store.add(saved)
         }
-        Task { await store.publish(saved) }
+        store.publish(saved)
         dismiss()
         onSave?()
     }
