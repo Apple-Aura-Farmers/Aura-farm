@@ -1,0 +1,59 @@
+# Cheap checks that do not need a Mac, so they run on Linux and finish in seconds.
+name: Repo checks
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  project-files:
+    name: Swift files are in the Xcode project
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Target folders are synchronized with the Xcode project, so every Swift file inside
+      # one compiles on its own. A Swift file anywhere else is in no target and never
+      # compiles, while the tests still pass, so nothing else would catch it.
+      - name: Check every Swift file is inside a target folder
+        run: |
+          stray=0
+          while IFS= read -r f; do
+            echo "::error file=$f::outside every target folder, so it is never compiled"
+            stray=1
+          done < <(git ls-files '*.swift' | grep -vE '^(AuraFarm|AuraFarmTests|AuraFarmKit)/')
+          exit $stray
+
+  no-raw-footage:
+    name: No raw footage or large files
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Raw clips are training data and live off the repo. Once committed they are
+      # in the history for good, so block them at the pull request.
+      #
+      # The ceiling is 80 MB because the detector is a transformer: its Core ML weights are
+      # 57 MB where the YOLO model before it was 4.9. Nothing else in here is close, so this
+      # still catches a clip or a stray build folder.
+      - name: Check for committed video and oversized files
+        run: |
+          limit=$((80 * 1024 * 1024))
+          fail=0
+          while IFS= read -r f; do
+            case "$f" in
+              *.mov|*.mp4|*.m4v|*.avi|*.mkv|*.xcresult/*)
+                echo "::error file=$f::raw footage and test bundles must not be committed"
+                fail=1
+                continue
+                ;;
+            esac
+            size=$(stat -c%s "$f")
+            if [ "$size" -gt "$limit" ]; then
+              echo "::error file=$f::$size bytes is over the 5 MB limit"
+              fail=1
+            fi
+          done < <(git ls-files)
+          exit $fail

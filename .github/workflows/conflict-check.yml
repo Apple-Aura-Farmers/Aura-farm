@@ -1,0 +1,52 @@
+# Labels a pull request when it stops merging cleanly into its base branch, so a
+# stale branch is visible in the pull request list without opening it.
+name: Conflict check
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  conflicts:
+    name: Merges cleanly into the base branch
+    runs-on: ubuntu-latest
+    steps:
+      # The head commit, not the merge ref: GitHub does not build a merge ref for
+      # a pull request that already conflicts.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Try the merge
+        id: merge
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git fetch -q origin "${{ github.base_ref }}"
+          if git merge --no-commit --no-ff "origin/${{ github.base_ref }}" >/dev/null 2>&1; then
+            echo "clean=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "clean=false" >> "$GITHUB_OUTPUT"
+            git diff --name-only --diff-filter=U
+          fi
+          git merge --abort 2>/dev/null || true
+
+      - name: Set the label
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.number }}
+        run: |
+          gh label create has-conflicts --color B60205 \
+            --description "Does not merge cleanly into the base branch" --force
+          if [ "${{ steps.merge.outputs.clean }}" = "true" ]; then
+            gh pr edit "$PR" --remove-label has-conflicts 2>/dev/null || true
+          else
+            gh pr edit "$PR" --add-label has-conflicts
+            echo "::warning::This branch conflicts with ${{ github.base_ref }}. Merge it in and resolve."
+          fi
