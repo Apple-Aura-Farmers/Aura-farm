@@ -84,11 +84,13 @@
         var targetTrailPoint: CGPoint?
         /// The predicted edges as segments in the trail's space.
         var predictedTrailLines: [PredictedTrailLine] = []
+        /// The confirmed edge points, in the trail's space.
+        var edgeTrailPoints: [CGPoint] = []
     }
 
     /// One predicted edge segment for the trail mini-map.
     struct PredictedTrailLine: Equatable {
-        enum Kind: Equatable { case top, bottom, right }
+        enum Kind: Equatable { case top, bottom, left, right }
         var kind: Kind
         var from: CGPoint
         var to: CGPoint
@@ -414,7 +416,8 @@
                     columnInProgress: guide.columnInProgress, spotMode: spotMode),
                 overlay: overlay,
                 captureTrailPoint: result.capture == nil ? nil : step.positionFields,
-                targetTrailPoint: targetPoint, predictedTrailLines: predictedLines)
+                targetTrailPoint: targetPoint, predictedTrailLines: predictedLines,
+                edgeTrailPoints: guide.predictedEdges.points.compactMap(trailPoint))
         }
 
         /// The predicted edges as segments in guide fields: the top and bottom lines over the x
@@ -432,9 +435,12 @@
                         CGPoint(x: range.upperBound, y: fit.along(at: range.upperBound))
                     ))
             }
-            if let x = edges.rightX, let top = edges.top, let bottom = edges.bottom {
-                segments.append(
-                    (.right, CGPoint(x: x, y: top.along(at: x)), CGPoint(x: x, y: bottom.along(at: x))))
+            if let top = edges.top, let bottom = edges.bottom {
+                for (kind, x) in [(PredictedTrailLine.Kind.left, edges.leftX), (.right, edges.rightX)] {
+                    guard let x else { continue }
+                    segments.append(
+                        (kind, CGPoint(x: x, y: top.along(at: x)), CGPoint(x: x, y: bottom.along(at: x))))
+                }
             }
             return segments
         }

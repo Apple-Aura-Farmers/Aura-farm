@@ -89,7 +89,7 @@ struct LiveOrganismCounter {
     mutating func update(
         detections: [OrganismDetector.Detection], pictureMoved: CGPoint, trackerPosition: CGPoint,
         frameSize: CGSize, fieldCircle: FieldCircle?, crop: CGRect? = nil, seconds: Double,
-        column: Int
+        column: Int, fieldSide: Double = 1
     ) -> FrameResult {
         let width = Double(frameSize.width)
         let height = Double(frameSize.height)
@@ -134,7 +134,9 @@ struct LiveOrganismCounter {
             } else {
                 isRepeat[track.id] = false
                 result.newEntries.append(
-                    map.add(label: track.label, at: position, seconds: seconds, column: column))
+                    map.add(
+                        label: track.label, at: position, seconds: seconds, column: column,
+                        fieldSide: fieldSide))
                 result.newOnMap += 1
             }
         }

@@ -140,6 +140,11 @@
         @ObservationIgnored private var guideCaptured: [CGPoint] = []
         @ObservationIgnored private var guideTarget: CGPoint?
         @ObservationIgnored private var guidePredicted: [PredictedTrailLine] = []
+        @ObservationIgnored private var guideEdgePoints: [CGPoint] = []
+        /// "Show life on map": the organisms and edge points are drawn on the mini-map.
+        @ObservationIgnored private var showsLifeOnMap = true
+        /// The run's path in the trail's space, thinned as it grows, for the run record's map.
+        @ObservationIgnored private var runPath: [CGPoint] = []
         @ObservationIgnored private var frameCount = 0
         @ObservationIgnored private var analyzing = false
         /// Analyze every Nth frame: about 10 fps at 30 fps capture.
@@ -517,6 +522,11 @@
             }
         }
 
+        /// "Show life on map": dots for the organisms counted, on the mini-map.
+        func setShowsLifeOnMap(_ shows: Bool) {
+            analysisQueue.async { [weak self] in self?.showsLifeOnMap = shows }
+        }
+
         /// "Cover slip": square lets the guide predict the right edge. Starts the guide afresh.
         func setCoverSlip(_ shape: CoverSlipShape) {
             analysisQueue.async { [weak self] in
@@ -586,6 +596,8 @@
             guideCaptured = []
             guideTarget = nil
             guidePredicted = []
+            guideEdgePoints = []
+            runPath = []
             // A new run: counting, its snapshots and the summary start afresh.
             live.begin(stamp: Self.stamp())
             live.setCounting(false)
@@ -1057,7 +1069,14 @@
                 framesSkippedByReason: live.counter.framesSkippedByReason,
                 detectorModel: live.model.rawValue, discDrops: live.counter.discDrops,
                 bigDrops: live.counter.bigDrops, detectorUnits: live.units.rawValue,
-                rightEdgeSource: dryRun.rightEdgeSource)
+                rightEdgeSource: dryRun.rightEdgeSource,
+                organisms: live.counter.map.entries.map {
+                    RunMapOrganism(
+                        label: $0.label, x: Double($0.fields.x), y: Double($0.fields.y),
+                        column: $0.column, seconds: $0.firstSeenSeconds)
+                },
+                path: RunMapContent.thinned(runPath), edges: runMapEdges(),
+                mapMapping: dryRun.mapping.rawValue, mapMirrored: dryRun.mirrored)
             var items: [URL] = []
             if let json = Self.writeRun(record) { items.append(json) }
             if logging, var last = rows.last {
@@ -1068,9 +1087,40 @@
                 if let csv = Self.write(rows, test: currentTest) { items.append(csv) }
             }
             DispatchQueue.main.async { [weak self] in
+                // The map as a picture, shared with the JSON and the CSV.
+                if let data = RunMapExport.pngData(for: record), let png = Self.writeMapPNG(data) {
+                    items.append(png)
+                }
                 self?.runSummary = record
                 self?.summaryItems = items
                 self?.runMarked = false
+            }
+        }
+
+        /// The run's edges for its record: the lines and the confirmed points, in the trail's space.
+        private func runMapEdges() -> [RunMapEdge] {
+            guidePredicted.map {
+                RunMapEdge(
+                    kind: String(describing: $0.kind), x1: Double($0.from.x), y1: Double($0.from.y),
+                    x2: Double($0.to.x), y2: Double($0.to.y))
+            }
+                + guideEdgePoints.map {
+                    RunMapEdge(
+                        kind: "point", x1: Double($0.x), y1: Double($0.y), x2: Double($0.x),
+                        y2: Double($0.y))
+                }
+        }
+
+        /// Documents/SlideLab/Runs/run-<timestamp>-map.png, next to the run's JSON.
+        private static func writeMapPNG(_ data: Data) -> URL? {
+            let folder = DetectionSnapshotWriter.documents.appending(path: "SlideLab/Runs")
+            do {
+                try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+                let url = folder.appending(path: "run-\(stamp())-map.png")
+                try data.write(to: url, options: .atomic)
+                return url
+            } catch {
+                return nil
             }
         }
 
@@ -1354,7 +1404,8 @@
                             frameShift: step.tracking.frameShift),
                         trackerPosition: step.position, frameSize: step.frameSize,
                         fieldCircle: step.fieldState?.mask.flatMap { FieldCircle(fitting: $0) },
-                        seconds: time - runStartSeconds, column: dryRun.column)
+                        seconds: time - runStartSeconds, column: dryRun.column,
+                        fieldSide: step.boxSide)
                 }
                 publishCount(isActive: dryRun.countingActive, frameSize: step.frameSize)
                 let path = edgeLine.map { $0.isCandidate ? $0.path : [] }
@@ -1367,6 +1418,7 @@
                 if let point = result.captureTrailPoint { guideCaptured.append(point) }
                 guideTarget = result.targetTrailPoint
                 guidePredicted = result.predictedTrailLines
+                guideEdgePoints = result.edgeTrailPoints
                 let control = SlideMovementInfo.RunControl(
                     pendingEnd: dryRun.pendingEnd, columnInProgress: dryRun.columnInProgress,
                     isFinished: dryRun.isFinished)
@@ -1399,6 +1451,13 @@
             if step.event != .none { lastEventName = step.eventName }
 
             trail.append(step.positionFields)
+            if guideEnabled, !dryRun.isFinished {
+                runPath.append(step.positionFields)
+                // Keeps every other point when it gets long: the path stays whole and small.
+                if runPath.count > 4 * RunMapContent.maxPathPoints {
+                    runPath = runPath.enumerated().filter { $0.offset % 2 == 0 }.map(\.element)
+                }
+            }
             trailBlind.append(!step.hasDetail)
             if trail.count > trailLength {
                 trail.removeFirst(trail.count - trailLength)
@@ -1580,7 +1639,9 @@
                 hopCount: hopCount, blind: trailBlind,
                 guideCaptured: guideEnabled ? guideCaptured : [],
                 guideTarget: guideEnabled ? guideTarget : nil,
-                predicted: guideEnabled ? guidePredicted : [])
+                predicted: guideEnabled ? guidePredicted : [],
+                edgePoints: guideEnabled && showsLifeOnMap ? guideEdgePoints : [],
+                life: guideEnabled && showsLifeOnMap ? lastCountInfo.dots : [])
             let circle =
                 step.awaitingReview ? step.fieldState?.mask.flatMap { FieldCircle(fitting: $0) } : nil
             let fieldInfo = SlideMovementInfo.Field(

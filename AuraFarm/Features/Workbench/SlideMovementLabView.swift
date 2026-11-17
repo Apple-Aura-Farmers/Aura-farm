@@ -31,6 +31,7 @@
         @AppStorage("slideLab.trackSparse") private var tracksSparse = true
         @AppStorage("slideLab.fullCoverSlip") private var fullCoverSlip = true
         @AppStorage("slideLab.askEdges") private var asksEdges = true
+        @AppStorage("slideLab.showLifeOnMap") private var showsLifeOnMap = true
         @AppStorage("slideLab.coverSlipShape") private var coverSlipName = CoverSlipShape.square.rawValue
         @AppStorage("slideLab.skipAlignFocus") private var skipsAlignFocus = false
         @AppStorage("slideLab.spotMode") private var spotModeName = "briefTouch"
@@ -73,6 +74,7 @@
                 model.setTracksSparse(tracksSparse)
                 model.setFullCoverSlip(fullCoverSlip)
                 model.setAsksEdges(asksEdges)
+                model.setShowsLifeOnMap(showsLifeOnMap)
                 model.setCoverSlip(CoverSlipShape(rawValue: coverSlipName) ?? .square)
                 model.setFieldRegion(FieldRegionMode(rawValue: fieldRegionName) ?? .auto)
                 model.setMeasuresHopAgreement(hopAgreement)
@@ -101,6 +103,7 @@
             .onChange(of: tracksSparse) { _, tracks in model.setTracksSparse(tracks) }
             .onChange(of: fullCoverSlip) { _, enabled in model.setFullCoverSlip(enabled) }
             .onChange(of: asksEdges) { _, asks in model.setAsksEdges(asks) }
+            .onChange(of: showsLifeOnMap) { _, shows in model.setShowsLifeOnMap(shows) }
             .onChange(of: coverSlipName) { _, name in
                 model.setCoverSlip(CoverSlipShape(rawValue: name) ?? .square)
             }
@@ -203,7 +206,7 @@
                         record: record, shareItems: model.summaryItems,
                         onDone: { model.dismissSummary() }
                     )
-                    .presentationDetents([.medium])
+                    .presentationDetents([.medium, .large])
                 }
             }
         }
@@ -408,6 +411,7 @@
                 Toggle("Track sparse sample", isOn: $tracksSparse)
                 Toggle("Full cover slip (line edges)", isOn: $fullCoverSlip)
                 Toggle("Ask me to confirm edges", isOn: $asksEdges)
+                Toggle("Show life on map", isOn: $showsLifeOnMap)
                 CoverSlipPicker(name: $coverSlipName)
                 Picker("Spot check", selection: $spotModeName) {
                     Text("Brief touch").tag("briefTouch")

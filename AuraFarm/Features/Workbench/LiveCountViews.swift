@@ -143,6 +143,8 @@
         var record: GuideRunRecord
         var shareItems: [URL]
         var onDone: () -> Void = {}
+        /// The type highlighted on the map by a tap on its legend row.
+        @State private var highlight: String?
 
         var body: some View {
             VStack(alignment: .leading, spacing: 10) {
@@ -155,6 +157,11 @@
                             separator: " · ")
                     )
                     .font(.subheadline)
+                }
+                if !record.path.isEmpty || !record.organisms.isEmpty {
+                    RunMapView(content: RunMapContent(record: record), highlight: highlight)
+                        .frame(height: 240)
+                    LifeLegendView(counts: record.countsByLabel, highlight: $highlight)
                 }
                 Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 4) {
                     row("Columns", "\(record.columns)")

@@ -38,6 +38,15 @@ struct GuideRunRecord: Codable, Equatable {
     /// How the right edge was found: "line", "empty" (the view went empty ahead) or "predicted"
     /// (the square cover slip's); empty when it was not found. Earlier records have none.
     var rightEdgeSource = ""
+    /// The map of the run, in fields in the trail's space, so it can be redrawn from the record
+    /// alone: the organisms the helper's count includes, the path (at most
+    /// `RunMapContent.maxPathPoints` points), the edges, and how that space turns onto the screen
+    /// (`ScreenMapping.rawValue` and the mirror). Earlier records have none.
+    var organisms: [RunMapOrganism] = []
+    var path: [RunMapPoint] = []
+    var edges: [RunMapEdge] = []
+    var mapMapping = ScreenMapping.asIs.rawValue
+    var mapMirrored = false
 
     /// The share of the edge span the columns reach; nil unless the span is known and positive.
     static func coverageShare(columns: Int, step: Double, edgeSpanFields: Double?) -> Double? {
@@ -106,6 +115,12 @@ extension GuideRunRecord {
             bigDrops: try c.decodeIfPresent(Int.self, forKey: .bigDrops) ?? 0,
             detectorUnits: try c.decodeIfPresent(String.self, forKey: .detectorUnits)
                 ?? DetectorUnits.graphics.rawValue,
-            rightEdgeSource: try c.decodeIfPresent(String.self, forKey: .rightEdgeSource) ?? "")
+            rightEdgeSource: try c.decodeIfPresent(String.self, forKey: .rightEdgeSource) ?? "",
+            organisms: try c.decodeIfPresent([RunMapOrganism].self, forKey: .organisms) ?? [],
+            path: try c.decodeIfPresent([RunMapPoint].self, forKey: .path) ?? [],
+            edges: try c.decodeIfPresent([RunMapEdge].self, forKey: .edges) ?? [],
+            mapMapping: try c.decodeIfPresent(String.self, forKey: .mapMapping)
+                ?? ScreenMapping.asIs.rawValue,
+            mapMirrored: try c.decodeIfPresent(Bool.self, forKey: .mapMirrored) ?? false)
     }
 }

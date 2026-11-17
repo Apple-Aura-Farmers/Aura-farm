@@ -33,6 +33,8 @@
         /// One row per label seen, biggest map count first; labels with no count are left out.
         var labels: [LabelCount] = []
         var boxes: [Box] = []
+        /// Every organism the helper's count includes, on the map (fields, the trail's space).
+        var dots: [RunMapOrganism] = []
         var frameSize = CGSize.zero
         var framesCounted = 0
         var framesSkipped: [String: Int] = [:]

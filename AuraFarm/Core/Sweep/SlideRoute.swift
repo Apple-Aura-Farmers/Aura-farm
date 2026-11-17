@@ -732,8 +732,8 @@ struct SlideRoute {
         let furthest = max(columns.last?.x ?? first.x, current?.x ?? first.x)
         let right = rightX ?? (furthest + thresholds.columnSpacingFields)
         return PredictedEdges(
-            top: prediction.fit(.top), bottom: prediction.fit(.bottom), rightX: rightX,
-            xRange: left...max(right, left))
+            top: prediction.fit(.top), bottom: prediction.fit(.bottom), rightX: rightX, leftX: left,
+            points: prediction.top + prediction.bottom, xRange: left...max(right, left))
     }
 
     /// Remembers where a leg's edge was (the view's position plus the line's offset along the leg).

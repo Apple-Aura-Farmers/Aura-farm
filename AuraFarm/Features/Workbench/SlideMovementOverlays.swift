@@ -187,7 +187,15 @@
         var mapping: ScreenMapping
         var mirrored: Bool
         var body: some View {
-            SlideMovementTrail(info: model.trailInfo, mapping: mapping, mirrored: mirrored)
+            VStack(spacing: 3) {
+                SlideMovementTrail(info: model.trailInfo, mapping: mapping, mirrored: mirrored)
+                // Under the map: the types present, with colour and count; the top 3 when small.
+                if !model.trailInfo.life.isEmpty {
+                    LifeLegendView(
+                        counts: Dictionary(grouping: model.trailInfo.life, by: \.label).mapValues(\.count),
+                        limit: 3)
+                }
+            }
         }
     }
 
@@ -550,7 +558,14 @@
         /// The frames from the centre to the edge of the box. Grows when the view travels far,
         /// so the whole move stays on screen.
         private var reach: Double {
-            TrailScale.reach(for: info.trail + [info.startPoint].compactMap { $0 })
+            var points = info.trail + [info.startPoint].compactMap { $0 }
+            // With life on the map the whole slip stays in view: the dots, the captured spots and
+            // the edges.
+            if !info.life.isEmpty {
+                points += info.life.map(\.point) + info.guideCaptured + info.edgePoints
+                points += info.predicted.flatMap { [$0.from, $0.to] }
+            }
+            return TrailScale.reach(for: points)
         }
 
         var body: some View {
@@ -623,6 +638,15 @@
                     path, with: .color(.cyan.opacity(0.45)),
                     style: StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
             }
+
+            // Confirmed edge points and the organisms of the helper's count.
+            for point in info.edgePoints {
+                let spot = place(point)
+                context.fill(
+                    Path(ellipseIn: CGRect(x: spot.x - 2, y: spot.y - 2, width: 4, height: 4)),
+                    with: .color(.cyan))
+            }
+            LifeDots.draw(info.life, in: &context, place: place)
 
             if let start = info.startPoint {
                 let home = place(start)
@@ -785,6 +809,40 @@
             mapping: .asIs, mirrored: false
         )
         .frame(width: 240, height: 240)
+        .background(Color.gray)
+    }
+
+    /// The mini-map with about 60 dots of 6 types, its legend (top 3) under it.
+    #Preview("Mini-map: life dots") {
+        let labels = ["Volvox", "Nematode", "Euglenoid", "Arcellinida", "Digononta", "Rotifer"]
+        var life: [RunMapOrganism] = []
+        for index in 0..<60 {
+            let x = Double((index * 37) % 50) / 12 - 2
+            let y = Double((index * 53) % 38) / 10 - 1.9
+            life.append(
+                RunMapOrganism(
+                    label: labels[index % 6], x: x, y: y, column: index / 10 + 1,
+                    seconds: Double(index)))
+        }
+        var trail: [CGPoint] = []
+        for index in 0..<40 {
+            trail.append(CGPoint(x: Double(index) * 0.05 - 1, y: Double(index) * 0.08 - 1.5))
+        }
+        let top = PredictedTrailLine(
+            kind: .top, from: CGPoint(x: -2, y: -2), to: CGPoint(x: 2.4, y: -2))
+        let bottom = PredictedTrailLine(
+            kind: .bottom, from: CGPoint(x: -2, y: 2), to: CGPoint(x: 2.4, y: 2))
+        var info = SlideMovementInfo.Trail()
+        info.trail = trail
+        info.startPoint = .zero
+        info.predicted = [top, bottom]
+        info.life = life
+        let counts = Dictionary(grouping: life, by: \.label).mapValues(\.count)
+        return VStack(spacing: 3) {
+            SlideMovementTrail(info: info, mapping: .asIs, mirrored: false)
+            LifeLegendView(counts: counts, limit: 3)
+        }
+        .frame(width: 180, height: 200)
         .background(Color.gray)
     }
 

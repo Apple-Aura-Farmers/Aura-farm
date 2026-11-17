@@ -17,6 +17,23 @@ struct SlideOrganismMap {
         var position: CGPoint
         var firstSeenSeconds: Double
         var column: Int
+        /// Pixels per field when it was added (the tracker's box side), for `fields`. 1 means
+        /// `fields` is in pixels (tests only).
+        var fieldSide = 1.0
+
+        /// Where the organism goes on the trail map, in fields, in the SAME space and sign as the
+        /// trail points (the tracker's `positionFields`): the point the trail would pass through
+        /// if the view were centred on the organism.
+        var fields: CGPoint { SlideOrganismMap.trailPoint(slide: position, fieldSide: fieldSide) }
+    }
+
+    /// A slide point (px) as a trail point (fields). The tracker's position is the content's
+    /// displacement, so a box seen at offset `o` from the frame centre with the tracker at `p` is
+    /// at slide point `q = o - p`; centred on it (`o = 0`) the tracker would read `-q`. Hence the
+    /// minus sign. Unit-tested against a real `SlideTracker`, both axes.
+    static func trailPoint(slide: CGPoint, fieldSide: Double) -> CGPoint {
+        guard fieldSide > 0 else { return .zero }
+        return CGPoint(x: -Double(slide.x) / fieldSide, y: -Double(slide.y) / fieldSide)
     }
 
     /// A new organism within this of an entry with the same label is a repeat: the larger box side
@@ -50,10 +67,12 @@ struct SlideOrganismMap {
     }
 
     /// Adds a new organism.
-    mutating func add(label: String, at position: CGPoint, seconds: Double, column: Int) -> Entry {
+    mutating func add(
+        label: String, at position: CGPoint, seconds: Double, column: Int, fieldSide: Double = 1
+    ) -> Entry {
         let entry = Entry(
             id: entries.count + 1, label: label, position: position, firstSeenSeconds: seconds,
-            column: column)
+            column: column, fieldSide: fieldSide)
         entries.append(entry)
         countByLabel[label, default: 0] += 1
         return entry

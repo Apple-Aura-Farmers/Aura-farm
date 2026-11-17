@@ -113,6 +113,11 @@ struct PredictedEdges: Equatable {
     var top: EdgeFit?
     var bottom: EdgeFit?
     var rightX: Double?
+    /// The left edge's x (column 1 less its inset), once there is a column.
+    var leftX: Double?
+    /// The confirmed or marked edge points (column x across, edge position along), top then
+    /// bottom.
+    var points: [CGPoint] = []
     /// The x range to draw the lines over: the left edge to the right edge, or one column past the
     /// last one when the right edge is unknown.
     var xRange: ClosedRange<Double>?

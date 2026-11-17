@@ -290,7 +290,7 @@
         func process(
             buffer: CVPixelBuffer, skipReason: String?, pictureMoved: CGPoint,
             trackerPosition: CGPoint, frameSize: CGSize, fieldCircle: FieldCircle?, seconds: Double,
-            column: Int
+            column: Int, fieldSide: Double = 1
         ) -> LiveCountFrameLog {
             var log = LiveCountFrameLog(active: true)
             log.model = model.rawValue
@@ -340,7 +340,7 @@
                 detect(
                     held, ticket: ticket, confidence: confidence, crop: crop, circle: circle,
                     pictureMoved: pictureMoved, trackerPosition: trackerPosition,
-                    frameSize: frameSize, seconds: seconds, column: column)
+                    frameSize: frameSize, seconds: seconds, column: column, fieldSide: fieldSide)
             }
             finish(&log)
             return log
@@ -356,7 +356,7 @@
         private func detect(
             _ held: HeldBuffer, ticket: Int, confidence: Float, crop: CGRect?, circle: FieldCircle?,
             pictureMoved: CGPoint, trackerPosition: CGPoint, frameSize: CGSize, seconds: Double,
-            column: Int
+            column: Int, fieldSide: Double
         ) {
             guard let buffer = held.buffer else { return }
             var run = injected
@@ -388,7 +388,7 @@
             let result = counterState.update(
                 detections: output.found, pictureMoved: pictureMoved,
                 trackerPosition: trackerPosition, frameSize: frameSize, fieldCircle: circle,
-                crop: crop, seconds: seconds, column: column)
+                crop: crop, seconds: seconds, column: column, fieldSide: fieldSide)
             lastDetectedAt = seconds
             var log = LiveCountFrameLog(active: true)
             log.ran = true
@@ -411,6 +411,7 @@
             for entry in result.newEntries {
                 log.counted.append(
                     "\(entry.label) id=\(entry.id) slide=(\(Int(entry.position.x)),\(Int(entry.position.y))) column=\(entry.column)"
+                        + String(format: " map=(%.2f,%.2f)", entry.fields.x, entry.fields.y)
                 )
             }
             var drawn: [(id: Int, label: String, rect: CGRect)] = []
@@ -465,6 +466,11 @@
                     .init(
                         id: $0.id, label: $0.label, confidence: $0.confidence, rect: $0.box,
                         status: $0.status)
+                },
+                dots: counter.map.entries.map {
+                    RunMapOrganism(
+                        label: $0.label, x: Double($0.fields.x), y: Double($0.fields.y),
+                        column: $0.column, seconds: $0.firstSeenSeconds)
                 },
                 frameSize: frameSize, framesCounted: counter.framesCounted,
                 framesSkipped: counter.framesSkippedByReason, hapticCount: haptics,

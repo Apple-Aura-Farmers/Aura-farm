@@ -69,6 +69,10 @@
             var guideTarget: CGPoint?
             /// The predicted top, bottom and right edges as segments in the same space as `trail`.
             var predicted: [PredictedTrailLine] = []
+            /// The confirmed edge points, and the organisms of the helper's count ("Show life on
+            /// map"), in the same space as `trail`. Empty when the setting is off.
+            var edgePoints: [CGPoint] = []
+            var life: [RunMapOrganism] = []
         }
 
         /// The guide dry run's block. Counters drive haptics, like `Readouts`.
