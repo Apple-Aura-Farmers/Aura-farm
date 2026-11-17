@@ -84,7 +84,7 @@ struct LandOutlineEditorView: View {
 
                 if corners.count >= 3 {
                     MapPolygon(coordinates: corners.map(\.coordinate))
-                        .foregroundStyle(.green.opacity(0.3))
+                        .foregroundStyle(Color.aura.opacity(0.3))
                         .stroke(.white, lineWidth: 2)
                 } else if corners.count == 2 {
                     MapPolyline(coordinates: corners.map(\.coordinate))

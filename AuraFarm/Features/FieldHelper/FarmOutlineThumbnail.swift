@@ -8,9 +8,9 @@ struct FarmOutlineThumbnail: View {
     var body: some View {
         ZStack {
             OutlineShape(corners: corners)
-                .fill(Color.green.opacity(0.3))
+                .fill(Color.aura.opacity(0.3))
             OutlineShape(corners: corners)
-                .stroke(Color.green, style: StrokeStyle(lineWidth: 1.5, lineJoin: .round))
+                .stroke(Color.aura, style: StrokeStyle(lineWidth: 1.5, lineJoin: .round))
         }
         .padding(10)
         .frame(width: 52, height: 52)
