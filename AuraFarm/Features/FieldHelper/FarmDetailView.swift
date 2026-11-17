@@ -136,20 +136,6 @@ struct FarmDetailView: View {
                         + "Tap a value for what it means. The standards and guidance are placeholders and have not been reviewed by an agronomist."
                 )
             }
-
-            Section {
-                PublishButton(title: "Publish farm") {
-                    guard let uploader = FarmUploader() else {
-                        throw FarmUploader.Failure.notConfigured
-                    }
-                    try await uploader.upload(farm)
-                }
-            } footer: {
-                Text(
-                    "A sample can only be filed against land the records already know, so "
-                        + "publish the farm before taking one from it."
-                )
-            }
         }
     }
 
