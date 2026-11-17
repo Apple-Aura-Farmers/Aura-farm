@@ -20,12 +20,16 @@ struct SampleDetailsView: View {
             }
 
             Section("Step 2 · Sample") {
-                TextField("Name", text: $details.sampleID)
-                    .textInputAutocapitalization(.words)
-                    .autocorrectionDisabled()
-                TextField("Location", text: $details.location.orEmpty)
-                    .textInputAutocapitalization(.words)
-                    .autocorrectionDisabled()
+                NavigationLink {
+                    FarmChoiceList(details: $details)
+                } label: {
+                    LabeledContent(
+                        "Farm", value: details.sampleID.isEmpty ? "Choose a farm" : details.sampleID)
+                }
+                // Taken from the farm, so it is shown and not typed.
+                if details.farmID != nil, let location = details.location {
+                    LabeledContent("Location", value: location)
+                }
                 Stepper("Microscope field \(details.field)", value: $details.field, in: 1...999)
                 Picker("Soil", selection: $details.moisture) {
                     ForEach(SampleDetails.Moisture.allCases) { moisture in
@@ -35,7 +39,6 @@ struct SampleDetailsView: View {
             }
 
             Section {
-                TextField("Farm plot", text: plotName)
                 Picker("Crop stage", selection: $details.cropStage) {
                     Text("Not set").tag(SampleDetails.CropStage?.none)
                     ForEach(SampleDetails.CropStage.allCases) { stage in
@@ -53,18 +56,10 @@ struct SampleDetailsView: View {
                 Text("Step 3 · Field notes (optional)")
             } footer: {
                 Text(
-                    "Helps the advice compare with earlier samples from the same plot. Skip anything you don't know."
+                    "Samples from the same farm are compared with each other. Skip anything you don't know."
                 )
             }
         }
-    }
-
-    /// The plot name, with an empty field stored as nil.
-    private var plotName: Binding<String> {
-        Binding(
-            get: { details.plotName ?? "" },
-            set: { details.plotName = $0.isEmpty ? nil : $0 }
-        )
     }
 }
 
@@ -118,4 +113,5 @@ private struct RecentActionsList: View {
                 )
             ))
     }
+    .environment(FarmStore(fileURL: nil))
 }

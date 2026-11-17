@@ -27,6 +27,11 @@ struct SampleDetails: Codable, Equatable {
     var cropStage: CropStage? = nil
     /// What was done to the plot in the last two weeks.
     var recentActions: [RecentAction]? = nil
+    /// The farm this sample came from, chosen from the list the field helpers keep. The name,
+    /// location and plot above are copies taken from it when it was chosen, so a sample still
+    /// reads the same if the farm is later renamed or deleted. nil for samples taken before
+    /// farms could be chosen.
+    var farmID: UUID? = nil
 
     enum Moisture: String, Codable, CaseIterable, Identifiable {
         case flooded

@@ -1,7 +1,7 @@
 # Aura Farm: results screen and AI advice, summary of changes
 
 - **Branch:** `feat/results-screen`, uncommitted on top of `80eeefd`
-- **Scope:** the iOS app only. The Mac app, AuraFarmKit and the `.aurafarm` report format are unchanged.
+- **Scope:** the iOS app only. AuraFarmKit is unchanged.
 
 ---
 
@@ -78,7 +78,6 @@ Field helpers need a results screen that turns a microscope sample into advice t
 - **Faster start:** the model is loaded when the screen opens.
 - **A "Based on …" line** says what the advice used.
 - **Older rules labelled:** saved advice from older rules is marked. The content version is worked out from the content itself, so nobody can forget to update it.
-- **iPhone only:** the advice isn't sent to the Mac.
 
 ### 7. Measuring advice quality
 - **Every build:** 21 fixed test samples check that the right actions are offered and the wrong ones aren't.
@@ -230,8 +229,21 @@ Field helpers need a results screen that turns a microscope sample into advice t
 - **In-memory stores** for advice and feedback, used by the gallery.
 
 ### 12. Tests and checks
-- 327 iOS unit tests and 6 Mac tests pass.
+- 327 unit tests passed before soil measurements were added to the advice (Part C). Tests for Part C are written (`SoilInputsTests`, `AdviceUpdateNoteTests`, `AdviceSnapshotTests`, and additions to `AdviceBasisTests`, `AdvicePromptBuilderTests` and `SoilResultViewModelTests`) but none has been compiled or run yet.
 - The Release build is clean, and so is `swift-format --strict`.
+
+---
+
+## Part C: soil measurements in the advice (plumbing only)
+
+The soil measurements a field helper records for a farm now reach the advice. **No rules read them yet**, so the estimate, the patterns and the actions offered are exactly what they were, and advice for a farm with no measurements is unchanged (same prompt, same instructions, same content version).
+
+- **Which values:** nitrogen, phosphorus, potassium, pH and organic carbon (`SoilInputs`). Fertilizer is left out: it has no standard, and an amount in the prompt would invite the model to quote a dose. Saving the form again without changing a number is not a change.
+- **Into the prompt:** one extra line, only when there are measurements, giving each value, its unit and its band (for example "pH 6.5 (standard)"), marked as background the model must not build advice on. The standards' guidance text is never sent.
+- **A copy of what the advice was based on:** `advice.json` gains a `snapshot` (the test, how many earlier samples were used, and the measurements). Advice saved before this has none, which reads as "written without measurements".
+- **Automatic rewrite:** when the saved advice's measurements differ from the farm's now, the advice is written again on its own, and a line says why, for example "Updated with the new pH reading." (`AdviceUpdateNote`). If the model can't write it, the earlier advice stays on screen with a note that the measurements changed.
+- **"Based on" line:** names the measurements used, for example "…, and soil measurements (N, pH)." Standard advice (when Apple Intelligence can't run) is built from the same rules and does not read the measurements, but the line still names what was available.
+- **Next:** rules that combine the microscope counts with the measurements, starting with the pH liming check, need the agronomist's review of the placeholder standards first.
 
 ---
 

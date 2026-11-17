@@ -7,64 +7,57 @@
 
 import SwiftUI
 
-/// Adding a farm, or changing one that is already saved: the farmer's name and where their land
-/// is. Both are needed before it can be saved, because a farm with no outline cannot be shown
-/// on the map.
+/// Adding a farm, or renaming one that is already saved: what the farm is called and whose it
+/// is. The land is not asked for here, because a farm can have several plots; they are marked
+/// one at a time on the farm's own page.
 struct FarmFormView: View {
     /// The farm being changed, or nil when adding a new one.
     private let editing: Farm?
+    /// Land marked before the farm existed, which becomes the new farm's first plot.
+    private let firstPlot: Plot?
+    /// Called once the farm has been saved, so a caller that opened this on top of its own
+    /// sheet can close that too.
+    private let onSave: (() -> Void)?
 
     @Environment(FarmStore.self) private var store
     @Environment(\.dismiss) private var dismiss
 
+    @State private var name: String
     @State private var farmerName: String
-    @State private var corners: [GeoPoint]
 
-    init(editing farm: Farm? = nil) {
+    init(editing farm: Farm? = nil, firstPlot: Plot? = nil, onSave: (() -> Void)? = nil) {
         editing = farm
+        self.firstPlot = firstPlot
+        self.onSave = onSave
+        _name = State(initialValue: farm?.name ?? "")
         _farmerName = State(initialValue: farm?.farmerName ?? "")
-        _corners = State(initialValue: farm?.corners ?? [])
     }
 
     var body: some View {
         NavigationStack {
             Form {
-                Section("Farmer") {
-                    TextField("Farmer's name", text: $farmerName)
-                        .textContentType(.name)
+                Section("Farm") {
+                    TextField("Farm name", text: $name)
                 }
 
                 Section {
-                    if hasUsableOutline {
-                        LandMapView(corners: corners)
-                            .frame(height: 180)
-                            .listRowInsets(EdgeInsets())
-                        LabeledContent("Area", value: areaText)
-                    }
-                    NavigationLink {
-                        LandOutlineEditorView(
-                            corners: corners, neighbours: otherFarms
-                        ) { confirmed in
-                            corners = confirmed
-                        }
-                    } label: {
-                        Label(
-                            corners.isEmpty ? "Mark the land on the map" : "Edit the outline",
-                            systemImage: "mappin.and.ellipse")
-                    }
+                    TextField("Farmer's name", text: $farmerName)
+                        .textContentType(.name)
                 } header: {
-                    Text("Land")
+                    Text("Farmer")
                 } footer: {
-                    VStack(alignment: .leading, spacing: 4) {
-                        if let landProblem {
-                            Text(landProblem).foregroundStyle(.orange)
-                        }
-                        if let overlapNote {
-                            Text(overlapNote).foregroundStyle(.orange)
-                        }
+                    if let firstPlot, let area = firstPlot.areaSquareMetres {
+                        Text(
+                            "The land you marked, "
+                                + LandGeometry.areaDescription(squareMetres: area)
+                                + ", becomes this farm's first plot."
+                        )
+                    } else if editing == nil {
+                        Text("Mark the plots on the farm's page once it is saved.")
                     }
                 }
             }
+            .textInputAutocapitalization(.words)
             .navigationTitle(editing == nil ? "Add a farm" : "Edit farm")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -80,53 +73,30 @@ struct FarmFormView: View {
     }
 
     private var trimmedName: String {
+        name.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var trimmedFarmerName: String {
         farmerName.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// Every saved farm except the one being edited, which cannot overlap itself.
-    private var otherFarms: [Farm] {
-        store.farms.filter { $0.id != editing?.id }
-    }
-
-    /// Three corners that do not cross themselves, so the area means something.
-    private var hasUsableOutline: Bool {
-        corners.count >= 3 && !LandGeometry.crossesItself(corners)
-    }
-
-    private var canSave: Bool { !trimmedName.isEmpty && hasUsableOutline }
-
-    private var areaText: String {
-        LandGeometry.areaDescription(squareMetres: LandGeometry.areaSquareMetres(of: corners) ?? 0)
-    }
-
-    /// What is wrong with the outline so far, once the helper has started on it.
-    private var landProblem: String? {
-        if corners.isEmpty { return nil }
-        if corners.count < 3 { return "The land needs at least 3 corners." }
-        if LandGeometry.crossesItself(corners) {
-            return "The edges of the outline cross each other. Open it and fix the dots."
-        }
-        return nil
-    }
-
-    /// A reminder, not a block: the helper may have confirmed an overlap on purpose.
-    private var overlapNote: String? {
-        guard hasUsableOutline else { return nil }
-        let overlapping = otherFarms.filter { LandGeometry.overlap(corners, $0.corners) }
-        guard !overlapping.isEmpty else { return nil }
-        let names = overlapping.map(\.farmerName).formatted(.list(type: .and))
-        return "This outline overlaps \(names)'s land."
-    }
+    private var canSave: Bool { !trimmedName.isEmpty && !trimmedFarmerName.isEmpty }
 
     private func save() {
         if var farm = editing {
-            farm.farmerName = trimmedName
-            farm.corners = corners
+            farm.name = trimmedName
+            farm.farmerName = trimmedFarmerName
             store.update(farm)
         } else {
-            store.add(Farm(farmerName: trimmedName, corners: corners))
+            store.add(
+                Farm(
+                    name: trimmedName,
+                    farmerName: trimmedFarmerName,
+                    plots: firstPlot.map { [$0] } ?? []
+                ))
         }
         dismiss()
+        onSave?()
     }
 }
 

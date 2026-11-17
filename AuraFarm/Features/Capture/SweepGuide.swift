@@ -37,8 +37,7 @@ struct SweepGuide: View {
             .animation(.easeOut(duration: 0.2), value: progress.kept)
 
             Text(
-                "Row \(progress.row) of \(progress.rowCount) · \(progress.kept) of "
-                    + "\(progress.total) saved"
+                "Row \(progress.row) · \(progress.kept) of \(progress.total) saved"
             )
             .font(.caption)
             .foregroundStyle(.white.opacity(0.8))
@@ -67,7 +66,7 @@ struct SweepGuide: View {
         Color.black
         SweepGuide(
             progress: SweepProgress(
-                kept: 6, total: 12, row: 2, rowCount: 3, keptInRow: 2, framesPerRow: 4),
+                kept: 6, total: 12, row: 2, keptInRow: 2, framesPerRow: 4),
             direction: .left
         )
     }

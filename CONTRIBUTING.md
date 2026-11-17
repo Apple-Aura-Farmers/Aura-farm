@@ -29,8 +29,7 @@ Trunk-based, with short-lived branches off `main`.
 
 A pull request can merge once:
 
-1. `Build and test`, `Mac build and test` and `AuraFarmKit tests` are green — both apps
-   build and every unit test passes
+1. `Build and test` is green — the app builds and every unit test passes
 2. `Format check` is green — `swift-format lint` is clean
 3. `Repo checks` are green — every Swift file is inside a target folder, and no video or
    oversized file is committed
@@ -42,7 +41,8 @@ Label a pull request `automerge` and it merges itself as soon as those checks pa
 ## Making a change
 
 1. Branch: `git switch -c feat/thing main`
-2. Put new Swift files inside the right target folder (`AuraFarm/`, `AuraFarmTests/`, …),
+2. Put new Swift files inside the right target folder (`AuraFarm/`, `AuraFarmTests/`,
+   `AuraFarmKit/`),
    from Xcode or on disk. The folders are synchronized with the project, so the file is
    in that target with no project edit. A Swift file outside every target folder never
    compiles, and CI fails the pull request for it.
@@ -51,9 +51,7 @@ Label a pull request `automerge` and it merges itself as soon as those checks pa
 
    ```bash
    xcodebuild test -scheme AuraFarm -destination 'platform=iOS Simulator,name=iPhone 17'
-   xcodebuild test -scheme AuraFarmManager -destination 'platform=macOS'
-   swift test --package-path AuraFarmKit
-   xcrun swift-format format -i -r AuraFarm AuraFarmTests AuraFarmManager AuraFarmManagerTests AuraFarmKit
+   xcrun swift-format format -i -r AuraFarm AuraFarmTests AuraFarmKit
    ```
 
 5. Open a pull request into `main` and fill in the template.
@@ -94,17 +92,6 @@ because breaking it costs data or credibility.
 8. **No soil verdict without the actions behind it.** Do not ship a rating, score or
    band on its own. Every result carries recommended actions, states its confidence,
    and says when a retest or a lab test is needed.
-
-## The soil report format
-
-The iPhone app and the Mac app talk only through the `.aurafarm` soil report in
-`AuraFarmKit`. Change it with care: a field helper's phone and the office Mac are rarely
-updated on the same day.
-
-- Add new fields as optionals, so a report from an older phone still opens.
-- Raise `SoilReport.currentSchemaVersion` only for a change an older reader cannot ignore.
-  An older Mac app then says the report needs an update instead of failing on it.
-- Keep it Foundation only, so its tests run with `swift test` and nothing else.
 
 ## UI copy
 

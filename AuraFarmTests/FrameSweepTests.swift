@@ -13,6 +13,16 @@ final class FrameSweepTests: XCTestCase {
         maxBytes: 1_000
     )
 
+    /// Room for more than one row, for the tests that walk the slide across and back.
+    private let longThresholds = SweepThresholds(
+        framesPerSweep: 12,
+        framesPerRow: 2,
+        shiftBetweenFrames: 100,
+        shiftBetweenRows: 500,
+        maxStepPixels: 150,
+        maxBytes: 1_000_000
+    )
+
     func testTheFirstFrameIsKeptAsSoonAsTheImageIsGood() {
         let sweep = FrameSweep(thresholds: thresholds)
 
@@ -75,8 +85,9 @@ final class FrameSweepTests: XCTestCase {
             sweep.update(isSettled: true, issue: .shaky, shift: CGPoint(x: 60, y: 0), travel: 120),
             .keepFrame)
         XCTAssertEqual(sweep.keptCount, 2)
-        // Two frames fill the row, so the slide is sent down before the next one.
-        XCTAssertEqual(sweep.prompt, .move(.down, kept: 2, of: 3))
+        // Still the same row: it runs until the helper says the cover slip ends, however
+        // many frames that takes.
+        XCTAssertEqual(sweep.prompt, .move(.right, kept: 2, of: 3))
     }
 
     func testTheSameFieldOfViewIsNotKeptTwice() {
@@ -171,21 +182,44 @@ final class FrameSweepTests: XCTestCase {
         XCTAssertEqual(sweep.keptCount, 1)
     }
 
-    func testTheSlideIsWalkedAcrossInRows() {
-        // Four frames to a row: right along the first, down a step, left along the second,
-        // down again, then right along the third.
-        let expected: [SweepDirection] = [
-            .right, .right, .right, .right,
-            .down, .left, .left, .left,
-            .down, .right, .right, .right,
-        ]
-        for (kept, direction) in expected.enumerated() {
+    func testARowRunsUntilTheHelperSaysTheCoverSlipEnds() {
+        let sweep = FrameSweep(thresholds: longThresholds)
+        XCTAssertEqual(sweep.update(isSettled: true, issue: nil, shift: nil, travel: nil), .keepFrame)
+        XCTAssertEqual(sweep.direction, .right)
+
+        // Four frames along, with no edge in sight: still the same row, still going right.
+        for _ in 0..<4 {
             XCTAssertEqual(
-                FrameSweep.direction(afterKeeping: kept, framesPerRow: 4),
-                direction,
-                "after \(kept) frames"
-            )
+                sweep.update(isSettled: true, issue: nil, shift: CGPoint(x: 10, y: 0), travel: 120),
+                .keepFrame)
         }
+        XCTAssertEqual(sweep.row, 1)
+        XCTAssertEqual(sweep.direction, .right)
+
+        // The helper can see the straight line, so the row ends here.
+        sweep.reachedTheEdge()
+        XCTAssertEqual(sweep.direction, .down)
+        XCTAssertEqual(sweep.row, 1, "the row below starts at its first frame, not at the tap")
+
+        // A step down is a row's worth, and the frame that lands starts row two going left.
+        XCTAssertEqual(
+            sweep.update(isSettled: true, issue: nil, shift: CGPoint(x: 10, y: 0), travel: 120), .wait)
+        XCTAssertEqual(
+            sweep.update(isSettled: true, issue: nil, shift: CGPoint(x: 0, y: 10), travel: 500), .keepFrame)
+        XCTAssertEqual(sweep.row, 2)
+        XCTAssertEqual(sweep.direction, .left)
+    }
+
+    func testTappingTheEdgeTwiceDoesNotSkipARow() {
+        let sweep = FrameSweep(thresholds: longThresholds)
+        XCTAssertEqual(sweep.update(isSettled: true, issue: nil, shift: nil, travel: nil), .keepFrame)
+
+        sweep.reachedTheEdge()
+        sweep.reachedTheEdge()
+
+        XCTAssertEqual(
+            sweep.update(isSettled: true, issue: nil, shift: CGPoint(x: 0, y: 10), travel: 500), .keepFrame)
+        XCTAssertEqual(sweep.row, 2)
     }
 
     func testThePromptFollowsThePath() {
@@ -199,6 +233,10 @@ final class FrameSweepTests: XCTestCase {
         XCTAssertEqual(
             sweep.update(isSettled: true, issue: nil, shift: CGPoint(x: 120, y: 0), travel: 120),
             .keepFrame)
+        XCTAssertEqual(sweep.prompt, .move(.right, kept: 2, of: 3))
+
+        // Only the helper turns the row, by saying the cover slip edge is in view.
+        sweep.reachedTheEdge()
         XCTAssertEqual(sweep.prompt, .move(.down, kept: 2, of: 3))
     }
 
@@ -268,27 +306,24 @@ final class FrameSweepTests: XCTestCase {
     }
 
     func testTheStepDownBetweenRowsWaitsForAWholeRow() {
-        // Two frames fill a row in these thresholds, so the third starts a new one.
-        let sweep = FrameSweep(thresholds: thresholds)
+        let sweep = FrameSweep(thresholds: longThresholds)
         XCTAssertEqual(
             sweep.update(isSettled: true, issue: nil, shift: nil, travel: nil), .keepFrame)
-        XCTAssertEqual(
-            sweep.update(isSettled: true, issue: nil, shift: CGPoint(x: 10, y: 0), travel: 120),
-            .keepFrame)
-        XCTAssertEqual(sweep.prompt, .move(.down, kept: 2, of: 3))
+        sweep.reachedTheEdge()
+        XCTAssertEqual(sweep.prompt, .move(.down, kept: 1, of: 12))
 
         // A sideways nudge's worth of travel is not a row, so nothing is kept yet and the
         // helper is still being told to go down.
         XCTAssertEqual(
             sweep.update(isSettled: true, issue: nil, shift: CGPoint(x: 0, y: 10), travel: 120),
             .wait)
-        XCTAssertEqual(sweep.keptCount, 2)
-        XCTAssertEqual(sweep.prompt, .move(.down, kept: 2, of: 3))
+        XCTAssertEqual(sweep.keptCount, 1)
+        XCTAssertEqual(sweep.prompt, .move(.down, kept: 1, of: 12))
 
         XCTAssertEqual(
             sweep.update(isSettled: true, issue: nil, shift: CGPoint(x: 0, y: 10), travel: 500),
             .keepFrame)
-        XCTAssertEqual(sweep.keptCount, 3)
+        XCTAssertEqual(sweep.keptCount, 2)
     }
 
     func testTheGuideBarFillsTheWayTheSlideIsBeingPushed() {

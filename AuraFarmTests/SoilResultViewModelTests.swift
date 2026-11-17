@@ -256,11 +256,14 @@ final class SoilResultViewModelTests: XCTestCase {
     private func savingViewModel(
         _ recommender: any RecommendationProviding, store: InMemoryAdviceStore, counts: [String: Int]? = nil,
         withSweep: Bool = true, timeout: Duration = .seconds(30),
-        feedbackStore: InMemoryAdviceFeedbackStore = InMemoryAdviceFeedbackStore()
+        feedbackStore: InMemoryAdviceFeedbackStore = InMemoryAdviceFeedbackStore(),
+        soil: SoilMeasurements? = nil
     ) -> SoilResultViewModel {
         let counts = counts ?? fairCounts
+        var base = withSweep ? sweepResult(counts) : result(counts)
+        base.soil = soil
         return SoilResultViewModel(
-            result: withSweep ? sweepResult(counts) : result(counts), recommender: recommender,
+            result: base, recommender: recommender,
             historyProvider: { _ in [] }, adviceTimeout: timeout, adviceStore: store,
             clock: { [savedDate] in savedDate }, feedbackStore: feedbackStore)
     }
@@ -431,6 +434,205 @@ final class SoilResultViewModelTests: XCTestCase {
         XCTAssertEqual(stub.freshRequests, [true, true])
         XCTAssertEqual(try XCTUnwrap(store.load(for: sweep)).recommendation.summary, "From the model")
         XCTAssertNil(viewModel.modelUnavailableReason)
+    }
+
+    // MARK: Soil measurements
+
+    /// Advice as it was saved with a copy of the measurements it was written with.
+    private func savedAdvice(soil: SoilInputs?) -> SavedAdvice {
+        var advice = savedAdvice()
+        advice.snapshot = AdviceSnapshot(
+            sampleID: "A12", testRecordedAt: .now, earlierSamples: 0, soil: soil)
+        return advice
+    }
+
+    func testAdviceSavedWithTheSameMeasurementsIsShownAsItIs() async throws {
+        let soil = SoilMeasurements(ph: 6.5)
+        let stub = StubRecommender()
+        let store = InMemoryAdviceStore()
+        let viewModel = savingViewModel(stub, store: store, soil: soil)
+        try store.save(savedAdvice(soil: SoilInputs(soil)), for: try XCTUnwrap(viewModel.result.sweep))
+
+        await viewModel.loadRecommendation()
+
+        XCTAssertEqual(stub.calls, 0)
+        XCTAssertEqual(viewModel.recommendationState, .ready(savedAdvice().recommendation))
+        XCTAssertNil(viewModel.updateNote)
+        XCTAssertTrue(viewModel.adviceBasis?.contains("soil measurements (pH)") ?? false)
+    }
+
+    func testSavingTheSameNumbersAgainIsNotAChange() async throws {
+        let stub = StubRecommender()
+        let store = InMemoryAdviceStore()
+        let saved = SoilMeasurements(ph: 6.5, updatedAt: Date(timeIntervalSince1970: 0))
+        let now = SoilMeasurements(
+            ph: 6.5, fertilizerProduct: "Urea", fertilizerKilogramsPerHectare: 50, updatedAt: .now)
+        let viewModel = savingViewModel(stub, store: store, soil: now)
+        try store.save(savedAdvice(soil: SoilInputs(saved)), for: try XCTUnwrap(viewModel.result.sweep))
+
+        await viewModel.loadRecommendation()
+
+        XCTAssertEqual(stub.calls, 0)
+        XCTAssertNil(viewModel.updateNote)
+    }
+
+    func testAdviceSavedBeforeSnapshotsIsWrittenAgainOnceThereAreMeasurements() async throws {
+        let soil = SoilMeasurements(ph: 6.5)
+        let stub = StubRecommender()
+        let store = InMemoryAdviceStore()
+        let viewModel = savingViewModel(stub, store: store, soil: soil)
+        let sweep = try XCTUnwrap(viewModel.result.sweep)
+        try store.save(savedAdvice(), for: sweep)
+
+        await viewModel.loadRecommendation()
+
+        XCTAssertEqual(stub.calls, 1)
+        XCTAssertEqual(stub.freshRequests, [false])
+        guard case .ready(let recommendation) = viewModel.recommendationState else {
+            return XCTFail("Expected advice, got \(viewModel.recommendationState)")
+        }
+        XCTAssertEqual(recommendation.summary, "From the model")
+        XCTAssertEqual(viewModel.updateNote, "Updated with the new soil measurements.")
+        let saved = try XCTUnwrap(store.load(for: sweep))
+        XCTAssertEqual(saved.recommendation.summary, "From the model")
+        XCTAssertEqual(saved.snapshot?.soil, SoilInputs(soil))
+    }
+
+    func testAChangedMeasurementIsNamedInTheNote() async throws {
+        let stub = StubRecommender()
+        let store = InMemoryAdviceStore()
+        let now = SoilMeasurements(nitrogen: 100, ph: 7.0)
+        let viewModel = savingViewModel(stub, store: store, soil: now)
+        let before = SoilInputs(nitrogen: 100, ph: 6.5)
+        try store.save(savedAdvice(soil: before), for: try XCTUnwrap(viewModel.result.sweep))
+
+        await viewModel.loadRecommendation()
+
+        XCTAssertEqual(stub.calls, 1)
+        XCTAssertEqual(viewModel.updateNote, "Updated with the new pH reading.")
+    }
+
+    func testRemovingTheMeasurementsWritesTheAdviceAgain() async throws {
+        let stub = StubRecommender()
+        let store = InMemoryAdviceStore()
+        let viewModel = savingViewModel(stub, store: store, soil: nil)
+        let sweep = try XCTUnwrap(viewModel.result.sweep)
+        try store.save(savedAdvice(soil: SoilInputs(ph: 6.5)), for: sweep)
+
+        await viewModel.loadRecommendation()
+
+        XCTAssertEqual(stub.calls, 1)
+        XCTAssertEqual(viewModel.updateNote, "Updated after the soil measurements were removed.")
+        XCTAssertNil(try XCTUnwrap(store.load(for: sweep)).snapshot?.soil)
+    }
+
+    func testNewAdviceIsSavedWithACopyOfWhatItWasBasedOn() async throws {
+        let soil = SoilMeasurements(nitrogen: 100, ph: 6.5, fertilizerProduct: "Urea")
+        let store = InMemoryAdviceStore()
+        let viewModel = savingViewModel(StubRecommender(), store: store, soil: soil)
+
+        await viewModel.loadRecommendation()
+
+        let snapshot = try XCTUnwrap(
+            store.load(for: try XCTUnwrap(viewModel.result.sweep))?.snapshot)
+        XCTAssertEqual(snapshot.sampleID, "A12")
+        XCTAssertEqual(snapshot.earlierSamples, 0)
+        XCTAssertEqual(snapshot.soil, SoilInputs(nitrogen: 100, ph: 6.5))
+        XCTAssertNil(viewModel.updateNote, "Advice written for the first time has no update note")
+    }
+
+    func testWhenTheModelCannotRunTheEarlierAdviceStaysWithANote() async throws {
+        let stub = StubRecommender()
+        stub.availability = .unavailable(reason: "Off")
+        let store = InMemoryAdviceStore()
+        let viewModel = savingViewModel(stub, store: store, soil: SoilMeasurements(ph: 6.5))
+        let sweep = try XCTUnwrap(viewModel.result.sweep)
+        let earlier = savedAdvice()
+        try store.save(earlier, for: sweep)
+
+        await viewModel.loadRecommendation()
+
+        XCTAssertEqual(stub.calls, 0)
+        XCTAssertEqual(viewModel.recommendationState, .ready(earlier.recommendation))
+        XCTAssertEqual(viewModel.savedAt, earlier.writtenAt)
+        XCTAssertTrue(
+            viewModel.modelUnavailableReason?.hasPrefix(
+                "The soil measurements changed, but Apple Intelligence can't write new advice now, "
+                    + "so the earlier advice is shown.") ?? false)
+        XCTAssertTrue(viewModel.modelUnavailableReason?.hasSuffix("Off") ?? false)
+        XCTAssertNil(viewModel.updateNote)
+        XCTAssertEqual(store.load(for: sweep), earlier)
+    }
+
+    func testWhenWritingFailsTheEarlierAdviceStaysWithANote() async throws {
+        let failures: [AdviceFailure] = [
+            .retry(message: "Busy."), .useStandardAdvice(note: "Refused."),
+        ]
+        for failure in failures {
+            let stub = StubRecommender()
+            stub.error = failure
+            let store = InMemoryAdviceStore()
+            let viewModel = savingViewModel(stub, store: store, soil: SoilMeasurements(ph: 6.5))
+            let sweep = try XCTUnwrap(viewModel.result.sweep)
+            let earlier = savedAdvice()
+            try store.save(earlier, for: sweep)
+            let savesBefore = store.saveCount
+
+            await viewModel.loadRecommendation()
+
+            XCTAssertEqual(viewModel.recommendationState, .ready(earlier.recommendation), "\(failure)")
+            XCTAssertTrue(
+                viewModel.modelUnavailableReason?.hasPrefix(
+                    "The soil measurements changed, but new advice couldn't be written, so the earlier "
+                        + "advice is shown.") ?? false,
+                "\(failure)")
+            XCTAssertNil(viewModel.updateNote, "\(failure)")
+            XCTAssertEqual(store.saveCount, savesBefore, "\(failure)")
+            XCTAssertEqual(store.load(for: sweep), earlier, "\(failure)")
+        }
+    }
+
+    func testStandardAdviceNeverCarriesAnUpdateNote() async {
+        let stub = StubRecommender()
+        stub.availability = .unavailable(reason: "Off")
+        let viewModel = savingViewModel(
+            stub, store: InMemoryAdviceStore(), soil: SoilMeasurements(ph: 6.5))
+
+        await viewModel.loadRecommendation()
+
+        guard case .ready(let recommendation) = viewModel.recommendationState else {
+            return XCTFail("Expected advice, got \(viewModel.recommendationState)")
+        }
+        XCTAssertEqual(recommendation.source, .rules)
+        XCTAssertNil(viewModel.updateNote)
+    }
+
+    func testWriteAgainDoesNotClaimAMeasurementChanged() async throws {
+        let stub = StubRecommender()
+        let store = InMemoryAdviceStore()
+        let soil = SoilMeasurements(ph: 6.5)
+        let viewModel = savingViewModel(stub, store: store, soil: soil)
+        try store.save(savedAdvice(soil: SoilInputs(soil)), for: try XCTUnwrap(viewModel.result.sweep))
+
+        await viewModel.writeAgain()
+
+        XCTAssertEqual(stub.freshRequests, [true])
+        XCTAssertNil(viewModel.updateNote)
+    }
+
+    func testTheUpdateNoteClearsOnTheNextLoad() async throws {
+        let stub = StubRecommender()
+        let store = InMemoryAdviceStore()
+        let viewModel = savingViewModel(stub, store: store, soil: SoilMeasurements(ph: 6.5))
+        try store.save(savedAdvice(), for: try XCTUnwrap(viewModel.result.sweep))
+        await viewModel.loadRecommendation()
+        XCTAssertNotNil(viewModel.updateNote)
+
+        // The advice was saved with the measurements it was just written with, so this load shows it as it is.
+        await viewModel.loadRecommendation()
+
+        XCTAssertNil(viewModel.updateNote)
+        XCTAssertEqual(stub.calls, 1)
     }
 
     // MARK: Feedback

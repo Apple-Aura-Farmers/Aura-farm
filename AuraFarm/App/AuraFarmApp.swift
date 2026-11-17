@@ -5,6 +5,10 @@ struct AuraFarmApp: App {
     /// The farms the Field Helper manages. Made once here so every screen shares it.
     @State private var farmStore = FarmStore()
 
+    /// Who is signed in, for sending finished tests. Made once here because a second client
+    /// would not see this one's sign-in.
+    @State private var session = SupabaseSession()
+
     init() {
         #if DEBUG
             // Launched with -benchmarkDetector, the app times the detector and prints the
@@ -24,10 +28,10 @@ struct AuraFarmApp: App {
                 if let scenario = Self.launchScenario {
                     NavigationStack { ResultScenarioScreen(scenario: scenario, useLiveModel: false) }
                 } else {
-                    RootView().environment(farmStore)
+                    RootView().environment(farmStore).environment(session)
                 }
             #else
-                RootView().environment(farmStore)
+                RootView().environment(farmStore).environment(session)
             #endif
         }
     }

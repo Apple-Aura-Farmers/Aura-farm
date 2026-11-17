@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Runs a recorded microscope video as if the camera were seeing it: the quality check, the
 /// guided sweep, the detector and the tally all run as they do live, and the result is an
-/// ordinary saved sweep with its counts, ready to send to the Mac.
+/// ordinary saved sweep with its counts.
 ///
 /// A prototype path, for seeing the whole flow without a microscope to hand.
 struct RecordedSampleView: View {
@@ -26,9 +26,8 @@ struct RecordedSampleView: View {
             }
 
             Section("Sample") {
-                TextField("Sample ID", text: $details.sampleID)
-                    .textInputAutocapitalization(.characters)
-                    .autocorrectionDisabled()
+                // Chosen on the New Test screen, so the recording is filed under that farm.
+                LabeledContent("Farm", value: details.sampleID)
             }
 
             DebugVideoPicker(selected: $selected)
@@ -58,7 +57,7 @@ struct RecordedSampleView: View {
                 if let outcome = runner.outcome {
                     Text(outcome)
                 } else if !details.isComplete {
-                    Text("Enter a sample ID first.")
+                    Text("Choose a farm first.")
                 }
             }
         }

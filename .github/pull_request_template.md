@@ -18,12 +18,6 @@
 
 - [ ] New Swift files were added from Xcode, so they are in `project.pbxproj`
 - [ ] `swift-format` run over the changed files
-- [ ] No raw video, and no file over 5 MB, committed
-- [ ] New decision logic has a unit test that does not need the camera
-- [ ] New thresholds are in `CaptureQualityThresholds`, with a comment saying whether
-      they are calibrated
-- [ ] No accuracy number, soil rating or score that has not been measured
-- [ ] UI copy says what the helper should do, in plain words
 
 ## Anything a reviewer should know
 

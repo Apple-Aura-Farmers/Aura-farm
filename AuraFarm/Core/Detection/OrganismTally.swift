@@ -59,8 +59,21 @@ struct OrganismTally {
     /// covers the model missing something for a frame or two; a track dropped and then seen
     /// again counts as new.
     ///
-    /// PLACEHOLDER: not calibrated.
-    var patience = 5
+    /// Five was fragmenting tracks badly. Over 466 analyzed frames of a clip that is nothing
+    /// but Volvox, the detector drew 4832 boxes and the tally made 157 organisms of them, on
+    /// tracks whose median life was 15 frames, 25 of 182 lasting a single frame. The count
+    /// climbed almost in a straight line for the whole clip and never settled, which is what
+    /// one organism picking up a new id every second or so looks like.
+    ///
+    /// At fifteen the same clip gives 107, median life 35 frames, and 9 of 116 single-frame
+    /// tracks. At thirty it gives 82, but thirty frames is three seconds of holding a track
+    /// on a slide that is flowing, long enough for something else to drift into the place
+    /// the lost one left.
+    ///
+    /// Still NOT a calibration: nothing here knows the true number of colonies in that clip.
+    /// It is the point where tracks stop falling apart, not the point where the count is
+    /// right. Footage with a count made by hand is what would settle it.
+    var patience = 15
 
     /// How many frames a thing has to be seen in before it is counted. Two, because the
     /// model puts up a box for a single frame often enough to swamp the count: on three

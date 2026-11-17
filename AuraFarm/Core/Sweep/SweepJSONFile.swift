@@ -5,7 +5,9 @@ import os
 /// share.
 enum SweepJSONFile {
     /// nil when the file is missing or can't be read; the reason is logged in debug builds.
-    static func read<T: Decodable>(_ type: T.Type, named name: String, in sweep: SavedSweep, what: String) -> T? {
+    static func read<T: Decodable>(_ type: T.Type, named name: String, in sweep: SavedSweep, what: String)
+        -> T?
+    {
         guard let data = try? Data(contentsOf: sweep.url.appending(path: name)) else { return nil }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601

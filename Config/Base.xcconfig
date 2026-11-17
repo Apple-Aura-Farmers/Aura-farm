@@ -11,4 +11,12 @@ AURA_BUNDLE_ID_PREFIX = io.github.apple-aura-farmers
 // Set in Local.xcconfig. CI builds without signing, so it is not needed there.
 DEVELOPMENT_TEAM =
 
+// The Supabase project the phone sends reports to. Both values are per-project rather than
+// per-developer, but they are secrets' neighbours, so they live in Local.xcconfig and the app
+// runs without them. Start from Config/Local.example.xcconfig.
+AURA_SUPABASE_PROJECT_REF =
+AURA_SUPABASE_ANON_KEY =
+
+// Last, because an xcconfig takes the final assignment: anything above this line is a default
+// that Local.xcconfig overrides, and anything below it would overrule Local.xcconfig instead.
 #include? "Local.xcconfig"

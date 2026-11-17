@@ -5,11 +5,12 @@ import XCTest
 final class AdviceBasisTests: XCTestCase {
     private func context(
         _ counts: [String: Int], frames: Int = 12, moisture: SampleDetails.Moisture = .flooded,
-        stage: SampleDetails.CropStage? = nil, plot: String? = nil, history: Int = 0
+        stage: SampleDetails.CropStage? = nil, plot: String? = nil, history: Int = 0,
+        soil: SoilMeasurements? = nil
     ) -> AdviceContext {
         let result = SoilResult(
             sampleID: "A12", recordedAt: .now, framesKept: frames, moisture: moisture, countsByClass: counts,
-            sweep: nil, plotName: plot, cropStage: stage)
+            sweep: nil, plotName: plot, cropStage: stage, soil: soil)
         let past = PastResult(
             recordedAt: .distantPast, moisture: .flooded, cropStage: nil, organismsPerFrame: 1,
             interpretedKinds: 2, level: .fair)
@@ -70,5 +71,43 @@ final class AdviceBasisTests: XCTestCase {
 
     func testNothingCountedHasNoLine() {
         XCTAssertNil(AdviceBasis.line(for: context([:])))
+    }
+
+    // MARK: Soil measurements
+
+    func testSoilMeasurementsAreNamedByTheirShortForms() {
+        let soil = SoilMeasurements(nitrogen: 100, ph: 6.5)
+
+        XCTAssertEqual(
+            AdviceBasis.line(
+                for: context(["paramecium": 9, "amoeba": 3], moisture: .drained, soil: soil)),
+            "Based on 12 organisms (2 kinds) in 12 frames, drained, and soil measurements (N, pH).")
+    }
+
+    func testSoilMeasurementsComeBeforeTheEarlierSamples() {
+        let soil = SoilMeasurements(
+            nitrogen: 100, phosphorus: 20, potassium: 150, ph: 6.5, organicCarbonPercent: 2.5)
+        let context = context(
+            ["euglena": 30, "phacus": 8, "paramecium": 3, "stentor": 6, "volvox": 4], stage: .tillering,
+            plot: "North 2", history: 2, soil: soil)
+
+        XCTAssertEqual(
+            AdviceBasis.line(for: context),
+            "Based on 41 organisms (3 kinds) in 12 frames, flooded, tillering, soil measurements "
+                + "(N, P, K, pH, organic carbon), and 2 earlier samples of North 2. 10 others weren't used.")
+    }
+
+    func testAFertilizerNoteAloneChangesNothing() {
+        let soil = SoilMeasurements(fertilizerProduct: "Urea", fertilizerKilogramsPerHectare: 50)
+
+        XCTAssertEqual(
+            AdviceBasis.line(for: context(["paramecium": 9, "amoeba": 3], soil: soil)),
+            AdviceBasis.line(for: context(["paramecium": 9, "amoeba": 3])))
+    }
+
+    func testNothingReadableDoesNotClaimTheMeasurementsWereUsed() {
+        XCTAssertEqual(
+            AdviceBasis.line(for: context(["stentor": 6], soil: SoilMeasurements(ph: 6.5))),
+            "Nothing in this sample could be read yet. 6 organisms weren't used.")
     }
 }

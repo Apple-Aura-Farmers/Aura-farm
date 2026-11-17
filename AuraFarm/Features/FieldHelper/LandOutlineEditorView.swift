@@ -16,8 +16,8 @@ import SwiftUI
 /// Nothing is kept until the helper taps **Confirm outline**. Leaving any other way throws the
 /// changes away, after asking if anything was changed.
 struct LandOutlineEditorView: View {
-    /// The other farms, drawn on the map so the new outline can be kept clear of them.
-    let neighbours: [Farm]
+    /// Land already mapped, drawn on the map so the new outline can be kept clear of it.
+    let neighbours: [Neighbour]
     let onConfirm: ([GeoPoint]) -> Void
 
     @State private var corners: [GeoPoint]
@@ -30,7 +30,10 @@ struct LandOutlineEditorView: View {
 
     private let startingCorners: [GeoPoint]
 
-    init(corners: [GeoPoint], neighbours: [Farm], onConfirm: @escaping ([GeoPoint]) -> Void) {
+    init(
+        corners: [GeoPoint], neighbours: [Neighbour],
+        onConfirm: @escaping ([GeoPoint]) -> Void
+    ) {
         self.startingCorners = corners
         self.neighbours = neighbours
         self.onConfirm = onConfirm
@@ -48,13 +51,15 @@ struct LandOutlineEditorView: View {
             Map(position: $position, interactionModes: drag == nil ? .all : []) {
                 UserAnnotation()
 
-                ForEach(neighbours) { farm in
-                    MapPolygon(coordinates: farm.corners.map(\.coordinate))
+                ForEach(neighbours) { neighbour in
+                    MapPolygon(coordinates: neighbour.corners.map(\.coordinate))
                         .foregroundStyle(.blue.opacity(0.25))
                         .stroke(.cyan, lineWidth: 2)
-                    if let middle = LandGeometry.centre(of: farm.corners) {
-                        Annotation(farm.farmerName, coordinate: middle.coordinate, anchor: .center) {
-                            Text(farm.farmerName)
+                    if let middle = LandGeometry.centre(of: neighbour.corners) {
+                        Annotation(
+                            neighbour.label, coordinate: middle.coordinate, anchor: .center
+                        ) {
+                            Text(neighbour.label)
                                 .font(.caption2.bold())
                                 .foregroundStyle(.white)
                                 .padding(.horizontal, 6)
@@ -183,7 +188,7 @@ struct LandOutlineEditorView: View {
                     .foregroundStyle(.secondary)
             }
 
-            if !overlappingFarms.isEmpty {
+            if !overlapping.isEmpty {
                 Text(overlapWarning)
                     .font(.footnote)
                     .multilineTextAlignment(.center)
@@ -230,7 +235,7 @@ struct LandOutlineEditorView: View {
                 onConfirm(corners)
                 dismiss()
             } label: {
-                Text(overlappingFarms.isEmpty ? "Confirm outline" : "Confirm anyway")
+                Text(overlapping.isEmpty ? "Confirm outline" : "Confirm anyway")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
@@ -246,12 +251,12 @@ struct LandOutlineEditorView: View {
 
     private var canConfirm: Bool { corners.count >= 3 && !crossesItself }
 
-    private var overlappingFarms: [Farm] {
+    private var overlapping: [Neighbour] {
         neighbours.filter { LandGeometry.overlap(corners, $0.corners) }
     }
 
     private var overlapWarning: String {
-        let names = overlappingFarms.map(\.farmerName).formatted(.list(type: .and))
+        let names = overlapping.map(\.label).formatted(.list(type: .and))
         return "This outline overlaps \(names)'s land. Move the dots so it stays on this "
             + "farmer's own land, or confirm anyway if the overlap is only GPS error."
     }
@@ -276,8 +281,9 @@ struct LandOutlineEditorView: View {
         LandOutlineEditorView(
             corners: [],
             neighbours: [
-                Farm(
-                    farmerName: "Pak Wayan",
+                Neighbour(
+                    id: UUID(),
+                    label: "Subak Jatiluwih",
                     corners: [
                         GeoPoint(latitude: -8.4095, longitude: 115.1889),
                         GeoPoint(latitude: -8.4095, longitude: 115.1900),

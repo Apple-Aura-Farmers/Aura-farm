@@ -23,7 +23,13 @@ enum AdviceBasis {
         ]
         if let stage = context.result.cropStage { parts.append(stage.label.lowercased()) }
         let plot = context.result.plotName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if !context.history.isEmpty && !plot.isEmpty {
+        let hasHistory = !context.history.isEmpty && !plot.isEmpty
+        if let soil = SoilInputs(context.result.soil) {
+            let names = soil.readings.map(\.short).joined(separator: ", ")
+            let part = "soil measurements (\(names))"
+            parts.append(hasHistory ? part : "and " + part)
+        }
+        if hasHistory {
             parts.append("and \(count(context.history.count, "earlier sample")) of \(plot)")
         }
 
