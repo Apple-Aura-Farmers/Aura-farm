@@ -45,44 +45,48 @@ struct NewPlotFormView: View {
             // A Form, so the rows, the grouping and the scroll out from under the keyboard are
             // all the system's. Nothing here draws a field of its own.
             Form {
-                Section("Farmer") {
-                    TextField("Farmer's name", text: $farmerName)
-                        .textContentType(.name)
-                        .textInputAutocapitalization(.words)
-                        .autocorrectionDisabled()
-                        .focused($focus, equals: .farmer)
-                        .submitLabel(.next)
-                        .onSubmit { focus = .plot }
+                Group {
+                    Section("Farmer") {
+                        TextField("Farmer's name", text: $farmerName)
+                            .textContentType(.name)
+                            .textInputAutocapitalization(.words)
+                            .autocorrectionDisabled()
+                            .focused($focus, equals: .farmer)
+                            .submitLabel(.next)
+                            .onSubmit { focus = .plot }
 
-                    // A Picker rather than a list under the field: the control iOS already has
-                    // for choosing one of a few things, so it opens, scrolls and closes itself.
-                    if !known.isEmpty {
-                        Picker("Already on this phone", selection: $farmerName) {
-                            ForEach(known, id: \.self) { name in
-                                Text(name).tag(name)
+                        // A Picker rather than a list under the field: the control iOS already has
+                        // for choosing one of a few things, so it opens, scrolls and closes itself.
+                        if !known.isEmpty {
+                            Picker("Already on this phone", selection: $farmerName) {
+                                ForEach(known, id: \.self) { name in
+                                    Text(name).tag(name)
+                                }
                             }
                         }
                     }
-                }
 
-                Section {
-                    TextField("Plot's name", text: $plotName)
-                        .textInputAutocapitalization(.words)
-                        .autocorrectionDisabled()
-                        .focused($focus, equals: .plot)
-                } header: {
-                    Text("Plot")
-                } footer: {
-                    // The Form's own footer, which makes room for itself as it appears.
-                    if isNameTaken {
-                        Text("\(trimmed(farmerName)) already has a plot called that.")
-                            .foregroundStyle(.red)
+                    Section {
+                        TextField("Plot's name", text: $plotName)
+                            .textInputAutocapitalization(.words)
+                            .autocorrectionDisabled()
+                            .focused($focus, equals: .plot)
+                    } header: {
+                        Text("Plot")
+                    } footer: {
+                        // The Form's own footer, which makes room for itself as it appears.
+                        if isNameTaken {
+                            Text("\(trimmed(farmerName)) already has a plot called that.")
+                                .foregroundStyle(.red)
+                        }
                     }
-                }
 
-                Section("The land") { preview }
+                    Section("The land") { preview }
+                }
+                .listRowBackground(Color.auraRow)
             }
             .animation(.snappy, value: isNameTaken)
+            .auraBackground()
             .navigationTitle("New Plot")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

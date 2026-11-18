@@ -57,8 +57,9 @@ final class SoilEducationReportTests: XCTestCase {
     private func farmAndTest(_ soil: SoilMeasurements?, frames: [URL] = [], date: Date? = nil) -> (
         Farm, FarmTest
     ) {
-        var farm = Farm(name: "Subak Jatiluwih", farmerName: "Pak Wayan", plots: [])
-        farm.soil = soil
+        let farm = Farm(
+            name: "Subak Jatiluwih", farmerName: "Pak Wayan",
+            plots: [Plot(corners: [], soil: soil)])
         var testResult = result(soil, counts: ["paramecium": 40, "amoeba": 30, "vorticella": 20])
         if let date { testResult.recordedAt = date }
         let sweep = SavedSweep(
@@ -389,7 +390,7 @@ final class SoilEducationReportTests: XCTestCase {
     func testChangingTheFertilizerUpdatesTheReport() throws {
         let (farm, test) = farmAndTest(SoilMeasurements(fertilizerType: .organic))
         var changed = farm
-        changed.soil = SoilMeasurements(fertilizerType: .inorganic)
+        changed.plots[0].soil = SoilMeasurements(fertilizerType: .inorganic)
         let recommendation = AdviceReport.sample().recommendation
         let first = try pdfText(
             AdviceReport.make(farm: farm, test: test, recommendation: recommendation, basis: nil))

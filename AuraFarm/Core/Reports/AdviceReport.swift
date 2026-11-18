@@ -100,10 +100,12 @@ extension AdviceReport {
     }
 
     static func make(
-        farm: Farm, test: FarmTest, recommendation: Recommendation, basis: String?,
-        adviceNote: String? = nil, history: [FarmTest] = [],
+        farm: Farm, plot: Plot? = nil, test: FarmTest, recommendation: Recommendation,
+        basis: String?, adviceNote: String? = nil, history: [FarmTest] = [],
         generatedAt: Date = Date()
     ) -> AdviceReport {
+        // The report is of one plot: its soil and its area. A farm of one plot needs no telling.
+        let land = plot ?? farm.plots.first
         let result = test.result
         let frames = max(result.framesKept, 1)
 
@@ -139,7 +141,7 @@ extension AdviceReport {
         return AdviceReport(
             farmName: farm.name,
             farmerName: farm.farmerName,
-            areaText: farm.areaSquareMetres.map { LandGeometry.areaDescription(squareMetres: $0) },
+            areaText: land?.areaSquareMetres.map { LandGeometry.areaDescription(squareMetres: $0) },
             plotName: (plot?.isEmpty ?? true) ? nil : plot,
             sampledAt: result.recordedAt,
             generatedAt: generatedAt,
@@ -154,8 +156,8 @@ extension AdviceReport {
             confidence: test.estimate.confidence.label,
             reasons: test.estimate.reasons,
             followUp: test.estimate.followUp,
-            education: AdviceEducation(farm.soil),
-            soilUpdatedAt: (farm.soil?.isEmpty == false) ? farm.soil?.updatedAt : nil,
+            education: AdviceEducation(land?.soil),
+            soilUpdatedAt: (land?.soil?.isEmpty == false) ? land?.soil?.updatedAt : nil,
             history: points,
             frameSources: frameSources(test.sweep.frameURLs),
             recommendation: recommendation,

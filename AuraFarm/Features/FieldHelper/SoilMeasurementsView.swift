@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// One farm's soil, as the helper meets it on the day: what the microscope found, what they
+/// One plot's soil, as the helper meets it on the day: what the microscope found, what they
 /// measured themselves, and what to do about it.
 ///
 /// Biodiversity comes first because it is the thing the helper cannot read off a probe. Until
@@ -11,6 +11,7 @@ import SwiftUI
 struct SoilMeasurementsView: View {
     /// Looked up each time, so the screen follows changes made anywhere else.
     let farmID: UUID
+    let plotID: UUID
 
     @Environment(FarmStore.self) private var store
     @Environment(\.dismiss) private var dismiss
@@ -18,18 +19,20 @@ struct SoilMeasurementsView: View {
     @State private var draft = SoilMeasurements()
     /// Set once from the farm, so reopening does not wipe what is being typed.
     @State private var hasLoaded = false
-    /// The tests taken on this farm, newest first. nil while they are read from disk.
+    /// The tests taken on this plot, newest first. nil while they are read from disk.
     @State private var tests: [FarmTest]?
     @State private var isSaving = false
 
     private var farm: Farm? { store.farms.first { $0.id == farmID } }
+    private var plot: Plot? { farm?.plots.first { $0.id == plotID } }
 
     var body: some View {
         Group {
-            if let farm {
+            if let farm, plot != nil {
                 form(for: farm)
+                    .auraBackground()
             } else {
-                ContentUnavailableView("This farm is no longer here", systemImage: "leaf")
+                ContentUnavailableView("This plot is no longer here", systemImage: "leaf")
             }
         }
         .navigationBarTitleDisplayMode(.inline)
@@ -41,14 +44,14 @@ struct SoilMeasurementsView: View {
                     .disabled(isSaving || !draft.problems.isEmpty)
             }
         }
-        .task(id: farmID) {
-            if !hasLoaded, let soil = farm?.soil {
+        .task(id: plotID) {
+            if !hasLoaded, let soil = plot?.soil {
                 draft = soil
             }
             hasLoaded = true
-            let id = farmID
+            guard let farm, let plot else { return }
             tests = await Task.detached(priority: .userInitiated) {
-                FarmTests.load(for: id)
+                FarmTests.load(for: plot, in: farm)
             }.value
         }
     }
@@ -69,13 +72,16 @@ struct SoilMeasurementsView: View {
 
     private func form(for farm: Farm) -> some View {
         List {
-            biodiversity(for: farm)
-            npk
-            acidity
-            organicCarbon
-            fertilizer
-            advice(for: farm)
-            problems
+            Group {
+                biodiversity(for: farm)
+                npk
+                acidity
+                organicCarbon
+                fertilizer
+                advice(for: farm)
+                problems
+            }
+            .listRowBackground(Color.auraRow)
         }
     }
 
@@ -270,13 +276,13 @@ struct SoilMeasurementsView: View {
     }
 
     private func save(closing: Bool = true) {
-        guard let farm, draft.problems.isEmpty else { return }
+        guard let farm, let plot, draft.problems.isEmpty else { return }
         var saved = draft
         saved.updatedAt = Date()
         draft = saved
         isSaving = true
         Task {
-            await store.saveSoil(saved.isUnrecorded ? nil : saved, for: farm)
+            await store.saveSoil(saved.isUnrecorded ? nil : saved, for: plot, in: farm)
             isSaving = false
             if closing { dismiss() }
         }
@@ -392,9 +398,9 @@ private struct SoilAdviceSection: View {
 }
 
 #Preview {
-    let farm = Farm(name: "Subak Jatiluwih", farmerName: "Pak Wayan")
+    let farm = Farm(name: "Subak Jatiluwih", farmerName: "Pak Wayan", plots: [Plot(corners: [])])
     NavigationStack {
-        SoilMeasurementsView(farmID: farm.id)
+        SoilMeasurementsView(farmID: farm.id, plotID: farm.plots[0].id)
     }
     .environment(FarmStore(fileURL: nil, farms: [farm]))
 }

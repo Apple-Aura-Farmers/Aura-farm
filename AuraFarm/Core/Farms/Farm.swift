@@ -28,6 +28,10 @@ struct Plot: Codable, Identifiable, Equatable {
     /// what it grows. Empty on a plot marked before the form asked for one.
     var name = ""
     var corners: [GeoPoint]
+    /// What the field helper has recorded about this plot's soil, apart from the microscope
+    /// tests. nil until they record something. Each plot has its own, because the readings
+    /// are taken on the plot and differ from one to the next.
+    var soil: SoilMeasurements? = nil
 
     /// nil until there are at least three corners.
     var areaSquareMetres: Double? { LandGeometry.areaSquareMetres(of: corners) }
@@ -44,10 +48,6 @@ struct Farm: Codable, Identifiable, Equatable {
     var farmerName: String
     var plots: [Plot] = []
     var createdAt = Date()
-    /// What the field helper has recorded about the soil, apart from the microscope tests.
-    /// nil until they record something. It belongs to the farm rather than a plot, because
-    /// that is where the helper takes the readings.
-    var soil: SoilMeasurements? = nil
 
     /// Every corner of every plot, for fitting a map around the whole farm.
     var allCorners: [GeoPoint] { plots.flatMap(\.corners) }
@@ -79,7 +79,8 @@ struct Farm: Codable, Identifiable, Equatable {
 }
 
 extension Farm {
-    /// Keys as they were written before a farm had a name of its own or more than one plot.
+    /// Keys as they were written before a farm had a name of its own, more than one plot, or
+    /// its soil kept per plot.
     private enum StoredKey: String, CodingKey {
         case id, name, farmerName, corners, plots, createdAt, soil
     }
@@ -93,12 +94,18 @@ extension Farm {
         farmerName = try stored.decode(String.self, forKey: .farmerName)
         createdAt = try stored.decode(Date.self, forKey: .createdAt)
         name = try stored.decodeIfPresent(String.self, forKey: .name) ?? farmerName
-        soil = try stored.decodeIfPresent(SoilMeasurements.self, forKey: .soil)
         if let plots = try stored.decodeIfPresent([Plot].self, forKey: .plots) {
             self.plots = plots
         } else {
             let corners = try stored.decodeIfPresent([GeoPoint].self, forKey: .corners) ?? []
             plots = corners.isEmpty ? [] : [Plot(corners: corners)]
+        }
+        // Soil used to belong to the farm as a whole. It goes to the first plot, the land a
+        // farm had before it could have more than one.
+        if let soil = try stored.decodeIfPresent(SoilMeasurements.self, forKey: .soil),
+            !plots.isEmpty, plots[0].soil == nil
+        {
+            plots[0].soil = soil
         }
     }
 }

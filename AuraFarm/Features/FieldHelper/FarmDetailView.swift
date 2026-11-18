@@ -7,9 +7,9 @@
 
 import SwiftUI
 
-/// One farm, with everything known about it in one place: the plots on the map, what the
-/// field helper has recorded about the soil, the tests the microscope operator has taken, and
-/// what to do next.
+/// One farm, where the plot is chosen: the plots on the map and a row for each. The soil
+/// measurements, tests and advice are on the page of the plot opened from here, because they
+/// are different for each plot.
 struct FarmDetailView: View {
     /// Looked up in the store each time, so the page shows changes made by Edit straight away.
     let farmID: UUID
@@ -17,8 +17,6 @@ struct FarmDetailView: View {
     @Environment(FarmStore.self) private var store
     /// The sheet showing over this page, if any. One at a time, so a single `sheet(item:)`.
     @State private var presented: Presentation?
-    /// The tests taken on this farm, newest first. nil while they are being read from disk.
-    @State private var tests: [FarmTest]?
     /// The plot waiting on a yes to being deleted.
     @State private var plotToDelete: Plot?
 
@@ -67,75 +65,36 @@ struct FarmDetailView: View {
             }
         }
         .navigationBarTitleDisplayMode(.inline)
+        .auraBackground()
     }
 
     private func details(for farm: Farm) -> some View {
         List {
-            if !farm.allCorners.isEmpty {
-                Section {
-                    LandMapView(outlines: farm.plots.map(\.corners), isInteractive: true)
-                        .id(farm.allCorners)
-                        .frame(height: 260)
-                        .listRowInsets(EdgeInsets())
+            Group {
+                if !farm.allCorners.isEmpty {
+                    Section {
+                        LandMapView(outlines: farm.plots.map(\.corners), isInteractive: true)
+                            .id(farm.allCorners)
+                            .frame(height: 260)
+                            .listRowInsets(EdgeInsets())
+                    }
                 }
-            }
 
-            Section("Farm") {
-                LabeledContent("Farmer", value: farm.farmerName)
-                if let area = farm.areaSquareMetres {
-                    LabeledContent(
-                        "Total area", value: LandGeometry.areaDescription(squareMetres: area))
+                Section("Farm") {
+                    LabeledContent("Farmer", value: farm.farmerName)
+                    if let area = farm.areaSquareMetres {
+                        LabeledContent(
+                            "Total area", value: LandGeometry.areaDescription(squareMetres: area))
+                    }
+                    LabeledContent("Added") {
+                        Text(farm.createdAt, format: .dateTime.day().month().year())
+                    }
                 }
-                LabeledContent("Added") {
-                    Text(farm.createdAt, format: .dateTime.day().month().year())
-                }
+
+                plots(of: farm)
+
             }
-
-            plots(of: farm)
-
-            soilSection(for: farm)
-
-            labResultsSection
-
-            adviceSection(for: farm)
-        }
-        .task(id: farm.id) {
-            let id = farm.id
-            tests = await Task.detached(priority: .userInitiated) {
-                FarmTests.load(for: id)
-            }.value
-        }
-    }
-
-    // MARK: Soil measurements
-
-    /// What the field helper has recorded: only the values that are filled in.
-    private func soilSection(for farm: Farm) -> some View {
-        Section {
-            if let soil = farm.soil, !soil.isEmpty {
-                ForEach(soil.rows) { row in
-                    SoilMeasurementRow(row: row)
-                }
-            } else {
-                Text("Nothing recorded yet.")
-                    .foregroundStyle(.secondary)
-            }
-            NavigationLink {
-                SoilMeasurementsView(farmID: farm.id)
-            } label: {
-                Label(
-                    farm.soil?.isEmpty == false ? "Edit measurements" : "Add measurements",
-                    systemImage: "square.and.pencil")
-            }
-        } header: {
-            Text("Soil measurements")
-        } footer: {
-            if let soil = farm.soil, !soil.isEmpty {
-                Text(
-                    "Updated \(soil.updatedAt.formatted(date: .abbreviated, time: .omitted)). "
-                        + "Tap a value for what it means. The standards and guidance are placeholders and have not been reviewed by an agronomist."
-                )
-            }
+            .listRowBackground(Color.auraRow)
         }
     }
 
@@ -143,15 +102,7 @@ struct FarmDetailView: View {
         Section {
             ForEach(farm.plots) { plot in
                 NavigationLink {
-                    // The farm is already known here, so confirming is the last step and the
-                    // button says so.
-                    LandOutlineEditorView(
-                        corners: plot.corners,
-                        neighbours: store.farms.neighbours(excluding: plot.id),
-                        confirmTitle: "Save"
-                    ) { corners in
-                        replace(plot, with: corners, in: farm)
-                    }
+                    PlotDetailView(farmID: farm.id, plotID: plot.id)
                 } label: {
                     row(for: plot, in: farm)
                 }
@@ -176,9 +127,10 @@ struct FarmDetailView: View {
         } header: {
             Text("Plots")
         } footer: {
-            if farm.plots.isEmpty {
-                Text("Mark each piece of this farmer's land as its own plot.")
-            }
+            Text(
+                farm.plots.isEmpty
+                    ? "Mark each piece of this farmer's land as its own plot."
+                    : "Choose a plot for its soil measurements, lab results and advice.")
         }
     }
 
@@ -211,14 +163,6 @@ struct FarmDetailView: View {
         store.publish(changed)
     }
 
-    private func replace(_ plot: Plot, with corners: [GeoPoint], in farm: Farm) {
-        guard let index = farm.plots.firstIndex(where: { $0.id == plot.id }) else { return }
-        var changed = farm
-        changed.plots[index].corners = corners
-        store.update(changed)
-        store.publish(changed)
-    }
-
     /// Takes the plot out of the records first, so one deleted here but left there does not
     /// come back with the next pull.
     private func remove(_ plot: Plot, from farm: Farm) async {
@@ -233,159 +177,6 @@ struct FarmDetailView: View {
         var changed = farm
         changed.plots.removeAll { $0.id == plot.id }
         store.update(changed)
-    }
-
-    // MARK: Lab results
-
-    private var labResultsSection: some View {
-        Section {
-            if let tests {
-                if tests.isEmpty {
-                    Text("No tests on this farm yet.")
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(tests) { test in
-                        NavigationLink {
-                            SoilResultScreen(sweep: test.sweep)
-                        } label: {
-                            row(for: test)
-                        }
-                    }
-                }
-            } else {
-                ProgressView()
-            }
-        } header: {
-            Text("Lab results")
-        } footer: {
-            Text("Tests the microscope operator takes on this farm show here.")
-        }
-    }
-
-    /// One test: how much soil life it saw, when, and how sure that is. The band is never shown
-    /// without its confidence; the reasons are one tap away on the full result.
-    private func row(for test: FarmTest) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: test.estimate.level.systemImage)
-                .font(.title2)
-                .foregroundStyle(test.estimate.level.tint)
-                .frame(width: 32)
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(test.estimate.level.title)
-                    .font(.headline)
-                Text(
-                    test.result.recordedAt.formatted(date: .abbreviated, time: .shortened)
-                        + " · \(test.result.moisture.label)"
-                )
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                Text(detail(of: test))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .accessibilityElement(children: .combine)
-    }
-
-    private func detail(of test: FarmTest) -> String {
-        var parts: [String] = []
-        if let total = test.result.totalCount {
-            parts.append(total == 1 ? "1 organism" : "\(total) organisms")
-        }
-        parts.append("\(test.estimate.confidence.label) confidence")
-        return parts.joined(separator: " · ")
-    }
-
-    // MARK: What to do next
-
-    /// Advice for the farm's most recent counted test, written with the farm's soil measurements.
-    @ViewBuilder
-    private func adviceSection(for farm: Farm) -> some View {
-        if let latest = tests?.first {
-            FarmAdvice(farm: farm, test: latest, history: tests ?? [])
-                // A new test, or different soil measurements, is new advice, so a fresh view model
-                // for it. It then shows the saved advice if that still fits, and writes it again
-                // if it doesn't.
-                .id(AdviceKey(test: latest.id, soil: SoilInputs(farm.soil)))
-        } else if tests?.isEmpty == true {
-            Section {
-                Text("Advice shows here once the microscope operator has tested this farm.")
-                    .foregroundStyle(.secondary)
-            } header: {
-                Text("What to do next")
-            }
-        }
-    }
-}
-
-/// What the advice on a farm's page is for. When it changes, the advice is looked at afresh.
-private struct AdviceKey: Hashable {
-    let test: URL
-    let soil: SoilInputs?
-}
-
-/// "What to do next" for one test, and a way to export it. Owns the view model so it survives
-/// redraws.
-private struct FarmAdvice: View {
-    @State private var viewModel: SoilResultViewModel
-    private let farm: Farm
-    private let test: FarmTest
-    /// Every counted test of this farm, for the report's trend.
-    private let history: [FarmTest]
-    private let testedOn: Date
-    private let usesSoil: Bool
-
-    init(farm: Farm, test: FarmTest, history: [FarmTest]) {
-        self.farm = farm
-        self.test = test
-        self.history = history
-        testedOn = test.result.recordedAt
-        usesSoil = SoilInputs(farm.soil) != nil
-        var result = test.result
-        result.soil = farm.soil
-        _viewModel = State(wrappedValue: SoilResultViewModel(result: result))
-    }
-
-    var body: some View {
-        Group {
-            WhatToDoNextSection(
-                viewModel: viewModel,
-                footer: "From the microscope test on "
-                    + "\(testedOn.formatted(date: .abbreviated, time: .omitted))"
-                    + (usesSoil
-                        ? ", with the soil measurements above."
-                        : " only.")
-            )
-            exportSection
-        }
-    }
-
-    /// Offered once the advice is written, so the PDF never shows an advice that is still loading.
-    /// The PDF is written when a place to send it to is chosen, not before.
-    @ViewBuilder
-    private var exportSection: some View {
-        if case .ready(let recommendation) = viewModel.recommendationState {
-            Section {
-                ShareLink(
-                    // The report carries the advice exactly as it is on screen: the same
-                    // recommendation, "Based on" line, step labels and note. It is rebuilt from the
-                    // view model each time this redraws, so it never holds advice that was replaced.
-                    item: ExportableAdvice(
-                        report: AdviceReport.make(
-                            farm: farm, test: test, recommendation: recommendation,
-                            basis: viewModel.adviceBasis,
-                            adviceNote: viewModel.modelUnavailableReason, history: history)),
-                    preview: SharePreview("Field report for \(farm.name)")
-                ) {
-                    Label("Export field report as PDF", systemImage: "square.and.arrow.up")
-                }
-            } footer: {
-                Text(
-                    "A field report of this test, the soil measurements, the fertilizer and the advice above, to share or print."
-                )
-            }
-        }
     }
 }
 

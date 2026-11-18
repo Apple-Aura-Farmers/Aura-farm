@@ -8,8 +8,10 @@
 import SwiftUI
 
 struct SplashScreen: View {
+    @Environment(\.colorScheme) private var scheme
+
     var body: some View {
-        Image("Splash_Screen")
+        Image(scheme == .dark ? "Splash_Screen" : "Splash_Screen_Light")
             .resizable()
             .scaledToFill()
             .ignoresSafeArea()

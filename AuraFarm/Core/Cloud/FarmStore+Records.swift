@@ -9,14 +9,20 @@ extension FarmStore {
         guard let uploader = FarmUploader() else { return }
         do {
             let records = try await uploader.fetch()
-            // The farms table knows nothing about soil, so a farm read back carries none. Its
+            // The plots table knows nothing about soil, so a plot read back carries none. Its
             // soil comes from its own table, and failing that from what this phone already
             // holds, rather than the pull quietly wiping measurements nobody published.
             let soil = try await SoilMeasurementUploader()?.fetch() ?? [:]
+            let held = Dictionary(
+                self.farms.flatMap(\.plots).map { ($0.id, $0.soil) },
+                uniquingKeysWith: { first, _ in first })
             merge(
                 records.map { farm in
                     var farm = farm
-                    farm.soil = soil[farm.id] ?? self.farms.first { $0.id == farm.id }?.soil
+                    for index in farm.plots.indices {
+                        let id = farm.plots[index].id
+                        farm.plots[index].soil = soil[id] ?? held[id] ?? nil
+                    }
                     return farm
                 })
             report(nil)
@@ -59,18 +65,19 @@ extension FarmStore {
         }
     }
 
-    /// Keeps what the helper measured, on the phone first and in the records after.
+    /// Keeps what the helper measured on one plot, on the phone first and in the records after.
     ///
     /// The phone is written to whether or not the sending works, because the measurement is
     /// the helper's own reading and losing it to a bad connection would be the worse half.
-    func saveSoil(_ soil: SoilMeasurements?, for farm: Farm) async {
+    func saveSoil(_ soil: SoilMeasurements?, for plot: Plot, in farm: Farm) async {
         var changed = farm
-        changed.soil = soil
+        guard let index = changed.plots.firstIndex(where: { $0.id == plot.id }) else { return }
+        changed.plots[index].soil = soil
         update(changed)
 
         guard let uploader = SoilMeasurementUploader() else { return }
         do {
-            try await uploader.upload(soil, forFarm: farm.id)
+            try await uploader.upload(soil, forPlot: plot.id, inFarm: farm.id)
             report(nil)
         } catch {
             report(error.localizedDescription)
