@@ -28,13 +28,21 @@ struct FarmChoiceList: View {
                 )
             } else {
                 List(matching) { farm in
-                    Button {
-                        details.use(farm)
-                        dismiss()
-                    } label: {
-                        row(for: farm)
+                    // A farm with several plots asks which one the soil came from.
+                    if farm.plots.count > 1 {
+                        NavigationLink {
+                            plotList(for: farm)
+                        } label: {
+                            row(for: farm)
+                        }
+                    } else {
+                        Button {
+                            choose(farm.plots.first, of: farm)
+                        } label: {
+                            row(for: farm)
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
                 .searchable(text: $search, prompt: "Search farms")
                 .overlay {
@@ -54,6 +62,44 @@ struct FarmChoiceList: View {
                     || $0.farmerName.localizedStandardContains(search)
             }
             .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+
+    /// A farm with no plot yet has no land to take a location from, so it is chosen without one.
+    private func choose(_ plot: Plot?, of farm: Farm) {
+        details.use(plot, of: farm)
+        dismiss()
+    }
+
+    private func plotList(for farm: Farm) -> some View {
+        List(farm.plots) { plot in
+            Button {
+                choose(plot, of: farm)
+            } label: {
+                HStack(spacing: 14) {
+                    FarmOutlineThumbnail(corners: plot.corners)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(farm.title(of: plot))
+                            .font(.headline)
+                        if !plot.name.isEmpty {
+                            Text(plot.name)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    Spacer()
+                    if details.plotID == plot.id {
+                        Image(systemName: "checkmark")
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(.tint)
+                            .accessibilityLabel("Chosen")
+                    }
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+        .navigationTitle("Choose a plot")
+        .navigationBarTitleDisplayMode(.inline)
     }
 
     private func row(for farm: Farm) -> some View {

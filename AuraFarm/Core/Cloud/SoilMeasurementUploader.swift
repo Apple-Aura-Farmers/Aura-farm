@@ -1,7 +1,7 @@
 import Foundation
 import Supabase
 
-/// Sends what the helper measured on the farm to `soil_measurements`, and reads it back.
+/// Sends what the helper measured on each plot to `soil_measurements`, and reads it back.
 ///
 /// The measurements are already on the phone before this runs, so a failure here costs the
 /// sending and not the reading: a helper out of signal records the soil now and it goes up
@@ -32,44 +32,44 @@ struct SoilMeasurementUploader {
         self.client = client
     }
 
-    /// Writes a farm's soil, or takes the row away when there is nothing left to keep.
+    /// Writes a plot's soil, or takes the row away when there is nothing left to keep.
     ///
-    /// An upsert on the farm, not on the measurement's own id: a farm has one soil, and a
+    /// An upsert on the plot, not on the measurement's own id: a plot has one soil, and a
     /// phone that was reinstalled would otherwise write a second row for the same land.
-    func upload(_ soil: SoilMeasurements?, forFarm farmID: UUID) async throws {
+    func upload(_ soil: SoilMeasurements?, forPlot plotID: UUID, inFarm farmID: UUID) async throws {
         do {
             guard let soil, !soil.isUnrecorded else {
                 try await client
                     .from("soil_measurements")
                     .delete()
-                    .eq("farm_id", value: farmID)
+                    .eq("plot_id", value: plotID)
                     .execute()
                 return
             }
             try await client
                 .from("soil_measurements")
-                .upsert(StoredSoilRow(soil: soil, farmID: farmID), onConflict: "farm_id")
+                .upsert(StoredSoilRow(soil: soil, plotID: plotID, farmID: farmID), onConflict: "plot_id")
                 .execute()
         } catch {
             throw Self.readable(error)
         }
     }
 
-    /// Every farm's soil that this account can see, by farm.
+    /// Every plot's soil that this account can see, by plot.
     func fetch() async throws -> [UUID: SoilMeasurements] {
         do {
             let rows: [StoredSoilRow] =
                 try await client
                 .from("soil_measurements")
                 .select(
-                    "id, farm_id, nitrogen, phosphorus, potassium, ph, organic_carbon_percent, "
+                    "id, farm_id, plot_id, nitrogen, phosphorus, potassium, ph, organic_carbon_percent, "
                         + "fertilizer_product, fertilizer_kg_per_hectare, scientist_alerted_at, "
                         + "updated_at"
                 )
                 .execute()
                 .value
             return Dictionary(
-                rows.map { ($0.farmID, $0.measurements) }, uniquingKeysWith: { first, _ in first })
+                rows.map { ($0.plotID, $0.measurements) }, uniquingKeysWith: { first, _ in first })
         } catch {
             throw Self.readable(error)
         }
@@ -86,6 +86,7 @@ struct SoilMeasurementUploader {
 struct StoredSoilRow: Codable {
     var id: UUID
     var farmID: UUID
+    var plotID: UUID
     var nitrogen: Double?
     var phosphorus: Double?
     var potassium: Double?
@@ -99,6 +100,7 @@ struct StoredSoilRow: Codable {
     enum CodingKeys: String, CodingKey {
         case id
         case farmID = "farm_id"
+        case plotID = "plot_id"
         case nitrogen
         case phosphorus
         case potassium
@@ -110,8 +112,9 @@ struct StoredSoilRow: Codable {
         case updatedAt = "updated_at"
     }
 
-    init(soil: SoilMeasurements, farmID: UUID) {
+    init(soil: SoilMeasurements, plotID: UUID, farmID: UUID) {
         id = soil.id
+        self.plotID = plotID
         self.farmID = farmID
         nitrogen = soil.nitrogen
         phosphorus = soil.phosphorus

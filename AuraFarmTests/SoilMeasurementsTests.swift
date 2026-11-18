@@ -63,8 +63,10 @@ final class SoilMeasurementsTests: XCTestCase {
     }
 
     func testFarmWithSoilSurvivesSavingAndLoading() throws {
-        var farm = Farm(name: "Subak Jatiluwih", farmerName: "Pak Wayan")
-        farm.soil = SoilMeasurements(nitrogen: 100, ph: 6.5, fertilizerProduct: "Compost")
+        let soil = SoilMeasurements(nitrogen: 100, ph: 6.5, fertilizerProduct: "Compost")
+        let farm = Farm(
+            name: "Subak Jatiluwih", farmerName: "Pak Wayan",
+            plots: [Plot(corners: [], soil: soil)])
         let data = try JSONEncoder().encode(farm)
         let loaded = try JSONDecoder().decode(Farm.self, from: data)
         XCTAssertEqual(loaded, farm)
@@ -114,6 +116,17 @@ final class SoilMeasurementsTests: XCTestCase {
             "corners":[],"createdAt":0}
             """
         let farm = try JSONDecoder().decode(Farm.self, from: Data(json.utf8))
-        XCTAssertNil(farm.soil)
+        XCTAssertNil(farm.plots.first?.soil)
+    }
+
+    /// Soil used to belong to the farm; it now goes to the farm's first plot.
+    func testFarmLevelSoilMovesToTheFirstPlot() throws {
+        let json = """
+            {"id":"6F9619FF-8B86-D011-B42D-00C04FC964FF","farmerName":"Pak Wayan",\
+            "corners":[{"latitude":0,"longitude":0}],"createdAt":0,\
+            "soil":{"nitrogen":100,"updatedAt":0}}
+            """
+        let farm = try JSONDecoder().decode(Farm.self, from: Data(json.utf8))
+        XCTAssertEqual(farm.plots.first?.soil?.nitrogen, 100)
     }
 }

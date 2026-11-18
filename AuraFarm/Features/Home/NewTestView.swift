@@ -34,6 +34,9 @@ struct NewTestView: View {
                     if details.farmID != nil, let location = details.location {
                         LabeledContent("Location", value: location)
                     }
+                    if details.plotID != nil, let plot = details.plotName {
+                        LabeledContent("Plot", value: plot)
+                    }
                 }
 
                 Section("Description") {

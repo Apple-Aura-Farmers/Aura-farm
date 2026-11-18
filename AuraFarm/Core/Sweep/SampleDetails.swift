@@ -32,6 +32,9 @@ struct SampleDetails: Codable, Equatable {
     /// reads the same if the farm is later renamed or deleted. nil for samples taken before
     /// farms could be chosen.
     var farmID: UUID? = nil
+    /// Which of the farm's plots the soil came from. nil for samples taken before plots could
+    /// be chosen, which belong to the farm's first plot.
+    var plotID: UUID? = nil
 
     enum Moisture: String, Codable, CaseIterable, Identifiable {
         case flooded
