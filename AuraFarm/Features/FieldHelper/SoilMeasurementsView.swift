@@ -73,13 +73,13 @@ struct SoilMeasurementsView: View {
     private func form(for farm: Farm) -> some View {
         List {
             Group {
-            biodiversity(for: farm)
-            npk
-            acidity
-            organicCarbon
-            fertilizer
-            advice(for: farm)
-            problems
+                biodiversity(for: farm)
+                npk
+                acidity
+                organicCarbon
+                fertilizer
+                advice(for: farm)
+                problems
             }
             .listRowBackground(Color.auraRow)
         }

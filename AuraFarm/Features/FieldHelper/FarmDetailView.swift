@@ -71,27 +71,27 @@ struct FarmDetailView: View {
     private func details(for farm: Farm) -> some View {
         List {
             Group {
-            if !farm.allCorners.isEmpty {
-                Section {
-                    LandMapView(outlines: farm.plots.map(\.corners), isInteractive: true)
-                        .id(farm.allCorners)
-                        .frame(height: 260)
-                        .listRowInsets(EdgeInsets())
+                if !farm.allCorners.isEmpty {
+                    Section {
+                        LandMapView(outlines: farm.plots.map(\.corners), isInteractive: true)
+                            .id(farm.allCorners)
+                            .frame(height: 260)
+                            .listRowInsets(EdgeInsets())
+                    }
                 }
-            }
 
-            Section("Farm") {
-                LabeledContent("Farmer", value: farm.farmerName)
-                if let area = farm.areaSquareMetres {
-                    LabeledContent(
-                        "Total area", value: LandGeometry.areaDescription(squareMetres: area))
+                Section("Farm") {
+                    LabeledContent("Farmer", value: farm.farmerName)
+                    if let area = farm.areaSquareMetres {
+                        LabeledContent(
+                            "Total area", value: LandGeometry.areaDescription(squareMetres: area))
+                    }
+                    LabeledContent("Added") {
+                        Text(farm.createdAt, format: .dateTime.day().month().year())
+                    }
                 }
-                LabeledContent("Added") {
-                    Text(farm.createdAt, format: .dateTime.day().month().year())
-                }
-            }
 
-            plots(of: farm)
+                plots(of: farm)
 
             }
             .listRowBackground(Color.auraRow)

@@ -360,7 +360,6 @@ struct FieldHelperHomeView: View {
                 ]))
 }
 
-
 /// The street address of a plot's middle, looked up from the map data when the card opens.
 private struct PlotAddress: View {
     let corners: [GeoPoint]
@@ -376,22 +375,26 @@ private struct PlotAddress: View {
                 if let address {
                     Text(address).font(.callout.weight(.semibold)).foregroundStyle(.primary)
                 } else {
-                    Label(String(format: "%.4f, %.4f", middle.latitude, middle.longitude),
-                          systemImage: "mappin.and.ellipse")
-                        .font(.body)
-                        .foregroundStyle(.secondary)
+                    Label(
+                        String(format: "%.4f, %.4f", middle.latitude, middle.longitude),
+                        systemImage: "mappin.and.ellipse"
+                    )
+                    .font(.body)
+                    .foregroundStyle(.secondary)
                 }
             }
-                .task(id: corners) {
-                    let place = try? await CLGeocoder().reverseGeocodeLocation(
-                        CLLocation(latitude: middle.latitude, longitude: middle.longitude)
-                    ).first
-                    // shortcut: the geocoder has nothing for open land or sea, so the coordinates stay.
-                    let named = [place?.name, place?.locality, place?.administrativeArea,
-                                 place?.country, place?.ocean, place?.inlandWater]
-                        .compactMap { $0 }.joined(separator: ", ")
-                    address = named.isEmpty ? nil : named
-                }
+            .task(id: corners) {
+                let place = try? await CLGeocoder().reverseGeocodeLocation(
+                    CLLocation(latitude: middle.latitude, longitude: middle.longitude)
+                ).first
+                // shortcut: the geocoder has nothing for open land or sea, so the coordinates stay.
+                let named = [
+                    place?.name, place?.locality, place?.administrativeArea,
+                    place?.country, place?.ocean, place?.inlandWater,
+                ]
+                .compactMap { $0 }.joined(separator: ", ")
+                address = named.isEmpty ? nil : named
+            }
         }
     }
 }

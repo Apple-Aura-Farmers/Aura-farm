@@ -37,12 +37,18 @@ private struct AuraBackground: ViewModifier {
     /// Redrawn here because the exported SVG relies on blur filters that SwiftUI does not render.
     private var glow: some View {
         ZStack {
-            GlowShape(points: [(253.734, 432.486), (151.519, 421.36), (94.9, 299.728), (94.9, 121.452), (570.9, 94.9), (551.86, 227.659), (355.948, 443.613)])
-                .fill(Color.auraBrown)
-                .blur(radius: 47.45)
-            GlowShape(points: [(225.4, 280.072), (123.4, 265.841), (108.9, 196.785), (95.4, 128.862), (570.4, 94.9), (525.9, 159.589), (327.4, 294.304)])
-                .fill(Color(red: 0xED / 255, green: 0x9C / 255, blue: 0x27 / 255))
-                .blur(radius: 47.45)
+            GlowShape(points: [
+                (253.734, 432.486), (151.519, 421.36), (94.9, 299.728), (94.9, 121.452), (570.9, 94.9),
+                (551.86, 227.659), (355.948, 443.613),
+            ])
+            .fill(Color.auraBrown)
+            .blur(radius: 47.45)
+            GlowShape(points: [
+                (225.4, 280.072), (123.4, 265.841), (108.9, 196.785), (95.4, 128.862), (570.4, 94.9),
+                (525.9, 159.589), (327.4, 294.304),
+            ])
+            .fill(Color(red: 0xED / 255, green: 0x9C / 255, blue: 0x27 / 255))
+            .blur(radius: 47.45)
         }
         .frame(width: 665.8, height: 527.8)
         .opacity(scheme == .dark ? 0.14 : 0.35)

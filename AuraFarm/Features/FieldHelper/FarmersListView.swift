@@ -50,18 +50,18 @@ struct FarmersListView: View {
     private var list: some View {
         List {
             Group {
-            ForEach(shown) { farm in
-                NavigationLink(value: farm.id) {
-                    row(for: farm)
-                }
-                .swipeActions {
-                    Button(role: .destructive) {
-                        farmToDelete = farm
-                    } label: {
-                        Label("Delete", systemImage: "trash")
+                ForEach(shown) { farm in
+                    NavigationLink(value: farm.id) {
+                        row(for: farm)
+                    }
+                    .swipeActions {
+                        Button(role: .destructive) {
+                            farmToDelete = farm
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
                     }
                 }
-            }
             }
             .listRowBackground(Color.auraRow)
         }

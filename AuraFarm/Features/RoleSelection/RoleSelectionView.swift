@@ -92,7 +92,8 @@ struct RoleSelectionView: View {
     /// Light: the tan card turns gold when picked. Dark: it lifts towards grey.
     private func fill(_ isPicked: Bool) -> Color {
         scheme == .dark
-            ? (isPicked ? .white.opacity(0.15) : Color(red: 40 / 255, green: 34 / 255, blue: 27 / 255).opacity(0.2))
+            ? (isPicked
+                ? .white.opacity(0.15) : Color(red: 40 / 255, green: 34 / 255, blue: 27 / 255).opacity(0.2))
             : (isPicked ? Color(red: 242 / 255, green: 223 / 255, blue: 174 / 255).opacity(0.8) : .auraRow)
     }
 
