@@ -6,18 +6,25 @@ struct AlignmentTicksView: View {
     var ticks: AlignmentTicks
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ForEach(Array(ticks.lines.enumerated()), id: \.offset) { _, line in
-                Label {
-                    Text(line.text).font(.title3)
-                } icon: {
-                    Image(systemName: line.isOK ? "checkmark.circle.fill" : "circle")
-                        .foregroundStyle(line.isOK ? .green : .white.opacity(0.5))
+        VStack(alignment: .leading, spacing: 6) {
+            LazyVGrid(
+                columns: [
+                    GridItem(.flexible(), alignment: .leading), GridItem(.flexible(), alignment: .leading),
+                ],
+                alignment: .leading, spacing: 6
+            ) {
+                ForEach(Array(ticks.lines.enumerated()), id: \.offset) { _, line in
+                    Label {
+                        Text(line.text).font(.subheadline).lineLimit(2).minimumScaleFactor(0.8)
+                    } icon: {
+                        Image(systemName: line.isOK ? "checkmark.circle.fill" : "circle")
+                            .foregroundStyle(line.isOK ? .green : .white.opacity(0.5))
+                    }
                 }
             }
             if ticks.passed {
                 Label("Aligned", systemImage: "checkmark.seal.fill")
-                    .font(.title3.bold())
+                    .font(.headline)
                     .foregroundStyle(.green)
             }
         }

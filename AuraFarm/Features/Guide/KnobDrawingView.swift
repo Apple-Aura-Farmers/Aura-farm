@@ -8,7 +8,7 @@ struct KnobDrawingView: View {
     var words: KnobRule.Words?
 
     var body: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: 6) {
             knob(.top)
             knob(.bottom)
         }
@@ -24,17 +24,17 @@ struct KnobDrawingView: View {
         return ZStack {
             Circle()
                 .fill(isMain ? Color.accentColor : .gray.opacity(isAlso ? 0.55 : 0.3))
-                .frame(width: 44, height: 44)
+                .frame(width: 36, height: 36)
             // A tick, so a turning knob has something to turn.
-            Capsule().fill(.white.opacity(isLit ? 0.95 : 0.5)).frame(width: 4, height: 14)
-                .offset(y: -11)
+            Capsule().fill(.white.opacity(isLit ? 0.95 : 0.5)).frame(width: 4, height: 11)
+                .offset(y: -9)
             if isMain, let words {
                 TurnArrow(towardsYou: words.way == .towardsYou)
                     .stroke(.white, style: StrokeStyle(lineWidth: 4, lineCap: .round))
-                    .frame(width: 62, height: 62)
+                    .frame(width: 50, height: 50)
             }
         }
-        .frame(width: 68, height: 62)
+        .frame(width: 56, height: 52)
     }
 }
 

@@ -6,7 +6,7 @@ final class GuidedScanSetupTests: XCTestCase {
     private func stage(_ flow: LabSetupFlow) -> GuidedScanSetupStage { .current(step: flow.step) }
 
     func testThereIsNoStageBeforeTheLabsFirstStep() {
-        XCTAssertEqual(GuidedScanSetupStage.allCases, [.align, .focus, .field, .stage, .ready])
+        XCTAssertEqual(GuidedScanSetupStage.allCases, [.align, .field, .focus, .stage, .ready])
         XCTAssertEqual(GuidedScanSetupStage.stepCount, LabSetupFlow.stepCount)
     }
 
@@ -14,25 +14,27 @@ final class GuidedScanSetupTests: XCTestCase {
         var flow = LabSetupFlow()
         var shown = [stage(flow)]
         let moves: [(inout LabSetupFlow) -> Void] = [
-            { $0.update(alignmentPassed: true) }, { $0.update(focused: true) },
-            { $0.update(fieldConfirmed: true) }, { $0.update(stageMeasured: true) },
+            { $0.update(alignmentPassed: true) }, { $0.update(fieldConfirmed: true) },
+            { $0.update(focused: true) }, { $0.update(stageMeasured: true) },
         ]
         for move in moves {
             move(&flow)
             shown.append(stage(flow))
         }
-        XCTAssertEqual(shown, [.align, .focus, .field, .stage, .ready])
+        XCTAssertEqual(shown, [.align, .field, .focus, .stage, .ready])
         XCTAssertEqual(shown.dropLast().compactMap(\.number), [1, 2, 3, 4])
         XCTAssertEqual(shown.map { $0.number ?? 0 }.dropLast(), [1, 2, 3, 4])
         XCTAssertEqual(GuidedScanSetupStage.align.indicator, "Step 1 of 4: Align")
+        XCTAssertEqual(GuidedScanSetupStage.field.indicator, "Step 2 of 4: Find the eyepiece")
+        XCTAssertEqual(GuidedScanSetupStage.focus.indicator, "Step 3 of 4: Focus")
         XCTAssertEqual(GuidedScanSetupStage.ready.indicator, "Ready")
     }
 
     func testRedoSetupAndTheStageSkipAndTheSkipSettingFollowTheLab() {
         var flow = LabSetupFlow()
         flow.update(alignmentPassed: true)
-        flow.update(focused: true)
         flow.update(fieldConfirmed: true)
+        flow.update(focused: true)
         XCTAssertEqual(stage(flow), .stage)
         flow.skip()  // the stage step's Skip goes straight to the end of setup
         XCTAssertEqual(stage(flow), .ready)
@@ -114,4 +116,14 @@ final class GuidedScanSetupTests: XCTestCase {
             XCTAssertFalse(lab.guideDryRun)
         }
     #endif
+
+    func testTheGuidedScanLocksTheSheetsDismissalWhileOpenAndOnlyThen() {
+        var launch = GuidedScanLaunch()
+        XCTAssertFalse(launch.locksSheetDismissal, "before it opens")
+        launch.open()
+        XCTAssertTrue(launch.isOpen)
+        XCTAssertTrue(launch.locksSheetDismissal, "while it is open, setup included")
+        launch.close()
+        XCTAssertFalse(launch.locksSheetDismissal, "after it closes")
+    }
 }

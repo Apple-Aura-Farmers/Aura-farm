@@ -1,9 +1,6 @@
 #if DEBUG
     import SwiftUI
 
-    /// Seconds of stillness the stops test asks for.
-    let slideLabStillGoalSeconds = 2.0
-
     /// The big numbers under the camera strip: distance, stillness, hops.
     struct BigReadouts: View {
         var model: SlideMovementLabModel

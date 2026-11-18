@@ -215,7 +215,7 @@
                 Text(
                     model.setupInfo.step == .align
                         ? "1. Align the phone: the whole microscope circle in view, round, evenly lit, no glare."
-                        : "2. Focus with the microscope's focus knob (the stage's Z), not the phone's."
+                        : "3. Focus with the microscope's focus knob (the stage's Z), not the phone's."
                 )
                 .font(.callout)
                 setupButtons

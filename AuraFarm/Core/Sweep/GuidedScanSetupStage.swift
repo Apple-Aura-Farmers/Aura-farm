@@ -15,7 +15,7 @@ struct GuidedScanPictureTreatment: Equatable {
 /// (`LabSetupFlow` through `LabSetupSession`): this only names its steps for a helper. There is no
 /// stage of its own: the page starts the camera and the setup together, as the lab does.
 enum GuidedScanSetupStage: Equatable, CaseIterable {
-    case align, focus, field
+    case align, field, focus
     /// The optional knob step.
     case stage
     /// Setup is done: choose the coverage and start the scan.
@@ -28,8 +28,8 @@ enum GuidedScanSetupStage: Equatable, CaseIterable {
     static func current(step: LabSetupStep) -> GuidedScanSetupStage {
         switch step {
         case .align: .align
-        case .focus: .focus
         case .field: .field
+        case .focus: .focus
         case .stage: .stage
         case .done: .ready
         }
@@ -39,8 +39,8 @@ enum GuidedScanSetupStage: Equatable, CaseIterable {
     var number: Int? {
         switch self {
         case .align: 1
-        case .focus: 2
-        case .field: 3
+        case .field: 2
+        case .focus: 3
         case .stage: 4
         case .ready: nil
         }
@@ -50,8 +50,8 @@ enum GuidedScanSetupStage: Equatable, CaseIterable {
     var title: String {
         switch self {
         case .align: "Align"
+        case .field: "Find the eyepiece"
         case .focus: "Focus"
-        case .field: "Check the outline"
         case .stage: "Knobs (optional)"
         case .ready: "Ready"
         }
@@ -67,8 +67,8 @@ enum GuidedScanSetupStage: Equatable, CaseIterable {
         switch self {
         case .align:
             "Move the phone until the whole round view is inside the picture, round and evenly lit."
-        case .focus: "Turn the microscope's focus knob slowly until the picture is sharp."
         case .field: "Check the outline fits the round view, then confirm."
+        case .focus: "Turn the microscope's focus knob slowly until the picture is sharp."
         case .stage:
             "Turn the bottom knob a little, then the top knob, as asked. You can skip this."
         case .ready: "Choose how much of the slide, then start the scan."
@@ -79,7 +79,7 @@ enum GuidedScanSetupStage: Equatable, CaseIterable {
     /// field is confirmed; before that the whole camera picture is shown, with no target.
     var treatment: GuidedScanPictureTreatment {
         switch self {
-        case .align, .focus, .field:
+        case .align, .field, .focus:
             GuidedScanPictureTreatment(centres: false, darkensOutside: false, drawsTargetOutline: false)
         case .stage, .ready:
             GuidedScanPictureTreatment(centres: true, darkensOutside: true, drawsTargetOutline: false)

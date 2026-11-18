@@ -20,14 +20,15 @@ struct HelperCardView: View {
             VStack(alignment: .leading, spacing: 10) {
                 Text(card.text)
                     .font(.title.weight(.bold))
-                    .minimumScaleFactor(0.7)
+                    .minimumScaleFactor(0.6)
                     .fixedSize(horizontal: false, vertical: true)
                 if case .question = card { answers }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, minHeight: 110)
+        .dynamicTypeSize(...DynamicTypeSize.accessibility2)
+        .padding(14)
+        .frame(maxWidth: .infinity, minHeight: 96)
         .background(.black.opacity(0.78), in: RoundedRectangle(cornerRadius: 20))
         .foregroundStyle(.white)
         .accessibilityElement(children: .combine)

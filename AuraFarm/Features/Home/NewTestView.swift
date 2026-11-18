@@ -11,7 +11,7 @@ struct NewTestView: View {
     @FocusState private var focus: Field?
     @State private var isUsingRecording = false
     #if DEBUG
-        @State private var isGuidedScan = false
+        @State private var guidedScan = GuidedScanLaunch()
     #endif
 
     private enum Field {
@@ -89,7 +89,7 @@ struct NewTestView: View {
                         // The guided scan for helpers: debug only until the engine is in the
                         // release app.
                         Button {
-                            isGuidedScan = true
+                            guidedScan.open()
                         } label: {
                             Label("Guided scan", systemImage: "scope")
                                 .frame(maxWidth: .infinity)
@@ -106,9 +106,17 @@ struct NewTestView: View {
                 RecordedSampleView(details: $details)
             }
             #if DEBUG
-                .navigationDestination(isPresented: $isGuidedScan) {
-                    GuidedScanPage(details: $details)
+                // Full screen, not pushed inside this sheet: a swipe down cannot take a run
+                // away. The sheet's own swipe is off while the scan is open as well.
+                .fullScreenCover(
+                    isPresented: Binding(
+                        get: { guidedScan.isOpen },
+                        set: { if $0 { guidedScan.open() } else { guidedScan.close() } })
+                ) {
+                    NavigationStack { GuidedScanPage(details: $details) }
+                    .interactiveDismissDisabled(true)
                 }
+                .interactiveDismissDisabled(guidedScan.locksSheetDismissal)
             #endif
         }
     }

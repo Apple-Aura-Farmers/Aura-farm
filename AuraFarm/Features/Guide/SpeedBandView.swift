@@ -1,25 +1,22 @@
 import SwiftUI
 
-/// The speed band, small and always shown: a dot and a word.
+/// The speed band as a thin bar, with no words: green, amber or red. "Slower" is shown by the
+/// instruction card, never here.
 struct SpeedBandView: View {
     var band: SpeedBand
 
     var body: some View {
-        Label(text, systemImage: "circle.fill")
-            .font(.caption.bold())
-            .foregroundStyle(.white, colour)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 4)
-            .background(.black.opacity(0.6), in: Capsule())
-            .labelStyle(.titleAndIcon)
+        Capsule()
+            .fill(colour)
+            .frame(height: 8)
             .accessibilityLabel("Speed: \(text)")
     }
 
     private var text: String {
         switch band {
-        case .green: "Speed good"
-        case .amber: "A bit fast"
-        case .red: "Too fast"
+        case .green: "good"
+        case .amber: "a bit fast"
+        case .red: "too fast"
         }
     }
 
@@ -38,5 +35,5 @@ struct SpeedBandView: View {
         SpeedBandView(band: .amber)
         SpeedBandView(band: .red)
     }
-    .padding().background(.gray)
+    .padding().background(.black)
 }
