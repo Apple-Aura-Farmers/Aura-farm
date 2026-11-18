@@ -124,7 +124,6 @@ struct FieldHelperHomeView: View {
                         // Only as tall as it needs to be, so the land stays in view behind it.
                         .presentationDetents([.height(210)])
                         .presentationBackground(Color.auraBase)
-                        .preferredColorScheme(.dark)
                         .presentationDragIndicator(.hidden)
                         .presentationBackgroundInteraction(.enabled)
                 }
@@ -296,7 +295,7 @@ struct FieldHelperHomeView: View {
             } label: {
                 Text("View Test Results")
                     .font(.headline)
-                    .foregroundStyle(.black)
+                    .foregroundStyle(Color.auraOnAccent)
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)

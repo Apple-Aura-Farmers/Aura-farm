@@ -7,59 +7,99 @@
 
 import SwiftUI
 
-/// Two large buttons, one per role, shown until a role has been chosen. Big targets so it
-/// can be answered with a thumb in the field.
+/// Two large cards, one per role, shown until a role has been chosen. Tapping a card picks
+/// it and Continue confirms, so a stray touch in the field does not decide for the person.
 struct RoleSelectionView: View {
     /// Told which role was picked.
     var onSelect: (UserRole) -> Void
 
-    var body: some View {
-        NavigationStack {
-            List {
-                Section {
-                    ForEach(UserRole.allCases) { role in
-                        Button {
-                            onSelect(role)
-                        } label: {
-                            row(for: role)
-                        }
-                        .foregroundStyle(.primary)
-                    }
-                } footer: {
-                    Text("You can switch role later.")
-                }
-            }
-            .navigationTitle("User Selection")
-            .navigationBarTitleDisplayMode(.large)
-        }
-    }
+    @State private var picked: UserRole?
+    @Environment(\.colorScheme) private var scheme
 
-    private func row(for role: UserRole) -> some View {
-        HStack(spacing: 16) {
-            Image(systemName: role.systemImage)
-                .font(.largeTitle)
-                .foregroundStyle(.tint)
-                .frame(width: 52)
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 4) {
-                Text(role.title)
-                    .font(.headline)
-                Text(role.summary)
-                    .font(.subheadline)
+    var body: some View {
+        VStack(spacing: 16) {
+            VStack(spacing: 6) {
+                Text("Select role")
+                    .font(.largeTitle.bold())
+                Text("You can change this later if your goals change")
+                    .font(.callout)
                     .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.leading)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(.top, 40)
+            .padding(.bottom, 24)
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isHeader)
+
+            ForEach(UserRole.allCases) { role in
+                card(for: role)
             }
             Spacer(minLength: 0)
-            Image(systemName: "chevron.right")
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(.tertiary)
-                .accessibilityHidden(true)
+
+            Button {
+                if let picked { onSelect(picked) }
+            } label: {
+                Text("Continue")
+                    .font(.headline)
+                    .foregroundStyle(Color.auraOnAccent)
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .buttonBorderShape(.capsule)
+            .controlSize(.large)
+            .disabled(picked == nil)
         }
-        // Big targets so it can be answered with a thumb in the field.
-        .padding(.vertical, 12)
-        .contentShape(.rect)
-        .accessibilityElement(children: .combine)
-        .accessibilityHint("Opens the \(role.title) screens")
+        .padding(.horizontal, 29)
+        .padding(.bottom, 8)
+        .auraBackground()
+    }
+
+    private func card(for role: UserRole) -> some View {
+        let isPicked = picked == role
+        let dark = scheme == .dark
+        return Button {
+            picked = role
+        } label: {
+            HStack(alignment: .center, spacing: 8) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(role.title)
+                        .font(.body.weight(.medium))
+                    Text(role.summary)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.leading)
+                }
+                Spacer(minLength: 0)
+                Image(dark ? role.illustration : role.illustration + "_Light")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 100, height: 120)
+                    .accessibilityHidden(true)
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, minHeight: 162, alignment: .leading)
+            .background(fill(isPicked), in: .rect(cornerRadius: 16))
+            .overlay {
+                RoundedRectangle(cornerRadius: 16)
+                    .strokeBorder(border(isPicked), lineWidth: 1)
+            }
+            .contentShape(.rect(cornerRadius: 16))
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isPicked ? .isSelected : [])
+    }
+
+    /// Light: the tan card turns gold when picked. Dark: it lifts towards grey.
+    private func fill(_ isPicked: Bool) -> Color {
+        scheme == .dark
+            ? (isPicked ? .white.opacity(0.15) : Color(red: 40 / 255, green: 34 / 255, blue: 27 / 255).opacity(0.2))
+            : (isPicked ? Color(red: 242 / 255, green: 223 / 255, blue: 174 / 255).opacity(0.8) : .auraRow)
+    }
+
+    private func border(_ isPicked: Bool) -> Color {
+        scheme == .dark
+            ? .white.opacity(isPicked ? 0.4 : 0.08)
+            : Color.auraBrown.opacity(isPicked ? 0.53 : 0)
     }
 }
 

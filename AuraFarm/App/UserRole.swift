@@ -28,8 +28,10 @@ enum UserRole: String, CaseIterable, Identifiable {
     /// One line under the title on the role picker.
     var summary: String {
         switch self {
-        case .fieldHelper: return "Work out on the farm."
-        case .microscopeOperator: return "Prepare a slide, sweep it and count what is in it."
+        case .fieldHelper:
+            return "collect farm data, receive scientific test results and generate actionable recommendations through AI analysis."
+        case .microscopeOperator:
+            return "observe soil biodiversity through your microscope, with AI-powered identification and analysis."
         }
     }
 
@@ -42,10 +44,11 @@ enum UserRole: String, CaseIterable, Identifiable {
         }
     }
 
-    var systemImage: String {
+    /// The name of the drawing on the role picker, which has a `_Light` twin for light mode.
+    var illustration: String {
         switch self {
-        case .fieldHelper: return "leaf.fill"
-        case .microscopeOperator: return "microbe.fill"
+        case .fieldHelper: return "Field_Helper"
+        case .microscopeOperator: return "Scientist"
         }
     }
 }
