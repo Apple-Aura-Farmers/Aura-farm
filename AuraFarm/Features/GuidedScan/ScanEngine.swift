@@ -4,16 +4,17 @@ import Observation
 /// Seconds of stillness the lab's stops test asks for (its haptic fires at it).
 let slideLabStillGoalSeconds = 2.0
 
-/// The camera and the recorded-video runner behind the slide movement lab. It follows
-/// `CaptureViewModel`'s patterns (session queue, analysis queue, every third frame, 720p,
-/// locked focus, 420f frames) and is a model of its own so the capture screen is left
-/// alone. Frames are analyzed off the main thread; UI state is only changed on the main
+/// The camera and the analysis behind the guided scan and the slide movement lab (session queue,
+/// analysis queue, 720p, locked focus, 420f frames). Frames are analyzed off the main thread; UI state is only changed on the main
 /// queue.
 ///
 /// Debug builds only. Measurement tooling: nothing here is saved to `FrameSets`; the CSV
 /// goes to a temporary file for sharing.
 @Observable
 class ScanEngine: NSObject {
+    /// The lens position the camera is locked at (autofocus hunts on a microscope).
+    static let defaultLensPosition: Float = 1.0
+
     // MARK: UI state (main queue only)
 
     private(set) var authorization = AVCaptureDevice.authorizationStatus(for: .video)
@@ -76,7 +77,7 @@ class ScanEngine: NSObject {
     private(set) var markToast: String?
     @ObservationIgnored private var toastTask: Task<Void, Never>?
     private(set) var cameraError: String?
-    private(set) var lensPosition = CaptureViewModel.defaultLensPosition
+    private(set) var lensPosition = ScanEngine.defaultLensPosition
     private(set) var isLogging = false
     /// False while the person is setting the phone up: the camera runs so they can position
     /// and focus it, but nothing is analyzed until they tap Start.
@@ -866,7 +867,7 @@ class ScanEngine: NSObject {
         // Fixed focus: autofocus hunts on a microscope. The user moves the lens by hand.
         if device.isFocusModeSupported(.locked), (try? device.lockForConfiguration()) != nil {
             device.setFocusModeLocked(
-                lensPosition: CaptureViewModel.defaultLensPosition, completionHandler: nil)
+                lensPosition: ScanEngine.defaultLensPosition, completionHandler: nil)
             device.unlockForConfiguration()
         }
 

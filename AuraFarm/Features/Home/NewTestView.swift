@@ -1,18 +1,14 @@
 import SwiftUI
 
-/// What a test is of, asked for before the camera opens. The date is today's and is shown
+/// What a test is of, asked for before the guided scan opens. The date is today's and is shown
 /// rather than asked, because a test is filled in as it is taken.
 struct NewTestView: View {
     @Binding var details: SampleDetails
-    /// Called when the helper taps Start. The caller closes this and opens the camera.
+    /// Called when the helper taps Start. The caller closes this and opens the guided scan.
     var start: () -> Void
 
     @Environment(\.dismiss) private var dismiss
     @FocusState private var focus: Field?
-    @State private var isUsingRecording = false
-    #if DEBUG
-        @State private var guidedScan = GuidedScanLaunch()
-    #endif
 
     private enum Field {
         case note
@@ -65,59 +61,16 @@ struct NewTestView: View {
                 }
             }
             .safeAreaInset(edge: .bottom) {
-                VStack(spacing: 8) {
-                    Button(action: start) {
-                        Text("Start")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                    .disabled(!details.isComplete)
-
-                    // Prototype: the same pipeline, fed from a recorded microscope video.
-                    Button {
-                        isUsingRecording = true
-                    } label: {
-                        Label("Use a recorded video", systemImage: "film")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.large)
-                    .disabled(!details.isComplete)
-
-                    #if DEBUG
-                        // The guided scan for helpers: debug only until the engine is in the
-                        // release app.
-                        Button {
-                            guidedScan.open()
-                        } label: {
-                            Label("Guided scan", systemImage: "scope")
-                                .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.large)
-                        .disabled(!details.isComplete)
-                    #endif
+                Button(action: start) {
+                    Text("Start")
+                        .frame(maxWidth: .infinity)
                 }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .disabled(!details.isComplete)
                 .padding()
                 .background(.bar)
             }
-            .navigationDestination(isPresented: $isUsingRecording) {
-                RecordedSampleView(details: $details)
-            }
-            #if DEBUG
-                // Full screen, not pushed inside this sheet: a swipe down cannot take a run
-                // away. The sheet's own swipe is off while the scan is open as well.
-                .fullScreenCover(
-                    isPresented: Binding(
-                        get: { guidedScan.isOpen },
-                        set: { if $0 { guidedScan.open() } else { guidedScan.close() } })
-                ) {
-                    NavigationStack { GuidedScanPage(details: $details) }
-                    .interactiveDismissDisabled(true)
-                }
-                .interactiveDismissDisabled(guidedScan.locksSheetDismissal)
-            #endif
         }
     }
 }

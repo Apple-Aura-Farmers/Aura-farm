@@ -22,6 +22,14 @@ helper visiting farms, not a lab technician.
 
 **Built today**
 
+- **Guided scan** — the one way to scan a sample. New Test, Start, then a full-screen scan:
+  setup (align, find the eyepiece, focus, knobs), then the app follows the slide column by
+  column, says which knob to turn, counts organisms live and saves a run record (path, edges,
+  where each organism was) with the movement log. It keeps no frames. Abundance is counted
+  per field of view scanned, one for each spot ticked. The result screen draws the run map.
+- **Earlier frame sweeps** — the next bullets, down to the sweep library, describe the old
+  capture screen, which has been removed. Sweeps saved that way still open, show their frames
+  and panorama, and publish as before.
 - **Capture quality check** — reads the live image and warns when it is too dark,
   blurry or shaky, in plain language that says what to fix. Record stays disabled
   until the image is usable.

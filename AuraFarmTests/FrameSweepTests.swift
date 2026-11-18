@@ -283,7 +283,7 @@ final class FrameSweepTests: XCTestCase {
     }
 
     func testTheSweepPatternNumbersTheFieldsTheWayTheSlideIsWalked() {
-        let pattern = SweepPatternView()
+        let pattern = SweepLayout()
 
         // First row runs left to right, the next comes back the other way, and so on, so
         // the slide is only ever nudged on from where it already is.
@@ -324,14 +324,6 @@ final class FrameSweepTests: XCTestCase {
             sweep.update(isSettled: true, issue: nil, shift: CGPoint(x: 0, y: 10), travel: 500),
             .keepFrame)
         XCTAssertEqual(sweep.keptCount, 2)
-    }
-
-    func testTheGuideBarFillsTheWayTheSlideIsBeingPushed() {
-        // Row one runs left to right and row two comes back, so the bar has to run back too
-        // or it would fill against the direction of the arrow on it.
-        XCTAssertEqual(SweepGuide.cells(inRow: 1, framesPerRow: 4), [0, 1, 2, 3])
-        XCTAssertEqual(SweepGuide.cells(inRow: 2, framesPerRow: 4), [3, 2, 1, 0])
-        XCTAssertEqual(SweepGuide.cells(inRow: 3, framesPerRow: 4), [0, 1, 2, 3])
     }
 
     func testASweepThatStoppedEarlyStillGetsItsLastPartRow() {

@@ -25,6 +25,9 @@ struct SweepManifest: Codable, Equatable {
     /// counts come from the run's map, and the run record and movement CSV are in the folder.
     /// nil for every other sweep, and for sweeps saved before the page existed.
     var guidedScan: Bool?
+    /// For a guided scan: the fields of view scanned, one for each spot the run ticked. nil for a
+    /// frame sweep, and for any sweep saved before this was kept.
+    var fieldsScanned: Int?
 
     /// Every organism counted, or nil when the sweep was not counted.
     var totalOrganismCount: Int? {

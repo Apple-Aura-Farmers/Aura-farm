@@ -95,7 +95,7 @@ struct PlaceholderSoilHealthEstimator: SoilHealthEstimating {
         let weighted = counts.reduce(0.0) { sum, entry in
             sum + Double(entry.value) * (thresholds.classWeights[entry.key.lowercased()] ?? 1)
         }
-        let perFrame = weighted / Double(max(result.framesKept, 1))
+        let perFrame = weighted / Double(max(result.viewsLooked, 1))
         let abundance = min(perFrame / thresholds.fullAbundancePerFrame, 1) * thresholds.abundancePoints
         let kinds = result.classesFound
         let diversity =
@@ -111,7 +111,9 @@ struct PlaceholderSoilHealthEstimator: SoilHealthEstimating {
             confidence: .low,
             reasons: [
                 "About \(perFrame.formatted(.number.precision(.fractionLength(0...1)))) organisms "
-                    + "per frame across \(result.framesKept) frames.",
+                    + (result.isGuidedScan
+                        ? "per field of view across \(result.viewsLooked) fields of view."
+                        : "per frame across \(result.framesKept) frames."),
                 kinds == 1 ? "1 kind of organism found." : "\(kinds) kinds of organism found.",
                 "The limits used are guesses, not checked against lab tests.",
             ],

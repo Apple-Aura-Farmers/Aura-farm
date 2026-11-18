@@ -29,7 +29,12 @@ private struct HomeTab: View {
     /// helper just typed.
     @State private var details = SampleDetails.blank
     @State private var isNaming = false
-    @State private var isRecording = false
+    /// The guided scan is open (full screen). Set once the New Test sheet has closed.
+    @State private var isScanning = false
+    /// Start was tapped: the guided scan opens as soon as the New Test sheet is gone.
+    @State private var startRequested = false
+    /// What the scan saved, shown on the results screen once the scan has closed.
+    @State private var savedName: String?
     @State private var sweeps: [SavedSweep] = []
     @State private var isReadingNotices = false
     @State private var isShowingAccount = false
@@ -132,26 +137,43 @@ private struct HomeTab: View {
             .sheet(isPresented: $isShowingAccount) {
                 AccountView()
             }
-            .sheet(isPresented: $isNaming) {
+            .sheet(
+                isPresented: $isNaming,
+                onDismiss: {
+                    // The scan opens after the sheet has gone, so the two never overlap.
+                    if startRequested {
+                        startRequested = false
+                        isScanning = true
+                    }
+                }
+            ) {
                 NewTestView(details: $details) {
+                    startRequested = true
                     isNaming = false
-                    isRecording = true
                 }
             }
-            .navigationDestination(isPresented: $isRecording) {
-                CaptureView(details: $details) { name in
-                    finishedSweep = SweepLibrary.sweeps().first { $0.name == name }
+            // Full screen, so nothing swipes a run away: the scan's own Close (which asks) and
+            // End run are the only ways out. The tab bar is covered while scanning.
+            .fullScreenCover(
+                isPresented: $isScanning,
+                onDismiss: {
+                    if let name = savedName {
+                        savedName = nil
+                        finishedSweep = SweepLibrary.sweeps().first { $0.name == name }
+                    }
                 }
-                // Walking a slide wants the whole screen, and there is nowhere else to be
-                // while the camera is open.
-                .toolbar(.hidden, for: .tabBar)
+            ) {
+                NavigationStack {
+                    GuidedScanPage(details: $details) { savedName = $0 }
+                }
+                .interactiveDismissDisabled(true)
             }
             .sheet(item: $finishedSweep) { sweep in
                 NavigationStack {
                     SoilResultScreen(sweep: sweep)
                 }
             }
-            .task(id: isRecording) { sweeps = SweepLibrary.sweeps() }
+            .task(id: isScanning) { sweeps = SweepLibrary.sweeps() }
         }
     }
 

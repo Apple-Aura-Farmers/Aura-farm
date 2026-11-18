@@ -108,7 +108,7 @@ final class SweepLibraryTests: XCTestCase {
                 to: folder.appending(path: String(format: "frame_%02d.jpg", index)))
         }
         if let manifest {
-            try SweepRecorder.writeManifest(manifest, inSweepAt: folder)
+            try SweepStore.writeManifest(manifest, inSweepAt: folder)
         }
     }
 

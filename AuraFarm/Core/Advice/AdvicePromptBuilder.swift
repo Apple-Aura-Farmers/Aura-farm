@@ -45,7 +45,10 @@ enum AdvicePromptBuilder {
 
         var sample = ["Sample: \(result.moisture.rawValue)."]
         if let stage = result.cropStage { sample.append("Crop stage: \(stage.label.lowercased()).") }
-        sample.append("Frames looked at: \(result.framesKept).")
+        sample.append(
+            result.isGuidedScan
+                ? "Fields of view scanned: \(result.viewsLooked)."
+                : "Frames looked at: \(result.framesKept).")
         if !result.recentActions.isEmpty {
             sample.append(
                 "Done recently: \(result.recentActions.map { $0.label.lowercased() }.joined(separator: ", "))."

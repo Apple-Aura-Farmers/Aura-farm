@@ -116,14 +116,4 @@ final class GuidedScanSetupTests: XCTestCase {
             XCTAssertFalse(lab.guideDryRun)
         }
     #endif
-
-    func testTheGuidedScanLocksTheSheetsDismissalWhileOpenAndOnlyThen() {
-        var launch = GuidedScanLaunch()
-        XCTAssertFalse(launch.locksSheetDismissal, "before it opens")
-        launch.open()
-        XCTAssertTrue(launch.isOpen)
-        XCTAssertTrue(launch.locksSheetDismissal, "while it is open, setup included")
-        launch.close()
-        XCTAssertFalse(launch.locksSheetDismissal, "after it closes")
-    }
 }

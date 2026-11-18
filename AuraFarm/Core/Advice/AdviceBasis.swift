@@ -16,9 +16,9 @@ enum AdviceBasis {
 
         let total = context.interpreted.reduce(0) { $0 + $1.count }
         let kinds = context.interpretedKinds
-        let frames = context.result.framesKept
+        let frames = context.result.viewsLooked
         var parts = [
-            "\(count(total, "organism")) (\(count(kinds, "kind"))) in \(count(frames, "frame"))",
+            "\(count(total, "organism")) (\(count(kinds, "kind"))) in \(views(frames, guided: context.result.isGuidedScan))",
             context.result.moisture.rawValue,
         ]
         if let stage = context.result.cropStage { parts.append(stage.label.lowercased()) }
@@ -38,6 +38,12 @@ enum AdviceBasis {
             line += unused == 1 ? " 1 other wasn't used." : " \(unused) others weren't used."
         }
         return line
+    }
+
+    private static func views(_ number: Int, guided: Bool) -> String {
+        guided
+            ? "\(number) \(number == 1 ? "field of view" : "fields of view")"
+            : count(number, "frame")
     }
 
     private static func count(_ number: Int, _ noun: String) -> String {

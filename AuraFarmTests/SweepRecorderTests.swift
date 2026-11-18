@@ -64,10 +64,10 @@ final class SweepRecorderTests: XCTestCase {
 
     func testFreeURLNeverWritesIntoAnExistingSweep() throws {
         let directory = try makeTemporaryDirectory()
-        let first = SweepRecorder.freeURL(base: "A12_f001", in: directory)
+        let first = SweepStore.freeURL(base: "A12_f001", in: directory)
         try FileManager.default.createDirectory(at: first, withIntermediateDirectories: true)
 
-        let second = SweepRecorder.freeURL(base: "A12_f001", in: directory)
+        let second = SweepStore.freeURL(base: "A12_f001", in: directory)
 
         XCTAssertEqual(first.lastPathComponent, "A12_f001")
         XCTAssertEqual(second.lastPathComponent, "A12_f001-2")
@@ -79,7 +79,7 @@ final class SweepRecorderTests: XCTestCase {
         let manifest = SweepManifest(
             details: details(), frameCount: 7, byteCount: 2_048, stoppedEarly: true)
 
-        try SweepRecorder.writeManifest(manifest, inSweepAt: folder)
+        try SweepStore.writeManifest(manifest, inSweepAt: folder)
 
         let url = folder.appending(path: "manifest.json")
         XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))

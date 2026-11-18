@@ -4,7 +4,7 @@ import Foundation
 /// Publish work on it as on any other. It keeps no frames: the counts come from the run's map,
 /// and the run record (path, edges, organisms) and the movement CSV are saved in the folder.
 ///
-/// This is its own path and does not go through `SweepRecorder.finish`, whose "No frames were
+/// This is its own path and does not write frames, so the old recorder's "No frames were
 /// kept" failure belongs to the capture screen and stays as it is.
 enum GuidedScanSaver {
     static let runRecordFileName = "run.json"
@@ -29,9 +29,9 @@ enum GuidedScanSaver {
     @discardableResult
     static func save(
         details: SampleDetails, record: GuideRunRecord, movementCSV: URL?,
-        in directory: URL = SweepRecorder.sweepsDirectory
+        in directory: URL = SweepStore.sweepsDirectory
     ) throws -> String {
-        let folder = SweepRecorder.freeURL(base: details.fileBaseName, in: directory)
+        let folder = SweepStore.freeURL(base: details.fileBaseName, in: directory)
         do {
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         } catch {
@@ -50,8 +50,9 @@ enum GuidedScanSaver {
             let manifest = SweepManifest(
                 details: details, frameCount: 0, byteCount: bytes, stoppedEarly: false,
                 panoramaFile: nil, panoramaProblem: nil, organismCounts: record.countsByLabel,
-                guidedScan: true)
-            try SweepRecorder.writeManifest(manifest, inSweepAt: folder)
+                guidedScan: true,
+                fieldsScanned: record.spotsTicked)
+            try SweepStore.writeManifest(manifest, inSweepAt: folder)
         } catch {
             throw Failure.notSaved
         }

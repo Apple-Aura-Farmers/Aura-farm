@@ -53,7 +53,7 @@ struct AdviceContext: Equatable {
 
     /// Interpreted organisms per kept frame, worked out as `PastResult.organismsPerFrame` is.
     var interpretedPerFrame: Double {
-        Double(interpreted.reduce(0) { $0 + $1.count }) / Double(max(result.framesKept, 1))
+        Double(interpreted.reduce(0) { $0 + $1.count }) / Double(max(result.viewsLooked, 1))
     }
 
     /// Kinds of interpreted organism counted, as `PastResult.interpretedKinds`.

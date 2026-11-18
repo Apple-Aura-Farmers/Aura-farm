@@ -159,8 +159,10 @@ private struct SampleSummarySection: View {
                 Text(result.recordedAt, format: .dateTime.day().month().hour().minute())
             }
             LabeledContent("Soil", value: result.moisture.label)
-            // A guided scan keeps no frames, so there is nothing to count.
-            if result.sweep?.manifest?.guidedScan != true {
+            // A guided scan keeps no frames: it counts fields of view.
+            if result.isGuidedScan {
+                LabeledContent("Fields of view scanned", value: "\(result.viewsLooked)")
+            } else {
                 LabeledContent("Frames kept", value: "\(result.framesKept)")
             }
         }

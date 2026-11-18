@@ -30,7 +30,7 @@ extension PastResult {
             recordedAt: result.recordedAt,
             moisture: result.moisture,
             cropStage: result.cropStage,
-            organismsPerFrame: Double(total) / Double(max(result.framesKept, 1)),
+            organismsPerFrame: Double(total) / Double(max(result.viewsLooked, 1)),
             interpretedKinds: kinds.count,
             level: level
         )

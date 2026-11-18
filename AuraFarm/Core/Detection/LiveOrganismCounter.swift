@@ -61,7 +61,7 @@ struct LiveOrganismCounter {
     var tallyCountByLabel: [String: Int] { tally.countByLabel }
 
     /// How the tracker's frame shift becomes the tally's picture movement. NOT negated, unlike
-    /// `CaptureViewModel.pictureMoved`: `SlideTracker.frameShift` reads like its `position`, the
+    /// `PictureShift.pictureMoved`: `SlideTracker.frameShift` reads like its `position`, the
     /// way the CONTENT moved (content moving right by 6 px reads +6), which is what the tally
     /// wants (a thing that stayed put on the slide appears this much further along). Checked
     /// against a real `SlideTracker` on shifted frames in `LiveOrganismCounterTests`, both axes.

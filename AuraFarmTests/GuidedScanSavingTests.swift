@@ -50,7 +50,7 @@ final class GuidedScanSavingTests: XCTestCase {
     }
 
     func testItNeverReportsNoFramesWereKept() throws {
-        // The failure belongs to `SweepRecorder.finish`, which this path does not use; the
+        // The failure belongs to the frame recorder (the stitch tool's), which this path does not use; the
         // result screen reads the sweep without any failure.
         let sweep = try savedSweep()
         XCTAssertNoThrow(try SoilResult(sweep: sweep))
@@ -92,18 +92,20 @@ final class GuidedScanSavingTests: XCTestCase {
         XCTAssertNotEqual(first.url, second.url)
     }
 
-    // MARK: The existing zero-frame failure
+    #if DEBUG
+        // MARK: The existing zero-frame failure
 
-    func testTheCaptureScreenStillFailsAZeroFrameSweep() {
-        let recorder = SweepRecorder()
-        XCTAssertTrue(recorder.begin(details: details))
-        let finished = recorder.finish(stoppedEarly: false)
-        XCTAssertNotNil(finished)
-        let expectation = expectation(description: "published")
-        DispatchQueue.main.async { expectation.fulfill() }
-        wait(for: [expectation], timeout: 2)
-        XCTAssertEqual(recorder.errorMessage, "No frames were kept. Check the image and try again.")
-    }
+        func testTheFrameRecorderStillFailsAZeroFrameSweep() {
+            let recorder = SweepRecorder()
+            XCTAssertTrue(recorder.begin(details: details))
+            let finished = recorder.finish(stoppedEarly: false)
+            XCTAssertNotNil(finished)
+            let expectation = expectation(description: "published")
+            DispatchQueue.main.async { expectation.fulfill() }
+            wait(for: [expectation], timeout: 2)
+            XCTAssertEqual(recorder.errorMessage, "No frames were kept. Check the image and try again.")
+        }
+    #endif
 
     // MARK: The results screen's map
 

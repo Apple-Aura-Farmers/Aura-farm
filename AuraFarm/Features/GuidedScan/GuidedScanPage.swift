@@ -8,6 +8,8 @@ import SwiftUI
 /// the release app.
 struct GuidedScanPage: View {
     @Binding var details: SampleDetails
+    /// Called with the saved sweep's folder name when the run is saved; the page then closes.
+    var onSaved: (String) -> Void = { _ in }
 
     @Environment(\.dismiss) private var dismiss
     @State private var model = ScanEngine()
@@ -21,7 +23,6 @@ struct GuidedScanPage: View {
     /// Draws the model's detection boxes over the picture; this scan only, never stored.
     @State private var showsDetections = false
     @State private var saveProblem: String?
-    @State private var result: SavedSweep?
     @State private var haptics = HelperHapticPlayer()
     // The lab's own display settings.
     @AppStorage("slideLab.centreField") private var centresField = true
@@ -66,9 +67,6 @@ struct GuidedScanPage: View {
                     })
             )
             .onDisappear { model.stop() }
-            .sheet(item: $result, onDismiss: { dismiss() }) { sweep in
-                NavigationStack { SoilResultScreen(sweep: sweep) }
-            }
             .alert(
                 "The scan could not be saved", isPresented: .constant(saveProblem != nil)
             ) {
@@ -366,13 +364,14 @@ struct GuidedScanPage: View {
         return model.authorization == .denied ? "Camera access is off. Turn it on in Settings." : nil
     }
 
-    /// Saves the finished run as a sweep and goes to the results.
+    /// Saves the finished run as a sweep; the page closes and the caller shows the results.
     private func save(_ record: GuideRunRecord) {
         let csv = model.summaryItems.first { $0.pathExtension == "csv" }
         do {
             let name = try GuidedScanSaver.save(details: details, record: record, movementCSV: csv)
             model.stop()
-            result = SweepLibrary.sweeps().first { $0.name == name }
+            onSaved(name)
+            dismiss()
         } catch {
             saveProblem = error.localizedDescription
         }

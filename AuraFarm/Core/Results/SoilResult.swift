@@ -30,6 +30,8 @@ struct SoilResult: Equatable {
     /// Background for the advice only: it does not change the estimate, the patterns or the
     /// actions offered. nil when there are none, and for results shown away from a farm.
     var soil: SoilMeasurements? = nil
+    /// For a guided scan: the fields of view scanned (the spots ticked). nil for a frame sweep.
+    var fieldsScanned: Int? = nil
 
     enum Failure: Error, Equatable, LocalizedError {
         case noSampleDetails
@@ -41,6 +43,14 @@ struct SoilResult: Equatable {
             }
         }
     }
+
+    /// How many views of the sample the counts are spread over: the fields of view of a guided
+    /// scan, or the frames of an older sweep. A frame and a field of view are both one eyepiece
+    /// view, so abundance per view stays comparable between the two.
+    var viewsLooked: Int { fieldsScanned ?? framesKept }
+
+    /// Whether this came from a guided scan, which keeps no frames.
+    var isGuidedScan: Bool { fieldsScanned != nil }
 
     /// Every organism counted, or nil when the sweep was not counted.
     var totalCount: Int? {
@@ -68,7 +78,8 @@ extension SoilResult {
             plotName: manifest.details.plotName,
             cropStage: manifest.details.cropStage,
             recentActions: manifest.details.recentActions ?? [],
-            stoppedEarly: manifest.stoppedEarly
+            stoppedEarly: manifest.stoppedEarly,
+            fieldsScanned: manifest.fieldsScanned
         )
     }
 }
