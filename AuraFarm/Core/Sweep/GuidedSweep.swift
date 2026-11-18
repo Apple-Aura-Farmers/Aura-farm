@@ -14,6 +14,8 @@ struct GuideStep: Equatable {
     var finishReason: SweepFinishReason?
     /// What the edge conditions made of this reading, for the CSV.
     var edge = EdgeDiagnostics()
+    /// The column being swept is the last one (at the right edge): "Last column".
+    var lastColumn = false
 }
 
 /// Tells a person moving a slide by hand where to go next, so the whole sample is covered
@@ -57,6 +59,38 @@ struct GuidedSweep {
     /// column leg or a step right; nil otherwise. See `SlideRoute.edgeHeading`.
     var edgeHeading: CGPoint? { route.edgeHeading }
 
+    /// Live counting runs from the first ticked spot of column 1 until the route finishes.
+    var countingActive: Bool { route.countingStarted && !route.isFinished }
+    var pendingEnd: Bool { route.pendingEnd }
+    /// A column is being swept: "End after this column" means something.
+    var columnInProgress: Bool { route.columnInProgress }
+    var spotWindow: SpotWindow? { route.spotWindow }
+    var touchElapsed: Double { route.touchElapsed }
+    var missedSpots: Int { route.missedSpots }
+    var distanceToSpot: Double { route.distanceToSpot }
+    var columnNumber: Int { route.columnNumber }
+    /// Left edge to right edge, in fields, when both are known.
+    var edgeSpanFields: Double? { route.edgeSpanFields }
+    /// How far the first and last columns sit inside the left and right edges, in fields.
+    var sideInsetFields: Double { route.thresholds.sideInsetFields }
+    /// Tells the route the confirmed eyepiece circle's radius in fields, before the first column.
+    mutating func setEyepieceRadius(fields: Double) {
+        route.thresholds.eyepieceRadiusFields = fields
+    }
+    /// The slip's height measured from its top and bottom edges, in fields, when both are known.
+    var measuredHeightFields: Double? { route.measuredHeightFields }
+    var columnSpacingFields: Double { route.thresholds.columnSpacingFields }
+    /// How the right edge was found ("line", "empty" or "predicted"); empty when it was not.
+    var rightEdgeSource: String { route.rightEdgeSource }
+    /// The predicted top, bottom and right edges, for the trail mini-map.
+    var predictedEdges: PredictedEdges { route.predictedEdges }
+
+    /// Ends the run now (`.endedByHelper`). Idempotent; nothing after a finish.
+    mutating func endNow() { route.endNow() }
+    /// Ends when the current column finishes; at once if none is in progress.
+    mutating func endAfterColumn() { route.endAfterColumn() }
+    mutating func cancelEndAfterColumn() { route.cancelEndAfterColumn() }
+
     /// Why the run is paused, nil while it runs.
     private(set) var pauseReason: GuidePauseReason?
     /// When the last pause ended, in the readings' seconds.
@@ -91,6 +125,20 @@ struct GuidedSweep {
         return step(from: route.userEdge(feedback, reading))
     }
 
+    /// What the edge question is about now (see `SlideRoute.edgeQuestionSnapshot`).
+    var edgeQuestionSnapshot: EdgeQuestionSnapshot? { route.edgeQuestionSnapshot }
+
+    /// An answer to an earlier edge question. nil when it no longer applies (paused, or the route
+    /// has moved on).
+    mutating func answerEdgeQuestion(
+        _ snapshot: EdgeQuestionSnapshot, _ feedback: EdgeFeedback, _ reading: GuideReading
+    ) -> GuideStep? {
+        guard pauseReason == nil else { return nil }
+        let result = route.answerEdgeQuestion(snapshot, feedback, reading)
+        guard result.applied else { return nil }
+        return step(from: result.output)
+    }
+
     /// Holds the route where it is until `resume`.
     mutating func pause(_ reason: GuidePauseReason) {
         pauseReason = reason
@@ -111,7 +159,7 @@ struct GuidedSweep {
             instruction: route.isFinished ? .finished : output.instruction, target: output.target,
             capture: output.capture, stateName: route.stateName, column: route.columnNumber,
             isFinished: route.isFinished, finishReason: route.finishReason,
-            edge: route.diagnostics)
+            edge: route.diagnostics, lastColumn: route.isLastColumn && !route.isFinished)
     }
 
     /// Ends the route at once, whatever it was doing. The instruction is then always

@@ -7,8 +7,8 @@ enum LabSetupStep: Equatable {
     var order: Int {
         switch self {
         case .align: 0
-        case .focus: 1
-        case .field: 2
+        case .field: 1
+        case .focus: 2
         case .stage: 3
         case .done: 4
         }
@@ -26,13 +26,14 @@ enum LabSetupStep: Equatable {
     }
 }
 
-/// The order of a lab session's setup: 1 align the phone, 2 focus, 3 field (learn, review and
-/// confirm the eyepiece field), 4 stage (measure the two knobs' axes), then the lab itself. It
-/// only holds the step; the caller feeds it what the checks say.
+/// The order of a lab session's setup: 1 align the phone, 2 field (find the eyepiece: learn,
+/// review and confirm the round view), 3 focus (with the confirmed field), 4 stage (measure the
+/// two knobs' axes), then the lab itself. It only holds the step; the caller feeds it what the
+/// checks say.
 ///
-/// Losing alignment after it passed (`alignmentLost`) sends it back to align and, once aligned
-/// again, on to where it was; the field and stage steps return to FIELD, because the circle
-/// moved and the mask must be learned again.
+/// Losing alignment after it passed (`alignmentLost`), at field, focus or stage, sends it back
+/// to align and then to FIELD, because the circle moved and the mask must be learned again;
+/// focus follows as usual.
 struct LabSetupFlow: Equatable {
     /// How many steps the indicator shows.
     static let stepCount = 4
@@ -40,18 +41,22 @@ struct LabSetupFlow: Equatable {
     private(set) var step: LabSetupStep
     /// Where to go when align passes again after `alignmentLost`; nil in an ordinary run.
     private(set) var resumeStep: LabSetupStep?
+    /// The helper chose to skip align and focus: the field step still runs, and goes straight to
+    /// stage once confirmed.
+    private var skipsFocus: Bool
 
     /// Starts at align, or at field when the helper chose to skip align and focus.
     init(skippingAlignAndFocus: Bool = false) {
         step = skippingAlignAndFocus ? .field : .align
+        skipsFocus = skippingAlignAndFocus
     }
 
     /// 1, 2 or 3 for the indicator; done shows the last step as complete.
     var stepNumber: Int {
         switch step {
         case .align: 1
-        case .focus: 2
-        case .field: 3
+        case .field: 2
+        case .focus: 3
         case .stage, .done: 4
         }
     }
@@ -72,10 +77,10 @@ struct LabSetupFlow: Equatable {
     ) -> Bool {
         switch step {
         case .align where alignmentPassed:
-            step = resumeStep ?? .focus
+            step = resumeStep ?? .field
             resumeStep = nil
-        case .focus where focused: step = .field
-        case .field where fieldConfirmed: step = .stage
+        case .field where fieldConfirmed: step = skipsFocus ? .stage : .focus
+        case .focus where focused: step = .stage
         case .stage where stageMeasured: step = .done
         default: return false
         }
@@ -87,8 +92,7 @@ struct LabSetupFlow: Equatable {
     /// monitor watches then).
     mutating func alignmentLost() {
         switch step {
-        case .focus: resumeStep = .focus
-        case .field, .stage: resumeStep = .field
+        case .field, .focus, .stage: resumeStep = .field
         case .align, .done: return
         }
         step = .align
@@ -98,6 +102,7 @@ struct LabSetupFlow: Equatable {
     mutating func redo() {
         step = .align
         resumeStep = nil
+        skipsFocus = false
     }
 
     /// Only the field again.

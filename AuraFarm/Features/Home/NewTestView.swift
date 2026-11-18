@@ -1,15 +1,14 @@
 import SwiftUI
 
-/// What a test is of, asked for before the camera opens. The date is today's and is shown
+/// What a test is of, asked for before the guided scan opens. The date is today's and is shown
 /// rather than asked, because a test is filled in as it is taken.
 struct NewTestView: View {
     @Binding var details: SampleDetails
-    /// Called when the helper taps Start. The caller closes this and opens the camera.
+    /// Called when the helper taps Start. The caller closes this and opens the guided scan.
     var start: () -> Void
 
     @Environment(\.dismiss) private var dismiss
     @FocusState private var focus: Field?
-    @State private var isUsingRecording = false
 
     private enum Field {
         case note
@@ -65,31 +64,15 @@ struct NewTestView: View {
                 }
             }
             .safeAreaInset(edge: .bottom) {
-                VStack(spacing: 8) {
-                    Button(action: start) {
-                        Text("Start")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                    .disabled(!details.isComplete)
-
-                    // Prototype: the same pipeline, fed from a recorded microscope video.
-                    Button {
-                        isUsingRecording = true
-                    } label: {
-                        Label("Use a recorded video", systemImage: "film")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.large)
-                    .disabled(!details.isComplete)
+                Button(action: start) {
+                    Text("Start")
+                        .frame(maxWidth: .infinity)
                 }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .disabled(!details.isComplete)
                 .padding()
                 .background(.bar)
-            }
-            .navigationDestination(isPresented: $isUsingRecording) {
-                RecordedSampleView(details: $details)
             }
         }
     }

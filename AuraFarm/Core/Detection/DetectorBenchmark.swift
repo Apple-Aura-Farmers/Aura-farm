@@ -52,10 +52,12 @@ enum DetectorBenchmark {
         }
     }
 
-    static func run(hardware: Hardware, runs: Int) throws -> Outcome {
+    static func run(
+        model: DetectorModel = .v1, hardware: Hardware, runs: Int
+    ) throws -> Outcome {
         let image = try sampleImage()
         let opened = CFAbsoluteTimeGetCurrent()
-        let detector = try OrganismDetector(computeUnits: hardware.computeUnits)
+        let detector = try OrganismDetector(model: model, computeUnits: hardware.computeUnits)
         let loadMilliseconds = (CFAbsoluteTimeGetCurrent() - opened) * 1000
 
         // The first runs are slow while the model is still being moved onto the hardware.
@@ -80,19 +82,23 @@ enum DetectorBenchmark {
     /// Runs every hardware setting in turn and prints a line each, for reading over a cable.
     static func printEveryHardware(runs: Int = 30) {
         print("BENCH device=\(deviceName) runs=\(runs)")
-        for hardware in Hardware.allCases {
-            do {
-                let outcome = try run(hardware: hardware, runs: runs)
-                print(
-                    String(
-                        format: "BENCH %@ | median %.1f ms | best %.1f | worst %.1f | %.1f fps "
-                            + "| open %.0f ms | %@ | found %d",
-                        hardware.rawValue, outcome.median, outcome.best, outcome.worst,
-                        outcome.framesPerSecond, outcome.loadMilliseconds, outcome.imageSize,
-                        outcome.detections
-                    ))
-            } catch {
-                print("BENCH \(hardware.rawValue) | failed: \(error.localizedDescription)")
+        // V1's rows first, as they always were; V2's after.
+        for model in DetectorModel.allCases {
+            for hardware in Hardware.allCases {
+                let name = model == .v1 ? hardware.rawValue : "\(model.displayName) \(hardware.rawValue)"
+                do {
+                    let outcome = try run(model: model, hardware: hardware, runs: runs)
+                    print(
+                        String(
+                            format: "BENCH %@ | median %.1f ms | best %.1f | worst %.1f | %.1f fps "
+                                + "| open %.0f ms | %@ | found %d",
+                            name, outcome.median, outcome.best, outcome.worst,
+                            outcome.framesPerSecond, outcome.loadMilliseconds, outcome.imageSize,
+                            outcome.detections
+                        ))
+                } catch {
+                    print("BENCH \(name) | failed: \(error.localizedDescription)")
+                }
             }
         }
         print("BENCH done")

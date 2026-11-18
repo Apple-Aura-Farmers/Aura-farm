@@ -1,0 +1,77 @@
+import XCTest
+
+@testable import AuraFarm
+
+final class GuideRunRecordTests: XCTestCase {
+    private func record(_ reason: SweepFinishReason = .rightEdge, share: Double? = 0.75) -> GuideRunRecord {
+        GuideRunRecord(
+            started: Date(timeIntervalSince1970: 1_700_000_000),
+            ended: Date(timeIntervalSince1970: 1_700_000_300), finishReason: reason,
+            spotMode: "brief_touch", coverageStep: 1.6, columns: 3, spotsTicked: 20, missedSpots: 2,
+            elapsedSeconds: 300, secondsPerSpot: 15, coverageShare: share,
+            countsByLabel: ["Volvox": 7], tallyCountsByLabel: ["Volvox": 9], totalCount: 7,
+            minimumConfidence: 0.3, cropToEyepiece: false, classNames: ["Volvox"], framesCounted: 100,
+            framesSkippedByReason: ["too_fast": 12])
+    }
+
+    func testARunRecordSurvivesAJSONRoundTrip() throws {
+        let original = record()
+        let data = try GuideRunRecord.encoder().encode(original)
+        XCTAssertEqual(try GuideRunRecord.decoder().decode(GuideRunRecord.self, from: data), original)
+    }
+
+    func testEveryFinishReasonHasItsCardTitle() {
+        XCTAssertEqual(record(.endedByHelper).title, "Ended early")
+        XCTAssertEqual(record(.stageLimit).title, "Stage limit")
+        XCTAssertEqual(record(.rightEdge).title, "Reached the right edge")
+        XCTAssertEqual(record(.sampleFinished).title, "Finished")
+        XCTAssertEqual(record(.storageFull).title, "Finished")
+    }
+
+    func testANilCoverageShareShowsAsUnknown() {
+        XCTAssertEqual(record(share: nil).coverageText, "unknown")
+        XCTAssertEqual(record(share: 0.754).coverageText, "75%")
+        XCTAssertNil(GuideRunRecord.coverageShare(columns: 3, step: 0.8, edgeSpanFields: nil))
+        XCTAssertEqual(
+            GuideRunRecord.coverageShare(columns: 3, step: 0.8, edgeSpanFields: 4.8) ?? 0, 0.5, accuracy: 1e-9
+        )
+        XCTAssertEqual(GuideRunRecord.coverageShare(columns: 9, step: 0.8, edgeSpanFields: 2) ?? 0, 1)
+    }
+
+    func testAFullCoverRunKnowsItsEdgeSpan() {
+        let drop = SimulatedDrop(circles: [], rects: [CGRect(x: 0, y: 0, width: 2.8, height: 2.4)])
+        let simulator = GuideSimulator(drop: drop, start: CGPoint(x: 1.5, y: 1.2))
+        simulator.useFullCoverSlip()
+        _ = simulator.run()
+        let span = simulator.guide.edgeSpanFields
+        XCTAssertNotNil(span)
+        XCTAssertEqual(span ?? 0, 2.8, accuracy: 0.6)
+    }
+
+    func testARecordFromBeforeTheDetectorModelWasSavedStillDecodes() throws {
+        let old = """
+            {"started":"2026-11-16T15:47:00Z","ended":"2026-11-16T15:52:00Z","finishReason":"rightEdge",
+            "spotMode":"brief_touch","coverageStep":0.8,"columns":3,"spotsTicked":20,"missedSpots":1,
+            "elapsedSeconds":300,"countsByLabel":{"Volvox":7},"tallyCountsByLabel":{"Volvox":9},
+            "totalCount":7,"minimumConfidence":0.3,"cropToEyepiece":false,"classNames":["Volvox"],
+            "framesCounted":100,"framesSkippedByReason":{"too_fast":12}}
+            """
+        let record = try GuideRunRecord.decoder().decode(GuideRunRecord.self, from: Data(old.utf8))
+        XCTAssertEqual(record.detectorModel, "v1")
+        XCTAssertEqual(record.discDrops, 0)
+        XCTAssertEqual(record.bigDrops, 0)
+        XCTAssertEqual(record.detectorUnits, "gpu", "earlier records ran on the graphics chip")
+        XCTAssertNil(record.secondsPerSpot)
+        XCTAssertEqual(record.totalCount, 7)
+    }
+
+    func testTheModelAndDropsRoundTrip() throws {
+        var original = record()
+        original.detectorModel = "v2"
+        original.discDrops = 4
+        original.bigDrops = 2
+        original.detectorUnits = "ne"
+        let data = try GuideRunRecord.encoder().encode(original)
+        XCTAssertEqual(try GuideRunRecord.decoder().decode(GuideRunRecord.self, from: data), original)
+    }
+}

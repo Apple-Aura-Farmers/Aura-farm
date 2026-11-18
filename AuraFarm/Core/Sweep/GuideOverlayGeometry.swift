@@ -12,6 +12,11 @@ struct GuideOverlayThresholds {
     var travelArrowFields: Double = 1.5
     /// A go-back vector shorter than this is only a direction, in fields.
     var minimumVectorFields: Double = 0.1
+    /// The "x.x fields" text beside an arrow's tail: its size, and the least distance it keeps
+    /// from the picture's edge, in points. PLACEHOLDER: the size of the caption at its type
+    /// size, chosen by eye.
+    var distanceLabelSize = CGSize(width: 84, height: 20)
+    var distanceLabelMargin: Double = 4
 }
 
 enum GuideTone: Equatable { case move, onTarget, wrongWay, warning }
@@ -44,6 +49,13 @@ struct GuideOverlayModel: Equatable {
     var justReachedEdge = false
     /// 0...1 while the edge is being checked (the white ring).
     var checkProgress: Double?
+    /// Brief-touch mode: near the cross and faster than a touch allows ("Ease off at the cross").
+    var easeOff = false
+    /// The guide's instruction this was made for, for a screen that words it its own way.
+    var instruction = GuideInstruction.findSample
+    /// The column being swept, and whether it is the last one.
+    var column = 0
+    var lastColumn = false
 
     /// - Parameters:
     ///   - step: the guide's answer for this reading.
@@ -71,6 +83,10 @@ struct GuideOverlayModel: Equatable {
         if case .checkingEdge(let progress) = step.instruction {
             checkProgress = min(max(progress, 0), 1)
         }
+        var line = step.instruction.helperText(fullCoverSlip: step.edge.edgeMode == "line")
+        if step.lastColumn, !step.isFinished {
+            line = line.isEmpty ? "Last column" : "Last column. \(line)"
+        }
         return GuideOverlayModel(
             centre: centre, toleranceRadius: alignToleranceFields * pointsPerField,
             mark: mark(
@@ -78,16 +94,16 @@ struct GuideOverlayModel: Equatable {
                 pointsPerField: pointsPerField, fieldRadius: fieldRadius, heading: heading,
                 thresholds: thresholds),
             holdProgress: holdProgress, justCaptured: justCaptured,
-            line: step.instruction.helperText(fullCoverSlip: step.edge.edgeMode == "line"),
-            isFinished: step.isFinished,
-            justReachedEdge: justReachedEdge, checkProgress: checkProgress)
+            line: line, isFinished: step.isFinished,
+            justReachedEdge: justReachedEdge, checkProgress: checkProgress,
+            instruction: step.instruction, column: step.column, lastColumn: step.lastColumn)
     }
 
     static func tone(of instruction: GuideInstruction) -> GuideTone {
         switch instruction {
         case .aligned, .holding: .onTarget
         case .paused, .stageLimit: .warning
-        case .tooFar, .otherWay: .wrongWay
+        case .tooFar, .otherWay, .missedSpot: .wrongWay
         case .slowDown, .refocus: .warning
         default: .move
         }
@@ -106,7 +122,7 @@ struct GuideOverlayModel: Equatable {
         case .paused:
             // The picture is not where the route thinks: nothing to point at.
             return .none
-        case .travel(let direction):
+        case .travel(let direction), .lineLead(let direction, _):
             vector = CGPoint(
                 x: direction.x * thresholds.travelArrowFields,
                 y: direction.y * thresholds.travelArrowFields)
@@ -151,5 +167,37 @@ struct GuideOverlayModel: Equatable {
         return .pinnedArrow(
             at: at, angle: atan2(Double(points.y), Double(points.x)), tone: tone,
             distanceFields: hasDistance ? fields : nil)
+    }
+}
+
+extension GuideOverlayModel {
+    /// Where the centre of the "x.x fields" text goes: beside the arrow's TAIL (the end away from
+    /// the tip), on the line the arrow lies on, and nudged inward so it stays inside the picture.
+    /// - Parameters:
+    ///   - arrowCentre: the arrow's centre, the point of `GuideMark.pinnedArrow`.
+    ///   - angle: the arrow's angle on screen, in radians.
+    ///   - viewSize: the picture's size in points.
+    static func distanceLabelCentre(
+        arrowCentre: CGPoint, angle: Double, viewSize: CGSize,
+        thresholds: GuideOverlayThresholds = GuideOverlayThresholds()
+    ) -> CGPoint {
+        let along = CGPoint(x: cos(angle), y: sin(angle))
+        let size = thresholds.distanceLabelSize
+        // From the tail back by half the text's extent along the arrow's line, plus a gap.
+        let half = abs(along.x) * Double(size.width) / 2 + abs(along.y) * Double(size.height) / 2
+        let distance = thresholds.arrowLengthPoints / 2 + half + 4
+        var centre = CGPoint(
+            x: Double(arrowCentre.x) - Double(along.x) * distance,
+            y: Double(arrowCentre.y) - Double(along.y) * distance)
+        let margin = thresholds.distanceLabelMargin
+        let halfWidth = Double(size.width) / 2 + margin
+        let halfHeight = Double(size.height) / 2 + margin
+        if viewSize.width > halfWidth * 2 {
+            centre.x = min(max(Double(centre.x), halfWidth), Double(viewSize.width) - halfWidth)
+        }
+        if viewSize.height > halfHeight * 2 {
+            centre.y = min(max(Double(centre.y), halfHeight), Double(viewSize.height) - halfHeight)
+        }
+        return centre
     }
 }

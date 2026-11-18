@@ -55,8 +55,20 @@
                 } else {
                     if model.guideDryRun {
                         GuideGeometryHost(model: model, previewLayer: previewLayer, display: display)
+                        if model.showsDetections {
+                            let mapper = FramePreviewConverter(
+                                layer: previewLayer, frameSize: model.fieldInfo.frameSize,
+                                display: display)
+                            DetectionBoxes(info: model.liveBoxes) { mapper?.viewPolygon(of: $0) ?? [] }
+                        }
                         LiveGuideOverlay(state: model.overlayState)
                         LiveEdgeFeedback(model: model, state: model.overlayState)
+                        // Below the ✓ count at the top of the guide area.
+                        VStack {
+                            HelperCountChip(info: model.countInfo).padding(.top, 40)
+                            Spacer()
+                        }
+                        .allowsHitTesting(false)
                         EdgeLineOverlay(
                             state: model.edgeLineState,
                             mapper: FramePreviewConverter(
@@ -67,12 +79,14 @@
                         monitor: model.setupInfo.monitor,
                         mapper: FramePreviewConverter(
                             layer: previewLayer, frameSize: model.fieldInfo.frameSize,
-                            display: display))
+                            display: display),
+                        onResumeAnyway: { model.resumeFocusAnyway() })
                     VStack {
                         HStack(alignment: .top) {
                             // The picture stays clear while the guide is drawing on it.
                             if !model.guideDryRun { LiveStatusBanner(model: model) }
                             Spacer()
+                            ThermalBadge(state: model.thermalState)
                             LiveRecBadge(model: model)
                         }
                         Spacer()
@@ -155,12 +169,7 @@
 
     struct LiveStatusBanner: View {
         var model: SlideMovementLabModel
-        var body: some View { StatusBanner(status: model.statusInfo.status) }
-    }
-
-    struct LiveSpeedMeter: View {
-        var model: SlideMovementLabModel
-        var body: some View { SpeedMeter(speedFraction: model.statusInfo.speedFraction) }
+        var body: some View { StatusBanner(status: model.speedState.status) }
     }
 
     struct LiveTrail: View {
@@ -168,7 +177,41 @@
         var mapping: ScreenMapping
         var mirrored: Bool
         var body: some View {
-            SlideMovementTrail(info: model.trailInfo, mapping: mapping, mirrored: mirrored)
+            VStack(spacing: 3) {
+                SlideMovementTrail(info: model.trailInfo, mapping: mapping, mirrored: mirrored)
+                // Under the map: the types present, with colour and count; the top 3 when small.
+                if !model.trailInfo.life.isEmpty {
+                    LifeLegendView(
+                        counts: Dictionary(grouping: model.trailInfo.life, by: \.label).mapValues(\.count),
+                        limit: 3)
+                }
+            }
+        }
+    }
+
+    /// The phone's thermal state, a small badge: nothing depends on it yet (no heat guard).
+    struct ThermalBadge: View {
+        var state: String
+
+        private var colour: Color {
+            switch state {
+            case "fair": .yellow
+            case "serious": .orange
+            case "critical": .red
+            default: .green
+            }
+        }
+
+        var body: some View {
+            HStack(spacing: 4) {
+                Image(systemName: "thermometer.medium")
+                Text(state)
+            }
+            .font(.caption2.bold())
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(.black.opacity(0.6), in: Capsule())
+            .foregroundStyle(colour)
         }
     }
 
@@ -180,179 +223,6 @@
                     elapsed: model.readouts.elapsedLogSeconds, rowCount: model.rowCount,
                     label: model.label)
             }
-        }
-    }
-
-    struct LiveFieldOutlines: View {
-        var model: SlideMovementLabModel
-        var previewLayer: AVCaptureVideoPreviewLayer?
-        var display = CGAffineTransform.identity
-        /// The picture is shown as the field's square: everything outside the circle is dark.
-        var darkensOutside = false
-        var body: some View {
-            FieldOutlines(
-                info: model.fieldInfo,
-                converter: FramePreviewConverter(
-                    layer: previewLayer, frameSize: model.fieldInfo.frameSize, display: display),
-                darkensOutside: darkensOutside)
-        }
-    }
-
-    // MARK: - Drawing from values
-
-    /// The learned eyepiece mask as a faint red tint (or, when the picture is shown as the
-    /// field's square, everything outside the circle dark: an even-odd fill of the view less the
-    /// circle), and the rectangle registration looks in as a thin yellow outline that turns with
-    /// the picture, drawn over the preview with the preview layer's own conversion from frame
-    /// pixels. Nothing is drawn without a converter (a preview with no camera).
-    struct FieldOutlines: View {
-        var info: SlideMovementInfo.Field
-        var converter: FramePreviewConverter?
-        var darkensOutside = false
-
-        var body: some View {
-            Canvas { context, size in
-                guard let converter else { return }
-                if darkensOutside, let mask = info.state?.mask, let circle = FieldCircle(fitting: mask) {
-                    var outside = Path(CGRect(origin: .zero, size: size))
-                    let box = converter.layerRect(
-                        of: CGRect(
-                            x: circle.centre.x - circle.radius, y: circle.centre.y - circle.radius,
-                            width: circle.radius * 2, height: circle.radius * 2))
-                    outside.addPath(Path(ellipseIn: box).applying(converter.display))
-                    context.fill(outside, with: .color(.black), style: FillStyle(eoFill: true))
-                } else {
-                    for rect in info.state?.mask?.eyepieceRects() ?? [] {
-                        context.fill(
-                            Path(converter.viewRect(of: rect)), with: .color(.red.opacity(0.35)))
-                    }
-                }
-                if let rect = info.registrationRect {
-                    var outline = Path()
-                    outline.addLines(converter.viewPolygon(of: rect))
-                    outline.closeSubpath()
-                    context.stroke(outline, with: .color(.yellow), lineWidth: 1)
-                }
-            }
-            .allowsHitTesting(false)
-        }
-    }
-
-    /// Measures the preview's axes and sizes for the guide overlay and hands them to the model.
-    /// Draws nothing. Rebuilds when the box, the frame size or the view size changes.
-    struct GuideGeometryHost: View {
-        var model: SlideMovementLabModel
-        var previewLayer: AVCaptureVideoPreviewLayer?
-        /// The centring transform: the axes, the centre and the size of a field are measured in
-        /// the displayed space, the one the marks are drawn in.
-        var display = CGAffineTransform.identity
-
-        private struct Key: Equatable {
-            var box: CGRect?
-            var frameSize: CGSize
-            var viewSize: CGSize
-            var hasLayer: Bool
-            var openShare: Double?
-            var display: CGAffineTransform
-        }
-
-        /// The length, in frame pixels, of the two probe vectors the axes are measured with.
-        static let probePixels = 100.0
-
-        var body: some View {
-            GeometryReader { proxy in
-                let info = model.fieldInfo
-                Color.clear
-                    .task(
-                        id: Key(
-                            box: info.registrationRect, frameSize: info.frameSize,
-                            viewSize: proxy.size, hasLayer: previewLayer != nil,
-                            openShare: info.state?.openShare, display: display)
-                    ) {
-                        model.setGuideGeometry(geometry(for: info))
-                    }
-            }
-            .allowsHitTesting(false)
-        }
-
-        private func geometry(for info: SlideMovementInfo.Field) -> GuideScreenGeometry? {
-            guard
-                let converter = FramePreviewConverter(
-                    layer: previewLayer, frameSize: info.frameSize, display: display)
-            else { return nil }
-            var circle: FieldCircle?
-            if case .ready(let mask)? = info.state { circle = FieldCircle(fitting: mask) }
-            return Self.geometry(
-                using: converter, box: info.registrationRect ?? CGRect(origin: .zero, size: info.frameSize),
-                circle: circle)
-        }
-
-        /// How the preview shows the box. The size of a field and of the field's radius come from
-        /// the lengths of the probe vectors (`FrameToView.scale`), not from the bounding box of
-        /// a rectangle, which grows when the picture is turned or sheared.
-        static func geometry(
-            using mapper: any FrameToView, box: CGRect, circle: FieldCircle?
-        ) -> GuideScreenGeometry? {
-            let middle = CGPoint(x: box.midX, y: box.midY)
-            let probe = probePixels
-            let origin = mapper.viewPoint(of: middle)
-            guard
-                let axes = GuideScreenAxes(
-                    origin: origin,
-                    xUnit: mapper.viewPoint(of: CGPoint(x: middle.x + probe, y: middle.y)),
-                    yUnit: mapper.viewPoint(of: CGPoint(x: middle.x, y: middle.y + probe)),
-                    framePixels: probe)
-            else { return nil }
-            let scale = mapper.scale(at: middle, probe: probe)
-            let side = Double(min(box.width, box.height)) * scale
-            guard side > 0 else { return nil }
-            let radius = circle.map { mapper.viewRadius(of: $0) } ?? side / 2
-            return GuideScreenGeometry(
-                axes: axes, centre: origin, pointsPerField: side, fieldRadius: radius)
-        }
-    }
-
-    struct LiveFieldCard: View {
-        var model: SlideMovementLabModel
-        var body: some View { FieldCard(state: model.fieldInfo.state) }
-    }
-
-    /// Says what the eyepiece field is up to: learning, or not found.
-    struct FieldCard: View {
-        var state: FieldState?
-
-        var body: some View {
-            switch state {
-            case .learning(let progress):
-                card(colour: .black.opacity(0.7)) {
-                    Text("Finding the eyepiece field…").font(.headline)
-                    Text("Slowly move the slide around so every part of the field is lit")
-                        .font(.caption)
-                    ProgressView(value: progress).tint(.white)
-                }
-            case .untrusted:
-                card(colour: .orange) {
-                    Text("Couldn't find the eyepiece field.").font(.headline)
-                    Text(
-                        "Using the centre of the frame. Check the light and tap Re-detect field."
-                    )
-                    .font(.caption)
-                }
-            default:
-                EmptyView()
-            }
-        }
-
-        private func card<Content: View>(
-            colour: Color, @ViewBuilder content: () -> Content
-        ) -> some View {
-            VStack(spacing: 6, content: content)
-                .multilineTextAlignment(.center)
-                .foregroundStyle(.white)
-                .padding(12)
-                .frame(maxWidth: 260)
-                .background(colour, in: RoundedRectangle(cornerRadius: 12))
-                .allowsHitTesting(false)
         }
     }
 
@@ -448,41 +318,6 @@
         }
     }
 
-    /// A bar with green, orange and red zones and a needle. The scale ends at twice the
-    /// too-fast speed.
-    struct SpeedMeter: View {
-        var speedFraction: Double
-        var thresholds = MovementIndicatorThresholds()
-
-        var body: some View {
-            let end = thresholds.tooFastSpeedFraction * 2
-            let comfortable = min(thresholds.comfortableSpeedFraction / end, 1)
-            let tooFast = min(thresholds.tooFastSpeedFraction / end, 1)
-            let needle = min(max(speedFraction / end, 0), 1)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Speed").font(.caption2.bold()).foregroundStyle(.white)
-                GeometryReader { proxy in
-                    let width = proxy.size.width
-                    ZStack(alignment: .leading) {
-                        HStack(spacing: 0) {
-                            Rectangle().fill(.green).frame(width: width * comfortable)
-                            Rectangle().fill(.orange).frame(width: width * (tooFast - comfortable))
-                            Rectangle().fill(.red)
-                        }
-                        .clipShape(Capsule())
-                        Rectangle().fill(.white)
-                            .frame(width: 4, height: 22)
-                            .shadow(radius: 1)
-                            .offset(x: width * needle - 2)
-                    }
-                }
-                .frame(height: 22)
-            }
-            .padding(8)
-            .background(.black.opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
-        }
-    }
-
     /// The recent position as a line with a dot at the current one, drawn through the chosen
     /// screen mapping, with a hop ring, the start marker and its home zone, the hops that were
     /// tracked and where tracking was lost, a one-frame grid, and a legend showing where the
@@ -498,7 +333,14 @@
         /// The frames from the centre to the edge of the box. Grows when the view travels far,
         /// so the whole move stays on screen.
         private var reach: Double {
-            TrailScale.reach(for: info.trail + [info.startPoint].compactMap { $0 })
+            var points = info.trail + [info.startPoint].compactMap { $0 }
+            // With life on the map the whole slip stays in view: the dots, the captured spots and
+            // the edges.
+            if !info.life.isEmpty {
+                points += info.life.map(\.point) + info.guideCaptured + info.edgePoints
+                points += info.predicted.flatMap { [$0.from, $0.to] }
+            }
+            return TrailScale.reach(for: points)
         }
 
         var body: some View {
@@ -561,6 +403,25 @@
                     Path(ellipseIn: CGRect(x: spot.x - 6, y: spot.y - 6, width: 12, height: 12)),
                     with: .color(.yellow), lineWidth: 2)
             }
+
+            // The predicted top, bottom and right edges: faint dashed lines.
+            for line in info.predicted {
+                var path = Path()
+                path.move(to: place(line.from))
+                path.addLine(to: place(line.to))
+                context.stroke(
+                    path, with: .color(.cyan.opacity(0.45)),
+                    style: StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
+            }
+
+            // Confirmed edge points and the organisms of the helper's count.
+            for point in info.edgePoints {
+                let spot = place(point)
+                context.fill(
+                    Path(ellipseIn: CGRect(x: spot.x - 2, y: spot.y - 2, width: 4, height: 4)),
+                    with: .color(.cyan))
+            }
+            LifeDots.draw(info.life, in: &context, place: place)
 
             if let start = info.startPoint {
                 let home = place(start)
@@ -704,5 +565,67 @@
     #Preview("Too fast") { PreviewStrip(status: .tooFast, speed: 0.22, mapping: .rotateRight) }
     #Preview("Lost") {
         PreviewStrip(status: .lost, speed: 0.02, mapping: .asIs, mirrored: true)
+    }
+
+    /// The trail mini-map with the predicted top, bottom and right edges drawn faint and dashed.
+    #Preview("Trail map: predicted edges") {
+        SlideMovementTrail(
+            info: .init(
+                trail: (0..<40).map { CGPoint(x: Double($0) * 0.05, y: -2.0 + Double($0) * 0.1) },
+                startPoint: .zero, guideCaptured: [CGPoint(x: 0.4, y: -1.5), CGPoint(x: 0.4, y: -0.7)],
+                predicted: [
+                    PredictedTrailLine(
+                        kind: .top, from: CGPoint(x: -0.6, y: -2.4), to: CGPoint(x: 3.4, y: -2.4)),
+                    PredictedTrailLine(
+                        kind: .bottom, from: CGPoint(x: -0.6, y: 2.4), to: CGPoint(x: 3.4, y: 2.4)),
+                    PredictedTrailLine(
+                        kind: .right, from: CGPoint(x: 3.4, y: -2.4), to: CGPoint(x: 3.4, y: 2.4)),
+                ]),
+            mapping: .asIs, mirrored: false
+        )
+        .frame(width: 240, height: 240)
+        .background(Color.gray)
+    }
+
+    /// The mini-map with about 60 dots of 6 types, its legend (top 3) under it.
+    #Preview("Mini-map: life dots") {
+        let labels = ["Volvox", "Nematode", "Euglenoid", "Arcellinida", "Digononta", "Rotifer"]
+        var life: [RunMapOrganism] = []
+        for index in 0..<60 {
+            let x = Double((index * 37) % 50) / 12 - 2
+            let y = Double((index * 53) % 38) / 10 - 1.9
+            life.append(
+                RunMapOrganism(
+                    label: labels[index % 6], x: x, y: y, column: index / 10 + 1,
+                    seconds: Double(index)))
+        }
+        var trail: [CGPoint] = []
+        for index in 0..<40 {
+            trail.append(CGPoint(x: Double(index) * 0.05 - 1, y: Double(index) * 0.08 - 1.5))
+        }
+        let top = PredictedTrailLine(
+            kind: .top, from: CGPoint(x: -2, y: -2), to: CGPoint(x: 2.4, y: -2))
+        let bottom = PredictedTrailLine(
+            kind: .bottom, from: CGPoint(x: -2, y: 2), to: CGPoint(x: 2.4, y: 2))
+        var info = SlideMovementInfo.Trail()
+        info.trail = trail
+        info.startPoint = .zero
+        info.predicted = [top, bottom]
+        info.life = life
+        let counts = Dictionary(grouping: life, by: \.label).mapValues(\.count)
+        return VStack(spacing: 3) {
+            SlideMovementTrail(info: info, mapping: .asIs, mirrored: false)
+            LifeLegendView(counts: counts, limit: 3)
+        }
+        .frame(width: 180, height: 200)
+        .background(Color.gray)
+    }
+
+    #Preview("Thermal badge: each state") {
+        VStack(alignment: .trailing, spacing: 8) {
+            ForEach(["nominal", "fair", "serious", "critical"], id: \.self) { ThermalBadge(state: $0) }
+        }
+        .padding()
+        .background(.gray)
     }
 #endif

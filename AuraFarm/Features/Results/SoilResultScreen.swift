@@ -92,6 +92,8 @@ struct SoilResultScreen: View {
 /// The result itself, once there is one. Owns the view model so it survives redraws.
 private struct SoilResultContent: View {
     @State private var viewModel: SoilResultViewModel
+    /// The map of a guided scan, read once from the sweep's folder; nil for any other sweep.
+    @State private var runRecord: GuideRunRecord?
     let showsAdvice: Bool
 
     init(
@@ -102,6 +104,8 @@ private struct SoilResultContent: View {
         showsAdvice: Bool
     ) {
         self.showsAdvice = showsAdvice
+        _runRecord = State(
+            wrappedValue: result.sweep.flatMap { GuidedScanSaver.runRecord(in: $0.url) })
         _viewModel = State(
             wrappedValue: SoilResultViewModel(
                 result: result, recommender: recommender, historyProvider: historyProvider,
@@ -126,6 +130,10 @@ private struct SoilResultContent: View {
                 taxonomy: $viewModel.selectedTaxonomy,
                 isExpanded: $viewModel.isBreakdownExpanded
             )
+
+            if let runRecord {
+                Section("Run map") { RunMapPanel(record: runRecord) }
+            }
 
             if showsAdvice {
                 WhatToDoNextSection(
@@ -163,7 +171,12 @@ private struct SampleSummarySection: View {
                 Text(result.recordedAt, format: .dateTime.day().month().hour().minute())
             }
             LabeledContent("Soil", value: result.moisture.label)
-            LabeledContent("Frames kept", value: "\(result.framesKept)")
+            // A guided scan keeps no frames: it counts fields of view.
+            if result.isGuidedScan {
+                LabeledContent("Fields of view scanned", value: "\(result.viewsLooked)")
+            } else {
+                LabeledContent("Frames kept", value: "\(result.framesKept)")
+            }
         }
     }
 }

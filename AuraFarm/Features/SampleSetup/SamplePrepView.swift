@@ -117,18 +117,6 @@ struct SamplePrepView: View {
             } footer: {
                 Text("Prototype guidance. Check it against your own microscope and phone holder.")
             }
-
-            Section {
-                SweepPatternView()
-                    .padding(.vertical, 4)
-            } header: {
-                Text("Walking the slide")
-            } footer: {
-                Text(
-                    "Once it is under the lens, move the slide across, down one step, then "
-                        + "back the other way. The app says which way to go next and keeps a "
-                        + "frame each time you have moved far enough.")
-            }
         }
         .navigationTitle("Preparing a sample")
         .navigationBarTitleDisplayMode(.inline)

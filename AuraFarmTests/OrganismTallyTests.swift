@@ -138,9 +138,9 @@ final class OrganismTallyTests: XCTestCase {
         // The registration reports the move that puts this frame back on the one before, so
         // a thing that stayed put went the other way.
         XCTAssertEqual(
-            CaptureViewModel.pictureMoved(registered: CGPoint(x: 12, y: -4)),
+            PictureShift.pictureMoved(registered: CGPoint(x: 12, y: -4)),
             CGPoint(x: -12, y: 4)
         )
-        XCTAssertEqual(CaptureViewModel.pictureMoved(registered: nil), .zero)
+        XCTAssertEqual(PictureShift.pictureMoved(registered: nil), .zero)
     }
 }

@@ -66,6 +66,16 @@ struct GuideReading: Equatable {
     /// line measured along another heading than the route's current one is ignored.
     var edgeLineHeading: CGPoint?
 
+    /// The detail in the two quarters of the box ahead along the heading over the detail in the two
+    /// behind (the `quad_*` columns): near 0 when the area ahead is empty. nil when any quarter or
+    /// the heading is unknown, or nothing is behind.
+    var areaAheadShare: Double? {
+        guard let aa = quadAheadAway, let at = quadAheadToward, let ba = quadBehindAway,
+            let bt = quadBehindToward, ba + bt > 1e-9
+        else { return nil }
+        return (aa + at) / (ba + bt)
+    }
+
     /// Whether the slide has been still for `seconds` in a row. Without `stillSeconds` this is
     /// `isStill`.
     func isStill(for seconds: Double) -> Bool {
@@ -108,6 +118,15 @@ struct EdgeDiagnostics: Equatable {
     /// The box's sharpness over the median before the candidate began, when the corner rule
     /// looked at it; nil otherwise.
     var cornerBoxShare: Double?
+    /// Which rule accepted the latest edge line ("strict" or "area"); empty without one.
+    var lineAccept = ""
+    /// The detail ahead over the detail behind on this reading (`GuideReading.areaAheadShare`).
+    var areaAheadShare: Double?
+    /// The predicted edge's position along the current leg's heading at the column's x, in fields;
+    /// nil without a prediction.
+    var predictedEdgeAlong: Double?
+    /// "Edge should be here. Confirm?" is showing.
+    var expectedEdgeAsk = false
 }
 
 /// The helper's answer about an edge, in full-cover-slip mode.
@@ -177,12 +196,21 @@ enum GuideInstruction: Equatable {
     /// Full-cover-slip mode: a line that passes the rule is just behind the cross (the helper went
     /// past it): come back along the leg until it is on the cross; unit vector or the way back.
     case edgeBehind(toward: CGPoint)
+    /// An accepted edge line is a little ahead (0 to `lineLeadFields`) but the spot rules call the
+    /// view too far or the wrong way: keep going along the leg. `nudge` after the helper has been
+    /// still for a while with the line beyond the at-cross band.
+    case lineLead(direction: CGPoint, nudge: Bool)
+    /// The view passed the predicted edge with nothing ahead and no edge found: ✓ takes it as the
+    /// edge, ✗ keeps going.
+    case expectedEdge
     /// The helper said the line is not an edge: keep going (shown for a moment).
     case notAnEdge
     /// Full-cover-slip mode: the box has no detail, which says nothing about an edge.
     case nothingToFollow
     case tooFar
     case otherWay
+    /// Brief-touch mode: the view went past a spot without touching it; unit vector back to it.
+    case missedSpot(toward: CGPoint)
     case refocus
     case slowDown
     case finished
@@ -205,12 +233,15 @@ enum GuideInstruction: Equatable {
         case .lineAhead: "Edge line ahead"
         case .edgeDetected: "Stay still, edge detected"
         case .edgeBehind: "Edge just behind, come back"
+        case .lineLead: "A little further, to the line"
+        case .expectedEdge: "Edge should be here. Confirm?"
         case .notAnEdge: "Not an edge, keep going"
         case .nothingToFollow: "Nothing to follow here"
         case .stageLimit: "Stage limit, turning"
         case .paused(let reason): reason == .alignment ? "Paused: alignment" : "Paused: focus"
         case .tooFar: "Too far, come back a little"
         case .otherWay: "Other way"
+        case .missedSpot: "Missed spot"
         case .refocus: "Refocus"
         case .slowDown: "Slow down"
         case .finished: "Sample finished"
@@ -234,13 +265,17 @@ enum GuideInstruction: Equatable {
         case .lineAhead: "Edge line ahead. Keep going until it reaches the centre cross"
         case .edgeDetected: "Stay still, edge detected"
         case .edgeBehind: "Edge just behind you. Come back until it's on the cross"
+        case .lineLead: "A little further, to the line"
+        case .expectedEdge: "Edge should be here. Confirm?"
         case .notAnEdge: "Not an edge. Keep going"
         case .nothingToFollow:
             "Nothing to follow here. Turn back, or move to a patch with more particles"
         case .stageLimit: "Stage limit reached. Turning"
-        case .paused(.alignment): "Phone moved. Put it back so the circle fills the outline"
+        // No words: the orange circle and "Paused" say it, and the picture stays clear.
+        case .paused(.alignment): ""
         case .paused(.focus): "Out of focus. Turn the focus knob slowly until it's sharp"
         case .tooFar, .otherWay: "Turn back toward the cross"
+        case .missedSpot: "Missed a spot. Come back a little, slower"
         case .refocus: "Refocus"
         case .slowDown: "Slow down"
         case .finished: "Sample finished"
@@ -272,12 +307,15 @@ enum GuideInstruction: Equatable {
         case .lineAhead: "line_ahead"
         case .edgeDetected: "edge_detected"
         case .edgeBehind: "edge_behind"
+        case .lineLead: "line_ahead"
+        case .expectedEdge: "expected_edge"
         case .notAnEdge: "not_an_edge"
         case .nothingToFollow: "nothing_to_follow"
         case .stageLimit: "stage_limit"
         case .paused(let reason): reason == .alignment ? "paused_alignment" : "paused_focus"
         case .tooFar: "too_far"
         case .otherWay: "other_way"
+        case .missedSpot: "missed_spot"
         case .refocus: "refocus"
         case .slowDown: "slow_down"
         case .finished: "finished"

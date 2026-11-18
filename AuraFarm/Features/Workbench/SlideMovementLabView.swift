@@ -14,7 +14,7 @@
 
         @State private var model = SlideMovementLabModel()
         @State private var mode = Mode.live
-        @AppStorage("slideLab.mapping") private var mappingName = ScreenMapping.asIs.rawValue
+        @AppStorage("slideLab.mapping") private var mappingName = ScreenMapping.rotateRight.rawValue
         @AppStorage("slideLab.mirror") private var mirrored = false
         @State private var isAskingDistance = false
         @State private var distanceText = ""
@@ -31,7 +31,23 @@
         @AppStorage("slideLab.trackSparse") private var tracksSparse = true
         @AppStorage("slideLab.fullCoverSlip") private var fullCoverSlip = true
         @AppStorage("slideLab.askEdges") private var asksEdges = true
+        @AppStorage("slideLab.showLifeOnMap") private var showsLifeOnMap = true
+        // The guided scan page's knob rule, for other microscopes. See `KnobRule`.
+        @AppStorage("slideLab.knobSwap") private var swapsKnobs = false
+        @AppStorage("slideLab.knobReverseX") private var reversesKnobX = false
+        @AppStorage("slideLab.knobReverseY") private var reversesKnobY = false
+        @AppStorage("slideLab.coverSlipShape") private var coverSlipName = CoverSlipShape.square.rawValue
         @AppStorage("slideLab.skipAlignFocus") private var skipsAlignFocus = false
+        @AppStorage("slideLab.spotMode") private var spotModeName = "briefTouch"
+        @AppStorage("slideLab.coverageStep") private var coverageStep = 0.8
+        @AppStorage("slideLab.countOrganisms") private var countsOrganisms = true
+        @AppStorage("slideLab.showDetections") private var showsDetections = false
+        @AppStorage("slideLab.cropEyepiece") private var cropsToEyepiece = true
+        @AppStorage("slideLab.detectorModel") private var detectorModelName = DetectorModel.v2.rawValue
+        @AppStorage("slideLab.detectorUnits") private var detectorUnitsName = DetectorUnits.neuralEngine
+            .rawValue
+        @AppStorage("slideLab.cameraRate") private var cameraRateName = CameraRate.fps20.rawValue
+        @AppStorage("slideLab.confidence") private var confidence = 0.3
         @State private var noteText = ""
 
         // Recorded video.
@@ -39,6 +55,7 @@
         @State private var startMinutes = 0.0
 
         private var mapping: ScreenMapping { ScreenMapping(rawValue: mappingName) ?? .asIs }
+        private var spotMode: SpotConfirmMode { spotModeName == "holdStill" ? .holdStill : .briefTouch }
 
         var body: some View {
             VStack(spacing: 0) {
@@ -55,32 +72,10 @@
             }
             .navigationTitle("Slide movement lab")
             .navigationBarTitleDisplayMode(.inline)
-            .onAppear {
-                model.setSkipsAlignAndFocus(skipsAlignFocus)
-                model.setPausesOnMonitor(pausesOnMonitor)
-                model.setTracksSparse(tracksSparse)
-                model.setFullCoverSlip(fullCoverSlip)
-                model.setAsksEdges(asksEdges)
-                model.setFieldRegion(FieldRegionMode(rawValue: fieldRegionName) ?? .auto)
-                model.setMeasuresHopAgreement(hopAgreement)
-                model.setShowsThumbnail(showsSees)
-                model.setGuideDryRun(guideDryRun)
-                model.setScreenMapping(mapping, mirrored: mirrored)
-                if mode == .live { model.start() }
-            }
-            .onChange(of: fieldRegionName) { _, name in
-                model.setFieldRegion(FieldRegionMode(rawValue: name) ?? .auto)
-            }
-            .onChange(of: hopAgreement) { _, enabled in model.setMeasuresHopAgreement(enabled) }
-            .onChange(of: showsSees) { _, shown in model.setShowsThumbnail(shown) }
-            .onChange(of: guideDryRun) { _, enabled in model.setGuideDryRun(enabled) }
-            .onChange(of: skipsAlignFocus) { _, skips in model.setSkipsAlignAndFocus(skips) }
-            .onChange(of: pausesOnMonitor) { _, pauses in model.setPausesOnMonitor(pauses) }
-            .onChange(of: tracksSparse) { _, tracks in model.setTracksSparse(tracks) }
-            .onChange(of: fullCoverSlip) { _, enabled in model.setFullCoverSlip(enabled) }
-            .onChange(of: asksEdges) { _, asks in model.setAsksEdges(asks) }
-            .onChange(of: mappingName) { model.setScreenMapping(mapping, mirrored: mirrored) }
-            .onChange(of: mirrored) { model.setScreenMapping(mapping, mirrored: mirrored) }
+            // The same settings sequence and syncs the guided scan page uses.
+            .modifier(
+                LabSettingsSync(model: model) { if mode == .live { model.start() } }
+            )
             .onDisappear { model.stop() }
             .onChange(of: mode) { _, newMode in
                 if newMode == .live { model.start() } else { model.stop() }
@@ -152,6 +147,7 @@
                         if showsSees { seesThumbnail }
                         BigReadouts(model: model)
                         if model.guideDryRun { GuideReadout(model: model) }
+                        if model.guideDryRun, showsDetections { DetectionPanel(info: model.countInfo) }
                         analyzingControls
                     } else {
                         setupControls
@@ -160,6 +156,18 @@
             }
             .background(SlideLabHaptics(model: model))
             .sheet(isPresented: $isShowingTrail) { fullTrail }
+            .sheet(
+                isPresented: Binding(
+                    get: { model.runSummary != nil }, set: { if !$0 { model.dismissSummary() } })
+            ) {
+                if let record = model.runSummary {
+                    RunSummaryCard(
+                        record: record, shareItems: model.summaryItems,
+                        onDone: { model.dismissSummary() }
+                    )
+                    .presentationDetents([.medium, .large])
+                }
+            }
         }
 
         /// "What the app sees": the grid the analysis uses, in the frame's raw orientation.
@@ -207,7 +215,7 @@
                 Text(
                     model.setupInfo.step == .align
                         ? "1. Align the phone: the whole microscope circle in view, round, evenly lit, no glare."
-                        : "2. Focus with the microscope's focus knob (the stage's Z), not the phone's."
+                        : "3. Focus with the microscope's focus knob (the stage's Z), not the phone's."
                 )
                 .font(.callout)
                 setupButtons
@@ -362,6 +370,57 @@
                 Toggle("Track sparse sample", isOn: $tracksSparse)
                 Toggle("Full cover slip (line edges)", isOn: $fullCoverSlip)
                 Toggle("Ask me to confirm edges", isOn: $asksEdges)
+                Toggle("Show life on map", isOn: $showsLifeOnMap)
+                Toggle("Swap knobs", isOn: $swapsKnobs)
+                Toggle("Reverse X", isOn: $reversesKnobX)
+                Toggle("Reverse Y", isOn: $reversesKnobY)
+                Text(
+                    "Knob words on the guided scan page: X is the bottom knob. Arrow left = towards you, right = away; up = top knob towards you, down = away."
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                CoverSlipPicker(name: $coverSlipName)
+                Picker("Spot check", selection: $spotModeName) {
+                    Text("Brief touch").tag("briefTouch")
+                    Text("Hold still").tag("holdStill")
+                }
+                .pickerStyle(.segmented)
+                Picker("Coverage", selection: $coverageStep) {
+                    Text("Every column").tag(0.8)
+                    Text("Every 2nd").tag(1.6)
+                    Text("Every 3rd").tag(2.4)
+                }
+                .pickerStyle(.segmented)
+                Picker("Model", selection: $detectorModelName) {
+                    ForEach(DetectorModel.allCases) { Text($0.displayName).tag($0.rawValue) }
+                }
+                .pickerStyle(.segmented)
+                .disabled(model.modelLocked)
+                Picker("Model chip", selection: $detectorUnitsName) {
+                    ForEach(DetectorUnits.allCases) { Text($0.displayName).tag($0.rawValue) }
+                }
+                .pickerStyle(.segmented)
+                .disabled(model.modelLocked)
+                Picker("Camera", selection: $cameraRateName) {
+                    ForEach(CameraRate.allCases) { Text($0.displayName).tag($0.rawValue) }
+                }
+                .pickerStyle(.segmented)
+                .disabled(model.modelLocked)
+                if !model.cameraNote.isEmpty {
+                    Text(model.cameraNote).font(.caption).foregroundStyle(.secondary)
+                }
+                if model.modelLocked {
+                    Text("The model, chip and camera can change before Mark start or after a finish.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Toggle("Count organisms", isOn: $countsOrganisms)
+                Toggle("Show detections", isOn: $showsDetections)
+                Toggle("Crop to eyepiece circle", isOn: $cropsToEyepiece)
+                VStack(alignment: .leading) {
+                    Text("Confidence \(confidence, specifier: "%.2f")").font(.caption)
+                    Slider(value: $confidence, in: 0.1...0.6, step: 0.05)
+                }
                 Text("Red tint: treated as the eyepiece. Yellow box: where movement is measured.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -504,4 +563,23 @@
     #Preview {
         NavigationStack { SlideMovementLabView() }
     }
+
+    /// "Cover slip": Square (the usual 22 x 22 mm) lets the guide predict the right edge.
+    struct CoverSlipPicker: View {
+        @Binding var name: String
+
+        var body: some View {
+            Picker("Cover slip", selection: $name) {
+                ForEach(CoverSlipShape.allCases) { Text($0.title).tag($0.rawValue) }
+            }
+            .pickerStyle(.segmented)
+        }
+    }
+
+    private struct CoverSlipPreview: View {
+        @State private var name = CoverSlipShape.square.rawValue
+        var body: some View { Form { CoverSlipPicker(name: $name) } }
+    }
+
+    #Preview("Cover slip setting") { CoverSlipPreview() }
 #endif

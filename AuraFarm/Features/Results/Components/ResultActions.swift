@@ -12,11 +12,14 @@ struct ResultActions: View {
             Text("The farm manager reads published tests in the farm's records.")
         }
 
-        Section {
-            NavigationLink {
-                SweepDetailView(sweep: sweep)
-            } label: {
-                Label("Look through the frames", systemImage: "square.grid.3x3")
+        // A guided scan keeps no frames: its map is on this screen.
+        if sweep.manifest?.guidedScan != true {
+            Section {
+                NavigationLink {
+                    SweepDetailView(sweep: sweep)
+                } label: {
+                    Label("Look through the frames", systemImage: "square.grid.3x3")
+                }
             }
         }
     }

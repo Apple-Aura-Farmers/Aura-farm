@@ -34,7 +34,7 @@ final class LabSetupSessionTests: XCTestCase {
         return false
     }
 
-    func testAlignAndFocusNeitherLearnTheMaskNorTrackAndFieldStartsLearning() {
+    func testAlignDoesNotLearnThenFieldLearnsThenFocusDoesNotTrack() {
         let pipeline = makePipeline()
         let session = LabSetupSession()
         let frame = discFrame()
@@ -47,31 +47,111 @@ final class LabSetupSessionTests: XCTestCase {
             }
         }
 
-        // Align: 1.5 s of a whole, round, even disc passes it.
+        // Align: 1.5 s of a whole, round, even disc passes it; nothing learns yet.
         let align = feed(14)
         XCTAssertEqual(session.step, .align)
         XCTAssertTrue(align.allSatisfy(isSetup), "no frame went to the pipeline")
         XCTAssertEqual(progress(pipeline), 0, "no mask learning in align")
         _ = feed(4)
-        XCTAssertEqual(session.step, .focus)
+        XCTAssertEqual(session.step, .field, "the eyepiece is found next")
         XCTAssertTrue(session.info.isAlignmentPassed)
 
-        // Focus: a flat disc has no sharpness peak, so it stays here; still nothing learns.
+        // Field: the frames go to the pipeline, which learns, and waits for the review.
+        let field = feed(31)
+        XCTAssertTrue(field.allSatisfy(isTracked))
+        XCTAssertTrue(pipeline.isAwaitingReview)
+        XCTAssertEqual(session.step, .field)
+        pipeline.confirmField()
+        _ = feed(1)
+        XCTAssertEqual(session.step, .focus)
+
+        // Focus: a flat disc has no sharpness peak, so it stays here; frames do not track.
         let focus = feed(30)
         XCTAssertEqual(session.step, .focus)
         XCTAssertTrue(focus.allSatisfy(isSetup))
-        XCTAssertEqual(progress(pipeline), 0, "no mask learning in focus")
         XCTAssertNotNil(session.info.focusSquare)
         XCTAssertNotNil(session.info.focus)
         XCTAssertFalse(session.log.isEmpty)
         XCTAssertTrue(session.log.contains { $0.step == .focus && $0.focus != nil })
+    }
 
-        // Field: the frames go to the pipeline, which starts learning.
-        session.redoField(pipeline: pipeline)
+    func testFocusIsMeasuredInsideTheConfirmedRoundView() throws {
+        let pipeline = makePipeline()
+        let session = LabSetupSession(skippingAlignAndFocus: false)
+        let time = reachFocus(session: session, pipeline: pipeline)
+        feed(discFrame(), for: 0.5, from: time, session: session, pipeline: pipeline)
+        let mask = try XCTUnwrap(pipeline.fieldState.mask)
+        let circle = try XCTUnwrap(FieldCircle(fitting: mask))
+        let expected = LabSetupSession.focusSquare(for: circle, frameSize: size)
+        XCTAssertEqual(session.info.focusSquare, expected)
+    }
+
+    func testAlignWaitsForAConfirmWhenTheSessionAsksForOne() {
+        let pipeline = makePipeline()
+        let session = LabSetupSession()
+        session.confirmsSteps = true
+        var time = feed(discFrame(), for: 4.0, from: 0, session: session, pipeline: pipeline)
+        XCTAssertTrue(session.info.isAlignmentPassed, "the checks passed")
+        XCTAssertEqual(session.step, .align, "but it waits for the person")
+        session.confirmStep()
+        time = feed(discFrame(), for: 0.3, from: time, session: session, pipeline: pipeline)
         XCTAssertEqual(session.step, .field)
-        let field = feed(5)
-        XCTAssertTrue(field.allSatisfy(isTracked))
-        XCTAssertGreaterThan(progress(pipeline), 0, "learning started")
+        // Without the setting (the lab) the step moves on by itself, as before.
+        let lab = LabSetupSession()
+        feed(discFrame(), for: 2.0, from: 0, session: lab, pipeline: makePipeline())
+        XCTAssertEqual(lab.step, .field)
+    }
+
+    func testFocusWaitsForAConfirmAndThenSetsTheBaseline() {
+        let pipeline = makePipeline()
+        let session = LabSetupSession()
+        var time = reachFocus(session: session, pipeline: pipeline)
+        session.confirmsSteps = true
+        for amplitude in [30.0, 60, 80, 80, 80, 20, 20, 20, 80, 80] {
+            time = feed(
+                texturedFrame(amplitude), for: 0.4, from: time, session: session, pipeline: pipeline)
+        }
+        time = feed(texturedFrame(80), for: 3, from: time, session: session, pipeline: pipeline)
+        XCTAssertEqual(session.info.focus?.state, .focused)
+        XCTAssertEqual(session.step, .focus, "focused, but waiting for the person")
+        XCTAssertNil(session.focusBaseline)
+        session.confirmStep()
+        feed(texturedFrame(80), for: 0.3, from: time, session: session, pipeline: pipeline)
+        XCTAssertEqual(session.step, .stage)
+        XCTAssertNotNil(session.focusBaseline)
+    }
+
+    func testFocusFinishingSetsTheBaselineAndMovesOnToTheStage() {
+        let pipeline = makePipeline()
+        let session = LabSetupSession()
+        var time = reachFocus(session: session, pipeline: pipeline)
+        XCTAssertNil(session.focusBaseline)
+        // The knob goes to a sharp picture, past it, and back to it, then holds.
+        for amplitude in [30.0, 60, 80, 80, 80, 20, 20, 20, 80, 80] {
+            time = feed(texturedFrame(amplitude), for: 0.4, from: time, session: session, pipeline: pipeline)
+        }
+        time = feed(texturedFrame(80), for: 3, from: time, session: session, pipeline: pipeline)
+        XCTAssertEqual(session.step, .stage, "focused, so on to the knobs")
+        XCTAssertNotNil(session.focusBaseline, "the run monitor's baseline is set")
+    }
+
+    /// A bright disc with a fine texture of the given strength: sharper when stronger.
+    private func texturedFrame(_ amplitude: Double) -> CVPixelBuffer {
+        SyntheticFrame.make(width: 1280, height: 720) { x, y in
+            guard hypot(Double(x) - 640, Double(y) - 360) <= 300 else { return 10 }
+            let wave = sin(Double(x) * 0.5) * sin(Double(y) * 0.5)
+            return UInt8(max(0, min(255, 170 + amplitude * wave)))
+        }
+    }
+
+    /// Feeds a whole disc through align and the field step (confirmed), to the start of focus.
+    private func reachFocus(session: LabSetupSession, pipeline: SlideMovementPipeline) -> Double {
+        var time = feed(discFrame(), for: 2.0, from: 0, session: session, pipeline: pipeline)
+        time = feed(discFrame(), for: 3.2, from: time, session: session, pipeline: pipeline)
+        pipeline.confirmField()
+        time = feed(discFrame(), for: 0.2, from: time, session: session, pipeline: pipeline)
+        XCTAssertEqual(session.step, .focus)
+        return time
     }
 
     func testFieldConfirmedMovesOnToStageAndSkippingTheStageUsesTheIdentity() {
@@ -154,28 +234,30 @@ final class LabSetupSessionTests: XCTestCase {
         return seconds
     }
 
-    func testALossInFocusGoesBackToAlignAndReturnsToFocus() {
+    func testALossInFocusGoesBackToAlignThenFieldAgainThenFocus() {
         let pipeline = makePipeline()
         let session = LabSetupSession()
-        var time = feed(discFrame(), for: 2.0, from: 0, session: session, pipeline: pipeline)
-        XCTAssertEqual(session.step, .focus)
+        var time = reachFocus(session: session, pipeline: pipeline)
         time = feed(darkFrame(), for: 1.0, from: time, session: session, pipeline: pipeline)
         XCTAssertEqual(session.step, .focus, "a 1 s dip does not go back")
         time = feed(discFrame(), for: 0.5, from: time, session: session, pipeline: pipeline)
         time = feed(darkFrame(), for: 2.2, from: time, session: session, pipeline: pipeline)
         XCTAssertEqual(session.step, .align)
-        XCTAssertEqual(session.info.resumeStep, .focus)
-        XCTAssertEqual(progress(pipeline), 0, "nothing learns while aligning again")
-        feed(discFrame(), for: 2.0, from: time, session: session, pipeline: pipeline)
-        XCTAssertEqual(session.step, .focus)
+        XCTAssertEqual(session.info.resumeStep, .field)
+        time = feed(discFrame(), for: 2.0, from: time, session: session, pipeline: pipeline)
+        XCTAssertEqual(session.step, .field, "the circle moved: the mask is learned again")
         XCTAssertNil(session.info.resumeStep)
+        XCTAssertLessThan(progress(pipeline), 0.3, "learning started again (a redetect)")
+        time = feed(discFrame(), for: 3.2, from: time, session: session, pipeline: pipeline)
+        pipeline.confirmField()
+        feed(discFrame(), for: 0.2, from: time, session: session, pipeline: pipeline)
+        XCTAssertEqual(session.step, .focus)
     }
 
     func testAReadingBetweenThePassAndLostLimitsDoesNotGoBack() {
         let pipeline = makePipeline()
         let session = LabSetupSession()
-        var time = feed(discFrame(), for: 2.0, from: 0, session: session, pipeline: pipeline)
-        XCTAssertEqual(session.step, .focus)
+        var time = reachFocus(session: session, pipeline: pipeline)
         // One half 30% darker: fails passing (0.75) but not the looser limit (0.65).
         let uneven = SyntheticFrame.make(width: 1280, height: 720) { x, y in
             hypot(Double(x) - 640, Double(y) - 360) <= 300 ? (x >= 640 ? 140 : 200) : 10

@@ -47,7 +47,7 @@ struct SweepLibraryView: View {
     }
 
     private func detail(for set: SavedSweep) -> String {
-        var parts = ["\(set.frameCount) frames"]
+        var parts = [set.manifest?.guidedScan == true ? "Guided scan" : "\(set.frameCount) frames"]
         parts.append(set.byteCount.formatted(.byteCount(style: .file)))
         parts.append(set.recordedAt.formatted(date: .abbreviated, time: .shortened))
         if set.panoramaURL == nil, set.frameCount > 1 { parts.append("frames not joined") }

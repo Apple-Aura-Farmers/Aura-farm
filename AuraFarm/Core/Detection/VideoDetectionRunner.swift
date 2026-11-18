@@ -232,7 +232,7 @@ final class VideoDetectionRunner {
                         confidence: detection.confidence
                     )
                 },
-                pictureMoved: CaptureViewModel.pictureMoved(registered: shake.lastShift)
+                pictureMoved: PictureShift.pictureMoved(registered: shake.lastShift)
             )
 
             // A picture is kept when something new turns up, not on every frame that has

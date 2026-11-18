@@ -322,7 +322,9 @@ final class LineRuleTests: XCTestCase {
         XCTAssertNotEqual(route.last.edge.lineState, "confirmed")
     }
 
-    func testTheCsvEndsWithTheLineAttachSource() {
-        XCTAssertEqual(MovementLog.header.last, "line_attach_source")
+    func testTheLineAttachSourceIsFollowedOnlyByTheSpotAndCountingColumns() {
+        // 32 columns (spot check, coverage, counting, event detail, model, units, camera, phone, edge
+        // acceptance, camera drops and the guided scan's knob words) follow it.
+        XCTAssertEqual(MovementLog.header[MovementLog.header.count - 41], "line_attach_source")
     }
 }

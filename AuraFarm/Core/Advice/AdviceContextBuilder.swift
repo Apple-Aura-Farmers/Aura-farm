@@ -27,7 +27,11 @@ struct AdviceContextBuilder {
 
         var cautions: [String] = []
         if result.stoppedEarly { cautions.append("The sweep stopped early.") }
-        if result.framesKept < thresholds.fewFrames { cautions.append("Only a few frames were kept.") }
+        if result.viewsLooked < thresholds.fewFrames {
+            cautions.append(
+                result.isGuidedScan
+                    ? "Only a few fields of view were scanned." : "Only a few frames were kept.")
+        }
         if patterns.contains(.possibleMisidentification) {
             cautions.append("Some organisms may have been misidentified.")
         }
@@ -53,7 +57,7 @@ struct AdviceContextBuilder {
             }
         }
 
-        let frames = Double(max(result.framesKept, 1))
+        let frames = Double(max(result.viewsLooked, 1))
         let interpreted = interpretedCounts.values.compactMap {
             note, count -> AdviceContext.OrganismReading? in
             guard let abundance = note.abundance else { return nil }
@@ -62,7 +66,7 @@ struct AdviceContextBuilder {
             if band == .high && count < thresholds.minimumCountForHigh { band = .typical }
             return AdviceContext.OrganismReading(
                 note: note, count: count, perFrame: perFrame, band: band,
-                lowIsMeaningful: band != .low || result.framesKept >= thresholds.minimumFramesForLow)
+                lowIsMeaningful: band != .low || result.viewsLooked >= thresholds.minimumFramesForLow)
         }
         .sorted { $0.count != $1.count ? $0.count > $1.count : $0.note.displayName < $1.note.displayName }
 
@@ -89,7 +93,7 @@ struct AdviceContextBuilder {
         let unreadable = patterns.contains(.nothingInterpretable)
         let mixed = patterns.contains(.mixedSignals)
         let oneKind = patterns.contains(.onlyOneKind)
-        let fewFrames = result.framesKept < thresholds.fewFrames
+        let fewFrames = result.viewsLooked < thresholds.fewFrames
         let freshLabels = [
             tooFew ? "too few to say" : nil,
             result.stoppedEarly ? "sweep stopped early" : nil,
@@ -351,7 +355,7 @@ private struct Signals {
     /// False when nothing interpreted was counted: nothing readable is not low abundance.
     var lowAbundance: Bool {
         interpretedTotal > 0
-            && Double(interpretedTotal) / Double(max(result.framesKept, 1)) < thresholds.lowAbundancePerFrame
+            && Double(interpretedTotal) / Double(max(result.viewsLooked, 1)) < thresholds.lowAbundancePerFrame
     }
 
     /// False when nothing interpreted was counted: nothing readable is not low diversity.

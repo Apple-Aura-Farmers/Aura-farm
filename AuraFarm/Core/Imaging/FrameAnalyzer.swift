@@ -206,7 +206,7 @@ final class TravelSinceLastFrame {
     /// registration as `distance(to:)`, with the vertical flipped the way `ShakeEstimator`
     /// flips it, because Vision works bottom-up. It is the move that puts this frame back on
     /// the held one, so content on the slide has gone the other way (see
-    /// `CaptureViewModel.pictureMoved`).
+    /// `PictureShift.pictureMoved`).
     func offset(to buffer: CVPixelBuffer) -> CGPoint? {
         guard let held else { return nil }
         let request = VNTranslationalImageRegistrationRequest(targetedCVPixelBuffer: held)

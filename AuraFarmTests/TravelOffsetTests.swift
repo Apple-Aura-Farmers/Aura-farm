@@ -5,7 +5,7 @@ import XCTest
 /// `offset(to:)` is Vision's alignment translation with the vertical flipped to top-down.
 /// On these synthetic frames it comes out pointing the SAME way as the content's move: a
 /// frame whose content moved right and down by 40 px reads (+40, +40). Real footage may
-/// differ from this (see `CaptureViewModel.pictureMoved`, measured on a microscope), which
+/// differ from this (see `PictureShift.pictureMoved`, measured on a microscope), which
 /// is why the lab has a screen-mapping picker; these tests only pin the convention down.
 final class TravelOffsetTests: XCTestCase {
     private let size = 256

@@ -1,9 +1,6 @@
 #if DEBUG
     import SwiftUI
 
-    /// Seconds of stillness the stops test asks for.
-    let slideLabStillGoalSeconds = 2.0
-
     /// The big numbers under the camera strip: distance, stillness, hops.
     struct BigReadouts: View {
         var model: SlideMovementLabModel
@@ -57,6 +54,7 @@
     /// the crosshairs; this only reads out.
     struct GuideReadout: View {
         var model: SlideMovementLabModel
+        @State private var isEnding = false
 
         var body: some View {
             let info = model.guideInfo
@@ -79,6 +77,14 @@
                     showsHint: info.showsStageLimitHint, onTap: { model.stageLimit() }
                 )
                 .frame(maxWidth: .infinity)
+                if model.runControl.pendingEnd {
+                    EndingBanner(onKeepGoing: { model.endRun(.cancel) })
+                }
+                if !model.runControl.isFinished {
+                    Button("End run", role: .destructive) { isEnding = true }
+                        .buttonStyle(.bordered)
+                        .frame(maxWidth: .infinity)
+                }
             }
             .font(.footnote.monospaced())
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -86,6 +92,13 @@
             .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 10))
             .padding(.horizontal)
             .padding(.bottom, 4)
+            .confirmationDialog("End run", isPresented: $isEnding, titleVisibility: .visible) {
+                Button("End now", role: .destructive) { model.endRun(.now) }
+                if model.runControl.columnInProgress {
+                    Button("End after this column") { model.endRun(.afterColumn) }
+                }
+                Button("Cancel", role: .cancel) {}
+            }
         }
     }
 
@@ -196,17 +209,21 @@
         var model: SlideMovementLabModel
 
         var body: some View {
-            let stopReached =
-                model.test == .stops && model.readouts.stillSeconds >= slideLabStillGoalSeconds
+            // Read from `hapticInfo`, which is published at full rate: a tap is never held back by
+            // the throttled panels.
+            let haptics = model.hapticInfo
             Color.clear
                 .frame(width: 0, height: 0)
-                .sensoryFeedback(.impact(weight: .light), trigger: model.readouts.hopCount)
-                .sensoryFeedback(.warning, trigger: model.readouts.lostCount)
-                .sensoryFeedback(.impact(weight: .light), trigger: model.guideInfo.captureCount)
-                .sensoryFeedback(.impact(weight: .light), trigger: model.guideInfo.edgeCount)
-                .sensoryFeedback(.warning, trigger: model.guideInfo.wrongWayCount)
-                .sensoryFeedback(.success, trigger: model.guideInfo.edgeReachedCount)
-                .sensoryFeedback(.success, trigger: stopReached) { _, reached in reached }
+                .sensoryFeedback(.impact(weight: .light), trigger: haptics.hops)
+                .sensoryFeedback(.warning, trigger: haptics.lost)
+                .sensoryFeedback(.impact(weight: .light), trigger: haptics.captures)
+                .sensoryFeedback(.impact(weight: .light), trigger: haptics.edges)
+                .sensoryFeedback(.warning, trigger: haptics.wrongWays)
+                .sensoryFeedback(.impact(weight: .medium), trigger: haptics.nudges)
+                .sensoryFeedback(.impact(flexibility: .soft, intensity: 0.6), trigger: haptics.organisms)
+                .sensoryFeedback(.impact(weight: .medium), trigger: model.endActionCount)
+                .sensoryFeedback(.success, trigger: haptics.edgesReached)
+                .sensoryFeedback(.success, trigger: haptics.stopReached) { _, reached in reached }
                 // Align passed, focus found, field confirmed: a step forward.
                 .sensoryFeedback(.success, trigger: model.setupInfo.step) { old, new in
                     new.order > old.order
@@ -229,10 +246,10 @@
         }
 
         var body: some View {
-            let state = model.setupInfo.monitor.state
+            let state = model.hapticInfo.monitor
             Color.clear
                 .frame(width: 0, height: 0)
-                .sensoryFeedback(.impact(weight: .medium), trigger: model.guideInfo.stageLimitCount)
+                .sensoryFeedback(.impact(weight: .medium), trigger: model.hapticInfo.stageLimits)
                 .sensoryFeedback(.warning, trigger: state, condition: Self.paused)
                 .sensoryFeedback(.success, trigger: state, condition: Self.resumed)
         }

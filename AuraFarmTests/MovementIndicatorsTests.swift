@@ -5,11 +5,21 @@ import XCTest
 final class MovementIndicatorsTests: XCTestCase {
     /// A reference side of 100 px, so speed fractions read as px / 100 and a hop is at 30 px.
 
+    /// Readings arrive 0.1 s apart unless a test says otherwise: speed is shift per 0.1 s, so
+    /// every reading at the same instant (a zero gap) would read twice as fast.
+    private var clock = 0.0
+
     private func feed(
-        _ indicators: inout MovementIndicators, shake: CGPoint?, at seconds: Double = 0,
+        _ indicators: inout MovementIndicators, shake: CGPoint?, at time: Double? = nil,
         anchorOffset: CGPoint? = nil, position: CGPoint = .zero, isLost: Bool = false,
         event: HopOdometer.Event = .none
     ) {
+        let seconds =
+            time
+            ?? {
+                clock += 0.1
+                return clock
+            }()
         indicators.update(
             shake: shake, anchorOffset: anchorOffset, positionFields: position, isLost: isLost,
             event: event, referenceSide: 100, seconds: seconds, hopDistance: 30)

@@ -9,20 +9,21 @@ final class LabSetupFlowTests: XCTestCase {
         XCTAssertFalse(flow.update(focused: true, fieldConfirmed: true))
         XCTAssertEqual(flow.step, .align)
         XCTAssertTrue(flow.update(alignmentPassed: true))
-        XCTAssertEqual(flow.step, .focus)
+        XCTAssertEqual(flow.step, .field, "the eyepiece is found before focusing")
     }
 
-    func testFocusedMovesFocusOnToFieldAConfirmedFieldToStageAndAMeasuredStageToDone() {
+    func testAConfirmedFieldMovesOnToFocusFocusToStageAndAMeasuredStageToDone() {
         var flow = LabSetupFlow()
         flow.update(alignmentPassed: true)
-        XCTAssertFalse(flow.update(alignmentPassed: true), "align's answer is not focus's")
-        XCTAssertEqual(flow.step, .focus)
-        flow.update(focused: true)
+        XCTAssertFalse(flow.update(alignmentPassed: true), "align's answer is not field's")
+        XCTAssertFalse(flow.update(focused: true), "focus cannot come before the field")
         XCTAssertEqual(flow.step, .field)
-        XCTAssertFalse(flow.update(alignmentPassed: true, focused: true))
         flow.update(fieldConfirmed: true)
+        XCTAssertEqual(flow.step, .focus)
+        XCTAssertFalse(flow.update(alignmentPassed: true, fieldConfirmed: true))
+        flow.update(focused: true)
         XCTAssertEqual(flow.step, .stage)
-        XCTAssertFalse(flow.update(fieldConfirmed: true), "field's answer is not stage's")
+        XCTAssertFalse(flow.update(focused: true), "focus's answer is not stage's")
         flow.update(stageMeasured: true)
         XCTAssertEqual(flow.step, .done)
         XCTAssertTrue(flow.isDone)
@@ -31,7 +32,7 @@ final class LabSetupFlowTests: XCTestCase {
     func testOneStepAtATimeEvenWhenEverythingHolds() {
         var flow = LabSetupFlow()
         flow.update(alignmentPassed: true, focused: true, fieldConfirmed: true)
-        XCTAssertEqual(flow.step, .focus)
+        XCTAssertEqual(flow.step, .field)
     }
 
     func testRedoGoesBackToAlignAndRedoFieldToField() {
@@ -44,8 +45,17 @@ final class LabSetupFlowTests: XCTestCase {
         XCTAssertEqual(flow.step, .align)
     }
 
-    func testSkippingStartsAtFieldAndSkipGoesStraightToDone() {
-        XCTAssertEqual(LabSetupFlow(skippingAlignAndFocus: true).step, .field)
+    func testSkippingAlignAndFocusStartsAtFieldAndSkipsFocusButNotTheField() {
+        var skipping = LabSetupFlow(skippingAlignAndFocus: true)
+        XCTAssertEqual(skipping.step, .field)
+        skipping.update(fieldConfirmed: true)
+        XCTAssertEqual(skipping.step, .stage, "the field step ran; focus is skipped")
+        // Redo is all of it again, focus included.
+        skipping.redo()
+        skipping.update(alignmentPassed: true)
+        skipping.update(fieldConfirmed: true)
+        XCTAssertEqual(skipping.step, .focus)
+
         var flow = LabSetupFlow()
         flow.skip()
         XCTAssertEqual(flow.step, .done)
@@ -57,32 +67,29 @@ final class LabSetupFlowTests: XCTestCase {
         XCTAssertEqual(flow.stepNumber, 1)
         flow.update(alignmentPassed: true)
         XCTAssertEqual(flow.stepNumber, 2)
-        flow.update(focused: true)
-        XCTAssertEqual(flow.stepNumber, 3)
         flow.update(fieldConfirmed: true)
+        XCTAssertEqual(flow.stepNumber, 3)
+        flow.update(focused: true)
         XCTAssertEqual(flow.stepNumber, 4)
         flow.update(stageMeasured: true)
         XCTAssertEqual(flow.stepNumber, 4)
     }
 
-    func testALossInFocusReturnsToFocusAndALossInFieldOrStageReturnsToField() {
-        var flow = LabSetupFlow()
-        flow.update(alignmentPassed: true)
-        flow.alignmentLost()
-        XCTAssertEqual(flow.step, .align)
-        XCTAssertEqual(flow.resumeStep, .focus)
-        XCTAssertTrue(flow.update(alignmentPassed: true))
-        XCTAssertEqual(flow.step, .focus)
-        XCTAssertNil(flow.resumeStep)
-
-        for step in [LabSetupStep.field, .stage] {
-            var flow = LabSetupFlow(skippingAlignAndFocus: true)
-            if step == .stage { flow.update(fieldConfirmed: true) }
-            XCTAssertEqual(flow.step, step)
+    func testALossInFieldFocusOrStageReturnsToFieldAndFocusFollows() {
+        for lostAt in [LabSetupStep.field, .focus, .stage] {
+            var flow = LabSetupFlow()
+            flow.update(alignmentPassed: true)
+            if lostAt != .field { flow.update(fieldConfirmed: true) }
+            if lostAt == .stage { flow.update(focused: true) }
+            XCTAssertEqual(flow.step, lostAt)
             flow.alignmentLost()
             XCTAssertEqual(flow.step, .align)
-            flow.update(alignmentPassed: true)
-            XCTAssertEqual(flow.step, .field, "from \(step): the mask is learned again")
+            XCTAssertEqual(flow.resumeStep, .field, "from \(lostAt): the circle moved")
+            XCTAssertTrue(flow.update(alignmentPassed: true))
+            XCTAssertEqual(flow.step, .field, "from \(lostAt): the mask is learned again")
+            XCTAssertNil(flow.resumeStep)
+            flow.update(fieldConfirmed: true)
+            XCTAssertEqual(flow.step, .focus, "from \(lostAt): focus comes round again")
         }
     }
 
@@ -98,6 +105,6 @@ final class LabSetupFlowTests: XCTestCase {
         flow.redo()
         XCTAssertNil(flow.resumeStep)
         flow.update(alignmentPassed: true)
-        XCTAssertEqual(flow.step, .focus)
+        XCTAssertEqual(flow.step, .field)
     }
 }

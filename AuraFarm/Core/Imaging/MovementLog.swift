@@ -169,6 +169,69 @@ struct MovementLogRow: Equatable {
     /// "yes", "no" or "mark" on the row of a tap on an edge button, "auto" when the rule confirmed
     /// an edge by itself, else empty.
     var edgeFeedback = ""
+    /// Brief-touch mode: "brief_touch" or "hold_still", where the view is against the spot's window
+    /// ("in", "ahead", "behind" or empty), how long it has been inside, and the running count of
+    /// spots passed without a touch; the coverage step in fields. Empty without the guide.
+    var spotMode = ""
+    var spotWindow = ""
+    var touchSeconds: Double?
+    var missedSpots: Int?
+    var coverageStep: Double?
+    /// Live counting: whether it is on, whether the detector ran on this frame (else why not), how
+    /// long it took, and what it found and counted. Totals are running.
+    var countingActive = false
+    var detRan = false
+    var detSkipReason = ""
+    var detMilliseconds: Double?
+    var detFound: Int?
+    var detOutside: Int?
+    var detNewTally: Int?
+    var detNewMap: Int?
+    var detRepeatMap: Int?
+    var countTallyTotal: Int?
+    var countMapTotal: Int?
+    /// More about an event row: an organism counted (label, id, slide position, column) or the
+    /// run's summary.
+    var eventDetail = ""
+    /// The detector model counting ("v1" or "v2") and the boxes the guards dropped on this frame
+    /// as the eyepiece disc and as too big.
+    var detectorModel = ""
+    var detDropDisc: Int?
+    var detDropBig: Int?
+    /// The hardware the counting model runs on ("ne" or "gpu"), seconds since the previous analysed
+    /// frame, and what the camera and the phone were doing: the camera's measured rate, the
+    /// exposure and the ISO, the thermal state and the battery level (0 to 1).
+    var detUnits = ""
+    var frameDt: Double?
+    var cameraFps: Double?
+    var exposureMs: Double?
+    var iso: Double?
+    var thermalState = ""
+    var batteryLevel: Double?
+    /// The focus pause's second signal: the rolling box-sharpness reference, the latest sharpness
+    /// over it, and why the run is paused ("index_and_sharpness", "detail_lost", "alignment").
+    var sharpnessRef: Double?
+    var sharpnessShare: Double?
+    var pauseCause = ""
+    /// The detector's result arrives after its frame: when the frame it ran on was taken (run
+    /// seconds), and where its time went: crop and render, the model alone, and decoding.
+    var detFrameSeconds: Double?
+    var detPreMs: Double?
+    var detInferMs: Double?
+    var detDecodeMs: Double?
+    /// Which rule accepted the latest edge line ("strict" or "area"; empty without one), and the
+    /// detail ahead over the detail behind that the area rule used.
+    var lineAccept = ""
+    var areaAheadShare: Double?
+    /// The predicted edge's position along the leg at the column's x, and 1 on the readings where
+    /// "Edge should be here. Confirm?" shows.
+    var predictedEdgeAlong: Double?
+    var expectedEdgeAsk = false
+    /// Frames the camera output dropped as late so far (a running count).
+    var cameraDrops: Int?
+    /// The words the guided scan page showed on this row ("Bottom knob towards you"); empty in
+    /// the lab, which shows none.
+    var knobWords = ""
 }
 
 enum MovementLog {
@@ -201,6 +264,15 @@ enum MovementLog {
         "ghost_frames", "ghost_fallbacks", "line_state", "line_attached_count", "edge_mode",
         "sparse_skips", "line_before_energy", "line_beyond_energy",
         "edge_feedback", "line_attach_source",
+        "spot_mode", "spot_window", "touch_seconds", "missed_spots", "coverage_step",
+        "counting_active", "det_ran", "det_skip_reason", "det_ms", "det_found", "det_outside",
+        "det_new_tally", "det_new_map", "det_repeat_map", "count_tally_total", "count_map_total",
+        "event_detail", "detector_model", "det_drop_disc", "det_drop_big",
+        "det_units", "frame_dt", "camera_fps", "exposure_ms", "iso", "thermal_state", "battery_level",
+        "sharpness_ref", "sharpness_share", "pause_cause", "det_frame_seconds", "det_pre_ms",
+        "det_infer_ms", "det_decode_ms",
+        "line_accept", "area_ahead_share", "predicted_edge_along", "expected_edge_ask",
+        "camera_drops", "knob_words",
     ]
 
     static func csv(_ rows: [MovementLogRow]) -> String {
@@ -261,6 +333,25 @@ enum MovementLog {
             String(row.sparseSkips), number(row.edgeLine?.beforeEnergy, 2),
             number(row.edgeLine?.beyondEnergy, 2), row.edgeFeedback,
             row.edgeLine?.attachSource ?? "",
+            row.spotMode, row.spotWindow, number(row.touchSeconds, 2),
+            row.missedSpots.map(String.init) ?? "", number(row.coverageStep, 1),
+            row.spotMode.isEmpty ? "" : (row.countingActive ? "1" : "0"),
+            row.countingActive ? (row.detRan ? "1" : "0") : "", row.detSkipReason,
+            number(row.detMilliseconds, 1), row.detFound.map(String.init) ?? "",
+            row.detOutside.map(String.init) ?? "", row.detNewTally.map(String.init) ?? "",
+            row.detNewMap.map(String.init) ?? "", row.detRepeatMap.map(String.init) ?? "",
+            row.countTallyTotal.map(String.init) ?? "", row.countMapTotal.map(String.init) ?? "",
+            row.eventDetail, row.detectorModel, row.detDropDisc.map(String.init) ?? "",
+            row.detDropBig.map(String.init) ?? "",
+            row.detUnits, number(row.frameDt, 3), number(row.cameraFps, 1),
+            number(row.exposureMs, 2), number(row.iso, 0), row.thermalState,
+            number(row.batteryLevel, 2),
+            number(row.sharpnessRef, 1), number(row.sharpnessShare, 2), row.pauseCause,
+            number(row.detFrameSeconds, 3), number(row.detPreMs, 1), number(row.detInferMs, 1),
+            number(row.detDecodeMs, 1),
+            row.lineAccept, number(row.areaAheadShare, 3), number(row.predictedEdgeAlong, 3),
+            row.lineState.isEmpty ? "" : (row.expectedEdgeAsk ? "1" : "0"),
+            row.cameraDrops.map(String.init) ?? "", row.knobWords,
         ]
     }
 

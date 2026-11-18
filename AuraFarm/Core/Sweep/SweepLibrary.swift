@@ -22,12 +22,12 @@ struct SavedSweep: Identifiable, Equatable {
 /// Lists what is in the frame sets folder. Read only: nothing here moves, edits or deletes
 /// a frame. Frames are the raw data the counting work will be trained on.
 enum SweepLibrary {
-    static func sweeps(in directory: URL = SweepRecorder.sweepsDirectory) -> [SavedSweep] {
+    static func sweeps(in directory: URL = SweepStore.sweepsDirectory) -> [SavedSweep] {
         sweepFolders(in: directory)
             .map { folder in
                 let manifest = manifest(in: folder)
                 let frames = frameURLs(in: folder)
-                let panorama = folder.appending(path: SweepRecorder.panoramaFileName)
+                let panorama = folder.appending(path: SweepStore.panoramaFileName)
                 let hasPanorama = FileManager.default.fileExists(atPath: panorama.path)
                 // Everything in the folder counts towards the store, the joined image included.
                 let bytes = (frames + (hasPanorama ? [panorama] : [])).reduce(into: Int64(0)) {
@@ -50,7 +50,7 @@ enum SweepLibrary {
     /// Like `sweeps(in:)` but reads only each manifest: no frame list, sizes or panorama, so
     /// `frameURLs` is empty, `byteCount` is 0 and `panoramaURL` is nil. For callers that only
     /// need the sample details, such as the plot history.
-    static func manifestsOnly(in directory: URL = SweepRecorder.sweepsDirectory) -> [SavedSweep] {
+    static func manifestsOnly(in directory: URL = SweepStore.sweepsDirectory) -> [SavedSweep] {
         sweepFolders(in: directory)
             .map { folder in
                 let manifest = manifest(in: folder)
@@ -105,7 +105,7 @@ enum SweepLibrary {
 
     /// Bytes used by every saved sweep. The store holds 50 MB, so the app shows how close
     /// it is to full.
-    static func totalBytes(in directory: URL = SweepRecorder.sweepsDirectory) -> Int64 {
+    static func totalBytes(in directory: URL = SweepStore.sweepsDirectory) -> Int64 {
         sweeps(in: directory).reduce(into: Int64(0)) { $0 += $1.byteCount }
     }
 }
