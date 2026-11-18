@@ -65,6 +65,8 @@ struct FarmDetailView: View {
             }
         }
         .navigationBarTitleDisplayMode(.inline)
+        // The tab bar is for browsing and adding plots; inside one farmer it is just in the way.
+        .toolbar(.hidden, for: .tabBar)
         .auraBackground()
     }
 
