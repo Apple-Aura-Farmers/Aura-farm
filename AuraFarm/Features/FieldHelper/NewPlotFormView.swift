@@ -45,6 +45,7 @@ struct NewPlotFormView: View {
             // A Form, so the rows, the grouping and the scroll out from under the keyboard are
             // all the system's. Nothing here draws a field of its own.
             Form {
+            Group {
                 Section("Farmer") {
                     TextField("Farmer's name", text: $farmerName)
                         .textContentType(.name)
@@ -82,7 +83,10 @@ struct NewPlotFormView: View {
 
                 Section("The land") { preview }
             }
+            .listRowBackground(Color.auraRow)
+        }
             .animation(.snappy, value: isNameTaken)
+            .auraBackground()
             .navigationTitle("New Plot")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

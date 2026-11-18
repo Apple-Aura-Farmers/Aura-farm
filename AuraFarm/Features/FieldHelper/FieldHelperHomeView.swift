@@ -68,7 +68,7 @@ struct FieldHelperHomeView: View {
             switch self {
             case .addFarm: "add"
             case .filePlot(let draft): draft.id.uuidString
-            case .plot(let selection): selection.plot.id.uuidString
+            case .plot: "plot"
             }
         }
     }
@@ -122,8 +122,10 @@ struct FieldHelperHomeView: View {
                 case .plot(let selection):
                     plotCard(selection)
                         // Only as tall as it needs to be, so the land stays in view behind it.
-                        .presentationDetents([.height(240)])
-                        .presentationDragIndicator(.visible)
+                        .presentationDetents([.height(210)])
+                        .presentationBackground(Color.auraBase)
+                        .preferredColorScheme(.dark)
+                        .presentationDragIndicator(.hidden)
                         .presentationBackgroundInteraction(.enabled)
                 }
             }
@@ -269,7 +271,7 @@ struct FieldHelperHomeView: View {
     /// through to its tests. The sheet it sits in gives it the drag and the dismiss, so there
     /// is no card chrome of its own here.
     private func plotCard(_ selection: Selection) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             Text("\(selection.farm.farmerName) · \(selection.farm.title(of: selection.plot))")
                 .font(.title2.bold())
             if !selection.plot.name.isEmpty {
@@ -282,8 +284,9 @@ struct FieldHelperHomeView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
+            PlotAddress(corners: selection.plot.corners)
 
-            Spacer(minLength: 0)
+            Spacer(minLength: 8)
 
             Button {
                 // The sheet goes first: pushing out from under a sheet leaves it hanging over
@@ -293,6 +296,7 @@ struct FieldHelperHomeView: View {
             } label: {
                 Text("View Test Results")
                     .font(.headline)
+                    .foregroundStyle(.black)
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
@@ -300,8 +304,8 @@ struct FieldHelperHomeView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 20)
-        .padding(.top, 24)
-        .padding(.bottom, 20)
+        .padding(.top, 22)
+        .padding(.bottom, 16)
     }
 
     // MARK: Controls
@@ -372,4 +376,40 @@ struct FieldHelperHomeView: View {
                             ])
                         ])
                 ]))
+}
+
+
+/// The street address of a plot's middle, looked up from the map data when the card opens.
+private struct PlotAddress: View {
+    let corners: [GeoPoint]
+    @State private var address: String?
+
+    private var middle: GeoPoint? { LandGeometry.centre(of: corners) }
+
+    var body: some View {
+        if let middle {
+            // The place name is bold and bright as in the design; the coordinates it falls back
+            // to stay as they were.
+            Group {
+                if let address {
+                    Text(address).font(.callout.weight(.semibold)).foregroundStyle(.primary)
+                } else {
+                    Label(String(format: "%.4f, %.4f", middle.latitude, middle.longitude),
+                          systemImage: "mappin.and.ellipse")
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                }
+            }
+                .task(id: corners) {
+                    let place = try? await CLGeocoder().reverseGeocodeLocation(
+                        CLLocation(latitude: middle.latitude, longitude: middle.longitude)
+                    ).first
+                    // shortcut: the geocoder has nothing for open land or sea, so the coordinates stay.
+                    let named = [place?.name, place?.locality, place?.administrativeArea,
+                                 place?.country, place?.ocean, place?.inlandWater]
+                        .compactMap { $0 }.joined(separator: ", ")
+                    address = named.isEmpty ? nil : named
+                }
+        }
+    }
 }

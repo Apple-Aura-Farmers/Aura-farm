@@ -28,6 +28,7 @@ struct SoilMeasurementsView: View {
         Group {
             if let farm {
                 form(for: farm)
+                    .auraBackground()
             } else {
                 ContentUnavailableView("This farm is no longer here", systemImage: "leaf")
             }
@@ -69,6 +70,7 @@ struct SoilMeasurementsView: View {
 
     private func form(for farm: Farm) -> some View {
         List {
+            Group {
             biodiversity(for: farm)
             npk
             acidity
@@ -76,6 +78,8 @@ struct SoilMeasurementsView: View {
             fertilizer
             advice(for: farm)
             problems
+            }
+            .listRowBackground(Color.auraRow)
         }
     }
 

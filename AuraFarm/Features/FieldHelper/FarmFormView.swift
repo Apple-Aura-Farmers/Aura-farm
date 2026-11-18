@@ -36,6 +36,7 @@ struct FarmFormView: View {
     var body: some View {
         NavigationStack {
             Form {
+            Group {
                 Section("Farm") {
                     TextField("Farm name", text: $name)
                 }
@@ -57,7 +58,10 @@ struct FarmFormView: View {
                     }
                 }
             }
+            .listRowBackground(Color.auraRow)
+        }
             .textInputAutocapitalization(.words)
+            .auraBackground()
             .navigationTitle(editing == nil ? "Add a farm" : "Edit farm")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

@@ -67,10 +67,12 @@ struct FarmDetailView: View {
             }
         }
         .navigationBarTitleDisplayMode(.inline)
+        .auraBackground()
     }
 
     private func details(for farm: Farm) -> some View {
         List {
+            Group {
             if !farm.allCorners.isEmpty {
                 Section {
                     LandMapView(outlines: farm.plots.map(\.corners), isInteractive: true)
@@ -98,6 +100,8 @@ struct FarmDetailView: View {
             labResultsSection
 
             adviceSection(for: farm)
+            }
+            .listRowBackground(Color.auraRow)
         }
         .task(id: farm.id) {
             let id = farm.id
