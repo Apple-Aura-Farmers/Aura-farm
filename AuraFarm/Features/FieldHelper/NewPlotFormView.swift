@@ -22,6 +22,9 @@ struct NewPlotFormView: View {
 
     @State private var farmerName: String
     @State private var plotName: String
+    /// Whether the farmer is being typed in rather than picked. It stays so while typing, even
+    /// if the name comes to match a known farmer, so the field does not vanish under the keyboard.
+    @State private var isNewFarmer = true
     @FocusState private var focus: Field?
 
     init(
@@ -47,22 +50,24 @@ struct NewPlotFormView: View {
             Form {
                 Group {
                     Section("Farmer") {
-                        TextField("Farmer's name", text: $farmerName)
-                            .textContentType(.name)
-                            .textInputAutocapitalization(.words)
-                            .autocorrectionDisabled()
-                            .focused($focus, equals: .farmer)
-                            .submitLabel(.next)
-                            .onSubmit { focus = .plot }
-
-                        // A Picker rather than a list under the field: the control iOS already has
-                        // for choosing one of a few things, so it opens, scrolls and closes itself.
+                        // One dropdown: a farmer already on the phone, or a new one, which
+                        // opens a field to type the name in.
                         if !known.isEmpty {
-                            Picker("Already on this phone", selection: $farmerName) {
+                            Picker("Farmer", selection: farmerChoice) {
                                 ForEach(known, id: \.self) { name in
                                     Text(name).tag(name)
                                 }
+                                Text("New farmer").tag(Self.newFarmerTag)
                             }
+                        }
+                        if isNewFarmer || known.isEmpty {
+                            TextField("Farmer's name", text: $farmerName)
+                                .textContentType(.name)
+                                .textInputAutocapitalization(.words)
+                                .autocorrectionDisabled()
+                                .focused($focus, equals: .farmer)
+                                .submitLabel(.next)
+                                .onSubmit { focus = .plot }
                         }
                     }
 
@@ -86,6 +91,8 @@ struct NewPlotFormView: View {
                 .listRowBackground(Color.auraRow)
             }
             .animation(.snappy, value: isNameTaken)
+            // Coming back from editing the outline with a known farmer already chosen.
+            .onAppear { isNewFarmer = !known.contains(farmerName) }
             .auraBackground()
             .navigationTitle("New Plot")
             .navigationBarTitleDisplayMode(.inline)
@@ -102,6 +109,18 @@ struct NewPlotFormView: View {
     }
 
     // MARK: The farmer
+
+    private static let newFarmerTag = "\u{0}new"
+
+    private var farmerChoice: Binding<String> {
+        Binding(
+            get: { isNewFarmer ? Self.newFarmerTag : farmerName },
+            set: { choice in
+                isNewFarmer = choice == Self.newFarmerTag
+                farmerName = isNewFarmer ? "" : choice
+                if isNewFarmer { focus = .farmer }
+            })
+    }
 
     /// Every farmer the phone knows, for the picker.
     private var known: [String] {

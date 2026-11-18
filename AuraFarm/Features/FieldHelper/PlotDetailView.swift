@@ -36,6 +36,33 @@ struct PlotDetailView: View {
     }
 
     private func details(for plot: Plot, in farm: Farm) -> some View {
+        ScrollViewReader { proxy in
+            list(for: plot, in: farm)
+                .safeAreaInset(edge: .bottom) {
+                    Button {
+                        withAnimation { proxy.scrollTo(Self.adviceID, anchor: .top) }
+                    } label: {
+                        Label("Recommendation", systemImage: "sparkle")
+                            .font(.headline)
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 28)
+                            .padding(.vertical, 14)
+                            .background(
+                                LinearGradient(
+                                    colors: [.indigo, .purple, .pink, .orange],
+                                    startPoint: .leading, endPoint: .trailing),
+                                in: .capsule)
+                    }
+                    .shadow(color: .purple.opacity(0.5), radius: 12)
+                    .padding(.bottom, 8)
+                }
+        }
+    }
+
+    /// Where the Recommendation button scrolls to: the start of "What to do next".
+    fileprivate static let adviceID = "advice"
+
+    private func list(for plot: Plot, in farm: Farm) -> some View {
         List {
             Group {
                 if !plot.corners.isEmpty {
@@ -230,6 +257,7 @@ struct PlotDetailView: View {
             } header: {
                 Text("What to do next")
             }
+            .id(Self.adviceID)
         }
     }
 }
@@ -274,6 +302,7 @@ private struct FarmAdvice: View {
                         ? ", with the soil measurements above."
                         : " only.")
             )
+            .id(PlotDetailView.adviceID)
             exportSection
         }
     }
