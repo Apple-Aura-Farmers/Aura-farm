@@ -15,7 +15,7 @@ import Foundation
 /// percentage of the soil by weight, and fertilizer in kilograms per hectare. They are the units
 /// a soil lab report usually gives; if the team reports in others, change them here and in the
 /// form together.
-struct SoilMeasurements: Codable, Equatable {
+struct SoilMeasurements: Codable, Equatable, Identifiable {
     /// This measurement's own id, so the records can hold one row per farm's soil and replace
     /// it rather than collecting a row for every save.
     var id = UUID()
@@ -44,6 +44,14 @@ struct SoilMeasurements: Codable, Equatable {
     var scientistAlertedAt: Date?
     /// When these were last saved.
     var updatedAt = Date()
+    /// The day the helper took these readings, which they can set. A plot keeps one of these per
+    /// visit, and the advice is written from the newest.
+    var measuredAt = Date()
+
+    /// The newest reading that has something in it, which is what the advice is written from.
+    static func latest(in log: [SoilMeasurements]) -> SoilMeasurements? {
+        log.filter { !$0.isEmpty }.max { $0.measuredAt < $1.measuredAt }
+    }
 
     /// True when nothing has been filled in. The alert does not count: a soil nobody has
     /// measured can still be waiting on a scientist.
@@ -75,6 +83,8 @@ struct SoilMeasurements: Codable, Equatable {
             Double.self, forKey: .fertilizerKilogramsPerHectare)
         scientistAlertedAt = try stored.decodeIfPresent(Date.self, forKey: .scientistAlertedAt)
         updatedAt = try stored.decodeIfPresent(Date.self, forKey: .updatedAt) ?? Date()
+        // Saved before readings were dated: the day it was saved is the best there is.
+        measuredAt = try stored.decodeIfPresent(Date.self, forKey: .measuredAt) ?? updatedAt
     }
 
     init(
@@ -83,7 +93,7 @@ struct SoilMeasurements: Codable, Equatable {
         phMethod: PHMethod? = nil, phFieldWater: PHFieldWater? = nil,
         fertilizerType: FertilizerType? = nil,
         fertilizerProduct: String? = nil, fertilizerKilogramsPerHectare: Double? = nil,
-        scientistAlertedAt: Date? = nil, updatedAt: Date = Date()
+        scientistAlertedAt: Date? = nil, updatedAt: Date = Date(), measuredAt: Date? = nil
     ) {
         self.id = id
         self.nitrogen = nitrogen
@@ -98,6 +108,7 @@ struct SoilMeasurements: Codable, Equatable {
         self.fertilizerKilogramsPerHectare = fertilizerKilogramsPerHectare
         self.scientistAlertedAt = scientistAlertedAt
         self.updatedAt = updatedAt
+        self.measuredAt = measuredAt ?? updatedAt
     }
 
     /// What is wrong with the numbers, in words, for the form to show. Empty when all is well.

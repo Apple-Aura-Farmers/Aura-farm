@@ -599,7 +599,7 @@ private struct MeasurementsPage: View {
     private var intro: String {
         var text =
             "Recorded by the field helper, separately from the microscope. Each reading is placed against provisional standards for flooded rice, not graded."
-        if let updated = report.soilUpdatedAt { text += " Updated \(day(updated))." }
+        if let updated = report.soilUpdatedAt { text += " Measured \(day(updated))." }
         return text
     }
 

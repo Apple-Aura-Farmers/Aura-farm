@@ -6,12 +6,14 @@ import SwiftUI
 /// Biodiversity comes first because it is the thing the helper cannot read off a probe. Until
 /// a scientist has looked at a sample there is nothing to show, so that card is the way to ask
 /// for one; after that it is the waiting; after that it is the result, which opens in full.
-/// The measurements below it are the helper's own, and are kept when Save is tapped, both on
-/// the phone and in the records.
+/// The measurements below it are the helper's own: one visit's readings, new or an earlier one
+/// being corrected, kept when Save is tapped, both on the phone and in the records.
 struct SoilMeasurementsView: View {
     /// Looked up each time, so the screen follows changes made anywhere else.
     let farmID: UUID
     let plotID: UUID
+    /// The measurement being edited, or nil to add a new one.
+    var entryID: UUID? = nil
 
     @Environment(FarmStore.self) private var store
     @Environment(\.dismiss) private var dismiss
@@ -45,8 +47,8 @@ struct SoilMeasurementsView: View {
             }
         }
         .task(id: plotID) {
-            if !hasLoaded, let soil = plot?.soil {
-                draft = soil
+            if !hasLoaded, let entry = plot?.soilLog.first(where: { $0.id == entryID }) {
+                draft = entry
             }
             hasLoaded = true
             guard let farm, let plot else { return }
@@ -60,11 +62,11 @@ struct SoilMeasurementsView: View {
     private var title: some View {
         VStack(spacing: 0) {
             Text(
-                Calendar.current.isDateInToday(draft.updatedAt)
-                    ? "Today" : draft.updatedAt.formatted(.dateTime.weekday(.wide))
+                Calendar.current.isDateInToday(draft.measuredAt)
+                    ? "Today" : draft.measuredAt.formatted(.dateTime.weekday(.wide))
             )
             .font(.headline)
-            Text(draft.updatedAt, format: .dateTime.day().month(.abbreviated).year())
+            Text(draft.measuredAt, format: .dateTime.day().month(.abbreviated).year())
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -74,10 +76,7 @@ struct SoilMeasurementsView: View {
         List {
             Group {
                 biodiversity(for: farm)
-                npk
-                acidity
-                organicCarbon
-                fertilizer
+                SoilMeasurementSections(draft: $draft, isEditable: true)
                 advice(for: farm)
                 problems
             }
@@ -107,17 +106,7 @@ struct SoilMeasurementsView: View {
     /// The two states before a result: nobody asked yet, and asked and waiting.
     private func waitingCard(for farm: Farm) -> some View {
         VStack(spacing: 14) {
-            if draft.scientistAlertedAt == nil {
-                Text("You haven't assigned the scientist yet")
-                    .multilineTextAlignment(.center)
-                    .foregroundStyle(.secondary)
-                Button("Send alert") {
-                    draft.scientistAlertedAt = Date()
-                    save(closing: false)
-                }
-                .buttonStyle(.borderedProminent)
-                .buttonBorderShape(.capsule)
-            } else {
+            if let asked = plot?.scientistAlertedAt {
                 Text("Wait for the scientist to send you the result.")
                     .multilineTextAlignment(.center)
                     .foregroundStyle(.secondary)
@@ -125,11 +114,19 @@ struct SoilMeasurementsView: View {
                     .buttonStyle(.bordered)
                     .buttonBorderShape(.capsule)
                     .disabled(true)
-                Text(
-                    "Asked \(draft.scientistAlertedAt!.formatted(date: .abbreviated, time: .shortened))"
-                )
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                Text("Asked \(asked.formatted(date: .abbreviated, time: .shortened))")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                Text("You haven't assigned the scientist yet")
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(.secondary)
+                Button("Send alert") {
+                    guard let plot else { return }
+                    Task { await store.alertScientist(for: plot, in: farm) }
+                }
+                .buttonStyle(.borderedProminent)
+                .buttonBorderShape(.capsule)
             }
         }
         .frame(maxWidth: .infinity)
@@ -138,107 +135,15 @@ struct SoilMeasurementsView: View {
 
     // MARK: The helper's own measurements
 
-    private var npk: some View {
-        Section {
-            NutrientBar(health: draft.npkHealth)
-                .listRowSeparator(.hidden)
-            numberRow("Nitrogen (N)", value: $draft.nitrogen, unit: "mg/kg")
-            numberRow("Phosphorous (P)", value: $draft.phosphorus, unit: "mg/kg")
-            numberRow("Potassium (K)", value: $draft.potassium, unit: "mg/kg")
-        } header: {
-            Text("NPK")
-        } footer: {
-            Text(
-                "Milligrams per kilogram of soil. Standard: N \(SoilStandards.nitrogen.description), "
-                    + "P \(SoilStandards.phosphorus.description), "
-                    + "K \(SoilStandards.potassium.description). The standards are placeholders "
-                    + "and have not been checked by an agronomist."
-            )
-        }
-    }
-
-    private var acidity: some View {
-        Section {
-            VStack(spacing: 6) {
-                Slider(
-                    value: Binding(get: { draft.ph ?? 7 }, set: { draft.ph = $0 }),
-                    in: 0...14, step: 0.1
-                )
-                .accessibilityLabel("Acidity")
-                .accessibilityValue(reading(draft.ph))
-                HStack {
-                    Text("acidic")
-                    Spacer()
-                    Text("neutral")
-                    Spacer()
-                    Text("alkaline")
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            }
-            LabeledContent("pH", value: reading(draft.ph))
-            if draft.ph != nil {
-                Button("Clear", role: .destructive) { draft.ph = nil }
-            }
-            Picker("Field at the time", selection: $draft.phFieldWater) {
-                Text("Not recorded").tag(PHFieldWater?.none)
-                ForEach(PHFieldWater.allCases) { Text($0.label).tag(PHFieldWater?.some($0)) }
-            }
-        } header: {
-            Text("Acidity (pH)")
-        } footer: {
-            Text(
-                "Provisional target for flooded rice: about pH \(SoilStandards.ph.description). "
-                    + "Flooding often moves pH toward neutral, so a reading from dry soil may "
-                    + "differ from the pH around the roots once the field is flooded."
-            )
-        }
-    }
-
-    private var organicCarbon: some View {
-        Section {
-            numberRow("SOC", value: $draft.organicCarbonPercent, unit: "%")
-        } header: {
-            Text("Soil Organic Carbon")
-        } footer: {
-            Text("Standard: \(SoilStandards.organicCarbon.description) percent by weight.")
-        }
-    }
-
-    private var fertilizer: some View {
-        Section {
-            // Picked from a short list, not typed, so the same answer always reads the same.
-            Picker("Type", selection: $draft.fertilizerType) {
-                Text("Choose…").tag(FertilizerType?.none)
-                ForEach(FertilizerType.allCases) { Text($0.label).tag(FertilizerType?.some($0)) }
-            }
-            if let fertilizerType = draft.fertilizerType {
-                Text(fertilizerType.definition)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-            TextField(
-                "Product name (optional)",
-                text: Binding(
-                    get: { draft.fertilizerProduct ?? "" },
-                    set: { draft.fertilizerProduct = $0.isEmpty ? nil : $0 })
-            )
-            .textInputAutocapitalization(.sentences)
-            numberRow("Amount", value: $draft.fertilizerKilogramsPerHectare, unit: "kg/ha")
-        } header: {
-            Text("Fertilizer")
-        } footer: {
-            Text("What has been put on this land, and how much per hectare.")
-        }
-    }
-
     /// The advice for the newest test, written on the phone from these measurements.
     @ViewBuilder
     private func advice(for farm: Farm) -> some View {
         if let latest = tests?.first {
-            SoilAdviceSection(test: latest, soil: draft.isEmpty ? nil : draft)
+            // The newest measurement, which may be this one or a later one already kept.
+            let soil = SoilMeasurements.latest(in: (plot?.soilLog ?? []).filter { $0.id != draft.id } + [draft])
+            SoilAdviceSection(test: latest, soil: soil)
                 // A different test, or different numbers, is advice to look at afresh.
-                .id(AdviceKey(test: latest.id, soil: SoilInputs(draft.isEmpty ? nil : draft)))
+                .id(AdviceKey(test: latest.id, soil: SoilInputs(soil)))
         }
     }
 
@@ -254,26 +159,6 @@ struct SoilMeasurementsView: View {
         }
     }
 
-    // MARK: Pieces
-
-    /// One optional number: a label, a box that takes a decimal, and its unit.
-    private func numberRow(_ label: String, value: Binding<Double?>, unit: String) -> some View {
-        LabeledContent(label) {
-            HStack(spacing: 6) {
-                TextField("—", value: value, format: .number)
-                    .keyboardType(.decimalPad)
-                    .multilineTextAlignment(.trailing)
-                    .frame(maxWidth: 110)
-                Text(unit)
-                    .foregroundStyle(.secondary)
-            }
-        }
-    }
-
-    private func reading(_ value: Double?) -> String {
-        guard let value else { return "Not recorded" }
-        return value.formatted(.number.precision(.fractionLength(0...1)))
-    }
 
     private func save(closing: Bool = true) {
         guard let farm, let plot, draft.problems.isEmpty else { return }
@@ -282,7 +167,7 @@ struct SoilMeasurementsView: View {
         draft = saved
         isSaving = true
         Task {
-            await store.saveSoil(saved.isUnrecorded ? nil : saved, for: plot, in: farm)
+            await store.saveSoil(saved, for: plot, in: farm)
             isSaving = false
             if closing { dismiss() }
         }
@@ -297,9 +182,9 @@ private struct AdviceKey: Hashable {
 
 /// The result card: how much life the microscope found, how sure that is, and how many other
 /// tests this farm has waiting behind it.
-private struct BiodiversityRow: View {
+struct BiodiversityRow: View {
     let test: FarmTest
-    let others: Int
+    var others = 0
 
     var body: some View {
         HStack(spacing: 14) {
@@ -339,7 +224,7 @@ private struct BiodiversityRow: View {
 }
 
 /// Where the three nutrients sit together, from needing work to where they should be.
-private struct NutrientBar: View {
+struct NutrientBar: View {
     let health: Double?
 
     var body: some View {

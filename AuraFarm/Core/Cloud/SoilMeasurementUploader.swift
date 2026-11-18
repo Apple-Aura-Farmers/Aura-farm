@@ -1,7 +1,8 @@
 import Foundation
 import Supabase
 
-/// Sends what the helper measured on each plot to `soil_measurements`, and reads it back.
+/// Sends what the helper measured on each plot to `soil_measurements`, a row per visit, and reads
+/// it back.
 ///
 /// The measurements are already on the phone before this runs, so a failure here costs the
 /// sending and not the reading: a helper out of signal records the soil now and it goes up
@@ -32,31 +33,29 @@ struct SoilMeasurementUploader {
         self.client = client
     }
 
-    /// Writes a plot's soil, or takes the row away when there is nothing left to keep.
-    ///
-    /// An upsert on the plot, not on the measurement's own id: a plot has one soil, and a
-    /// phone that was reinstalled would otherwise write a second row for the same land.
-    func upload(_ soil: SoilMeasurements?, forPlot plotID: UUID, inFarm farmID: UUID) async throws {
+    /// Writes one measurement, replacing the row with the same id if it was saved before.
+    func upload(_ soil: SoilMeasurements, forPlot plotID: UUID, inFarm farmID: UUID) async throws {
         do {
-            guard let soil, !soil.isUnrecorded else {
-                try await client
-                    .from("soil_measurements")
-                    .delete()
-                    .eq("plot_id", value: plotID)
-                    .execute()
-                return
-            }
             try await client
                 .from("soil_measurements")
-                .upsert(StoredSoilRow(soil: soil, plotID: plotID, farmID: farmID), onConflict: "plot_id")
+                .upsert(StoredSoilRow(soil: soil, plotID: plotID, farmID: farmID), onConflict: "id")
                 .execute()
         } catch {
             throw Self.readable(error)
         }
     }
 
-    /// Every plot's soil that this account can see, by plot.
-    func fetch() async throws -> [UUID: SoilMeasurements] {
+    /// Takes one measurement out of the records.
+    func delete(_ id: UUID) async throws {
+        do {
+            try await client.from("soil_measurements").delete().eq("id", value: id).execute()
+        } catch {
+            throw Self.readable(error)
+        }
+    }
+
+    /// Every plot's measurements that this account can see, by plot.
+    func fetch() async throws -> [UUID: [SoilMeasurements]] {
         do {
             let rows: [StoredSoilRow] =
                 try await client
@@ -64,12 +63,11 @@ struct SoilMeasurementUploader {
                 .select(
                     "id, farm_id, plot_id, nitrogen, phosphorus, potassium, ph, organic_carbon_percent, "
                         + "fertilizer_product, fertilizer_kg_per_hectare, scientist_alerted_at, "
-                        + "updated_at"
+                        + "updated_at, measured_at"
                 )
                 .execute()
                 .value
-            return Dictionary(
-                rows.map { ($0.plotID, $0.measurements) }, uniquingKeysWith: { first, _ in first })
+            return Dictionary(grouping: rows, by: \.plotID).mapValues { $0.map(\.measurements) }
         } catch {
             throw Self.readable(error)
         }
@@ -96,6 +94,7 @@ struct StoredSoilRow: Codable {
     var fertilizerKilogramsPerHectare: Double?
     var scientistAlertedAt: Date?
     var updatedAt: Date
+    var measuredAt: Date
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -110,6 +109,7 @@ struct StoredSoilRow: Codable {
         case fertilizerKilogramsPerHectare = "fertilizer_kg_per_hectare"
         case scientistAlertedAt = "scientist_alerted_at"
         case updatedAt = "updated_at"
+        case measuredAt = "measured_at"
     }
 
     init(soil: SoilMeasurements, plotID: UUID, farmID: UUID) {
@@ -125,6 +125,7 @@ struct StoredSoilRow: Codable {
         fertilizerKilogramsPerHectare = soil.fertilizerKilogramsPerHectare
         scientistAlertedAt = soil.scientistAlertedAt
         updatedAt = soil.updatedAt
+        measuredAt = soil.measuredAt
     }
 
     var measurements: SoilMeasurements {
@@ -132,6 +133,6 @@ struct StoredSoilRow: Codable {
             id: id, nitrogen: nitrogen, phosphorus: phosphorus, potassium: potassium, ph: ph,
             organicCarbonPercent: organicCarbonPercent, fertilizerProduct: fertilizerProduct,
             fertilizerKilogramsPerHectare: fertilizerKilogramsPerHectare,
-            scientistAlertedAt: scientistAlertedAt, updatedAt: updatedAt)
+            scientistAlertedAt: scientistAlertedAt, updatedAt: updatedAt, measuredAt: measuredAt)
     }
 }

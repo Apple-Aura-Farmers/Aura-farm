@@ -157,7 +157,7 @@ extension AdviceReport {
             reasons: test.estimate.reasons,
             followUp: test.estimate.followUp,
             education: AdviceEducation(land?.soil),
-            soilUpdatedAt: (land?.soil?.isEmpty == false) ? land?.soil?.updatedAt : nil,
+            soilUpdatedAt: (land?.soil?.isEmpty == false) ? land?.soil?.measuredAt : nil,
             history: points,
             frameSources: frameSources(test.sweep.frameURLs),
             recommendation: recommendation,
