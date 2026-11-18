@@ -1,7 +1,7 @@
 # Aura Farm
 
-An iOS app that turns an iPhone and a microscope into an on-site soil test, and keeps the
-results by farm.
+An iOS app that turns an iPhone and a microscope into an on-site soil test, and a Mac
+app that keeps the results by farm and field.
 
 A field helper mounts the phone on a microscope, prepares a soil sample with the
 in-app guide, records the sample, and the app looks for the microbes that indicate
@@ -222,11 +222,14 @@ the feedback helpers gave. It checks rule-following, not whether advice is right
 | Scheme | Builds |
 |---|---|
 | `AuraFarm` | The iOS field app and its tests |
+| `AuraFarmManager` | The Mac farm manager and its tests |
 
 Run the unit tests:
 
 ```bash
 xcodebuild test -scheme AuraFarm -destination 'platform=iOS Simulator,name=iPhone 17'
+xcodebuild test -scheme AuraFarmManager -destination 'platform=macOS'
+swift test --package-path AuraFarmKit
 ```
 
 The simulator name has to match a runtime installed on your machine;
@@ -267,7 +270,14 @@ AuraFarm/               iOS field app
     SampleSetup/  Capture/  Results/  SweepLibrary/  Workbench/
   Resources/            Core ML model
 AuraFarmTests/          Unit tests for the iOS app
-AuraFarmKit/            Swift package with the organism group names
+AuraFarmManager/        macOS farm manager
+  App/                  App entry point, file opening, menu commands
+  Models/               SwiftData records: Farm, Field, SoilTest, OrganismCount
+  Services/             Importing soil reports
+  Features/             SwiftUI screens: Navigation/  Farms/  SoilTests/
+AuraFarmManagerTests/   Unit tests for the Mac app
+AuraFarmKit/            Swift package both apps share: the soil report format and the
+                        organism group names
 Config/                 Shared xcconfig and your gitignored Local.xcconfig
 ```
 
@@ -283,6 +293,8 @@ Every pull request into `main` runs:
 | Check | Does |
 |---|---|
 | `Build and test` | Builds the iOS app and runs its unit tests on an iOS Simulator |
+| `Mac build and test` | Builds the Mac app and runs its unit tests |
+| `AuraFarmKit tests` | Runs the shared package's unit tests |
 | `Format check` | `swift-format lint`, settings in `.swift-format` |
 | `Repo checks` | Every Swift file is inside a target folder; no video or file over 5 MB |
 | `Conflict check` | Labels the pull request `has-conflicts` when it stops merging cleanly |

@@ -6,7 +6,7 @@ final class AdviceContentVersionTests: XCTestCase {
     func testTheVersionIsTheOneTheContentHasToday() {
         // If this fails, advice content changed. If that was intended, update this value; saved advice
         // written before will be marked as written with older rules.
-        XCTAssertEqual(AdviceContentVersion.current, "content-81cfe9cb3e91")
+        XCTAssertEqual(AdviceContentVersion.current, "content-d566a1f7ae44")
     }
 
     func testTheFormat() {

@@ -54,7 +54,7 @@ private struct HomeTab: View {
                         Label("New Test", systemImage: "plus")
                             // A list tints a label's icon with the accent colour, which
                             // would sink it into the filled button.
-                            .foregroundStyle(.white)
+                            .foregroundStyle(Color.auraOnAccent)
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)

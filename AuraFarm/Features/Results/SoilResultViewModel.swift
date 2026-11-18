@@ -83,6 +83,9 @@ final class SoilResultViewModel {
         adviceContext.flatMap { AdviceBasis.line(for: $0) }
     }
 
+    /// The short education about the measurements this advice was written with. nil without any.
+    var education: AdviceEducation? { AdviceEducation(result.soil) }
+
     /// True when the advice on screen came from the model and the model can write it again.
     var canWriteAgain: Bool {
         guard case .ready(let recommendation) = recommendationState, recommendation.source == .foundationModel
@@ -159,9 +162,11 @@ final class SoilResultViewModel {
             if saved.snapshot?.soil == currentSoil {
                 savedAt = saved.writtenAt
                 savedFromOlderRules = saved.isFromOlderRules
-                recommendationState = .ready(saved.recommendation)
-                feedback = await matchingFeedback(for: saved.recommendation)
-                adviceContext = await buildContext()
+                let context = await buildContext()
+                guard !Task.isCancelled else { return }
+                adviceContext = context
+                let shown = showReady(saved.recommendation, context: context)
+                feedback = await matchingFeedback(for: shown)
                 return
             }
             outOfDate = saved
@@ -174,14 +179,16 @@ final class SoilResultViewModel {
                 provider = recommender
                 recommender.prewarm()
             case .unavailable(let reason):
-                if let outOfDate {
-                    // The model can't write it again, so the earlier advice stays, with a note.
-                    await show(
-                        outOfDate,
-                        note: "The soil measurements changed, but Apple Intelligence can't write new "
-                            + "advice now, so the earlier advice is shown. \(reason)")
+                if outOfDate != nil {
+                    // The earlier advice was chosen for other measurements, so its steps may be
+                    // wrong now. Standard advice for the current measurements is shown instead, and
+                    // the saved file is left as it is for the model's next chance.
                     guard !Task.isCancelled else { return }
-                    adviceContext = await buildContext()
+                    let context = await buildContext()
+                    guard !Task.isCancelled else { return }
+                    adviceContext = context
+                    await showStandardAdvice(
+                        note: Self.measurementsChangedNote + " \(reason)", context: context)
                     return
                 }
                 modelUnavailableReason = reason
@@ -198,7 +205,7 @@ final class SoilResultViewModel {
                 from: provider, context: context, freshWording: freshWording)
             guard !Task.isCancelled else { return }
             progress = nil
-            recommendationState = .ready(recommendation)
+            showReady(recommendation, context: context)
             if let outOfDate, recommendation.source == .foundationModel {
                 updateNote = AdviceUpdateNote.text(from: outOfDate.snapshot?.soil, to: currentSoil)
             }
@@ -206,9 +213,12 @@ final class SoilResultViewModel {
         } catch {
             guard !Task.isCancelled else { return }
             progress = nil
-            if freshWording || outOfDate != nil,
-                await showSavedAdviceAfterFailure(error, measurementsChanged: outOfDate != nil)
-            {
+            if outOfDate != nil {
+                // As above: never the earlier steps for measurements that have changed.
+                await showStandardAdvice(note: Self.measurementsChangedNote, context: context)
+                return
+            }
+            if freshWording, await showSavedAdviceAfterFailure(error) {
                 return
             }
             switch error as? AdviceFailure {
@@ -222,16 +232,17 @@ final class SoilResultViewModel {
         }
     }
 
+    /// Said when the soil measurements changed and Apple Intelligence could not write new wording.
+    static let measurementsChangedNote =
+        "The soil measurements changed and Apple Intelligence couldn't write new wording, so standard advice for the new measurements is shown."
+
     /// After a failed Write again the saved advice stays on screen, with a note. The file is not
-    /// touched. The same when advice that is behind the soil measurements could not be written
-    /// again. False when this sample has no saved advice.
-    private func showSavedAdviceAfterFailure(_ error: Error, measurementsChanged: Bool) async -> Bool {
+    /// touched. False when this sample has no saved advice. Never used when the measurements
+    /// changed: the earlier steps may no longer fit them.
+    private func showSavedAdviceAfterFailure(_ error: Error) async -> Bool {
         guard let saved = await savedAdvice() else { return false }
         guard !Task.isCancelled else { return true }
-        var note =
-            measurementsChanged
-            ? "The soil measurements changed, but new advice couldn't be written, so the earlier advice is shown."
-            : "New advice couldn't be written, so the saved advice is shown."
+        var note = "New advice couldn't be written, so the saved advice is shown."
         #if DEBUG
             let detail: String
             switch error as? AdviceFailure {
@@ -250,8 +261,25 @@ final class SoilResultViewModel {
         savedAt = saved.writtenAt
         savedFromOlderRules = saved.isFromOlderRules
         modelUnavailableReason = note
-        recommendationState = .ready(saved.recommendation)
-        feedback = await matchingFeedback(for: saved.recommendation)
+        let context: AdviceContext
+        if let existing = adviceContext {
+            context = existing
+        } else {
+            context = await buildContext()
+            adviceContext = context
+        }
+        let shown = showReady(saved.recommendation, context: context)
+        feedback = await matchingFeedback(for: shown)
+    }
+
+    /// Puts advice on screen with the soil steps added beside the microscope ones. The only place
+    /// advice reaches the screen, so the app and the report always show the same combined list.
+    /// What is saved with the sample is the advice as it was written, not this combined version.
+    @discardableResult
+    private func showReady(_ recommendation: Recommendation, context: AdviceContext) -> Recommendation {
+        let combined = AdviceComposer.combined(recommendation, context: context)
+        recommendationState = .ready(combined)
+        return combined
     }
 
     /// Rates the advice on screen. The same entry is updated while the same advice is shown, so
@@ -332,7 +360,7 @@ final class SoilResultViewModel {
             let standard = try await fallback.recommend(for: context)
             guard !Task.isCancelled else { return }
             modelUnavailableReason = note
-            recommendationState = .ready(standard)
+            showReady(standard, context: context)
         } catch {
             guard !Task.isCancelled else { return }
             recommendationState = .failed(message: Self.genericMessage(for: error))

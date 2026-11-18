@@ -18,6 +18,10 @@ import SwiftUI
 struct LandOutlineEditorView: View {
     /// Land already mapped, drawn on the map so the new outline can be kept clear of it.
     let neighbours: [Neighbour]
+    /// What the button that keeps the outline says. "Next" where a form for the farmer and
+    /// the plot's name follows, which is marking a plot from the map with no farm picked yet;
+    /// "Save" where the farm is already known and confirming is the last step.
+    var confirmTitle: String = "Next"
     let onConfirm: ([GeoPoint]) -> Void
     /// Called when the helper leaves without confirming, so whoever opened the editor can put
     /// back whatever was on screen before it.
@@ -36,12 +40,13 @@ struct LandOutlineEditorView: View {
     private let startingCorners: [GeoPoint]
 
     init(
-        corners: [GeoPoint], neighbours: [Neighbour],
+        corners: [GeoPoint], neighbours: [Neighbour], confirmTitle: String = "Next",
         onConfirm: @escaping ([GeoPoint]) -> Void,
         onCancel: (() -> Void)? = nil
     ) {
         self.startingCorners = corners
         self.neighbours = neighbours
+        self.confirmTitle = confirmTitle
         self.onConfirm = onConfirm
         self.onCancel = onCancel
         _corners = State(initialValue: corners)
@@ -79,7 +84,7 @@ struct LandOutlineEditorView: View {
 
                 if corners.count >= 3 {
                     MapPolygon(coordinates: corners.map(\.coordinate))
-                        .foregroundStyle(.green.opacity(0.3))
+                        .foregroundStyle(Color.aura.opacity(0.3))
                         .stroke(.white, lineWidth: 2)
                 } else if corners.count == 2 {
                     MapPolyline(coordinates: corners.map(\.coordinate))
@@ -159,8 +164,10 @@ struct LandOutlineEditorView: View {
                 .accessibilityLabel("Close")
             }
             ToolbarItem(placement: .topBarTrailing) {
-                // Plain until there is an area to name, then the blue of a real way on.
-                Button("Next") {
+                // Plain until there is an area to name, then the accent of a real way on. The
+                // system draws the one capsule: a background of its own under the bar's own
+                // left two stacked on top of each other.
+                Button(confirmTitle) {
                     onConfirm(corners)
                     dismiss()
                 }

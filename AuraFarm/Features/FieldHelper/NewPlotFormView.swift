@@ -10,6 +10,9 @@ import SwiftUI
 struct NewPlotFormView: View {
     /// The outline just marked.
     let corners: [GeoPoint]
+    /// Called with the farm this plot was filed against and the plot itself, so whatever opened
+    /// the form can show the land it has just taken in.
+    var onSaved: ((Farm, Plot) -> Void)?
     /// Called when the helper taps Edit, to go back to the map with these corners. It is handed
     /// what has been typed so far, so the form they come back to still holds it.
     var onEditOutline: ((_ farmer: String, _ plot: String) -> Void)?
@@ -23,9 +26,11 @@ struct NewPlotFormView: View {
 
     init(
         corners: [GeoPoint], farmer: String = "", plot: String = "",
+        onSaved: ((Farm, Plot) -> Void)? = nil,
         onEditOutline: ((String, String) -> Void)? = nil
     ) {
         self.corners = corners
+        self.onSaved = onSaved
         self.onEditOutline = onEditOutline
         _farmerName = State(initialValue: farmer)
         _plotName = State(initialValue: plot)
@@ -40,44 +45,48 @@ struct NewPlotFormView: View {
             // A Form, so the rows, the grouping and the scroll out from under the keyboard are
             // all the system's. Nothing here draws a field of its own.
             Form {
-                Section("Farmer") {
-                    TextField("Farmer's name", text: $farmerName)
-                        .textContentType(.name)
-                        .textInputAutocapitalization(.words)
-                        .autocorrectionDisabled()
-                        .focused($focus, equals: .farmer)
-                        .submitLabel(.next)
-                        .onSubmit { focus = .plot }
+                Group {
+                    Section("Farmer") {
+                        TextField("Farmer's name", text: $farmerName)
+                            .textContentType(.name)
+                            .textInputAutocapitalization(.words)
+                            .autocorrectionDisabled()
+                            .focused($focus, equals: .farmer)
+                            .submitLabel(.next)
+                            .onSubmit { focus = .plot }
 
-                    // A Picker rather than a list under the field: the control iOS already has
-                    // for choosing one of a few things, so it opens, scrolls and closes itself.
-                    if !known.isEmpty {
-                        Picker("Already on this phone", selection: $farmerName) {
-                            ForEach(known, id: \.self) { name in
-                                Text(name).tag(name)
+                        // A Picker rather than a list under the field: the control iOS already has
+                        // for choosing one of a few things, so it opens, scrolls and closes itself.
+                        if !known.isEmpty {
+                            Picker("Already on this phone", selection: $farmerName) {
+                                ForEach(known, id: \.self) { name in
+                                    Text(name).tag(name)
+                                }
                             }
                         }
                     }
-                }
 
-                Section {
-                    TextField("Plot's name", text: $plotName)
-                        .textInputAutocapitalization(.words)
-                        .autocorrectionDisabled()
-                        .focused($focus, equals: .plot)
-                } header: {
-                    Text("Plot")
-                } footer: {
-                    // The Form's own footer, which makes room for itself as it appears.
-                    if isNameTaken {
-                        Text("\(trimmed(farmerName)) already has a plot called that.")
-                            .foregroundStyle(.red)
+                    Section {
+                        TextField("Plot's name", text: $plotName)
+                            .textInputAutocapitalization(.words)
+                            .autocorrectionDisabled()
+                            .focused($focus, equals: .plot)
+                    } header: {
+                        Text("Plot")
+                    } footer: {
+                        // The Form's own footer, which makes room for itself as it appears.
+                        if isNameTaken {
+                            Text("\(trimmed(farmerName)) already has a plot called that.")
+                                .foregroundStyle(.red)
+                        }
                     }
-                }
 
-                Section("The land") { preview }
+                    Section("The land") { preview }
+                }
+                .listRowBackground(Color.auraRow)
             }
             .animation(.snappy, value: isNameTaken)
+            .auraBackground()
             .navigationTitle("New Plot")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -138,16 +147,20 @@ struct NewPlotFormView: View {
     private func save() {
         guard canSave else { return }
         let plot = Plot(name: trimmed(plotName), corners: corners)
-        if var farm = existingFarm {
-            farm.plots.append(plot)
-            store.update(farm)
+        let farm: Farm
+        if var existing = existingFarm {
+            existing.plots.append(plot)
+            store.update(existing)
+            farm = existing
         } else {
             // A farmer nobody has recorded before. The farm is named after them until there is
             // somewhere to ask for a name of its own.
-            store.add(
-                Farm(
-                    name: trimmed(farmerName), farmerName: trimmed(farmerName), plots: [plot]))
+            farm = Farm(
+                name: trimmed(farmerName), farmerName: trimmed(farmerName), plots: [plot])
+            store.add(farm)
         }
+        store.publish(farm)
+        onSaved?(farm, plot)
         dismiss()
     }
 

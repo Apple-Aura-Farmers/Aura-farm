@@ -136,7 +136,19 @@ private struct SoilResultContent: View {
             }
 
             if showsAdvice {
-                WhatToDoNextSection(viewModel: viewModel)
+                WhatToDoNextSection(
+                    viewModel: viewModel,
+                    footer: viewModel.result.soil == nil
+                        ? "Lab-only advice: from this microscope test, without the farm's soil measurements."
+                        : nil)
+            } else {
+                Section {
+                    Text(
+                        "Advice for this test, combined with the farm's soil measurements, is under What to do next on the farm's page."
+                    )
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                }
             }
 
             SampleSummarySection(result: viewModel.result)

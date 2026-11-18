@@ -1,18 +1,28 @@
 import MapKit
 import SwiftUI
 
-/// The Plots tab: a map of every plot the helper looks after, under a bar carrying the one
-/// control it needs, which is marking new land.
+/// The Plots tab: a map of every plot the helper looks after, under a search field. Marking
+/// new land is the button at the trailing end of the tab bar, which asks for it through
+/// `markPlot`.
 ///
 /// SwiftUI can only show one sheet at a time from a screen, and a sheet would sit on top of
 /// any page pushed from here, so the one sheet slot carries whichever form is wanted and the
 /// card for a tapped plot closes itself before opening that plot's farm.
 struct FieldHelperHomeView: View {
+    /// Where the map is looking. Owned by the tabs, so a search can send it somewhere and it
+    /// stays put when the helper changes tabs.
+    @Binding var camera: MapCameraPosition
+    /// Set by the tab bar's add button to start marking land; put back to false once taken.
+    @Binding var markPlot: Bool
+
     @Environment(FarmStore.self) private var store
 
-    /// Where the map is looking. Held here so it can be refitted when the land changes.
-    @State private var camera: MapCameraPosition = .automatic
-
+    /// What has been typed into the search field.
+    @State private var query = ""
+    /// A plot just filed, waiting for its form to finish closing so its card can open.
+    @State private var justFiled: Selection?
+    /// Whether the "Plot is Created" note is showing.
+    @State private var filedNotice = false
     /// The one sheet slot this screen has for its forms. It carries what to show rather than
     /// a flag, because a sheet reads a flag before the value beside it has arrived.
     @State private var formSheet: FormSheet?
@@ -59,41 +69,50 @@ struct FieldHelperHomeView: View {
             switch self {
             case .addFarm: "add"
             case .filePlot(let draft): draft.id.uuidString
-            case .plot(let selection): selection.plot.id.uuidString
+            case .plot: "plot"
             }
         }
     }
 
     var body: some View {
         NavigationStack {
-            Group {
-                if store.farms.isEmpty {
-                    emptyState
-                } else {
-                    mapScreen
+            withSearch(
+                Group {
+                    if store.farms.isEmpty {
+                        emptyState
+                    } else {
+                        mapScreen
+                    }
                 }
-            }
+            )
+            .overlay(alignment: .top) { searchResults }
             .overlay(alignment: .top) { problemBanner }
+            .overlay(alignment: .top) { filedBanner }
             // On the screen rather than on the map, because a phone with no farms yet shows no
             // map, and that is exactly the phone with everything to read.
             .task { await store.pull() }
-            .navigationTitle("Plots")
             .navigationBarTitleDisplayMode(.inline)
             // There is nothing scrolling under these bars, only the map, so the system has no
             // edge to fade against and draws a hard band of tinted blur across the land. The
             // bars float over it instead, which is what the design has.
             .toolbarBackgroundVisibility(.hidden, for: .navigationBar)
             .toolbarBackgroundVisibility(.hidden, for: .tabBar)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) { addButton }
+            .onChange(of: markPlot) {
+                guard markPlot else { return }
+                markPlot = false
+                selection = nil
+                outline = Outline()
             }
-            .sheet(item: $formSheet) { sheet in
+            .sheet(item: $formSheet, onDismiss: openJustFiled) { sheet in
                 switch sheet {
                 case .addFarm:
                     FarmFormView()
                 case .filePlot(let draft):
                     NewPlotFormView(
-                        corners: draft.corners, farmer: draft.farmer, plot: draft.plot
+                        corners: draft.corners, farmer: draft.farmer, plot: draft.plot,
+                        // Filing a plot ends on that plot's card, the same card tapping the
+                        // land opens, rather than on a map with nothing picked out on it.
+                        onSaved: { farm, plot in justFiled = Selection(farm: farm, plot: plot) }
                     ) { farmer, plot in
                         // Back to the map with these corners, rather than starting again.
                         formSheet = nil
@@ -104,8 +123,9 @@ struct FieldHelperHomeView: View {
                 case .plot(let selection):
                     plotCard(selection)
                         // Only as tall as it needs to be, so the land stays in view behind it.
-                        .presentationDetents([.height(240)])
-                        .presentationDragIndicator(.visible)
+                        .presentationDetents([.height(210)])
+                        .presentationBackground(Color.auraBase)
+                        .presentationDragIndicator(.hidden)
                         .presentationBackgroundInteraction(.enabled)
                 }
             }
@@ -136,10 +156,6 @@ struct FieldHelperHomeView: View {
             selected: selection?.plot.id
         )
         .ignoresSafeArea()
-        // Fits the land when it appears and whenever land is added, deleted or reshaped.
-        .onChange(of: store.farms.flatMap(\.allCorners), initial: true) {
-            camera = FarmsOverviewMap.fitting(store.farms)
-        }
     }
 
     private var emptyState: some View {
@@ -172,11 +188,86 @@ struct FieldHelperHomeView: View {
         if case .plot = formSheet { formSheet = nil }
     }
 
+    /// Opens the card for the plot that was just filed, once its form has finished closing. A
+    /// sheet cannot be swapped for another while it is still on screen, so this waits for the
+    /// form's dismissal rather than running at the moment the plot is saved.
+    private func openJustFiled() {
+        guard let filed = justFiled else { return }
+        justFiled = nil
+        // On the land that was just marked, not pulled back to take in every other plot too.
+        if let region = LandGeometry.region(fitting: filed.plot.corners) {
+            camera = .region(region)
+        }
+        show(filed.farm, filed.plot)
+        withAnimation(.snappy) { filedNotice = true }
+    }
+
+    // MARK: Searching
+
+    /// The field, always showing at the top over the map.
+    private func withSearch(_ content: some View) -> some View {
+        content.searchable(
+            text: $query, placement: .navigationBarDrawer(displayMode: .always),
+            prompt: "Search Map")
+    }
+
+    /// What has been typed matches, over the map rather than on a screen of its own. Nothing
+    /// typed shows nothing, so expanding the field leaves the land in view.
+    @ViewBuilder
+    private var searchResults: some View {
+        if !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let found = store.farms.matching(query)
+            ScrollView {
+                if found.isEmpty {
+                    ContentUnavailableView.search(text: query)
+                        .padding(.top, 60)
+                } else {
+                    LazyVStack(spacing: 0) {
+                        ForEach(found) { farm in
+                            Button {
+                                focus(on: farm)
+                            } label: {
+                                resultRow(farm)
+                            }
+                            .buttonStyle(.plain)
+                            Divider()
+                        }
+                    }
+                }
+            }
+            .background(.regularMaterial)
+        }
+    }
+
+    private func resultRow(_ farm: Farm) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(farm.farmerName)
+                .font(.headline)
+            Text(farm.locationLine)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(.rect)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
+    }
+
+    /// Sends the map to all of one farmer's land, and puts the results away so it can be seen.
+    private func focus(on farm: Farm) {
+        query = ""
+        selection = nil
+        camera = FarmsOverviewMap.fitting([farm])
+        // The keyboard would otherwise sit over half the land that was just searched for.
+        UIApplication.shared.sendAction(
+            #selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+    }
+
     /// What a tapped plot says for itself: whose it is, which of theirs, how big, and the way
     /// through to its tests. The sheet it sits in gives it the drag and the dismiss, so there
     /// is no card chrome of its own here.
     private func plotCard(_ selection: Selection) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             Text("\(selection.farm.farmerName) · \(selection.farm.title(of: selection.plot))")
                 .font(.title2.bold())
             if !selection.plot.name.isEmpty {
@@ -189,8 +280,9 @@ struct FieldHelperHomeView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
+            PlotAddress(corners: selection.plot.corners)
 
-            Spacer(minLength: 0)
+            Spacer(minLength: 8)
 
             Button {
                 // The sheet goes first: pushing out from under a sheet leaves it hanging over
@@ -200,6 +292,7 @@ struct FieldHelperHomeView: View {
             } label: {
                 Text("View Test Results")
                     .font(.headline)
+                    .foregroundStyle(Color.auraOnAccent)
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
@@ -207,22 +300,28 @@ struct FieldHelperHomeView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 20)
-        .padding(.top, 24)
-        .padding(.bottom, 20)
+        .padding(.top, 22)
+        .padding(.bottom, 16)
     }
 
-    // MARK: Controls
-
-    /// Land is marked the way the map does it: drop the dots first, name it afterwards.
-    ///
-    /// In the navigation bar, because the trailing end of the tab bar is the system's search
-    /// button and nothing can take its place there.
-    private var addButton: some View {
-        Button("Mark a plot on the map", systemImage: "plus") {
-            selection = nil
-            outline = Outline()
+    /// Says the land was filed, for as long as it takes to read. It goes on its own, because
+    /// the card underneath it is the thing to look at.
+    @ViewBuilder
+    private var filedBanner: some View {
+        if filedNotice {
+            Label("Plot is Created", systemImage: "checkmark.circle.fill")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(.aura, in: .capsule)
+                .padding(.top, 8)
+                .transition(.move(edge: .top).combined(with: .opacity))
+                .task {
+                    try? await Task.sleep(for: .seconds(2))
+                    withAnimation(.snappy) { filedNotice = false }
+                }
         }
-        .labelStyle(.iconOnly)
     }
 
     @ViewBuilder
@@ -241,7 +340,8 @@ struct FieldHelperHomeView: View {
 }
 
 #Preview {
-    FieldHelperHomeView()
+    @Previewable @State var camera = MapCameraPosition.automatic
+    FieldHelperHomeView(camera: $camera, markPlot: .constant(false))
         .environment(
             FarmStore(
                 fileURL: nil,
@@ -258,4 +358,43 @@ struct FieldHelperHomeView: View {
                             ])
                         ])
                 ]))
+}
+
+/// The street address of a plot's middle, looked up from the map data when the card opens.
+private struct PlotAddress: View {
+    let corners: [GeoPoint]
+    @State private var address: String?
+
+    private var middle: GeoPoint? { LandGeometry.centre(of: corners) }
+
+    var body: some View {
+        if let middle {
+            // The place name is bold and bright as in the design; the coordinates it falls back
+            // to stay as they were.
+            Group {
+                if let address {
+                    Text(address).font(.callout.weight(.semibold)).foregroundStyle(.primary)
+                } else {
+                    Label(
+                        String(format: "%.4f, %.4f", middle.latitude, middle.longitude),
+                        systemImage: "mappin.and.ellipse"
+                    )
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                }
+            }
+            .task(id: corners) {
+                let place = try? await CLGeocoder().reverseGeocodeLocation(
+                    CLLocation(latitude: middle.latitude, longitude: middle.longitude)
+                ).first
+                // shortcut: the geocoder has nothing for open land or sea, so the coordinates stay.
+                let named = [
+                    place?.name, place?.locality, place?.administrativeArea,
+                    place?.country, place?.ocean, place?.inlandWater,
+                ]
+                .compactMap { $0 }.joined(separator: ", ")
+                address = named.isEmpty ? nil : named
+            }
+        }
+    }
 }

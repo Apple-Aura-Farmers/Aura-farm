@@ -9,14 +9,20 @@ extension FarmStore {
         guard let uploader = FarmUploader() else { return }
         do {
             let records = try await uploader.fetch()
-            // The farms table knows nothing about soil, so a farm read back carries none. Its
+            // The plots table knows nothing about soil, so a plot read back carries none. Its
             // soil comes from its own table, and failing that from what this phone already
             // holds, rather than the pull quietly wiping measurements nobody published.
             let soil = try await SoilMeasurementUploader()?.fetch() ?? [:]
+            let held = Dictionary(
+                self.farms.flatMap(\.plots).map { ($0.id, $0.soil) },
+                uniquingKeysWith: { first, _ in first })
             merge(
                 records.map { farm in
                     var farm = farm
-                    farm.soil = soil[farm.id] ?? self.farms.first { $0.id == farm.id }?.soil
+                    for index in farm.plots.indices {
+                        let id = farm.plots[index].id
+                        farm.plots[index].soil = soil[id] ?? held[id] ?? nil
+                    }
                     return farm
                 })
             report(nil)
@@ -25,18 +31,53 @@ extension FarmStore {
         }
     }
 
-    /// Keeps what the helper measured, on the phone first and in the records after.
+    /// Sends a farm and its plots to the records, after the phone has kept them.
+    ///
+    /// Every screen that changes a farm calls this, so what a helper marks, renames or
+    /// reshapes is in the records straight away rather than waiting on them to remember
+    /// Publish. The phone keeps the change either way: a bad connection is reported in the
+    /// banner, not undone.
+    ///
+    /// Sends queue behind each other instead of racing. A send carries the whole farm, and
+    /// finishes by taking away the plot rows it did not carry, so a slow send of the farm as
+    /// it was one plot ago would otherwise land last and delete the plot marked after it.
+    /// Waiting means the last send to finish is always the last change made. The cost is that
+    /// a slow send holds up the ones behind it, which is the better way round: they are
+    /// seconds apart, and the alternative is land going missing from the records.
+    @MainActor
+    func publish(_ farm: Farm) {
+        let earlier = publishing
+        publishing = Task {
+            await earlier?.value
+            await send(farm)
+        }
+    }
+
+    /// One send. A farm with no plots is held back: the records describe a farm by its land,
+    /// so there is nothing to write until the first plot is marked, and it goes up with it.
+    private func send(_ farm: Farm) async {
+        guard !farm.plots.isEmpty, let uploader = FarmUploader() else { return }
+        do {
+            try await uploader.upload(farm)
+            report(nil)
+        } catch {
+            report(error.localizedDescription)
+        }
+    }
+
+    /// Keeps what the helper measured on one plot, on the phone first and in the records after.
     ///
     /// The phone is written to whether or not the sending works, because the measurement is
     /// the helper's own reading and losing it to a bad connection would be the worse half.
-    func saveSoil(_ soil: SoilMeasurements?, for farm: Farm) async {
+    func saveSoil(_ soil: SoilMeasurements?, for plot: Plot, in farm: Farm) async {
         var changed = farm
-        changed.soil = soil
+        guard let index = changed.plots.firstIndex(where: { $0.id == plot.id }) else { return }
+        changed.plots[index].soil = soil
         update(changed)
 
         guard let uploader = SoilMeasurementUploader() else { return }
         do {
-            try await uploader.upload(soil, forFarm: farm.id)
+            try await uploader.upload(soil, forPlot: plot.id, inFarm: farm.id)
             report(nil)
         } catch {
             report(error.localizedDescription)

@@ -22,17 +22,24 @@ struct AuraFarmApp: App {
 
     var body: some Scene {
         WindowGroup {
-            #if DEBUG
-                // Launched with -resultScenario good (or any ResultScenario name), the app opens
-                // straight on that result state, for screenshots without tapping through.
-                if let scenario = Self.launchScenario {
-                    NavigationStack { ResultScenarioScreen(scenario: scenario, useLiveModel: false) }
-                } else {
+            SplashGate {
+                #if DEBUG
+                    // Launched with -resultScenario good (or any ResultScenario name), the app
+                    // opens straight on that result state, for screenshots without tapping
+                    // through.
+                    if let scenario = Self.launchScenario {
+                        NavigationStack {
+                            ResultScenarioScreen(scenario: scenario, useLiveModel: false)
+                        }
+                    } else {
+                        RootView().environment(farmStore).environment(session)
+                    }
+                #else
                     RootView().environment(farmStore).environment(session)
-                }
-            #else
-                RootView().environment(farmStore).environment(session)
-            #endif
+                #endif
+            }
+            // The app's one accent, so every button, tab and control takes it from here.
+            .tint(.aura)
         }
     }
 

@@ -21,6 +21,7 @@ struct FarmersListView: View {
     var body: some View {
         NavigationStack {
             searchableList
+                .auraBackground()
                 .navigationTitle("Farmers")
                 .navigationDestination(for: Farm.ID.self) { id in
                     FarmDetailView(farmID: id)
@@ -48,18 +49,21 @@ struct FarmersListView: View {
 
     private var list: some View {
         List {
-            ForEach(shown) { farm in
-                NavigationLink(value: farm.id) {
-                    row(for: farm)
-                }
-                .swipeActions {
-                    Button(role: .destructive) {
-                        farmToDelete = farm
-                    } label: {
-                        Label("Delete", systemImage: "trash")
+            Group {
+                ForEach(shown) { farm in
+                    NavigationLink(value: farm.id) {
+                        row(for: farm)
+                    }
+                    .swipeActions {
+                        Button(role: .destructive) {
+                            farmToDelete = farm
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
                     }
                 }
             }
+            .listRowBackground(Color.auraRow)
         }
         .animation(.snappy, value: shown.map(\.id))
         .refreshable { await store.pull() }

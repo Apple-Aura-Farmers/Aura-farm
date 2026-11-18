@@ -25,9 +25,15 @@ enum AdvicePromptBuilder {
             "The summary is one sentence, at most about 25 words.",
             "Each action is one sentence, at most about 20 words.",
             "Use only facts in the prompt.",
+            "Soil steps come from the helper's soil measurements, not the microscope. Call a measurement low "
+                + "or high, not a number, and say it may matter, not that it proves anything.",
+            "If a fertilizer kind is given, it is only background. Do not judge it, and do not suggest a "
+                + "fertilizer, a product, an amount or a rate.",
+            "If you use a farming term such as cover crop or mulch, say plainly what it means.",
             "The rough estimate only reflects how much life was seen. If a pattern raises a concern, do not "
                 + "describe the result as good.",
             "Organism notes and patterns only might suggest something. Never treat them as certain.",
+            "The summary should cover both the sample and any soil steps listed, in one sentence.",
             "Pick 2 or 3 actions from \"Actions you may suggest\" by their id. Do not invent ids.",
             "For each, write one short sentence on why it fits this sample, building on the reason given. "
                 + "Do not repeat the action's wording.",
@@ -97,13 +103,33 @@ enum AdvicePromptBuilder {
             }
         }
 
+        let soilSteps = soilOnlyActions(for: context)
+        if !soilSteps.isEmpty {
+            lines.append(
+                "Soil steps the app will also show (do not pick these; you may mention them in the summary):")
+            lines += soilSteps.map { "- \($0.action.wording) (why: \($0.reason))" }
+        }
+
         lines.append("Write the advice.")
         return lines.joined(separator: "\n")
     }
 
-    /// The actions listed in the prompt. The answer is checked against the same list.
+    /// The actions the model may pick: the microscope and general ones. The steps that only the
+    /// soil measurements call for are added by `AdviceComposer`, so the model never has to choose
+    /// between them and the sample's own steps. The answer is checked against the same list.
     static func offeredActions(for context: AdviceContext) -> [AdviceContext.SuggestedAction] {
-        trimmed(context.actions, context: context)
+        trimmed(context.actions.filter { !($0.fromSoil && !$0.fromMicroscope) }, context: context)
+    }
+
+    /// The steps only the soil measurements call for, in priority order, as the report shows them.
+    static func soilOnlyActions(for context: AdviceContext) -> [AdviceContext.SuggestedAction] {
+        context.actions
+            .filter { $0.fromSoil && !$0.fromMicroscope }
+            .sorted {
+                (AdviceActions.fallbackPriority.firstIndex(of: $0.action.id) ?? Int.max)
+                    < (AdviceActions.fallbackPriority.firstIndex(of: $1.action.id) ?? Int.max)
+            }
+            .prefix(AdviceComposer.maxSoilSteps).map { $0 }
     }
 
     /// At most `maxActions`, the ones that come first in `AdviceActions.fallbackPriority`, so
@@ -168,17 +194,29 @@ enum AdvicePromptBuilder {
         return line
     }
 
-    /// The measurements the helper recorded, as background. They are not from the microscope, and
-    /// nothing in the rules reads them yet, so the model is told not to build advice on them.
-    /// Only the number, its unit and its band go in: never the standards' guidance.
+    /// The measurements the helper recorded, as context for the actions that come from them. They
+    /// are not from the microscope, so the line says so. Only the number, its unit and its band go
+    /// in: never the standards' guidance. The fertilizer goes in as its kind only, never its amount
+    /// or product name, so the model has nothing to repeat as a dose.
     private static func soilLine(_ soil: SoilInputs) -> String {
         let readings = soil.readings.map { reading in
             let amount = number(reading.value)
             let value = reading.unit.isEmpty ? amount : "\(amount) \(reading.unit)"
             return "\(reading.name) \(value) (\(reading.band.label.lowercased()))"
         }
-        return "Soil measurements the helper recorded (not from the microscope; background only, do not "
-            + "give advice from them): \(readings.joined(separator: ", "))."
+        var line =
+            "Soil measurements the helper recorded (not from the microscope): "
+            + "\(readings.joined(separator: ", ")). The soil steps listed at the end come from them."
+        if soil.ph != nil {
+            line += " pH targets for flooded rice are provisional."
+            if let water = soil.phFieldWater, water != .notSure {
+                line += " The pH was measured on \(water == .drained ? "drained" : "flooded") soil."
+            }
+        }
+        if let kind = soil.fertilizerType, kind.namesAKind {
+            line += " Fertilizer kind recorded (background only, not advice): \(kind.label.lowercased())."
+        }
+        return line
     }
 
     /// "6.5" or "100", the same on every phone.

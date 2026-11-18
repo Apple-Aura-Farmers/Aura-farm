@@ -12,6 +12,12 @@ final class FarmStore {
 
     @ObservationIgnored private let fileURL: URL?
 
+    /// The send to the records that is still in flight, if there is one. Each new send waits
+    /// for it before starting, so two changes made close together reach the records in the
+    /// order they were made rather than the order the network happens to finish in. Held here
+    /// rather than beside `publish` because an extension cannot carry state.
+    @ObservationIgnored var publishing: Task<Void, Never>?
+
     /// - Parameter fileURL: where the farms are kept. nil keeps them in memory only, for
     ///   previews and tests.
     init(fileURL: URL? = FarmStore.defaultFileURL, farms: [Farm] = []) {

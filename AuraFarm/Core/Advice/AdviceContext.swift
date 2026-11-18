@@ -34,6 +34,14 @@ struct AdviceContext: Equatable {
         /// A plain sentence a helper can read aloud, saying why this action fits. The model
         /// builds on it, and it is shown when the model's own reason is missing or fails a check.
         var reason: String
+        /// True when the soil measurements the field helper recorded call for this action, whether
+        /// or not the microscope does too. Such an action is kept when the list is trimmed, so the
+        /// measurements still shape the advice when the sample alone would fill it.
+        var fromSoil = false
+        /// True when the microscope sample calls for this action, whether or not the measurements
+        /// do too.
+        var fromMicroscope = false
+
     }
 
     var result: SoilResult

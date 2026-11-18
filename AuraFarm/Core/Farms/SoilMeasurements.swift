@@ -25,8 +25,19 @@ struct SoilMeasurements: Codable, Equatable {
     /// Acidity, 0 to 14.
     var ph: Double?
     var organicCarbonPercent: Double?
-    /// What fertilizer has been put on, such as "Urea" or "Compost".
+    /// How the pH was measured. No longer asked for or shown, and nothing reads it; kept so saved
+    /// farms and exported reports that have it still load.
+    var phMethod: PHMethod?
+    /// Whether the field was flooded when the pH was measured. nil when the helper did not say.
+    var phFieldWater: PHFieldWater?
+    /// The kind of fertilizer, chosen from a fixed list. nil when the question was never answered,
+    /// which is not the same as `.noneRecorded`.
+    var fertilizerType: FertilizerType?
+    /// The product's name, if the helper knows it. Shown on the farm's page and in the report, and
+    /// never sent to Apple Intelligence, because a product name can be a brand.
     var fertilizerProduct: String?
+    /// Shown on the farm's page and in the report, and never sent to Apple Intelligence, so the
+    /// model is never tempted to repeat it as a dose.
     var fertilizerKilogramsPerHectare: Double?
     /// When the helper asked a scientist to look at this soil, if they have. Until then there
     /// is nobody to send the sample to; after it, the helper is waiting on them.
@@ -38,8 +49,8 @@ struct SoilMeasurements: Codable, Equatable {
     /// measured can still be waiting on a scientist.
     var isEmpty: Bool {
         nitrogen == nil && phosphorus == nil && potassium == nil && ph == nil
-            && organicCarbonPercent == nil && fertilizerProduct == nil
-            && fertilizerKilogramsPerHectare == nil
+            && organicCarbonPercent == nil && phMethod == nil && phFieldWater == nil
+            && fertilizerType == nil && fertilizerProduct == nil && fertilizerKilogramsPerHectare == nil
     }
 
     /// True when there is nothing at all to keep, so the farm can go back to having no soil.
@@ -56,6 +67,9 @@ struct SoilMeasurements: Codable, Equatable {
         ph = try stored.decodeIfPresent(Double.self, forKey: .ph)
         organicCarbonPercent = try stored.decodeIfPresent(
             Double.self, forKey: .organicCarbonPercent)
+        phMethod = try stored.decodeIfPresent(PHMethod.self, forKey: .phMethod)
+        phFieldWater = try stored.decodeIfPresent(PHFieldWater.self, forKey: .phFieldWater)
+        fertilizerType = try stored.decodeIfPresent(FertilizerType.self, forKey: .fertilizerType)
         fertilizerProduct = try stored.decodeIfPresent(String.self, forKey: .fertilizerProduct)
         fertilizerKilogramsPerHectare = try stored.decodeIfPresent(
             Double.self, forKey: .fertilizerKilogramsPerHectare)
@@ -66,6 +80,8 @@ struct SoilMeasurements: Codable, Equatable {
     init(
         id: UUID = UUID(), nitrogen: Double? = nil, phosphorus: Double? = nil,
         potassium: Double? = nil, ph: Double? = nil, organicCarbonPercent: Double? = nil,
+        phMethod: PHMethod? = nil, phFieldWater: PHFieldWater? = nil,
+        fertilizerType: FertilizerType? = nil,
         fertilizerProduct: String? = nil, fertilizerKilogramsPerHectare: Double? = nil,
         scientistAlertedAt: Date? = nil, updatedAt: Date = Date()
     ) {
@@ -75,6 +91,9 @@ struct SoilMeasurements: Codable, Equatable {
         self.potassium = potassium
         self.ph = ph
         self.organicCarbonPercent = organicCarbonPercent
+        self.phMethod = phMethod
+        self.phFieldWater = phFieldWater
+        self.fertilizerType = fertilizerType
         self.fertilizerProduct = fertilizerProduct
         self.fertilizerKilogramsPerHectare = fertilizerKilogramsPerHectare
         self.scientistAlertedAt = scientistAlertedAt
@@ -131,6 +150,15 @@ struct SoilMeasurements: Codable, Equatable {
         let band: SoilBand?
         /// What that band means and what to do. nil with no standard.
         let note: SoilBandNote?
+        /// What the measurement does and what this reading may mean. nil with no standard.
+        var education: SoilEducation.Detail? = nil
+        /// A line under the value, such as how the pH was measured.
+        var context: String? = nil
+        /// Set on the fertilizer row only.
+        var fertilizerType: FertilizerType? = nil
+        /// The reading and its standard, for drawing where it sits. nil with no standard.
+        var number: Double? = nil
+        var standard: SoilStandard? = nil
         var id: String { label }
     }
 
@@ -144,7 +172,9 @@ struct SoilMeasurements: Codable, Equatable {
             rows.append(
                 Row(
                     label: label, value: unit.isEmpty ? number : "\(number) \(unit)",
-                    band: band, note: band.flatMap { standard?.note(for: $0) }))
+                    band: band, note: band.flatMap { standard?.note(for: $0) },
+                    education: band.flatMap { standard?.education.detail(for: $0) },
+                    context: label == "pH" ? phContext : nil, number: value, standard: standard))
         }
         add("Nitrogen (N)", nitrogen, unit: "mg/kg", standard: SoilStandards.nitrogen)
         add("Phosphorus (P)", phosphorus, unit: "mg/kg", standard: SoilStandards.phosphorus)
@@ -153,19 +183,64 @@ struct SoilMeasurements: Codable, Equatable {
         add(
             "Organic carbon", organicCarbonPercent, unit: "%",
             standard: SoilStandards.organicCarbon)
-        if fertilizerProduct != nil || fertilizerKilogramsPerHectare != nil {
-            var parts: [String] = []
-            if let fertilizerProduct { parts.append(fertilizerProduct) }
-            if let amount = fertilizerKilogramsPerHectare {
-                parts.append(
-                    "\(amount.formatted(.number.precision(.fractionLength(0...2)))) kg/ha")
-            }
-            // No standard for fertilizer yet, so no band.
+        if let fertilizer = fertilizerSummary {
+            // No standard for fertilizer, so no band. It is context, not a reading.
             rows.append(
                 Row(
-                    label: "Fertilizer", value: parts.joined(separator: " · "), band: nil,
-                    note: nil))
+                    label: "Fertilizer", value: fertilizer, band: nil, note: nil, education: nil,
+                    context: nil, fertilizerType: fertilizerType))
         }
         return rows
+    }
+
+    /// "Drained when measured". nil when not recorded.
+    var phContext: String? { phFieldWater?.label }
+
+    /// "Organic fertilizer · Compost · 50 kg/ha", from whatever was recorded. nil when nothing was.
+    var fertilizerSummary: String? {
+        var parts: [String] = []
+        if let fertilizerType { parts.append(fertilizerType.label) }
+        if let fertilizerProduct { parts.append(fertilizerProduct) }
+        if let amount = fertilizerKilogramsPerHectare {
+            parts.append("\(amount.formatted(.number.precision(.fractionLength(0...2)))) kg/ha")
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+}
+
+/// How a pH reading was taken. A lab reading of dried soil and a probe in a flooded field can
+/// differ, so the app keeps how it was taken beside the number.
+enum PHMethod: String, Codable, CaseIterable, Identifiable {
+    case laboratory
+    case fieldProbe
+    case notSure
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .laboratory: return "Laboratory test"
+        case .fieldProbe: return "Field probe or kit"
+        case .notSure: return "Method not known"
+        }
+    }
+}
+
+/// Whether the field had standing water when the pH was measured. Flooding moves acidic and
+/// alkaline soils toward neutral, so a reading from dry soil may not be the pH around the roots
+/// once the field is flooded.
+enum PHFieldWater: String, Codable, CaseIterable, Identifiable {
+    case flooded
+    case drained
+    case notSure
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .flooded: return "Flooded when measured"
+        case .drained: return "Drained or dry when measured"
+        case .notSure: return "Water not known"
+        }
     }
 }

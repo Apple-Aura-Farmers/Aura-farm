@@ -24,9 +24,15 @@ struct FarmsOverviewMap: View {
     /// Drawn thicker and brighter than the rest.
     var selected: Plot.ID?
 
+    /// Lets the controls be placed by hand instead of where the system puts them.
+    @Namespace private var mapScope
+
     var body: some View {
         MapReader { proxy in
-            Map(position: $camera) {
+            Map(position: $camera, scope: mapScope) {
+                // Where the helper is standing, since the map opens there.
+                UserAnnotation()
+
                 ForEach(farms) { farm in
                     ForEach(farm.plots) { plot in
                         let colour = colour(of: farm)
@@ -53,8 +59,16 @@ struct FarmsOverviewMap: View {
                 }
             }
             .mapStyle(.imagery)
-            .mapControls {
-                MapCompass()
+            // None where the system puts them: its trailing corner is where the navigation
+            // bar's own button already is, and the two sat on top of each other.
+            .mapControls {}
+            // The way back to where the helper is standing, after they have panned off it,
+            // above the search button at the other end of the screen.
+            .overlay(alignment: .bottomTrailing) {
+                MapUserLocationButton(scope: mapScope)
+                    .buttonBorderShape(.circle)
+                    .padding(.trailing, 16)
+                    .padding(.bottom, 108)
             }
             .onTapGesture { point in
                 guard let coordinate = proxy.convert(point, from: .local),
@@ -65,6 +79,8 @@ struct FarmsOverviewMap: View {
                 }
                 onOpen(hit.farm, hit.plot)
             }
+            // What lets the button placed by hand above find this map.
+            .mapScope(mapScope)
         }
     }
 

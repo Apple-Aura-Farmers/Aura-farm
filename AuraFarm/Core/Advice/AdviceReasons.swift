@@ -42,6 +42,35 @@ enum AdviceReasons {
     /// For the two fixed steps of a sweep that was never counted.
     static let notCounted = "Counting didn't run on this sweep."
 
+    // From the soil measurements the field helper recorded. Each says what the measurement shows,
+    // in a sentence a helper can read aloud, without a number or an amount.
+    static let phLow =
+        "The pH is below the provisional range for flooded rice, which can make some nutrients harder to use."
+    static let phHigh =
+        "The pH is well above the provisional range for flooded rice, which can make some nutrients less available."
+    /// For a pH outside the range that was measured on drained or dry soil.
+    static let phMeasuredDry =
+        "This pH was measured on drained soil, and flooding often moves pH toward neutral, so it is worth checking first."
+    static let nitrogenLow = "Nitrogen in the soil is low, and plants need it for leaves and stems."
+    static let nitrogenExcess =
+        "There is more nitrogen than plants need, which can weaken stems and attract pests."
+    static let phosphorusLow = "Phosphorus is low, and roots need it to grow strong."
+    static let phosphorusExcess =
+        "There is more phosphorus than plants need, and the extra can wash into waterways."
+    static let potassiumLow = "Potassium is low, and plants use it for strong stems and to save water."
+    static let potassiumExcess =
+        "There is more potassium than plants need, and it can crowd out other nutrients."
+    static let carbonLowStraw =
+        "Organic carbon is low, and returned straw feeds the soil life that builds it up."
+    static let carbonLowCompost = "Organic carbon is low, and compost builds it up."
+    static let carbonExcessStraw =
+        "Organic carbon is very high, so fresh straw is better left on the surface."
+    static let carbonExcessAir = "Organic carbon is very high, which can leave wet soil short of air."
+    static let fertilizerInorganicOnly =
+        "Paddy research generally finds organic fertilizer, even replacing part of the mineral kind, keeps soil carbon and yields steadier."
+    static let nutrientImbalance =
+        "Nitrogen, phosphorus and potassium need to be in balance, and these readings are not."
+
     /// Every sentence this file can return, in a fixed order. The content version is worked out
     /// from it, and a test checks that every reason the builder produces is in it.
     static let allSentences: [String] = [
@@ -49,5 +78,9 @@ enum AdviceReasons {
         sampleVaries, misidentified, plentyOfLife, strawLowAbundance, strawLowDiversity, burning, compost,
         coverCropLowAbundance, coverCropLowDiversity, stillWater, airInSoil, fertilizerAfterFertilizing,
         fertilizer, rootPests, extensionAfterPoor, extensionBeforeBiggerChanges, lowTwice, notes, notCounted,
+        phLow, phHigh, phMeasuredDry, nitrogenLow, nitrogenExcess, phosphorusLow, phosphorusExcess,
+        potassiumLow,
+        potassiumExcess, carbonLowStraw, carbonLowCompost, carbonExcessStraw, carbonExcessAir,
+        nutrientImbalance, fertilizerInorganicOnly,
     ]
 }

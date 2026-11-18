@@ -41,6 +41,14 @@ struct RuleBasedRecommender: RecommendationProviding {
     }
 
     static func summary(for context: AdviceContext) -> String {
+        let base = labSummary(for: context)
+        // One more sentence when the soil measurements call for steps of their own, so the summary
+        // does not read as if only the microscope was looked at.
+        guard context.actions.contains(where: \.fromSoil) else { return base }
+        return base + " The soil measurements point to a few changes too."
+    }
+
+    private static func labSummary(for context: AdviceContext) -> String {
         if context.patterns.contains(where: \.blocksImprovementActions) {
             return "This sample is hard to read. Check it again before changing anything."
         }

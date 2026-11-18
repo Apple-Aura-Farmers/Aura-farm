@@ -24,8 +24,9 @@ final class SoilStandardsTests: XCTestCase {
         let ph = SoilStandards.ph
         XCTAssertEqual(ph.band(for: 5.9), .low)
         XCTAssertEqual(ph.band(for: 6.0), .standard)
-        XCTAssertEqual(ph.band(for: 7.2), .standard)
-        XCTAssertEqual(ph.band(for: 7.21), .high)
+        // The provisional flooded-rice target is about 6.0 to 7.0.
+        XCTAssertEqual(ph.band(for: 7.0), .standard)
+        XCTAssertEqual(ph.band(for: 7.01), .high)
         XCTAssertEqual(ph.band(for: 7.8), .high)
         XCTAssertEqual(ph.band(for: 7.81), .excessive)
     }
