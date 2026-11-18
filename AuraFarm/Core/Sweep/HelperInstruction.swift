@@ -6,7 +6,6 @@ import Foundation
 enum HelperInstruction: Equatable {
     /// Turn this knob this way: "Bottom knob towards you".
     case turn(KnobRule.Words)
-    case slower
     /// "Hold still", with a ring while holding or confirming (0...1). `note` replaces the words.
     case stop(progress: Double?, note: String?)
     /// "Back a little: bottom knob away from you".
@@ -25,7 +24,6 @@ enum HelperInstruction: Equatable {
     var text: String {
         switch self {
         case .turn(let words): words.text
-        case .slower: "Slower"
         case .stop(_, let note): note ?? "Hold still"
         case .backALittle(let words): "Back a little: \(words.phrase)"
         case .refocus: "Turn the fine focus slowly until it's sharp"
@@ -59,7 +57,6 @@ enum HelperInstruction: Equatable {
         case .turn(let words): "turn \(words.text)"
         case .backALittle(let words): "back \(words.text)"
         case .stop(_, let note): "stop \(note ?? "")"
-        case .slower: "slower"
         case .refocus: "refocus"
         case .phoneMoved: "phoneMoved"
         case .edgeFound: "edgeFound"
@@ -75,7 +72,7 @@ enum HelperInstruction: Equatable {
     var isImmediate: Bool {
         switch self {
         case .stop, .question, .phoneMoved, .finished: true
-        case .turn, .slower, .backALittle, .refocus, .edgeFound, .lastColumn, .waiting: false
+        case .turn, .backALittle, .refocus, .edgeFound, .lastColumn, .waiting: false
         }
     }
 
@@ -90,7 +87,6 @@ enum HelperInstruction: Equatable {
     /// The tap pattern for the card, played once when it comes up.
     var haptic: HelperHaptic {
         switch self {
-        case .slower: .twoLight
         case .stop, .question: .firm
         case .backALittle: .threeLight
         case .edgeFound: .success
@@ -122,7 +118,8 @@ enum HelperInstruction: Equatable {
         case .move, .travel, .farAway, .lineAhead, .lineLead, .notAnEdge:
             return words.map { .turn($0) }
         case .slowDown:
-            return .slower
+            // The speed bar shows the speed: the turn card stays.
+            return nil
         case .holding(let progress), .checkingEdge(let progress):
             return .stop(progress: min(max(progress, 0), 1), note: nil)
         case .aligned, .edgeDetected:
@@ -159,7 +156,7 @@ extension GuideInstruction {
 
 /// One pattern of taps for a card, as data; the page's player turns it into feedback.
 enum HelperHaptic: Equatable {
-    case none, oneLight, twoLight, threeLight, firm, success, longSuccess
+    case none, oneLight, threeLight, firm, success, longSuccess
 
     enum Kind: Equatable { case light, firm, success }
 
@@ -168,7 +165,6 @@ enum HelperHaptic: Equatable {
         switch self {
         case .none: []
         case .oneLight: [(.light, 0)]
-        case .twoLight: [(.light, 0), (.light, 0.15)]
         case .threeLight: [(.light, 0), (.light, 0.15), (.light, 0.3)]
         case .firm: [(.firm, 0)]
         case .success: [(.success, 0)]
@@ -224,6 +220,13 @@ struct CardSteadiness {
         pending = nil
         noticeUntil = card.isNotice ? seconds + thresholds.noticeSeconds : -.infinity
         return (card, true)
+    }
+
+    /// Puts `card` on screen at once, as an answer to a tap does.
+    mutating func force(_ card: HelperInstruction) {
+        shown = card
+        pending = nil
+        noticeUntil = -.infinity
     }
 
     mutating func reset() {

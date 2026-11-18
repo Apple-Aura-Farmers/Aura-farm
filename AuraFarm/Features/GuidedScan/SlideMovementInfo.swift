@@ -112,8 +112,9 @@ enum SlideMovementInfo {
         var column = 0
         var lastColumn = false
         var slipHeightFields: Double?
-        /// A spot is within `SpeedBandThresholds.nearCrossFields` of the cross.
-        var spotNearCross = false
+        /// How far the first and last columns sit inside the left and right edges, in fields;
+        /// nil until the confirmed circle is known (the column count then uses the default).
+        var sideInsetFields: Double?
     }
 
     /// The speed bar and the status banner, which the helper steers by: full rate.

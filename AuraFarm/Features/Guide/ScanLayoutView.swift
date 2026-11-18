@@ -23,7 +23,7 @@ struct ScanLayoutView<Top: View, Picture: View, Bottom: View>: View {
     /// The page mid-run from values, with a grey disc for the camera.
     private struct MidRunPreview: View {
         var card: HelperInstruction
-        var band: SpeedBand
+        var showsBoxes = false
 
         var body: some View {
             ScanLayoutView {
@@ -37,14 +37,20 @@ struct ScanLayoutView<Top: View, Picture: View, Bottom: View>: View {
                 .padding(.horizontal)
                 .padding(.vertical, 8)
             } picture: {
-                Circle().fill(.gray).aspectRatio(1, contentMode: .fit).padding(8)
-            } bottom: {
-                VStack(spacing: 8) {
-                    SpeedBandView(band: band)
-                    HelperCardView(card: card)
+                ZStack(alignment: .bottomLeading) {
+                    Circle().fill(.gray).aspectRatio(1, contentMode: .fit)
+                    if showsBoxes {
+                        RoundedRectangle(cornerRadius: 2).stroke(.green, lineWidth: 2)
+                            .frame(width: 50, height: 40).offset(x: 120, y: -140)
+                    }
+                    // The lab's speed bar, bottom left of the picture.
+                    SpeedMeter(speedFraction: 0.12).frame(width: 140).padding(8)
                 }
-                .padding(.horizontal)
-                .padding(.bottom, 8)
+                .padding(8)
+            } bottom: {
+                HelperCardView(card: card)
+                    .padding(.horizontal)
+                    .padding(.bottom, 8)
             }
             .background(.black)
             .foregroundStyle(.white)
@@ -54,18 +60,14 @@ struct ScanLayoutView<Top: View, Picture: View, Bottom: View>: View {
     private let previewTurn = HelperInstruction.turn(
         .init(knob: .bottom, way: .towardsYou, alsoOtherKnob: false))
 
-    #Preview("Mid-run, iPhone SE size: Slower") {
-        MidRunPreview(card: .slower, band: .red).frame(width: 375, height: 667)
+    #Preview("Mid-run, iPhone SE size: lab speed bar, no green band") {
+        MidRunPreview(card: previewTurn).frame(width: 375, height: 667)
     }
     #Preview("Mid-run, iPhone SE size: turn, large type") {
-        MidRunPreview(card: previewTurn, band: .amber).frame(width: 375, height: 667)
+        MidRunPreview(card: previewTurn).frame(width: 375, height: 667)
             .dynamicTypeSize(.accessibility2)
     }
-    #Preview("Mid-run, iPhone 17 size: Slower") {
-        MidRunPreview(card: .slower, band: .red).frame(width: 402, height: 874)
-    }
-    #Preview("Mid-run, iPhone 17 size: turn, large type") {
-        MidRunPreview(card: previewTurn, band: .green).frame(width: 402, height: 874)
-            .dynamicTypeSize(.accessibility2)
+    #Preview("Mid-run, iPhone 17 size: Show detections on") {
+        MidRunPreview(card: previewTurn, showsBoxes: true).frame(width: 402, height: 874)
     }
 #endif

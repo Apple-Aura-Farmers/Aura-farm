@@ -59,7 +59,6 @@ struct HelperCardView: View {
 
     private var symbol: String? {
         switch card {
-        case .slower: "tortoise.fill"
         case .refocus: "scope"
         case .phoneMoved: "iphone.gen3.radiowaves.left.and.right"
         case .edgeFound: "checkmark.seal.fill"
@@ -74,7 +73,7 @@ struct HelperCardView: View {
 
     private var tint: Color {
         switch card {
-        case .slower, .phoneMoved: .orange
+        case .phoneMoved: .orange
         case .edgeFound, .finished, .lastColumn: .green
         default: .white
         }
@@ -101,7 +100,6 @@ struct HelperCardView: View {
     let words = KnobRule().words(forArrowDirection: CGPoint(x: 1, y: 0))
     ScrollView {
         VStack(spacing: 10) {
-            HelperCardView(card: .slower)
             HelperCardView(card: .stop(progress: 0.6, note: nil))
             if let words { HelperCardView(card: .backALittle(words)) }
             HelperCardView(card: .refocus)

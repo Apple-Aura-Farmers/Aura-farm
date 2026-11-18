@@ -100,6 +100,7 @@ class ScanEngine: NSObject {
     @ObservationIgnored let session = AVCaptureSession()
     @ObservationIgnored private let sessionQueue = DispatchQueue(label: "slidelab.session")
     @ObservationIgnored let analysisQueue = DispatchQueue(label: "slidelab.analysis")
+    @ObservationIgnored private var confirmsSetupSteps = false
     @ObservationIgnored private var isConfigured = false
     @ObservationIgnored private var device: AVCaptureDevice?
 
@@ -194,6 +195,12 @@ class ScanEngine: NSObject {
     @ObservationIgnored private var reportsRunningConfig = false
     @ObservationIgnored private var lastAnalysedAt: Double?
     @ObservationIgnored private var measureAgreementEnabled = false
+    /// The edge questions raised this run, and the id the next row's event refers to. Analysis queue.
+    @ObservationIgnored private var edgeQuestions = EdgeQuestionBook()
+    @ObservationIgnored private var lastEdgeReachedCount = 0
+    @ObservationIgnored private var pendingEdgeQuestionID: Int?
+    /// The `side_inset` event has been written for this run. Analysis queue.
+    @ObservationIgnored private var sideInsetLogged = false
 
     /// What the throttled panels are set to, in one piece.
     struct PanelUpdate {
@@ -263,6 +270,17 @@ class ScanEngine: NSObject {
         skipsAlignAndFocus = skips
     }
 
+    /// The guided scan page confirms align and focus with a button; the lab does not.
+    func setConfirmsSetupSteps(_ confirms: Bool) {
+        confirmsSetupSteps = confirms
+        analysisQueue.async { [weak self] in self?.setup.confirmsSteps = confirms }
+    }
+
+    /// The person tapped Confirm on the align or focus step.
+    func confirmSetupStep() {
+        analysisQueue.async { [weak self] in self?.setup.confirmStep() }
+    }
+
     /// Whether the guide pauses on the run monitor's say.
     func setPausesOnMonitor(_ pauses: Bool) {
         pausesOnMonitor = pauses
@@ -322,6 +340,7 @@ class ScanEngine: NSObject {
     private func beginSetup() {
         let skips = skipsAlignAndFocus
         setup = LabSetupSession(skippingAlignAndFocus: skips)
+        setup.confirmsSteps = confirmsSetupSteps
         pipeline.resetPosition()
         if skips { pipeline.redetectField() }
         clearTrackingDisplay()
@@ -491,6 +510,42 @@ class ScanEngine: NSObject {
         }
     }
 
+    /// What became of one answer to an edge question.
+    struct EdgeAnswerRecord: Equatable {
+        enum Outcome: Equatable { case applied, late }
+        var questionID: Int
+        var feedback: EdgeFeedback
+        var outcome: Outcome
+    }
+
+    /// The answers applied so far, in order. Analysis queue.
+    @ObservationIgnored private(set) var edgeAnswerLog: [EdgeAnswerRecord] = []
+
+    /// The helper's answer to the edge question on the card, by id. Queued on the analysis queue,
+    /// so a busy queue delays an answer but never drops one, and answers apply in order. The edge
+    /// the question was about is accepted or rejected even if the line has since left the cross.
+    /// A question that was answered, replaced or has expired is late: logged as `edge_user_late`
+    /// and ignored. Written to the CSV as `edge_user_yes`, `edge_user_no` or `edge_user_late`
+    /// with `question=<id>`.
+    func answerEdge(_ feedback: EdgeFeedback, questionID: Int) {
+        analysisQueue.async { [weak self] in
+            guard let self, self.guideEnabled else { return }
+            self.pendingEdgeQuestionID = questionID
+            if let question = self.edgeQuestions.answer(id: questionID),
+                self.dryRun.answerEdgeQuestion(
+                    question.snapshot, feedback, seconds: self.lastFrameSeconds)
+            {
+                self.pendingEdgeFeedback = feedback
+                self.edgeAnswerLog.append(
+                    EdgeAnswerRecord(questionID: questionID, feedback: feedback, outcome: .applied))
+            } else {
+                self.pendingEventName = "edge_user_late"
+                self.edgeAnswerLog.append(
+                    EdgeAnswerRecord(questionID: questionID, feedback: feedback, outcome: .late))
+            }
+        }
+    }
+
     /// What the guided scan page shows as the instruction, for the CSV's `knob_words`.
     func setHelperWords(_ words: String) {
         analysisQueue.async { [weak self] in self?.helperWords = words }
@@ -559,6 +614,10 @@ class ScanEngine: NSObject {
         guidePredicted = []
         guideEdgePoints = []
         runPath = []
+        sideInsetLogged = false
+        edgeQuestions = EdgeQuestionBook()
+        lastEdgeReachedCount = 0
+        pendingEdgeQuestionID = nil
         // A new run: counting, its snapshots and the summary start afresh.
         live.begin(stamp: Self.stamp())
         live.setCounting(false)
@@ -1023,7 +1082,7 @@ class ScanEngine: NSObject {
             framesSkippedByReason: live.counter.framesSkippedByReason,
             detectorModel: live.model.rawValue, discDrops: live.counter.discDrops,
             bigDrops: live.counter.bigDrops, detectorUnits: live.units.rawValue,
-            rightEdgeSource: dryRun.rightEdgeSource,
+            rightEdgeSource: dryRun.rightEdgeSource, sideInsetFields: dryRun.sideInsetFields,
             organisms: live.counter.map.entries.map {
                 RunMapOrganism(
                     label: $0.label, x: Double($0.fields.x), y: Double($0.fields.y),
@@ -1259,10 +1318,19 @@ extension ScanEngine: AVCaptureVideoDataOutputSampleBufferDelegate {
             let asks =
                 (dryRun.asksEdges && result.fields.lineAtCross) || result.fields.expectedEdgeAsk
             let canMark = result.fields.canMarkEdge
+            // The question on the card: raised while the guide asks, kept (with what it was about)
+            // for a few seconds after, and closed when the route settled the edge itself.
+            edgeQuestions.update(
+                asking: asks, snapshot: asks ? dryRun.edgeQuestionSnapshot : nil, seconds: time)
+            if result.info.edgeReachedCount != lastEdgeReachedCount {
+                lastEdgeReachedCount = result.info.edgeReachedCount
+                edgeQuestions.close()
+            }
+            let questionID = edgeQuestions.currentID
             DispatchQueue.main.async { [weak self] in
                 self?.overlayState.update(
                     model: overlay, captureCount: captureCount, asksEdge: asks,
-                    canMarkEdge: canMark)
+                    canMarkEdge: canMark, questionID: questionID)
             }
         }
         if step.event == .hop {
@@ -1356,6 +1424,19 @@ extension ScanEngine: AVCaptureVideoDataOutputSampleBufferDelegate {
             if let counted = result?.counted, !counted.isEmpty {
                 logged.eventDetail = counted.joined(separator: "; ")
                 if pendingEventName.isEmpty { pendingEventName = "organism_counted" }
+            }
+            // Once per run: how far the first and last columns sit inside the side edges.
+            if !sideInsetLogged, let inset = dryRun.sideInsetFields, logged.eventDetail.isEmpty,
+                pendingEventName.isEmpty
+            {
+                sideInsetLogged = true
+                pendingEventName = "side_inset"
+                logged.eventDetail = String(format: "side_inset_fields=%.2f", inset)
+            }
+            if let id = pendingEdgeQuestionID {
+                logged.eventDetail =
+                    (logged.eventDetail.isEmpty ? "" : logged.eventDetail + "; ") + "question=\(id)"
+                pendingEdgeQuestionID = nil
             }
             if cameraConfigPending, logged.eventDetail.isEmpty, pendingEventName.isEmpty {
                 cameraConfigPending = false

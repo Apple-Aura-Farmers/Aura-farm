@@ -136,6 +136,10 @@ final class GuideDryRun {
 
     private var classifier = ViewClassifier()
     private var guide = GuidedSweep()
+    /// The eyepiece circle's radius has been handed to the guide for this run.
+    private var sideInsetApplied = false
+    /// How far the first and last columns sit inside the side edges; nil until the circle is known.
+    var sideInsetFields: Double? { sideInsetApplied ? guide.sideInsetFields : nil }
 
     init() { reset() }
     /// Full-cover-slip mode (edges from the line only); changing it starts the guide afresh.
@@ -222,6 +226,14 @@ final class GuideDryRun {
         // the on-screen size of one field. Without a preview the picker's mapping stands in,
         // with a field being the box's side in pixels.
         let boxSide = max(step.boxSide, 1)
+        // The confirmed eyepiece circle, in the guide's unit (the box side), before the first
+        // column: the first and last columns then sit that far plus a margin inside the sides.
+        if !sideInsetApplied, guide.columnNumber == 0,
+            let circle = step.fieldState?.mask.flatMap({ FieldCircle(fitting: $0) })
+        {
+            guide.setEyepieceRadius(fields: Double(circle.radius) / boxSide)
+            sideInsetApplied = true
+        }
         // The axes of the CONTENT's motion on screen: measured from the preview, or the
         // picker's mapping (which describes the view's travel) negated.
         let axes = self.axes
@@ -415,7 +427,7 @@ final class GuideDryRun {
                 columnInProgress: guide.columnInProgress, spotMode: spotMode,
                 column: guide.columnNumber, lastColumn: result.lastColumn,
                 slipHeightFields: guide.measuredHeightFields,
-                spotNearCross: guide.distanceToSpot <= SpeedBandThresholds().nearCrossFields),
+                sideInsetFields: sideInsetFields),
             overlay: overlay,
             captureTrailPoint: result.capture == nil ? nil : step.positionFields,
             targetTrailPoint: targetPoint, predictedTrailLines: predictedLines,
@@ -491,7 +503,22 @@ final class GuideDryRun {
         lastEdgeHeading = guide.edgeHeading
     }
 
+    /// What the edge question is about now, captured when it is raised.
+    var edgeQuestionSnapshot: EdgeQuestionSnapshot? { guide.edgeQuestionSnapshot }
+
+    /// The helper's answer to an earlier question; false when it no longer applies.
+    func answerEdgeQuestion(
+        _ snapshot: EdgeQuestionSnapshot, _ feedback: EdgeFeedback, seconds: Double
+    ) -> Bool {
+        guard var reading = lastReading else { return false }
+        reading.seconds = seconds
+        let applied = guide.answerEdgeQuestion(snapshot, feedback, reading) != nil
+        lastEdgeHeading = guide.edgeHeading
+        return applied
+    }
+
     func reset() {
+        sideInsetApplied = false
         classifier.reset()
         var thresholds = GuidedSweepThresholds()
         thresholds.fullCoverSlip = fullCoverSlip

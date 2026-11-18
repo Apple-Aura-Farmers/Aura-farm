@@ -102,6 +102,11 @@ final class LabSetupSession {
     /// Alignment was lost after it passed: the field is learned again, and a focus already found
     /// before the loss stays found when focus comes round again.
     private var resumingAfterLoss = false
+    /// The guided scan page asks the person to confirm align and focus (as the field review is
+    /// confirmed): the checks must pass AND the person must confirm before the step moves on. The
+    /// lab leaves this off and advances as soon as the checks pass.
+    var confirmsSteps = false
+    private var stepConfirmed = false
     /// The round view the person confirmed, which focus is measured inside.
     private var confirmedFieldCircle: FieldCircle?
     private var frameCounter = 0
@@ -133,8 +138,12 @@ final class LabSetupSession {
     /// The run monitor's state, for the guide to pause on.
     var monitorState: RunMonitorState { info.monitor.state }
 
+    /// The person confirmed the align or focus step they are on (see `confirmsSteps`).
+    func confirmStep() { stepConfirmed = true }
+
     /// Back to align: the checks start afresh and the stage is forgotten.
     func redo() {
+        stepConfirmed = false
         flow.redo()
         alignment.reset()
         resetFocus()
@@ -244,13 +253,18 @@ final class LabSetupSession {
                 focusDial: dialReading))
 
         if atStep == .align {
-            if flow.update(alignmentPassed: alignment.isPassed) { enterField(pipeline: pipeline) }
+            if flow.update(alignmentPassed: alignment.isPassed && canAdvance) {
+                stepConfirmed = false
+                enterField(pipeline: pipeline)
+            }
         } else if alignment.isLost {
+            stepConfirmed = false
             flow.alignmentLost()
             alignment.reset()
             resumingAfterLoss = true
             focusReading = nil
-        } else if flow.update(focused: focusReading?.state == .focused) {
+        } else if flow.update(focused: focusReading?.state == .focused && canAdvance) {
+            stepConfirmed = false
             monitor.setFocusBaseline(median(focusIndexes.map(\.value)))
             // Tracking starts afresh for the stage step: the picture is sharper than the anchor
             // the field step left.
@@ -263,6 +277,9 @@ final class LabSetupSession {
             resumeStep: flow.resumeStep)
         return info
     }
+
+    /// The step may move on: always in the lab, after the person's confirmation on the page.
+    private var canAdvance: Bool { !confirmsSteps || stepConfirmed }
 
     private static func newSetupDial() -> FocusDial {
         FocusDial(
@@ -287,6 +304,7 @@ final class LabSetupSession {
     /// Focus is about to run (the field was confirmed): a focus found before an alignment loss
     /// stays found, otherwise the focus guide starts afresh.
     private func enterFocus() {
+        stepConfirmed = false
         if !(resumingAfterLoss && focusWasFocused) {
             resetFocus()
             focusWasFocused = false
@@ -384,6 +402,7 @@ final class LabSetupSession {
         flow.alignmentLost()
         alignment.reset()
         monitor.reset()
+        stepConfirmed = false
         resumingAfterLoss = true
     }
 

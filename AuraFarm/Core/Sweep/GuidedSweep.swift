@@ -71,6 +71,12 @@ struct GuidedSweep {
     var columnNumber: Int { route.columnNumber }
     /// Left edge to right edge, in fields, when both are known.
     var edgeSpanFields: Double? { route.edgeSpanFields }
+    /// How far the first and last columns sit inside the left and right edges, in fields.
+    var sideInsetFields: Double { route.thresholds.sideInsetFields }
+    /// Tells the route the confirmed eyepiece circle's radius in fields, before the first column.
+    mutating func setEyepieceRadius(fields: Double) {
+        route.thresholds.eyepieceRadiusFields = fields
+    }
     /// The slip's height measured from its top and bottom edges, in fields, when both are known.
     var measuredHeightFields: Double? { route.measuredHeightFields }
     var columnSpacingFields: Double { route.thresholds.columnSpacingFields }
@@ -117,6 +123,20 @@ struct GuidedSweep {
     mutating func userEdge(_ feedback: EdgeFeedback, _ reading: GuideReading) -> GuideStep {
         guard pauseReason == nil else { return update(reading) }
         return step(from: route.userEdge(feedback, reading))
+    }
+
+    /// What the edge question is about now (see `SlideRoute.edgeQuestionSnapshot`).
+    var edgeQuestionSnapshot: EdgeQuestionSnapshot? { route.edgeQuestionSnapshot }
+
+    /// An answer to an earlier edge question. nil when it no longer applies (paused, or the route
+    /// has moved on).
+    mutating func answerEdgeQuestion(
+        _ snapshot: EdgeQuestionSnapshot, _ feedback: EdgeFeedback, _ reading: GuideReading
+    ) -> GuideStep? {
+        guard pauseReason == nil else { return nil }
+        let result = route.answerEdgeQuestion(snapshot, feedback, reading)
+        guard result.applied else { return nil }
+        return step(from: result.output)
     }
 
     /// Holds the route where it is until `resume`.

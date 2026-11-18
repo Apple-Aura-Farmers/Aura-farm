@@ -18,16 +18,26 @@ final class GuidedScanSession {
         sentWords = ""
     }
 
+    /// The person tapped Yes or No on the question card: the card changes at once, and the answer
+    /// goes to the engine, which applies it to that question.
+    func answer(_ feedback: EdgeFeedback, on model: ScanEngine) -> HelperHaptic {
+        guard let id = display?.questionID else { return .none }
+        model.answerEdge(feedback, questionID: id)
+        let result = presenter.answered(
+            yes: feedback == .yes, questionID: id, at: CACurrentMediaTime())
+        display = result
+        return result.haptic
+    }
+
     /// Reads the engine's state now and updates the display; returns the haptic to play.
     func refresh(from model: ScanEngine) -> HelperHaptic {
         guard let overlay = model.overlayState.model else { return .none }
         let input = GuidedScanInput(
             seconds: CACurrentMediaTime(), instruction: overlay.instruction,
-            arrow: overlay.arrowDirection, asksEdge: model.overlayState.asksEdge,
+            arrow: overlay.arrowDirection, questionID: model.overlayState.questionID,
             column: overlay.column, lastColumn: overlay.lastColumn,
             slipHeightFields: model.guideInfo.slipHeightFields,
-            speedFraction: model.speedState.speedFraction,
-            spotNearCross: model.guideInfo.spotNearCross,
+            sideInsetFields: model.guideInfo.sideInsetFields,
             captureCount: model.overlayState.captureCount, isFinished: overlay.isFinished)
         let shown = presenter.present(input)
         if shown != display { display = shown }

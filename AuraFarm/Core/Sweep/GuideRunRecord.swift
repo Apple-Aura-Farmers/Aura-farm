@@ -38,6 +38,10 @@ struct GuideRunRecord: Codable, Equatable {
     /// How the right edge was found: "line", "empty" (the view went empty ahead) or "predicted"
     /// (the square cover slip's); empty when it was not found. Earlier records have none.
     var rightEdgeSource = ""
+    /// How far the first and last columns sat inside the left and right edges, in fields (the
+    /// confirmed eyepiece circle's radius plus a margin); nil when the circle was not known and
+    /// for earlier records.
+    var sideInsetFields: Double?
     /// The map of the run, in fields in the trail's space, so it can be redrawn from the record
     /// alone: the organisms the helper's count includes, the path (at most
     /// `RunMapContent.maxPathPoints` points), the edges, and how that space turns onto the screen
@@ -116,6 +120,7 @@ extension GuideRunRecord {
             detectorUnits: try c.decodeIfPresent(String.self, forKey: .detectorUnits)
                 ?? DetectorUnits.graphics.rawValue,
             rightEdgeSource: try c.decodeIfPresent(String.self, forKey: .rightEdgeSource) ?? "",
+            sideInsetFields: try c.decodeIfPresent(Double.self, forKey: .sideInsetFields),
             organisms: try c.decodeIfPresent([RunMapOrganism].self, forKey: .organisms) ?? [],
             path: try c.decodeIfPresent([RunMapPoint].self, forKey: .path) ?? [],
             edges: try c.decodeIfPresent([RunMapEdge].self, forKey: .edges) ?? [],

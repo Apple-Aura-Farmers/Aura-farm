@@ -86,6 +86,41 @@ final class LabSetupSessionTests: XCTestCase {
         XCTAssertEqual(session.info.focusSquare, expected)
     }
 
+    func testAlignWaitsForAConfirmWhenTheSessionAsksForOne() {
+        let pipeline = makePipeline()
+        let session = LabSetupSession()
+        session.confirmsSteps = true
+        var time = feed(discFrame(), for: 4.0, from: 0, session: session, pipeline: pipeline)
+        XCTAssertTrue(session.info.isAlignmentPassed, "the checks passed")
+        XCTAssertEqual(session.step, .align, "but it waits for the person")
+        session.confirmStep()
+        time = feed(discFrame(), for: 0.3, from: time, session: session, pipeline: pipeline)
+        XCTAssertEqual(session.step, .field)
+        // Without the setting (the lab) the step moves on by itself, as before.
+        let lab = LabSetupSession()
+        feed(discFrame(), for: 2.0, from: 0, session: lab, pipeline: makePipeline())
+        XCTAssertEqual(lab.step, .field)
+    }
+
+    func testFocusWaitsForAConfirmAndThenSetsTheBaseline() {
+        let pipeline = makePipeline()
+        let session = LabSetupSession()
+        var time = reachFocus(session: session, pipeline: pipeline)
+        session.confirmsSteps = true
+        for amplitude in [30.0, 60, 80, 80, 80, 20, 20, 20, 80, 80] {
+            time = feed(
+                texturedFrame(amplitude), for: 0.4, from: time, session: session, pipeline: pipeline)
+        }
+        time = feed(texturedFrame(80), for: 3, from: time, session: session, pipeline: pipeline)
+        XCTAssertEqual(session.info.focus?.state, .focused)
+        XCTAssertEqual(session.step, .focus, "focused, but waiting for the person")
+        XCTAssertNil(session.focusBaseline)
+        session.confirmStep()
+        feed(texturedFrame(80), for: 0.3, from: time, session: session, pipeline: pipeline)
+        XCTAssertEqual(session.step, .stage)
+        XCTAssertNotNil(session.focusBaseline)
+    }
+
     func testFocusFinishingSetsTheBaselineAndMovesOnToTheStage() {
         let pipeline = makePipeline()
         let session = LabSetupSession()

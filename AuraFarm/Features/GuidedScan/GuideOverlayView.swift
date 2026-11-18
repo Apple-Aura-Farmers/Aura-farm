@@ -10,11 +10,14 @@ final class GuideOverlayState {
     /// the helper is asked, and "Mark edge here" while an edge is looked for.
     private(set) var asksEdge = false
     private(set) var canMarkEdge = false
+    /// The edge question on screen, by id (the guided scan page's card); nil when none.
+    private(set) var questionID: Int?
 
     func update(
         model: GuideOverlayModel?, captureCount: Int, asksEdge: Bool = false,
-        canMarkEdge: Bool = false
+        canMarkEdge: Bool = false, questionID: Int? = nil
     ) {
+        if self.questionID != questionID { self.questionID = questionID }
         if self.model != model { self.model = model }
         if self.captureCount != captureCount { self.captureCount = captureCount }
         if self.asksEdge != asksEdge { self.asksEdge = asksEdge }
@@ -27,8 +30,11 @@ struct LiveGuideOverlay: View {
     var state: GuideOverlayState
     /// Only the cross, the target and the rings: the guided scan page words things itself.
     var plain = false
+    /// Draws no target cross or arrow (the guided scan page, while the edge question is showing).
+    var hidesMark = false
     var body: some View {
-        GuideOverlayView(model: state.model, captureCount: state.captureCount, plain: plain)
+        GuideOverlayView(
+            model: state.model, captureCount: state.captureCount, plain: plain, hidesMark: hidesMark)
     }
 }
 
@@ -42,6 +48,8 @@ struct GuideOverlayView: View {
     var captureCount = 0
     /// Draws no words, count or finished banner (see `LiveGuideOverlay.plain`).
     var plain = false
+    /// Draws the fixed centre and the rings, but no target cross or arrow.
+    var hidesMark = false
 
     @State private var flash = false
 
@@ -49,7 +57,7 @@ struct GuideOverlayView: View {
         ZStack {
             if let model {
                 centre(model)
-                mark(model)
+                if !hidesMark { mark(model) }
                 if let progress = model.holdProgress { holdRing(model, progress) }
                 if let progress = model.checkProgress { checkRing(model, progress) }
                 if plain {
@@ -100,21 +108,27 @@ struct GuideOverlayView: View {
                 .position(point)
                 .animation(.linear(duration: 0.1), value: point)
         case .pinnedArrow(let point, let angle, let tone, let distance):
-            VStack(spacing: 2) {
+            ZStack {
                 ArrowShape()
                     .fill(Self.colour(tone))
                     .overlay(ArrowShape().stroke(.black.opacity(0.7), lineWidth: 1.5))
                     .frame(width: 44, height: 28)
                     .rotationEffect(.radians(angle))
+                    .position(point)
+                // The distance sits beside the arrow's tail, not its tip.
                 if let distance {
-                    Text("\(distance, specifier: "%.1f") fields")
-                        .font(.caption.bold())
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 6)
-                        .background(.black.opacity(0.6), in: Capsule())
+                    GeometryReader { proxy in
+                        Text("\(distance, specifier: "%.1f") fields")
+                            .font(.caption.bold())
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 6)
+                            .background(.black.opacity(0.6), in: Capsule())
+                            .position(
+                                GuideOverlayModel.distanceLabelCentre(
+                                    arrowCentre: point, angle: angle, viewSize: proxy.size))
+                    }
                 }
             }
-            .position(point)
             .animation(.linear(duration: 0.1), value: point)
         case .none:
             EmptyView()
@@ -284,6 +298,39 @@ struct ArrowShape: Shape {
     }
 
     #Preview("Arrow far away") {
+        GuidePreviewBackdrop(
+            model: previewModel(
+                .pinnedArrow(
+                    at: CGPoint(x: 195, y: 340), angle: .pi / 2, tone: .move, distanceFields: 2.4),
+                line: "Bring the cross to the centre"))
+    }
+
+    /// The far-away arrow pinned at each side, with "x.x fields" beside its tail.
+    #Preview("Arrow far away: left") {
+        GuidePreviewBackdrop(
+            model: previewModel(
+                .pinnedArrow(
+                    at: CGPoint(x: 70, y: 210), angle: .pi, tone: .move, distanceFields: 2.4),
+                line: "Bring the cross to the centre"))
+    }
+
+    #Preview("Arrow far away: right") {
+        GuidePreviewBackdrop(
+            model: previewModel(
+                .pinnedArrow(
+                    at: CGPoint(x: 320, y: 210), angle: 0, tone: .move, distanceFields: 2.4),
+                line: "Bring the cross to the centre"))
+    }
+
+    #Preview("Arrow far away: up") {
+        GuidePreviewBackdrop(
+            model: previewModel(
+                .pinnedArrow(
+                    at: CGPoint(x: 195, y: 80), angle: -.pi / 2, tone: .move, distanceFields: 2.4),
+                line: "Bring the cross to the centre"))
+    }
+
+    #Preview("Arrow far away: down, text at the tail") {
         GuidePreviewBackdrop(
             model: previewModel(
                 .pinnedArrow(

@@ -16,7 +16,10 @@ struct GuidedScanPage: View {
     @State private var hasStarted = false
     @State private var previewLayer: AVCaptureVideoPreviewLayer?
     @State private var isConfirmingLeave = false
-    @State private var isChoosingEnd = false
+    /// "Ending after this column" is on; shown at once, then kept in step with the engine.
+    @State private var endsAfterColumn = false
+    /// Draws the model's detection boxes over the picture; this scan only, never stored.
+    @State private var showsDetections = false
     @State private var saveProblem: String?
     @State private var result: SavedSweep?
     @State private var haptics = HelperHapticPlayer()
@@ -56,7 +59,11 @@ struct GuidedScanPage: View {
                 LabSettingsSync(
                     model: model,
                     transform: { $0.forGuidedScan(coverage: coverage.rawValue) },
-                    onReady: { model.start() })
+                    onReady: {
+                        // Align and focus wait for a Confirm tap, like the field review.
+                        model.setConfirmsSetupSteps(true)
+                        model.start()
+                    })
             )
             .onDisappear { model.stop() }
             .sheet(item: $result, onDismiss: { dismiss() }) { sweep in
@@ -87,16 +94,11 @@ struct GuidedScanPage: View {
         .background(.black)
         .foregroundStyle(.white)
         .background(GuidedScanHaptics(model: model, session: session, player: haptics))
+        .onChange(of: showsDetections) { _, shown in model.setShowsDetections(shown) }
+        .onChange(of: model.runControl.pendingEnd) { _, pending in endsAfterColumn = pending }
         .onChange(of: model.runSummary) { _, record in
             guard let record else { return }
             save(record)
-        }
-        .confirmationDialog("End the run", isPresented: $isChoosingEnd) {
-            Button("End now", role: .destructive) { model.endRun(.now) }
-            if model.runControl.columnInProgress {
-                Button("End after this column") { model.endRun(.afterColumn) }
-            }
-            Button("Keep scanning", role: .cancel) {}
         }
     }
 
@@ -106,11 +108,32 @@ struct GuidedScanPage: View {
         HStack {
             if hasStarted {
                 Text(LiveCountInfo.organisms(model.countInfo.total)).bold()
+                    .lineLimit(1).minimumScaleFactor(0.7)
                 Spacer()
                 Text(session.display?.columnText ?? "").bold()
-                Button("End run") { isChoosingEnd = true }
-                    .buttonStyle(.bordered).controlSize(.small).tint(.white)
-                    .disabled(model.runControl.isFinished)
+                Button {
+                    showsDetections.toggle()
+                } label: {
+                    Image(systemName: showsDetections ? "eye.fill" : "eye")
+                }
+                .accessibilityLabel("Show detections")
+                .accessibilityValue(showsDetections ? "On" : "Off")
+                Menu {
+                    ForEach(
+                        EndRunMenu.items(
+                            columnInProgress: model.runControl.columnInProgress,
+                            endingAfterColumn: endsAfterColumn), id: \.title
+                    ) { item in
+                        Button(item.title, role: item == .endNow ? .destructive : nil) {
+                            chooseEnd(item)
+                        }
+                    }
+                } label: {
+                    Text(EndRunMenu.label(endingAfterColumn: endsAfterColumn))
+                        .lineLimit(1).minimumScaleFactor(0.7)
+                }
+                .buttonStyle(.bordered).controlSize(.small).tint(.white)
+                .disabled(model.runControl.isFinished)
             } else {
                 Text(stage.indicator).bold().lineLimit(1).minimumScaleFactor(0.7)
                 Spacer()
@@ -195,11 +218,28 @@ struct GuidedScanPage: View {
                 darkOutside(info, converter, isCentred)
                 GuideGeometryHost(model: model, previewLayer: previewLayer, display: display)
                 if hasStarted {
-                    LiveGuideOverlay(state: model.overlayState, plain: true)
+                    if showsDetections {
+                        DetectionBoxes(info: model.liveBoxes) {
+                            converter?.viewPolygon(of: $0) ?? []
+                        }
+                    }
+                    LiveGuideOverlay(
+                        state: model.overlayState, plain: true,
+                        hidesMark: session.display?.questionID != nil)
                     EdgeLineOverlay(state: model.edgeLineState, mapper: converter)
                     PausedOverlay(
                         monitor: model.setupInfo.monitor, mapper: converter,
                         onResumeAnyway: nil)
+                    // The lab's speed bar, where the lab draws it: bottom left of the picture.
+                    VStack {
+                        Spacer()
+                        HStack {
+                            LiveSpeedMeter(model: model).frame(width: 140)
+                            Spacer()
+                        }
+                    }
+                    .padding(8)
+                    .allowsHitTesting(false)
                 }
             }
         }
@@ -246,6 +286,16 @@ struct GuidedScanPage: View {
                     ? AlignmentTicks(
                         reading: model.setupInfo.alignment,
                         passed: model.setupInfo.isAlignmentPassed) : nil)
+            if stage == .align {
+                bigButton("Confirm alignment", isEnabled: model.setupInfo.isAlignmentPassed) {
+                    model.confirmSetupStep()
+                }
+            }
+            if stage == .focus {
+                bigButton("Confirm focus", isEnabled: model.setupInfo.focus?.state == .focused) {
+                    model.confirmSetupStep()
+                }
+            }
             if stage == .ready {
                 CoverageChoiceView(coverage: $coverage)
                 bigButton("Start scan", action: startScan)
@@ -255,11 +305,24 @@ struct GuidedScanPage: View {
         .padding(.bottom, 8)
     }
 
-    private func bigButton(_ title: String, action: @escaping () -> Void) -> some View {
+    private func bigButton(
+        _ title: String, isEnabled: Bool = true, action: @escaping () -> Void
+    ) -> some View {
         Button(action: action) {
             Text(title).font(.title2.bold()).frame(maxWidth: .infinity, minHeight: 56)
         }
         .buttonStyle(.borderedProminent)
+        .disabled(!isEnabled)
+    }
+
+    /// An End run choice: shown at once, then handed to the engine.
+    private func chooseEnd(_ item: EndRunMenu.Item) {
+        switch item {
+        case .endAfterColumn: endsAfterColumn = true
+        case .undo: endsAfterColumn = false
+        case .endNow, .keepScanning: break
+        }
+        if let action = item.action { model.endRun(action) }
     }
 
     /// Begins the scan: logging is on for every guided scan (the movement CSV and the run
@@ -272,13 +335,13 @@ struct GuidedScanPage: View {
         model.markStart()
     }
 
-    /// The speed as a thin bar (no words: "Slower" is the card itself), then the card.
+    /// The instruction card, in space of its own. The speed is the lab's bar on the picture.
     private var scanBottom: some View {
         VStack(spacing: 8) {
-            SpeedBandView(band: session.display?.band ?? .green)
             HelperCardView(
                 card: session.display?.card ?? .waiting("Getting ready…"),
-                onYes: { model.edgeFeedback(.yes) }, onNo: { model.edgeFeedback(.no) })
+                onYes: { haptics.play(session.answer(.yes, on: model)) },
+                onNo: { haptics.play(session.answer(.no, on: model)) })
         }
         .padding(.horizontal)
         .padding(.bottom, 8)
@@ -346,48 +409,6 @@ private struct GuidedScanHaptics: View {
             }
     }
 }
-
-/// The page's layout from values, with a grey disc for the camera: a setup step, and mid-run.
-private struct LayoutPreview: View {
-    var isRunning: Bool
-
-    var body: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Text(isRunning ? "32 organisms" : "Step 2 of 4").bold()
-                Spacer()
-                if isRunning { Text("Column 3 of 9").bold() }
-            }
-            .font(.title3.monospacedDigit())
-            .padding()
-            Circle().fill(.gray).aspectRatio(1, contentMode: .fit).padding(8)
-            VStack(spacing: 10) {
-                if isRunning {
-                    HelperCardView(
-                        card: .turn(
-                            KnobRule().words(forArrowDirection: CGPoint(x: -1, y: 0))
-                                ?? .init(knob: .bottom, way: .towardsYou, alsoOtherKnob: false)))
-                    HStack {
-                        SpeedBandView(band: .green)
-                        Spacer()
-                        Button("End run") {}.buttonStyle(.bordered).controlSize(.small).tint(.white)
-                    }
-                } else {
-                    Text("Turn the microscope's focus knob until the picture is sharp.")
-                        .font(.title3).multilineTextAlignment(.center)
-                }
-            }
-            .padding()
-            Spacer()
-        }
-        .background(.black)
-        .foregroundStyle(.white)
-    }
-}
-
-#Preview("Setup step") { LayoutPreview(isRunning: false) }
-
-#Preview("Whole page mid-run") { LayoutPreview(isRunning: true) }
 
 #Preview("Coverage choice") {
     @Previewable @State var coverage = GuidedScanCoverage.everySecondColumn

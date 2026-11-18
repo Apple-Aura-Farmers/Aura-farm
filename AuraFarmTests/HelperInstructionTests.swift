@@ -27,6 +27,7 @@ final class HelperInstructionTests: XCTestCase {
             (.aligned, "Hold still"),
             (.holding(progress: 0.4), "Hold still"),
             (.captured, nil),
+            (.slowDown, nil),
             (.edgeGoBack(toward: v), "Back a little: bottom knob towards you"),
             (.edgeReached, "Edge found"),
             (.checkingEdge(progress: 0.5), "Hold still"),
@@ -46,7 +47,6 @@ final class HelperInstructionTests: XCTestCase {
             (.otherWay, "Back a little: bottom knob towards you"),
             (.missedSpot(toward: v), "Back a little: bottom knob towards you"),
             (.refocus, "Turn the fine focus slowly until it's sharp"),
-            (.slowDown, "Slower"),
             (.finished, "Done"),
         ]
         for (instruction, expected) in table {
@@ -129,14 +129,12 @@ final class HelperInstructionTests: XCTestCase {
 
     func testEachCardHasOneHapticPattern() throws {
         let turn = try XCTUnwrap(card(.move(toward: v), arrow: left))
-        XCTAssertEqual(HelperInstruction.slower.haptic, .twoLight)
         XCTAssertEqual(HelperInstruction.stop(progress: nil, note: nil).haptic, .firm)
         XCTAssertEqual(HelperInstruction.question.haptic, .firm)
         XCTAssertEqual(try XCTUnwrap(card(.tooFar, arrow: left)).haptic, .threeLight)
         XCTAssertEqual(HelperInstruction.edgeFound.haptic, .success)
         XCTAssertEqual(HelperInstruction.finished.haptic, .longSuccess)
         XCTAssertEqual(turn.haptic, .none)
-        XCTAssertEqual(HelperHaptic.twoLight.taps.count, 2)
         XCTAssertEqual(HelperHaptic.threeLight.taps.count, 3)
         XCTAssertEqual(HelperHaptic.firm.taps.count, 1)
         XCTAssertGreaterThan(
@@ -148,12 +146,12 @@ final class HelperInstructionTests: XCTestCase {
 
     private func input(
         _ seconds: Double, _ instruction: GuideInstruction, arrow: CGPoint? = nil,
-        asks: Bool = false, column: Int = 1, last: Bool = false, height: Double? = nil,
-        speed: Double = 0.02, near: Bool = false, captures: Int = 0, finished: Bool = false
+        question: Int? = nil, column: Int = 1, last: Bool = false, height: Double? = nil,
+        sideInset: Double? = nil, captures: Int = 0, finished: Bool = false
     ) -> GuidedScanInput {
         GuidedScanInput(
-            seconds: seconds, instruction: instruction, arrow: arrow, asksEdge: asks, column: column,
-            lastColumn: last, slipHeightFields: height, speedFraction: speed, spotNearCross: near,
+            seconds: seconds, instruction: instruction, arrow: arrow, questionID: question, column: column,
+            lastColumn: last, slipHeightFields: height, sideInsetFields: sideInset,
             captureCount: captures, isFinished: finished)
     }
 
@@ -169,11 +167,11 @@ final class HelperInstructionTests: XCTestCase {
         step(input(0.1, .move(toward: v), arrow: left))
         // A spot is ticked: the card stays, one light tap.
         step(input(0.2, .captured, arrow: left, captures: 1))
-        // Too fast: "Slower", but only after it has held for 0.8 s.
-        step(input(0.3, .move(toward: v), arrow: left, speed: 0.15, captures: 1))
-        step(input(1.2, .move(toward: v), arrow: left, speed: 0.15, captures: 1))
+        // The guide says slow down: no card of its own, the turn card stays (the bar shows speed).
+        step(input(0.3, .slowDown, arrow: left, captures: 1))
+        step(input(1.2, .slowDown, arrow: left, captures: 1))
         // The line is at the cross and the edge is asked.
-        step(input(1.3, .edgeDetected, arrow: left, asks: true, captures: 1))
+        step(input(1.3, .edgeDetected, arrow: left, question: 1, captures: 1))
         step(input(1.4, .edgeReached, captures: 1))
         step(input(2.0, .finished, column: 2, captures: 1, finished: true))
 
@@ -183,9 +181,9 @@ final class HelperInstructionTests: XCTestCase {
         XCTAssertEqual(shown[1].0, "Bottom knob towards you")
         XCTAssertEqual(shown[2].0, "Bottom knob towards you", "captured keeps the card")
         XCTAssertEqual(shown[2].1, .oneLight, "with the spot-tick haptic")
-        XCTAssertEqual(shown[3].0, "Bottom knob towards you", "0.0 s of too fast so far")
-        XCTAssertEqual(shown[4].0, "Slower")
-        XCTAssertEqual(shown[4].1, .twoLight)
+        XCTAssertEqual(shown[3].0, "Bottom knob towards you", "slow down keeps the turn card")
+        XCTAssertEqual(shown[4].0, "Bottom knob towards you")
+        XCTAssertEqual(shown[4].1, .none, "and plays no haptic")
         XCTAssertEqual(shown[5].0, "Is this the edge of the sample?")
         XCTAssertEqual(shown[5].1, .firm)
         XCTAssertEqual(shown[6].0, "Edge found")
@@ -227,21 +225,19 @@ final class HelperInstructionTests: XCTestCase {
         XCTAssertEqual(count.shown(step: 1.6, measuredHeightFields: nil, column: 10, isLastColumn: false), 10)
     }
 
-    func testTheSpeedBandUsesTheExistingLimits() {
-        let touch = BriefTouchThresholds().maxTouchSpeedFraction
-        let comfortable = MovementIndicatorThresholds().comfortableSpeedFraction
-        let fast = MovementIndicatorThresholds().tooFastSpeedFraction
-        XCTAssertLessThan(touch, comfortable + 1, "sanity")
-        // Away from a spot: green up to the comfortable limit.
-        XCTAssertEqual(SpeedBand.of(speedFraction: comfortable, nearCross: false), .green)
-        XCTAssertEqual(SpeedBand.of(speedFraction: comfortable + 0.01, nearCross: false), .amber)
-        // Near the cross: the brief-touch limit.
-        XCTAssertEqual(SpeedBand.of(speedFraction: touch, nearCross: true), .green)
-        XCTAssertEqual(SpeedBand.of(speedFraction: touch + 0.01, nearCross: true), .amber)
-        XCTAssertEqual(SpeedBand.of(speedFraction: fast, nearCross: false), .red)
-        XCTAssertEqual(SpeedBand.of(speedFraction: fast, nearCross: true), .red)
-        XCTAssertFalse(SpeedBand.green.asksForSlower)
-        XCTAssertTrue(SpeedBand.amber.asksForSlower)
-        XCTAssertTrue(SpeedBand.red.asksForSlower)
+    func testASideInsetNarrowsTheColumnCount() {
+        let count = ColumnCount()
+        // A circle radius of 1.4 fields and the 0.15 margin: 1.55 on each side.
+        XCTAssertEqual(count.total(step: 1.6, sideInsetFields: 1.55), 7)
+        XCTAssertEqual(count.total(step: 0.8, sideInsetFields: 1.55), 14)
+        XCTAssertEqual(count.total(step: 1.6, sideInsetFields: nil), 9, "no circle: as before")
+        XCTAssertEqual(
+            count.shown(
+                step: 1.6, measuredHeightFields: nil, column: 1, isLastColumn: false,
+                sideInsetFields: 1.55), 7)
+        var presenter = GuidedScanPresenter()
+        let display = presenter.present(
+            input(0, .move(toward: v), arrow: left, column: 2, sideInset: 1.55))
+        XCTAssertEqual(display.columnText, "Column 2 of 7")
     }
 }

@@ -49,6 +49,21 @@ struct GuidedSweepThresholds {
     /// at the centre cross. The box is 1 field wide, so 0.5 puts its edge on the cover slip's
     /// edge; 0.6 leaves a little margin for a skewed stage. PLACEHOLDER: not calibrated.
     var columnInsetFields: Double = 0.6
+    /// The eyepiece circle's radius in fields (the guide's unit is the registration box side, the
+    /// circle is larger), once the confirmed circle is known; nil until then.
+    var eyepieceRadiusFields: Double?
+    /// Clear space left between the glass edge of the view and the cover slip's left and right
+    /// edges, beyond the circle's own radius, in fields. PLACEHOLDER: 0.15 field, a small margin
+    /// for a skewed stage; not calibrated.
+    var sideMarginFields: Double = 0.15
+    /// How far the first column sits inside the left edge and the last inside the right edge:
+    /// the circle's radius plus `sideMarginFields`, so that only sample is in view, never less than
+    /// `columnInsetFields`. Without a known circle, `columnInsetFields`. The top and bottom edges
+    /// keep `columnInsetFields`.
+    var sideInsetFields: Double {
+        guard let radius = eyepieceRadiusFields else { return columnInsetFields }
+        return max(radius + sideMarginFields, columnInsetFields)
+    }
     /// After a long stretch with no detail, detail that returns matched within this of where
     /// the stretch began was blur, not an edge. PLACEHOLDER: not calibrated.
     var sameSpotFields: Double = 0.3
@@ -201,7 +216,7 @@ struct SlideRoute {
     /// stage limit, or where a step right found the line), in fields; nil unless both are known.
     var edgeSpanFields: Double? {
         guard let first = columns.first ?? current else { return nil }
-        let left = first.x - thresholds.columnInsetFields
+        let left = first.x - thresholds.sideInsetFields
         let right =
             limits.maxX ?? rightEdgeX ?? (finishReason == .rightEdge ? Double(lastPosition.x) : nil)
         guard let right, right > left else { return nil }
@@ -571,7 +586,7 @@ struct SlideRoute {
     /// the recorded stage limits.
     var knownEdgeXs: [Double] {
         var edges = [limits.minX, limits.maxX].compactMap { $0 }
-        if let first = columns.first ?? current { edges.append(first.x - thresholds.columnInsetFields) }
+        if let first = columns.first ?? current { edges.append(first.x - thresholds.sideInsetFields) }
         return edges
     }
 
@@ -581,8 +596,13 @@ struct SlideRoute {
         guard let direction = reading.sideADirection else { return false }
         let towardLow = lowIsA ? Double(direction.x) : -Double(direction.x)
         let x = current?.x ?? Double(reading.position.x)
+        // The reach was measured with the column 0.6 inside the edge; a wider side inset moves
+        // the column away from the edge by the same amount, so the reach grows with it.
+        let reach =
+            thresholds.sideEdgeReachFields
+            + (thresholds.sideInsetFields - thresholds.columnInsetFields)
         return knownEdgeXs.contains {
-            abs(x - $0) <= thresholds.sideEdgeReachFields && ($0 - x) * towardLow > 0
+            abs(x - $0) <= reach && ($0 - x) * towardLow > 0
         }
     }
 
@@ -723,7 +743,7 @@ struct SlideRoute {
         guard thresholds.fullCoverSlip, thresholds.squareCoverSlip, let first = columns.first,
             let height = prediction.meanHeight(atColumns: columns.map(\.x))
         else { return nil }
-        return first.x - thresholds.columnInsetFields + height
+        return first.x - thresholds.sideInsetFields + height
     }
 
     /// What the route has predicted, for the trail mini-map.
@@ -732,7 +752,7 @@ struct SlideRoute {
             return PredictedEdges()
         }
         let rightX = rightEdgeX ?? predictedRightEdgeX()
-        let left = first.x - thresholds.columnInsetFields
+        let left = first.x - thresholds.sideInsetFields
         let furthest = max(columns.last?.x ?? first.x, current?.x ?? first.x)
         let right = rightX ?? (furthest + thresholds.columnSpacingFields)
         return PredictedEdges(
@@ -1020,7 +1040,7 @@ struct SlideRoute {
         lineEdge.consume()
         lineSeenAt = nil
         emptyAheadSince = nil
-        let x = edgeX - thresholds.columnInsetFields
+        let x = edgeX - thresholds.sideInsetFields
         guard !rightEdgeSeen, let index = stepBase,
             Double(reading.position.x) - columns[index].x > thresholds.lastColumnMinFields,
             x > columns[index].x
@@ -1068,6 +1088,76 @@ struct SlideRoute {
                 source: "line")
         default:
             return nil
+        }
+    }
+
+    /// What the edge question is about now, for an answer that comes a moment later: the line at
+    /// the cross (where it is, in guide fields), or the expected edge. nil when nothing is asked.
+    var edgeQuestionSnapshot: EdgeQuestionSnapshot? {
+        guard thresholds.fullCoverSlip else { return nil }
+        if lineEdge.atCross, let heading = edgeHeading {
+            let offset = lineEdge.offsetFields ?? 0
+            return .line(
+                point: CGPoint(
+                    x: Double(lastPosition.x) + offset * Double(heading.x),
+                    y: Double(lastPosition.y) + offset * Double(heading.y)),
+                angleDegrees: lineEdge.angleDegrees ?? 0)
+        }
+        if expectedEdgeAsking, let column = current, let edge = predictedEdge(for: column) {
+            return .expected(edgeAlong: edge)
+        }
+        return nil
+    }
+
+    /// The helper's answer to a question captured earlier (`edgeQuestionSnapshot`): the edge it
+    /// was about is accepted or rejected even if the line has since left the cross. The second
+    /// value is whether it applied; it does not when the route has moved on (no leg, no heading).
+    mutating func answerEdgeQuestion(
+        _ snapshot: EdgeQuestionSnapshot, _ feedback: EdgeFeedback, _ reading: GuideReading
+    ) -> (output: Output, applied: Bool) {
+        guard thresholds.fullCoverSlip else { return (lastOutput, false) }
+        switch (snapshot, feedback) {
+        case (.expected(let edge), .yes):
+            guard let column = current else { return (lastOutput, false) }
+            expectedEdgeAsking = false
+            guard
+                let output = takeLineEdge(
+                    reading, offsetFields: (edge - Double(reading.position.y)) * column.legDirection,
+                    angleDegrees: 0)
+            else { return (lastOutput, false) }
+            lastOutput = output
+            return (output, true)
+        case (.expected, .no):
+            guard current != nil else { return (lastOutput, false) }
+            expectedEdgeAsking = false
+            expectedAskDismissed = true
+            notAnEdgeUntil = reading.seconds + thresholds.lineEdge.notAnEdgeSeconds
+            lastOutput.instruction = .notAnEdge
+            return (lastOutput, true)
+        case (.line(let point, let angle), .yes), (.line(let point, let angle), .no):
+            guard let heading = edgeHeading else { return (lastOutput, false) }
+            // Where the edge is now relative to the view, along the heading.
+            let offset =
+                Double(point.x - reading.position.x) * Double(heading.x)
+                + Double(point.y - reading.position.y) * Double(heading.y)
+            if feedback == .yes {
+                guard
+                    let output = takeLineEdge(reading, offsetFields: offset, angleDegrees: angle)
+                else { return (lastOutput, false) }
+                lastOutput = output
+                return (output, true)
+            }
+            edgeMemory.recordRejected(
+                LineEdgeMemory.entry(
+                    normal: heading, position: reading.position, offsetFields: offset,
+                    angleDegrees: angle))
+            lineEdge.reset()
+            lineSeenAt = nil
+            notAnEdgeUntil = reading.seconds + thresholds.lineEdge.notAnEdgeSeconds
+            lastOutput.instruction = .notAnEdge
+            return (lastOutput, true)
+        case (_, .mark):
+            return (lastOutput, false)
         }
     }
 
@@ -1269,7 +1359,7 @@ struct SlideRoute {
     ) -> Output {
         switch purpose {
         case .leftEdge:
-            let inset = edgeAtCentre ? thresholds.columnInsetFields : 0
+            let inset = edgeAtCentre ? thresholds.sideInsetFields : 0
             let columnX = Double(reading.position.x) + inset
             if isRecheckRun {
                 isRecheckRun = false
@@ -1573,7 +1663,7 @@ struct SlideRoute {
         if let right = predictedRightEdgeX() {
             // A step that would cross the predicted right edge is shortened to the edge less the
             // inset and is the last column; too close to the column just done, there is none.
-            let farthest = right - thresholds.columnInsetFields
+            let farthest = right - thresholds.sideInsetFields
             if x > farthest {
                 rightEdgeX = right
                 rightEdgeSource = "predicted"
