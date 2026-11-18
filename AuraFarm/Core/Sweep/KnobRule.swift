@@ -37,7 +37,7 @@ struct KnobRule: Equatable {
         /// `text` with a lower-case first letter, to follow "Back a little: ".
         var phrase: String { text.prefix(1).lowercased() + text.dropFirst() }
 
-        /// The turning direction alone, which the drawing shows as a curved arrow.
+        /// The turning direction alone, which the drawing shows as an up (away) or down (towards) arrow.
         private static func wayText(_ way: Way) -> String {
             way == .towardsYou ? "towards you" : "away from you"
         }

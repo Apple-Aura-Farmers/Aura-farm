@@ -1,5 +1,16 @@
 import SwiftUI
 
+/// The boxes from the engine, read in a view of their own so they redraw as the engine publishes
+/// them (a read inside the page's picture closure is not tracked).
+struct LiveDetectionBoxes: View {
+    var model: ScanEngine
+    var converter: FramePreviewConverter?
+
+    var body: some View {
+        DetectionBoxes(info: model.liveBoxes) { converter?.viewPolygon(of: $0) ?? [] }
+    }
+}
+
 /// The detector's boxes over the picture: green counted, grey seen once, blue a repeat (already
 /// on the map). `polygon` turns a box in frame pixels into points of the displayed space, so
 /// the boxes go through the same centring and straightening as the picture.

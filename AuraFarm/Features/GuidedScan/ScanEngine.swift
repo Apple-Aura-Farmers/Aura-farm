@@ -669,7 +669,9 @@ class ScanEngine: NSObject {
         showsDetections = shown
         analysisQueue.async { [weak self] in
             self?.showsDetectionsFlag = shown
-            if !shown { DispatchQueue.main.async { self?.liveBoxes = LiveCountInfo() } }
+            // On: the boxes now, not at the next change of the count.
+            let current = shown ? self?.lastCountInfo : LiveCountInfo()
+            DispatchQueue.main.async { self?.liveBoxes = current ?? LiveCountInfo() }
         }
     }
 

@@ -85,7 +85,8 @@ struct GuidedScanPage: View {
     /// bar, and the instruction card in space of its own that nothing is drawn over.
     private var scanBody: some View {
         ScanLayoutView {
-            topLine
+            // Above the picture for touches too, whatever the picture does.
+            topLine.zIndex(1)
         } picture: {
             picture
         } bottom: {
@@ -168,6 +169,9 @@ struct GuidedScanPage: View {
                         previewLayer = $0
                     }
                 )
+                // The picture is only looked at: a centred picture is drawn larger than its frame,
+                // and its view must not catch taps meant for the top bar above it.
+                .allowsHitTesting(false)
                 .transformEffect(display)
                 if model.isAnalyzing {
                     overlays(display: display, isCentred: isCentred)
@@ -177,6 +181,7 @@ struct GuidedScanPage: View {
             }
             .frame(width: proxy.size.width, height: proxy.size.height)
             .clipShape(Rectangle())
+            .contentShape(Rectangle())
         }
         .frame(maxWidth: .infinity)
         .aspectRatio(1, contentMode: .fit)
@@ -194,9 +199,18 @@ struct GuidedScanPage: View {
         ZStack {
             switch stage {
             case .align:
-                EmptyView()
+                if model.setupInfo.isAlignmentPassed {
+                    confirmPanel(
+                        question: "Is the phone aligned?",
+                        detail: "The whole round view is in the picture, round and evenly lit.")
+                }
             case .focus:
                 LiveSetupOverlay(model: model, previewLayer: previewLayer, showsIndicator: false)
+                if model.setupInfo.focus?.state == .focused {
+                    confirmPanel(
+                        question: "Is the picture sharp?",
+                        detail: "Best focus found. Keep the knob still and confirm.")
+                }
             case .field:
                 LiveFieldOutlines(
                     model: model, previewLayer: previewLayer, display: display,
@@ -219,9 +233,7 @@ struct GuidedScanPage: View {
                 GuideGeometryHost(model: model, previewLayer: previewLayer, display: display)
                 if hasStarted {
                     if showsDetections {
-                        DetectionBoxes(info: model.liveBoxes) {
-                            converter?.viewPolygon(of: $0) ?? []
-                        }
+                        LiveDetectionBoxes(model: model, converter: converter)
                     }
                     LiveGuideOverlay(
                         state: model.overlayState, plain: true,
@@ -242,6 +254,16 @@ struct GuidedScanPage: View {
                     .allowsHitTesting(false)
                 }
             }
+        }
+    }
+
+    /// The align and focus confirmation, over the top of the picture like the field review's.
+    private func confirmPanel(question: String, detail: String) -> some View {
+        VStack {
+            SetupConfirmPanel(
+                question: question, detail: detail, buttonTitle: "Looks right"
+            ) { model.confirmSetupStep() }
+            Spacer()
         }
     }
 
@@ -286,16 +308,6 @@ struct GuidedScanPage: View {
                     ? AlignmentTicks(
                         reading: model.setupInfo.alignment,
                         passed: model.setupInfo.isAlignmentPassed) : nil)
-            if stage == .align {
-                bigButton("Confirm alignment", isEnabled: model.setupInfo.isAlignmentPassed) {
-                    model.confirmSetupStep()
-                }
-            }
-            if stage == .focus {
-                bigButton("Confirm focus", isEnabled: model.setupInfo.focus?.state == .focused) {
-                    model.confirmSetupStep()
-                }
-            }
             if stage == .ready {
                 CoverageChoiceView(coverage: $coverage)
                 bigButton("Start scan", action: startScan)
