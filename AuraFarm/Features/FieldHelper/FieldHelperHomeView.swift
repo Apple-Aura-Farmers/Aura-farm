@@ -1,22 +1,23 @@
 import MapKit
 import SwiftUI
 
-/// The Plots tab: a map of every plot the helper looks after, under a bar carrying the one
-/// control it needs, which is marking new land.
+/// The Plots tab: a map of every plot the helper looks after, under a search field. Marking
+/// new land is the button at the trailing end of the tab bar, which asks for it through
+/// `markPlot`.
 ///
 /// SwiftUI can only show one sheet at a time from a screen, and a sheet would sit on top of
 /// any page pushed from here, so the one sheet slot carries whichever form is wanted and the
 /// card for a tapped plot closes itself before opening that plot's farm.
 struct FieldHelperHomeView: View {
-    /// Where the map is looking. Owned by the tabs, so the Plots tab and the search tab beside
-    /// it show the same land and a search can send both somewhere.
+    /// Where the map is looking. Owned by the tabs, so a search can send it somewhere and it
+    /// stays put when the helper changes tabs.
     @Binding var camera: MapCameraPosition
-    /// Set on the copy behind the search tab, which is the only one with a field to type into.
-    var isSearch = false
+    /// Set by the tab bar's add button to start marking land; put back to false once taken.
+    @Binding var markPlot: Bool
 
     @Environment(FarmStore.self) private var store
 
-    /// What has been typed into the search field, on the copy that has one.
+    /// What has been typed into the search field.
     @State private var query = ""
     /// A plot just filed, waiting for its form to finish closing so its card can open.
     @State private var justFiled: Selection?
@@ -96,11 +97,11 @@ struct FieldHelperHomeView: View {
             // bars float over it instead, which is what the design has.
             .toolbarBackgroundVisibility(.hidden, for: .navigationBar)
             .toolbarBackgroundVisibility(.hidden, for: .tabBar)
-            .toolbar {
-                // Not on the search copy, where the bar belongs to the field.
-                if !isSearch {
-                    ToolbarItem(placement: .topBarTrailing) { addButton }
-                }
+            .onChange(of: markPlot) {
+                guard markPlot else { return }
+                markPlot = false
+                selection = nil
+                outline = Outline()
             }
             .sheet(item: $formSheet, onDismiss: openJustFiled) { sheet in
                 switch sheet {
@@ -203,22 +204,18 @@ struct FieldHelperHomeView: View {
 
     // MARK: Searching
 
-    /// The field, on the copy of this screen behind the search tab. The other copy is the same
-    /// map with no field over it, so moving between the two leaves the land where it is.
-    @ViewBuilder
+    /// The field, always showing at the top over the map.
     private func withSearch(_ content: some View) -> some View {
-        if isSearch {
-            content.searchable(text: $query, prompt: "Farmers or Locations")
-        } else {
-            content
-        }
+        content.searchable(
+            text: $query, placement: .navigationBarDrawer(displayMode: .always),
+            prompt: "Search Map")
     }
 
     /// What has been typed matches, over the map rather than on a screen of its own. Nothing
     /// typed shows nothing, so expanding the field leaves the land in view.
     @ViewBuilder
     private var searchResults: some View {
-        if isSearch, !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        if !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             let found = store.farms.matching(query)
             ScrollView {
                 if found.isEmpty {
@@ -307,20 +304,6 @@ struct FieldHelperHomeView: View {
         .padding(.bottom, 16)
     }
 
-    // MARK: Controls
-
-    /// Land is marked the way the map does it: drop the dots first, name it afterwards.
-    ///
-    /// In the navigation bar, because the trailing end of the tab bar is the system's search
-    /// button and nothing can take its place there.
-    private var addButton: some View {
-        Button("Mark a plot on the map", systemImage: "plus") {
-            selection = nil
-            outline = Outline()
-        }
-        .labelStyle(.iconOnly)
-    }
-
     /// Says the land was filed, for as long as it takes to read. It goes on its own, because
     /// the card underneath it is the thing to look at.
     @ViewBuilder
@@ -358,7 +341,7 @@ struct FieldHelperHomeView: View {
 
 #Preview {
     @Previewable @State var camera = MapCameraPosition.automatic
-    FieldHelperHomeView(camera: $camera)
+    FieldHelperHomeView(camera: $camera, markPlot: .constant(false))
         .environment(
             FarmStore(
                 fileURL: nil,
