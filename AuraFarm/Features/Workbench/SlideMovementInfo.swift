@@ -108,6 +108,13 @@
             /// A column is being swept: "End after this column" is offered.
             var columnInProgress = false
             var spotMode = SpotConfirmMode.briefTouch
+            /// The column being swept, whether it is the last, and the slip's height measured
+            /// from its edges (nil until both are known), for the guided scan page.
+            var column = 0
+            var lastColumn = false
+            var slipHeightFields: Double?
+            /// A spot is within `SpeedBandThresholds.nearCrossFields` of the cross.
+            var spotNearCross = false
         }
 
         /// The speed bar and the status banner, which the helper steers by: full rate.

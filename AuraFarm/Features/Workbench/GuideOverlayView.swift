@@ -26,7 +26,11 @@
     /// Reads the state and draws it.
     struct LiveGuideOverlay: View {
         var state: GuideOverlayState
-        var body: some View { GuideOverlayView(model: state.model, captureCount: state.captureCount) }
+        /// Only the cross, the target and the rings: the guided scan page words things itself.
+        var plain = false
+        var body: some View {
+            GuideOverlayView(model: state.model, captureCount: state.captureCount, plain: plain)
+        }
     }
 
     /// The guide drawn over the live preview, Night-mode style: a fixed cross in the centre, a
@@ -37,6 +41,8 @@
     struct GuideOverlayView: View {
         var model: GuideOverlayModel?
         var captureCount = 0
+        /// Draws no words, count or finished banner (see `LiveGuideOverlay.plain`).
+        var plain = false
 
         @State private var flash = false
 
@@ -47,13 +53,15 @@
                     mark(model)
                     if let progress = model.holdProgress { holdRing(model, progress) }
                     if let progress = model.checkProgress { checkRing(model, progress) }
-                    if model.isFinished {
+                    if plain {
+                        EmptyView()
+                    } else if model.isFinished {
                         finished
                     } else {
                         if !model.line.isEmpty { line(model.line) }
                         if model.easeOff { easeOff }
                     }
-                    if captureCount > 0 { count }
+                    if captureCount > 0, !plain { count }
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)

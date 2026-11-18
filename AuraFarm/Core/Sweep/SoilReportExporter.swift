@@ -55,7 +55,7 @@ enum SoilReportExporter {
             capture: SoilReport.Capture(
                 frameCount: manifest.frameCount,
                 stoppedEarly: manifest.stoppedEarly,
-                detectorModel: OrganismDetector.modelName,
+                detectorModel: detectorName(for: sweep),
                 appVersion: appVersion(of: bundle)
             ),
             organisms: organisms,
@@ -82,6 +82,14 @@ enum SoilReportExporter {
         bytes[6] = (bytes[6] & 0x0F) | 0x50
         bytes[8] = (bytes[8] & 0x3F) | 0x80
         return UUID(uuid: bytes.withUnsafeBytes { $0.load(as: uuid_t.self) })
+    }
+
+    /// The model that counted: the one the run record names for a guided scan (it counts with
+    /// V2 or V1 as the run chose), the capture screen's model for every other sweep.
+    private static func detectorName(for sweep: SavedSweep) -> String {
+        GuidedScanSaver.runRecord(in: sweep.url)
+            .flatMap { DetectorModel(rawValue: $0.detectorModel)?.resourceName }
+            ?? OrganismDetector.modelName
     }
 
     private static func appVersion(of bundle: Bundle) -> String {

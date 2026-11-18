@@ -229,6 +229,9 @@ struct MovementLogRow: Equatable {
     var expectedEdgeAsk = false
     /// Frames the camera output dropped as late so far (a running count).
     var cameraDrops: Int?
+    /// The words the guided scan page showed on this row ("Bottom knob towards you"); empty in
+    /// the lab, which shows none.
+    var knobWords = ""
 }
 
 enum MovementLog {
@@ -269,7 +272,7 @@ enum MovementLog {
         "sharpness_ref", "sharpness_share", "pause_cause", "det_frame_seconds", "det_pre_ms",
         "det_infer_ms", "det_decode_ms",
         "line_accept", "area_ahead_share", "predicted_edge_along", "expected_edge_ask",
-        "camera_drops",
+        "camera_drops", "knob_words",
     ]
 
     static func csv(_ rows: [MovementLogRow]) -> String {
@@ -348,7 +351,7 @@ enum MovementLog {
             number(row.detDecodeMs, 1),
             row.lineAccept, number(row.areaAheadShare, 3), number(row.predictedEdgeAlong, 3),
             row.lineState.isEmpty ? "" : (row.expectedEdgeAsk ? "1" : "0"),
-            row.cameraDrops.map(String.init) ?? "",
+            row.cameraDrops.map(String.init) ?? "", row.knobWords,
         ]
     }
 

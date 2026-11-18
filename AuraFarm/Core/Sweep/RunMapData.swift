@@ -28,6 +28,16 @@ struct RunMapEdge: Codable, Equatable {
     var y2: Double
 }
 
+/// Which parts of the map are drawn: the switches above the map on the results screen. The map is
+/// framed by everything in the record whatever is switched off, so it does not jump.
+struct RunMapLayers: Equatable {
+    var path = true
+    var organisms = true
+    var edges = true
+    /// Only this type of organism is drawn (a tapped legend row); nil for all.
+    var onlyType: String?
+}
+
 /// Everything the run map draws, in the trail's space (fields, the tracker's axes) and how that
 /// space turns onto the screen. Pure, so a map can be redrawn from a saved run record alone.
 struct RunMapContent: Equatable {
@@ -41,6 +51,15 @@ struct RunMapContent: Equatable {
     var organisms: [RunMapOrganism] = []
     var mapping = ScreenMapping.asIs
     var mirrored = false
+    var layers = RunMapLayers()
+
+    /// What is drawn after the switches: the framing uses all of the content, the drawing these.
+    var drawnPath: [CGPoint] { layers.path ? path : [] }
+    var drawnEdges: [RunMapEdge] { layers.edges ? edges : [] }
+    var drawnOrganisms: [RunMapOrganism] {
+        guard layers.organisms else { return [] }
+        return layers.onlyType.map { type in organisms.filter { $0.label == type } } ?? organisms
+    }
 
     init(
         path: [CGPoint] = [], spots: [CGPoint] = [], edges: [RunMapEdge] = [],

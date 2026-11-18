@@ -208,6 +208,10 @@ struct SlideRoute {
         return right - left
     }
 
+    /// The slip's height in fields, measured from the confirmed or marked top and bottom edges;
+    /// nil until both sides have one. Read only: the route does not use it.
+    var measuredHeightFields: Double? { prediction.meanHeight(atColumns: columns.map(\.x)) }
+
     private var alignment: SpotAlignment
     /// Tells a real edge from a blur. Called once per reading; see `confirm`.
     private var confirmation: EdgeConfirmation

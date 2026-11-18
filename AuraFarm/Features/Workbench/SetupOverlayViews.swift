@@ -197,6 +197,8 @@
     /// a horizontal meter with the current sharpness and a white tick at the peak, and one line
     /// of words.
     struct FocusOverlay: View {
+        /// The lab's own step chip; the guided scan page has its own indicator.
+        var showsIndicator = true
         var info: LabSetupInfo
         var reading: FocusReading?
         /// The two-sided dial, once the peak has been passed: it replaces the one-sided meter.
@@ -233,7 +235,7 @@
                 }
                 .allowsHitTesting(false)
                 VStack(spacing: 8) {
-                    SetupStepIndicator(step: .focus)
+                    if showsIndicator { SetupStepIndicator(step: .focus) }
                     Spacer()
                     if let dial {
                         FocusDialView(reading: dial)
@@ -277,6 +279,7 @@
     /// Step 4: the progress of the two knob runs and the words for each state, with a Skip button
     /// that keeps the picture as it is.
     struct StageOverlay: View {
+        var showsIndicator = true
         var progress: StageAxesProgress?
         var onSkip: () -> Void = {}
 
@@ -294,7 +297,7 @@
 
         var body: some View {
             VStack(spacing: 8) {
-                SetupStepIndicator(step: .stage)
+                if showsIndicator { SetupStepIndicator(step: .stage) }
                 Spacer()
                 ProgressView(
                     value: min((progress?.travelFields ?? 0) / StageAxesThresholds().minTravelFields, 1)
@@ -431,6 +434,7 @@
     struct LiveSetupOverlay: View {
         var model: SlideMovementLabModel
         var previewLayer: AVCaptureVideoPreviewLayer?
+        var showsIndicator = true
 
         var body: some View {
             let info = model.setupInfo
@@ -439,10 +443,12 @@
             case .align: AlignOverlay(info: info, mapper: mapper)
             case .focus:
                 FocusOverlay(
-                    info: info, reading: model.focusMeter.reading, dial: model.focusMeter.dial,
-                    mapper: mapper)
+                    showsIndicator: showsIndicator, info: info, reading: model.focusMeter.reading,
+                    dial: model.focusMeter.dial, mapper: mapper)
             case .stage:
-                StageOverlay(progress: info.stage, onSkip: { model.skipStage() })
+                StageOverlay(
+                    showsIndicator: showsIndicator, progress: info.stage,
+                    onSkip: { model.skipStage() })
             case .field, .done: EmptyView()
             }
         }

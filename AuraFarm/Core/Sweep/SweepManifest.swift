@@ -21,6 +21,10 @@ struct SweepManifest: Codable, Equatable {
     /// nothing; nil when it did not run, and for a sweep saved before counts were kept, so a
     /// sweep that was never counted is not mistaken for one that found nothing.
     var organismCounts: [String: Int]?
+    /// True for a sweep saved by the guided scan page: no frames were kept on purpose, the
+    /// counts come from the run's map, and the run record and movement CSV are in the folder.
+    /// nil for every other sweep, and for sweeps saved before the page existed.
+    var guidedScan: Bool?
 
     /// Every organism counted, or nil when the sweep was not counted.
     var totalOrganismCount: Int? {

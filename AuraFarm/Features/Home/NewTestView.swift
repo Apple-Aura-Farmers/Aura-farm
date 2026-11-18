@@ -10,6 +10,9 @@ struct NewTestView: View {
     @Environment(\.dismiss) private var dismiss
     @FocusState private var focus: Field?
     @State private var isUsingRecording = false
+    #if DEBUG
+        @State private var isGuidedScan = false
+    #endif
 
     private enum Field {
         case note
@@ -81,6 +84,20 @@ struct NewTestView: View {
                     .buttonStyle(.bordered)
                     .controlSize(.large)
                     .disabled(!details.isComplete)
+
+                    #if DEBUG
+                        // The guided scan for helpers: debug only until the engine is in the
+                        // release app.
+                        Button {
+                            isGuidedScan = true
+                        } label: {
+                            Label("Guided scan", systemImage: "scope")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.large)
+                        .disabled(!details.isComplete)
+                    #endif
                 }
                 .padding()
                 .background(.bar)
@@ -88,6 +105,11 @@ struct NewTestView: View {
             .navigationDestination(isPresented: $isUsingRecording) {
                 RecordedSampleView(details: $details)
             }
+            #if DEBUG
+                .navigationDestination(isPresented: $isGuidedScan) {
+                    GuidedScanPage(details: $details)
+                }
+            #endif
         }
     }
 }

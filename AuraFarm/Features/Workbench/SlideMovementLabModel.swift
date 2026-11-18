@@ -141,6 +141,8 @@
         @ObservationIgnored private var guideTarget: CGPoint?
         @ObservationIgnored private var guidePredicted: [PredictedTrailLine] = []
         @ObservationIgnored private var guideEdgePoints: [CGPoint] = []
+        /// The words the guided scan page shows now, written in each logged row. Analysis queue.
+        @ObservationIgnored private var helperWords = ""
         /// "Show life on map": the organisms and edge points are drawn on the mini-map.
         @ObservationIgnored private var showsLifeOnMap = true
         /// The run's path in the trail's space, thinned as it grows, for the run record's map.
@@ -513,6 +515,11 @@
             }
         }
 
+        /// What the guided scan page shows as the instruction, for the CSV's `knob_words`.
+        func setHelperWords(_ words: String) {
+            analysisQueue.async { [weak self] in self?.helperWords = words }
+        }
+
         /// Whether the guide asks the helper to confirm edges ("Ask me to confirm edges").
         func setAsksEdges(_ asks: Bool) {
             analysisQueue.async { [weak self] in
@@ -767,6 +774,11 @@
                 self.pendingMark.place(PendingMark(name: "start", millimetres: nil))
                 self.setup.rearmMonitor()
                 self.pipeline.setStartPicture()
+                // The knob rule says the X knob moves the picture left and right. A measured X
+                // axis nearer vertical means that is not so on this microscope: say so once.
+                if let axes = self.setup.stageAxes, KnobRule.xAxisIsVertical(axes.xDirection) {
+                    self.pendingEventName = "knob_axis_mismatch"
+                }
                 self.indicators.markStart(at: self.latestPositionFields)
                 self.startTrailPoint = self.latestPositionFields
             }
@@ -1521,6 +1533,7 @@
                 logged.frameDt = indicators.frameGap
                 logged.cameraFps = Double(frameTimes.count)
                 logged.cameraDrops = lateFrameDrops
+                logged.knobWords = helperWords
                 logged.exposureMs = device.map { $0.exposureDuration.seconds * 1000 }
                 logged.iso = device.map { Double($0.iso) }
                 logged.thermalState = LabDeviceStatus.thermalName

@@ -30,7 +30,7 @@ struct RunMapView: View {
                 y: size.height / 2 + (moved.y - centre.y) * scale)
         }
 
-        for edge in content.edges {
+        for edge in content.drawnEdges {
             if edge.kind == "point" {
                 let spot = place(CGPoint(x: edge.x1, y: edge.y1))
                 context.fill(
@@ -44,13 +44,14 @@ struct RunMapView: View {
             context.stroke(
                 line, with: .color(.cyan.opacity(0.6)), style: StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
         }
-        if content.path.count > 1 {
+        let drawnPath = content.drawnPath
+        if drawnPath.count > 1 {
             var trail = Path()
-            trail.move(to: place(content.path[0]))
-            for point in content.path.dropFirst() { trail.addLine(to: place(point)) }
+            trail.move(to: place(drawnPath[0]))
+            for point in drawnPath.dropFirst() { trail.addLine(to: place(point)) }
             context.stroke(trail, with: .color(.yellow.opacity(0.55)), lineWidth: 1.2)
         }
-        LifeDots.draw(content.organisms, in: &context, place: place, highlight: highlight)
+        LifeDots.draw(content.drawnOrganisms, in: &context, place: place, highlight: highlight)
     }
 }
 

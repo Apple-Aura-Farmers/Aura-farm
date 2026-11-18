@@ -71,6 +71,8 @@ struct GuidedSweep {
     var columnNumber: Int { route.columnNumber }
     /// Left edge to right edge, in fields, when both are known.
     var edgeSpanFields: Double? { route.edgeSpanFields }
+    /// The slip's height measured from its top and bottom edges, in fields, when both are known.
+    var measuredHeightFields: Double? { route.measuredHeightFields }
     var columnSpacingFields: Double { route.thresholds.columnSpacingFields }
     /// How the right edge was found ("line", "empty" or "predicted"); empty when it was not.
     var rightEdgeSource: String { route.rightEdgeSource }

@@ -32,6 +32,10 @@
         @AppStorage("slideLab.fullCoverSlip") private var fullCoverSlip = true
         @AppStorage("slideLab.askEdges") private var asksEdges = true
         @AppStorage("slideLab.showLifeOnMap") private var showsLifeOnMap = true
+        // The guided scan page's knob rule, for other microscopes. See `KnobRule`.
+        @AppStorage("slideLab.knobSwap") private var swapsKnobs = false
+        @AppStorage("slideLab.knobReverseX") private var reversesKnobX = false
+        @AppStorage("slideLab.knobReverseY") private var reversesKnobY = false
         @AppStorage("slideLab.coverSlipShape") private var coverSlipName = CoverSlipShape.square.rawValue
         @AppStorage("slideLab.skipAlignFocus") private var skipsAlignFocus = false
         @AppStorage("slideLab.spotMode") private var spotModeName = "briefTouch"
@@ -68,55 +72,10 @@
             }
             .navigationTitle("Slide movement lab")
             .navigationBarTitleDisplayMode(.inline)
-            .onAppear {
-                model.setSkipsAlignAndFocus(skipsAlignFocus)
-                model.setPausesOnMonitor(pausesOnMonitor)
-                model.setTracksSparse(tracksSparse)
-                model.setFullCoverSlip(fullCoverSlip)
-                model.setAsksEdges(asksEdges)
-                model.setShowsLifeOnMap(showsLifeOnMap)
-                model.setCoverSlip(CoverSlipShape(rawValue: coverSlipName) ?? .square)
-                model.setFieldRegion(FieldRegionMode(rawValue: fieldRegionName) ?? .auto)
-                model.setMeasuresHopAgreement(hopAgreement)
-                model.setShowsThumbnail(showsSees)
-                model.setSpotMode(spotMode)
-                model.setCoverageStep(coverageStep)
-                model.setCountsOrganisms(countsOrganisms)
-                model.setShowsDetections(showsDetections)
-                model.setCropsToEyepiece(cropsToEyepiece)
-                model.setMinimumConfidence(Float(confidence))
-                model.setDetectorModel(DetectorModel(rawValue: detectorModelName) ?? .v2)
-                model.setDetectorUnits(DetectorUnits(rawValue: detectorUnitsName) ?? .neuralEngine)
-                model.setCameraRate(CameraRate(rawValue: cameraRateName) ?? .fps20)
-                model.setGuideDryRun(guideDryRun)
-                model.setScreenMapping(mapping, mirrored: mirrored)
-                if mode == .live { model.start() }
-            }
-            .onChange(of: fieldRegionName) { _, name in
-                model.setFieldRegion(FieldRegionMode(rawValue: name) ?? .auto)
-            }
-            .onChange(of: hopAgreement) { _, enabled in model.setMeasuresHopAgreement(enabled) }
-            .onChange(of: showsSees) { _, shown in model.setShowsThumbnail(shown) }
-            .onChange(of: guideDryRun) { _, enabled in model.setGuideDryRun(enabled) }
-            .onChange(of: skipsAlignFocus) { _, skips in model.setSkipsAlignAndFocus(skips) }
-            .onChange(of: pausesOnMonitor) { _, pauses in model.setPausesOnMonitor(pauses) }
-            .onChange(of: tracksSparse) { _, tracks in model.setTracksSparse(tracks) }
-            .onChange(of: fullCoverSlip) { _, enabled in model.setFullCoverSlip(enabled) }
-            .onChange(of: asksEdges) { _, asks in model.setAsksEdges(asks) }
-            .onChange(of: showsLifeOnMap) { _, shows in model.setShowsLifeOnMap(shows) }
-            .onChange(of: coverSlipName) { _, name in
-                model.setCoverSlip(CoverSlipShape(rawValue: name) ?? .square)
-            }
+            // The same settings sequence and syncs the guided scan page uses.
             .modifier(
-                CountingSettingsSync(
-                    model: model, spotModeName: spotModeName, coverageStep: coverageStep,
-                    countsOrganisms: countsOrganisms, showsDetections: showsDetections,
-                    cropsToEyepiece: cropsToEyepiece, confidence: confidence,
-                    detectorModelName: detectorModelName, detectorUnitsName: detectorUnitsName,
-                    cameraRateName: cameraRateName)
+                LabSettingsSync(model: model) { if mode == .live { model.start() } }
             )
-            .onChange(of: mappingName) { model.setScreenMapping(mapping, mirrored: mirrored) }
-            .onChange(of: mirrored) { model.setScreenMapping(mapping, mirrored: mirrored) }
             .onDisappear { model.stop() }
             .onChange(of: mode) { _, newMode in
                 if newMode == .live { model.start() } else { model.stop() }
@@ -412,6 +371,14 @@
                 Toggle("Full cover slip (line edges)", isOn: $fullCoverSlip)
                 Toggle("Ask me to confirm edges", isOn: $asksEdges)
                 Toggle("Show life on map", isOn: $showsLifeOnMap)
+                Toggle("Swap knobs", isOn: $swapsKnobs)
+                Toggle("Reverse X", isOn: $reversesKnobX)
+                Toggle("Reverse Y", isOn: $reversesKnobY)
+                Text(
+                    "Knob words on the guided scan page: X is the bottom knob. Arrow left = towards you, right = away; up = top knob towards you, down = away."
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
                 CoverSlipPicker(name: $coverSlipName)
                 Picker("Spot check", selection: $spotModeName) {
                     Text("Brief touch").tag("briefTouch")
@@ -615,51 +582,4 @@
     }
 
     #Preview("Cover slip setting") { CoverSlipPreview() }
-
-    /// Hands the spot check, coverage and counting settings to the model when they change.
-    private struct CountingSettingsSync: ViewModifier {
-        var model: SlideMovementLabModel
-        var spotModeName: String
-        var coverageStep: Double
-        var countsOrganisms: Bool
-        var showsDetections: Bool
-        var cropsToEyepiece: Bool
-        var confidence: Double
-        var detectorModelName: String
-        var detectorUnitsName: String
-        var cameraRateName: String
-
-        func body(content: Content) -> some View {
-            third(second(first(content)))
-        }
-
-        private func first(_ content: Content) -> some View {
-            content
-                .onChange(of: spotModeName) { _, name in
-                    model.setSpotMode(name == "holdStill" ? .holdStill : .briefTouch)
-                }
-                .onChange(of: coverageStep) { _, step in model.setCoverageStep(step) }
-                .onChange(of: countsOrganisms) { _, counts in model.setCountsOrganisms(counts) }
-        }
-
-        private func second<V: View>(_ view: V) -> some View {
-            view
-                .onChange(of: showsDetections) { _, shown in model.setShowsDetections(shown) }
-                .onChange(of: cropsToEyepiece) { _, crops in model.setCropsToEyepiece(crops) }
-                .onChange(of: confidence) { _, value in model.setMinimumConfidence(Float(value)) }
-                .onChange(of: detectorModelName) { _, name in
-                    model.setDetectorModel(DetectorModel(rawValue: name) ?? .v2)
-                }
-        }
-
-        private func third<V: View>(_ view: V) -> some View {
-            view
-                .onChange(of: detectorUnitsName) { _, name in
-                    model.setDetectorUnits(DetectorUnits(rawValue: name) ?? .neuralEngine)
-                }
-                .onChange(of: cameraRateName) { _, name in
-                    model.setCameraRate(CameraRate(rawValue: name) ?? .fps20)
-                }
-        }
-    }
 #endif

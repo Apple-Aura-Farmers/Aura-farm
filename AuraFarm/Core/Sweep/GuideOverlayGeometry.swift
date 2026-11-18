@@ -46,6 +46,11 @@ struct GuideOverlayModel: Equatable {
     var checkProgress: Double?
     /// Brief-touch mode: near the cross and faster than a touch allows ("Ease off at the cross").
     var easeOff = false
+    /// The guide's instruction this was made for, for a screen that words it its own way.
+    var instruction = GuideInstruction.findSample
+    /// The column being swept, and whether it is the last one.
+    var column = 0
+    var lastColumn = false
 
     /// - Parameters:
     ///   - step: the guide's answer for this reading.
@@ -85,7 +90,8 @@ struct GuideOverlayModel: Equatable {
                 thresholds: thresholds),
             holdProgress: holdProgress, justCaptured: justCaptured,
             line: line, isFinished: step.isFinished,
-            justReachedEdge: justReachedEdge, checkProgress: checkProgress)
+            justReachedEdge: justReachedEdge, checkProgress: checkProgress,
+            instruction: step.instruction, column: step.column, lastColumn: step.lastColumn)
     }
 
     static func tone(of instruction: GuideInstruction) -> GuideTone {
