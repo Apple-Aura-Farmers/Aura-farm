@@ -33,6 +33,17 @@ struct SoilResult: Equatable {
     /// For a guided scan: the fields of view scanned (the spots ticked). nil for a frame sweep.
     var fieldsScanned: Int? = nil
 
+    /// A result with no microscope test behind it, made so the soil measurements alone can be
+    /// given advice.
+    static func soilOnly(_ soil: SoilMeasurements, recordedAt: Date, sampleID: String) -> SoilResult {
+        SoilResult(
+            sampleID: sampleID, recordedAt: recordedAt, framesKept: 0, moisture: .flooded,
+            countsByClass: nil, sweep: nil, soil: soil)
+    }
+
+    /// True for a result made by `soilOnly`: nothing was counted because no test was taken.
+    var isSoilOnly: Bool { sweep == nil && countsByClass == nil && framesKept == 0 && soil != nil }
+
     enum Failure: Error, Equatable, LocalizedError {
         case noSampleDetails
 

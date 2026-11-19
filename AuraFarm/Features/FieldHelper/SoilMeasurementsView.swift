@@ -37,7 +37,8 @@ struct SoilMeasurementsView: View {
         self.plotID = plotID
         self.entryID = entryID
         self.day = day
-        _isEditing = State(initialValue: entryID == nil)
+        // A day opened from the list is read first, even when only a lab test was taken that day.
+        _isEditing = State(initialValue: entryID == nil && day == nil)
     }
 
     private var farm: Farm? { store.farms.first { $0.id == farmID } }
@@ -112,7 +113,7 @@ struct SoilMeasurementsView: View {
                 .listRowBackground(Color.auraRow)
             }
             .safeAreaInset(edge: .bottom) {
-                if tests?.isEmpty == false {
+                if tests?.isEmpty == false || SoilInputs(draft) != nil {
                     Button {
                         withAnimation { proxy.scrollTo(Self.adviceID, anchor: .top) }
                     } label: {
@@ -188,12 +189,15 @@ struct SoilMeasurementsView: View {
     /// The advice for the newest test, written on the phone from these measurements.
     @ViewBuilder
     private func advice(for farm: Farm) -> some View {
-        if let plot, let latest = tests?.first {
+        if let plot, let tests {
             // The newest measurement, which may be this one or a later one already kept.
             let soil = SoilMeasurements.latest(in: plot.soilLog.filter { $0.id != draft.id } + [draft])
-            FarmAdvice(farm: farm, plot: plot, test: latest, soil: soil, history: tests ?? [])
-                // A different test, or different numbers, is advice to look at afresh.
-                .id(AdviceKey(test: latest.id, soil: SoilInputs(soil)))
+            // Without a test the advice comes from the measurements alone, once there are some.
+            if tests.first != nil || SoilInputs(soil) != nil {
+                FarmAdvice(farm: farm, plot: plot, test: tests.first, soil: soil, history: tests)
+                    // A different test, or different numbers, is advice to look at afresh.
+                    .id(AdviceKey(test: tests.first?.id, soil: SoilInputs(soil)))
+            }
         }
     }
 
@@ -212,7 +216,13 @@ struct SoilMeasurementsView: View {
 
     /// Drops the changes and shows the kept reading again; a new reading has none, so it closes.
     private func cancelEditing() {
-        guard let entry = plot?.soilLog.first(where: { $0.id == draft.id }) else { return dismiss() }
+        guard let entry = plot?.soilLog.first(where: { $0.id == draft.id }) else {
+            guard day != nil else { return dismiss() }
+            // A day with only a lab test has no reading to go back to: it goes back to the test.
+            draft = SoilMeasurements(measuredAt: day)
+            isEditing = false
+            return
+        }
         draft = entry
         isEditing = false
     }
@@ -233,7 +243,7 @@ struct SoilMeasurementsView: View {
 
 /// What the advice on this screen is for. When it changes, the advice is written again.
 private struct AdviceKey: Hashable {
-    let test: URL
+    let test: URL?
     let soil: SoilInputs?
 }
 

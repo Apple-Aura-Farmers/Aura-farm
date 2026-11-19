@@ -206,20 +206,25 @@ struct FarmAdvice: View {
     @State private var viewModel: SoilResultViewModel
     private let farm: Farm
     private let plot: Plot
-    private let test: FarmTest
+    /// nil when no microscope test has been taken, and the advice is from the soil alone.
+    private let test: FarmTest?
     /// Every counted test of this farm, for the report's trend.
     private let history: [FarmTest]
-    private let testedOn: Date
+    private let testedOn: Date?
     private let usesSoil: Bool
 
-    init(farm: Farm, plot: Plot, test: FarmTest, soil: SoilMeasurements?, history: [FarmTest]) {
+    init(farm: Farm, plot: Plot, test: FarmTest?, soil: SoilMeasurements?, history: [FarmTest]) {
         self.farm = farm
         self.plot = plot
         self.test = test
         self.history = history
-        testedOn = test.result.recordedAt
+        testedOn = test?.result.recordedAt
         usesSoil = SoilInputs(soil) != nil
-        var result = test.result
+        var result =
+            test?.result
+            ?? SoilResult.soilOnly(
+                soil ?? SoilMeasurements(), recordedAt: soil?.measuredAt ?? Date(),
+                sampleID: farm.farmerName)
         result.soil = soil
         _viewModel = State(wrappedValue: SoilResultViewModel(result: result))
     }
@@ -228,11 +233,11 @@ struct FarmAdvice: View {
         Group {
             WhatToDoNextSection(
                 viewModel: viewModel,
-                footer: "From the microscope test on "
-                    + "\(testedOn.formatted(date: .abbreviated, time: .omitted))"
-                    + (usesSoil
-                        ? ", with the soil measurements above."
-                        : " only.")
+                footer: testedOn.map {
+                    "From the microscope test on "
+                        + "\($0.formatted(date: .abbreviated, time: .omitted))"
+                        + (usesSoil ? ", with the soil measurements above." : " only.")
+                } ?? "From the soil measurements above only. A microscope test will add to it."
             )
             .id(SoilMeasurementsView.adviceID)
             exportSection
@@ -260,7 +265,7 @@ struct FarmAdvice: View {
                 }
             } footer: {
                 Text(
-                    "A field report of this test, the soil measurements, the fertilizer and the advice above, to share or print."
+                    "A field report of the soil measurements, the microscope test if there is one, the fertilizer and the advice above, to share or print."
                 )
             }
         }

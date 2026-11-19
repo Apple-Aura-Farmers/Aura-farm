@@ -140,11 +140,6 @@ struct SoilMeasurementSections: View {
             } else if let type = draft.fertilizerType {
                 LabeledContent("Type", value: type.label)
             }
-            if let fertilizerType = draft.fertilizerType {
-                Text(fertilizerType.definition)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
             if isEditable {
                 TextField(
                     "Product name (optional)",
@@ -160,7 +155,10 @@ struct SoilMeasurementSections: View {
                 numberRow("Amount", value: $draft.fertilizerKilogramsPerHectare, unit: "kg/ha")
             }
         } header: {
-            InfoHeader("Fertilizer") { "What has been put on this land, and how much per hectare." }
+            InfoHeader("Fertilizer") {
+                let about = "What has been put on this land, and how much per hectare."
+                return draft.fertilizerType.map { "\(about)\n\n\($0.label): \($0.definition)" } ?? about
+            }
         }
         }
     }

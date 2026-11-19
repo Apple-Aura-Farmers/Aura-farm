@@ -74,6 +74,8 @@ struct AdviceReport: Sendable {
     let frameSources: [FrameSource]
     /// Filled in by the exporter from `frameSources`. Empty until then.
     var frames: [Frame] = []
+    /// False for a report of the soil measurements alone, with no microscope test behind it.
+    var hasTest = true
 
     let recommendation: Recommendation
     /// The "Based on" line shown with the advice. nil when nothing was counted.
@@ -100,13 +102,16 @@ extension AdviceReport {
     }
 
     static func make(
-        farm: Farm, plot: Plot? = nil, test: FarmTest, recommendation: Recommendation,
+        farm: Farm, plot: Plot? = nil, test: FarmTest?, recommendation: Recommendation,
         basis: String?, adviceNote: String? = nil, history: [FarmTest] = [],
         generatedAt: Date = Date()
     ) -> AdviceReport {
         // The report is of one plot: its soil and its area. A farm of one plot needs no telling.
         let land = plot ?? farm.plots.first
-        let result = test.result
+        let soilOnly = SoilResult.soilOnly(
+            land?.soil ?? SoilMeasurements(), recordedAt: land?.soil?.measuredAt ?? generatedAt,
+            sampleID: farm.farmerName)
+        let result = test?.result ?? soilOnly
         let frames = max(result.framesKept, 1)
 
         let rows = OrganismTaxonomy.modelClass.rows(from: result.countsByClass ?? [:])
@@ -122,8 +127,8 @@ extension AdviceReport {
         let plot = result.plotName?.trimmingCharacters(in: .whitespacesAndNewlines)
 
         // The current test is always in the history, once, whatever was passed.
-        var tests = history.filter { $0.id != test.id }
-        tests.append(test)
+        var tests = history.filter { $0.id != test?.id }
+        if let test { tests.append(test) }
         let points = tests.map { past -> HistoryPoint in
             let pastFrames = Double(max(past.result.framesKept, 1))
             var byGroup: [String: Double] = [:]
@@ -134,11 +139,11 @@ extension AdviceReport {
             return HistoryPoint(
                 date: past.result.recordedAt,
                 perFrame: Double(past.result.totalCount ?? 0) / pastFrames,
-                moisture: past.result.moisture.label, isThisSample: past.id == test.id, byGroup: byGroup)
+                moisture: past.result.moisture.label, isThisSample: past.id == test?.id, byGroup: byGroup)
         }
         .sorted { $0.date < $1.date }
 
-        return AdviceReport(
+        var report = AdviceReport(
             farmName: farm.name,
             farmerName: farm.farmerName,
             areaText: land?.areaSquareMetres.map { LandGeometry.areaDescription(squareMetres: $0) },
@@ -152,17 +157,19 @@ extension AdviceReport {
             totalCount: result.totalCount,
             organisms: Array(organisms),
             moreKinds: max(rows.count - maximumOrganisms, 0),
-            levelTitle: test.estimate.level.title,
-            confidence: test.estimate.confidence.label,
-            reasons: test.estimate.reasons,
-            followUp: test.estimate.followUp,
+            levelTitle: test?.estimate.level.title ?? "Soil measurements",
+            confidence: test?.estimate.confidence.label ?? "",
+            reasons: test?.estimate.reasons ?? [],
+            followUp: test?.estimate.followUp ?? "",
             education: AdviceEducation(land?.soil),
             soilUpdatedAt: (land?.soil?.isEmpty == false) ? land?.soil?.measuredAt : nil,
             history: points,
-            frameSources: frameSources(test.sweep.frameURLs),
+            frameSources: frameSources(test?.sweep.frameURLs ?? []),
             recommendation: recommendation,
             basis: basis,
             adviceNote: adviceNote)
+        report.hasTest = test != nil
+        return report
     }
 
     /// The first frame and the middle one, chosen by where they come in the sweep, not by what is
