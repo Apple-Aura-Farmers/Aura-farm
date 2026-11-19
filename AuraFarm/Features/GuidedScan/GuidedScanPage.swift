@@ -68,6 +68,7 @@ struct GuidedScanPage: View {
                     onReady: {
                         // Align and focus wait for a Confirm tap, like the field review.
                         model.setConfirmsSetupSteps(true)
+                        model.setKeepsScreenAwake(true)
                         model.start()
                     })
             )

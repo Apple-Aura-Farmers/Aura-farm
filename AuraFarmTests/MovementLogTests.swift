@@ -49,13 +49,13 @@ final class MovementLogTests: XCTestCase {
         XCTAssertEqual(fields[index("position_x_frames")], "0.014")
         XCTAssertEqual(fields[index("frame_width")], "1280")
         XCTAssertEqual(
-            MovementLog.header.suffix(115).prefix(7),
+            MovementLog.header.suffix(117).prefix(7),
             [
                 "box_brightness", "box_sharpness", "box_contrast", "reading", "predicted_streak",
                 "no_detail", "blind_stretches",
             ])
         XCTAssertEqual(
-            MovementLog.header.suffix(108).prefix(27),
+            MovementLog.header.suffix(110).prefix(27),
             [
                 "start_match_x_px", "start_match_y_px", "true_off_start_fields",
                 "tracker_error_fields", "blank_returns_matched", "blank_returns_unmatched",
@@ -89,7 +89,7 @@ final class MovementLogTests: XCTestCase {
         XCTAssertEqual(fields[index("focus_top")], "1.200")
         XCTAssertEqual(fields[index("focus_bottom")], "", "a half with no ratio is empty")
         XCTAssertEqual(
-            MovementLog.header.suffix(80).prefix(5),
+            MovementLog.header.suffix(82).prefix(5),
             ["focus_index", "focus_baseline", "circle_shift_r", "circle_radius_change", "focus_low"],
             "the run monitor's columns are appended after every column")
         XCTAssertEqual(fields[index("monitor_state")], "")
@@ -186,9 +186,9 @@ final class MovementLogTests: XCTestCase {
 
     func testTheSpotAndCountingColumnsAreAppendedLast() {
         XCTAssertEqual(
-            MovementLog.header.suffix(42).prefix(3), ["spot_mode", "spot_window", "touch_seconds"])
+            MovementLog.header.suffix(44).prefix(3), ["spot_mode", "spot_window", "touch_seconds"])
         XCTAssertEqual(
-            MovementLog.header.suffix(26).prefix(18),
+            MovementLog.header.suffix(28).prefix(18),
             [
                 "event_detail", "detector_model", "det_drop_disc", "det_drop_big", "det_units",
                 "frame_dt", "camera_fps", "exposure_ms", "iso", "thermal_state", "battery_level",
@@ -262,9 +262,10 @@ final class MovementLogTests: XCTestCase {
 
     /// Phase 2u: the edge-acceptance, prediction and camera-drop columns are appended last.
     func testThePhase2uColumnsAreAppendedLast() {
-        // `knob_words` came after these, in Phase 3c, then the two lens video columns.
+        // `knob_words` came after these, in Phase 3c, then the two heat columns (performance
+        // step 3) and the two lens video columns.
         XCTAssertEqual(
-            Array(MovementLog.header.suffix(8).prefix(5)),
+            Array(MovementLog.header.suffix(10).prefix(5)),
             ["line_accept", "area_ahead_share", "predicted_edge_along", "expected_edge_ask", "camera_drops"])
         var logged = row()
         logged.lineState = "attached"
@@ -277,7 +278,19 @@ final class MovementLogTests: XCTestCase {
             separator: ",", omittingEmptySubsequences: false
         ).map(String.init)
         XCTAssertEqual(fields.count, MovementLog.header.count)
-        XCTAssertEqual(Array(fields.suffix(8).prefix(5)), ["area", "0.051", "-9.123", "1", "7"])
+        XCTAssertEqual(Array(fields.suffix(10).prefix(5)), ["area", "0.051", "-9.123", "1", "7"])
+    }
+
+    /// Performance step 3: the heat mode and the screen brightness come before the lens video's
+    /// two columns.
+    func testTheHeatModeAndScreenBrightnessComeBeforeTheLensVideoColumns() {
+        var logged = row()
+        logged.heatMode = "cool_down"
+        logged.screenBrightness = 0.35
+        let lines = MovementLog.csv([logged]).split(separator: "\n")
+        let fields = lines[1].split(separator: ",", omittingEmptySubsequences: false)
+        XCTAssertEqual(fields.count, MovementLog.header.count)
+        XCTAssertEqual(fields.suffix(4).prefix(2).map(String.init), ["cool_down", "0.35"])
     }
 
     func testTheLensVideoColumnsAreAppendedLast() {

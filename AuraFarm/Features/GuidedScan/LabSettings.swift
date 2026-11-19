@@ -26,6 +26,10 @@ struct LabSettings: Equatable {
     var detectorModelName = DetectorModel.v2.rawValue
     var detectorUnitsName = DetectorUnits.neuralEngine.rawValue
     var cameraRateName = CameraRate.fps20.rawValue
+    /// Heat-adaptive mode (see `HeatPolicy`): on by default; the lab can turn it off to compare.
+    var heatAdaptive = true
+    /// Caps the model at `LiveCountThresholds.maxModelRunsPerSecond` runs a second. On by default.
+    var modelRateCap = true
     /// Records the camera's frames to Documents/LensVideos. Off in the lab; the guided scan's own
     /// switch decides there.
     var recordsLensVideo = false
@@ -78,6 +82,8 @@ struct LabSettings: Equatable {
         model.setCameraRate(CameraRate(rawValue: cameraRateName) ?? .fps20)
         model.setGuideDryRun(guideDryRun)
         model.setScreenMapping(mapping, mirrored: mirrored)
+        model.setHeatAdaptive(heatAdaptive)
+        model.setModelRateCap(modelRateCap)
         model.setRecordsLensVideo(recordsLensVideo)
     }
 
@@ -113,6 +119,8 @@ struct LabSettings: Equatable {
         if cameraRateName != old.cameraRateName {
             model.setCameraRate(CameraRate(rawValue: cameraRateName) ?? .fps20)
         }
+        if heatAdaptive != old.heatAdaptive { model.setHeatAdaptive(heatAdaptive) }
+        if modelRateCap != old.modelRateCap { model.setModelRateCap(modelRateCap) }
         if recordsLensVideo != old.recordsLensVideo { model.setRecordsLensVideo(recordsLensVideo) }
         if mappingName != old.mappingName || mirrored != old.mirrored {
             model.setScreenMapping(mapping, mirrored: mirrored)
@@ -152,6 +160,8 @@ struct LabSettingsSync: ViewModifier {
         @AppStorage("slideLab.detectorUnits") private var detectorUnitsName = DetectorUnits
             .neuralEngine.rawValue
         @AppStorage("slideLab.cameraRate") private var cameraRateName = CameraRate.fps20.rawValue
+        @AppStorage("slideLab.heatAdaptive") private var heatAdaptive = true
+        @AppStorage("slideLab.modelRateCap") private var modelRateCap = true
         @AppStorage("slideLab.recordLensVideo") private var recordsLensVideo = false
     #endif
 
@@ -169,6 +179,7 @@ struct LabSettingsSync: ViewModifier {
                     showsDetections: showsDetections, cropsToEyepiece: cropsToEyepiece,
                     confidence: confidence, detectorModelName: detectorModelName,
                     detectorUnitsName: detectorUnitsName, cameraRateName: cameraRateName,
+                    heatAdaptive: heatAdaptive, modelRateCap: modelRateCap,
                     recordsLensVideo: recordsLensVideo))
         #else
             // No lab in Release: the chosen defaults.

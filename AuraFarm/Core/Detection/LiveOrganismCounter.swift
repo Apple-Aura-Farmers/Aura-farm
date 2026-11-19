@@ -179,15 +179,25 @@ struct LiveCountThresholds {
     /// A still view is looked at again this often, so anything swimming into it is found.
     /// PLACEHOLDER.
     var refreshSeconds = 1.0
+    /// The model runs at most this often a second while counting (the "rate" skip). Analysed
+    /// frames come every 0.11 to 0.12 s, so 5 a second lands on about every 2nd frame (4.1 to 4.5
+    /// a second). PLACEHOLDER; source: the 17 Nov device runs, where the model ran 6.3 to 6.8 times
+    /// a second on 94 to 97% of moving frames, and the 2-sighting rule: at 0.5 fields a second an
+    /// organism is in view about 2 s, so about 8 to 9 looks.
+    var maxModelRunsPerSecond = 5.0
 }
 
 extension LiveOrganismCounter {
     /// Why a frame is NOT sent to the detector while counting is on, or nil when it goes. The
-    /// reasons are checked in this order.
+    /// reasons are checked in this order: not_tracking, junk_frame, paused, no_sample, too_fast,
+    /// unchanged, heat_critical, rate, heat. `maxModelRunsPerSecond` is the "rate" cap; nil is no
+    /// cap.
     static func skipReason(
         tracking: TrackingState, isGhostOrSparseSkip: Bool, monitorPaused: Bool,
         viewClass: ViewClass, speedFraction: Double, stillSeconds: Double = 0,
-        secondsSinceLastDetection: Double? = nil,
+        secondsSinceLastDetection: Double? = nil, maxModelRunsPerSecond: Double? = nil,
+        heat: HeatMode = .normal,
+        heatThresholds: HeatThresholds = HeatThresholds(),
         thresholds: LiveCountThresholds = LiveCountThresholds()
     ) -> String? {
         if tracking != .tracking { return "not_tracking" }
@@ -199,6 +209,20 @@ extension LiveOrganismCounter {
             let since = secondsSinceLastDetection, since < thresholds.refreshSeconds - 1e-9
         {
             return "unchanged"
+        }
+        // Too hot: counting is paused, whatever the rate. Then the rate cap, which holds in every
+        // other mode; then, while cooling down, the lower cap, so a frame between the two gaps is
+        // "heat".
+        if heat == .tooHot { return "heat_critical" }
+        if let cap = maxModelRunsPerSecond, let since = secondsSinceLastDetection,
+            since < 1 / cap - 1e-9
+        {
+            return "rate"
+        }
+        if heat == .coolDown, let since = secondsSinceLastDetection,
+            since < 1 / heatThresholds.coolDownModelMaxPerSecond - 1e-9
+        {
+            return "heat"
         }
         return nil
     }

@@ -36,6 +36,9 @@ class ScanEngine: NSObject {
     private(set) var cameraNote = ""
     /// "nominal", "fair", "serious" or "critical", for the badge.
     private(set) var thermalState = "nominal"
+    /// How much work the phone is doing for the heat (see `HeatPolicy`); the page shows a card for
+    /// `.tooHot`.
+    private(set) var heatMode = HeatMode.normal
     // Published at full rate, because the helper steers by them or they mark events.
     private(set) var hapticInfo = SlideMovementInfo.Haptics()
     private(set) var runControl = SlideMovementInfo.RunControl()
@@ -180,6 +183,16 @@ class ScanEngine: NSObject {
     @ObservationIgnored private let countThrottle = MainThrottle<LiveCountInfo>()
     @ObservationIgnored private let thumbnailThrottle = MainThrottle<CGImage>()
     @ObservationIgnored private let deviceStatus = LabDeviceStatus()
+    /// Heat-adaptive mode: the policy on the analysis queue, the screen on the main queue.
+    @ObservationIgnored private let heat = HeatSupervisor()
+    @ObservationIgnored private let heatThresholds = HeatThresholds()
+    @ObservationIgnored private var lastHeatMode = HeatMode.normal
+    /// "normal->cool_down thermal=serious", waiting for a CSV row to carry it. Analysis queue.
+    @ObservationIgnored private var pendingHeatChange: String?
+    @ObservationIgnored private var keepsScreenAwake = false
+    /// The lab's "Cap model at 5 a second" toggle. Analysis queue.
+    @ObservationIgnored private var modelRateCap = true
+    @ObservationIgnored private let countThresholds = LiveCountThresholds()
     @ObservationIgnored private var lastHaptics = SlideMovementInfo.Haptics()
     @ObservationIgnored private var lastRunControl = SlideMovementInfo.RunControl()
     @ObservationIgnored private var lastSpeed = (
@@ -260,6 +273,8 @@ class ScanEngine: NSObject {
 
     func start() {
         deviceStatus.begin()
+        heat.begin(keepsScreenAwake: keepsScreenAwake)
+        heat.apply(heatMode)
         switch AVCaptureDevice.authorizationStatus(for: .video) {
         case .authorized:
             authorization = .authorized
@@ -280,6 +295,21 @@ class ScanEngine: NSObject {
     /// Whether a session starts at the field step: "Skip align and focus".
     func setSkipsAlignAndFocus(_ skips: Bool) {
         skipsAlignAndFocus = skips
+    }
+
+    /// Heat-adaptive mode on or off (the lab's toggle; always on in the guided scan).
+    func setHeatAdaptive(_ on: Bool) {
+        analysisQueue.async { [weak self] in self?.heat.isEnabled = on }
+    }
+
+    /// The model's rate cap on or off (the lab's toggle; always on in the guided scan).
+    func setModelRateCap(_ on: Bool) {
+        analysisQueue.async { [weak self] in self?.modelRateCap = on }
+    }
+
+    /// The guided scan keeps the screen awake from `start()` until `stop()`.
+    func setKeepsScreenAwake(_ keeps: Bool) {
+        keepsScreenAwake = keeps
     }
 
     /// The guided scan page confirms align and focus with a button; the lab does not.
@@ -425,6 +455,7 @@ class ScanEngine: NSObject {
         panelThrottle.flush()
         countThrottle.flush()
         deviceStatus.end()
+        heat.end()
         endAnalysis()
         // Strong self: the file is finished even if the page lets go of the engine first.
         analysisQueue.async { [self] in
@@ -1134,7 +1165,9 @@ class ScanEngine: NSObject {
                     column: $0.column, seconds: $0.firstSeenSeconds)
             },
             path: RunMapContent.thinned(runPath), edges: runMapEdges(),
-            mapMapping: dryRun.mapping.rawValue, mapMirrored: dryRun.mirrored)
+            mapMapping: dryRun.mapping.rawValue, mapMirrored: dryRun.mirrored,
+            heatSeconds: heat.secondsByMode,
+            modelRateCap: modelRateCap ? countThresholds.maxModelRunsPerSecond : nil)
         // The route is over, so the video is too; the file is finished before the record names it.
         finishLensVideo { [self] result in
             var record = record
@@ -1274,6 +1307,7 @@ extension ScanEngine: AVCaptureVideoDataOutputSampleBufferDelegate {
         else { return }
         let time = captured
         lastFrameSeconds = time
+        updateHeat(at: time)
         guard
             let output = setup.process(
                 buffer, seconds: time, pipeline: pipeline,
@@ -1340,6 +1374,7 @@ extension ScanEngine: AVCaptureVideoDataOutputSampleBufferDelegate {
             if runStartedAt == nil {
                 runStartedAt = Date()
                 runStartSeconds = time
+                heat.resetTimes()
                 live.prepare()
             }
             if dryRun.countingActive != lastCountingActive {
@@ -1355,7 +1390,9 @@ extension ScanEngine: AVCaptureVideoDataOutputSampleBufferDelegate {
                     speedFraction: indicators.speedFraction,
                     stillSeconds: indicators.stillSeconds,
                     secondsSinceLastDetection: live.secondsSinceDetection(
-                        at: time - runStartSeconds))
+                        at: time - runStartSeconds),
+                    maxModelRunsPerSecond: modelRateCap ? countThresholds.maxModelRunsPerSecond : nil,
+                    heat: lastHeatMode, heatThresholds: heatThresholds)
                 countLog = live.process(
                     buffer: buffer, skipReason: reason,
                     pictureMoved: LiveOrganismCounter.pictureMoved(
@@ -1494,6 +1531,8 @@ extension ScanEngine: AVCaptureVideoDataOutputSampleBufferDelegate {
             logged.exposureMs = device.map { $0.exposureDuration.seconds * 1000 }
             logged.iso = device.map { Double($0.iso) }
             logged.thermalState = LabDeviceStatus.thermalName
+            logged.heatMode = lastHeatMode.csvName
+            logged.screenBrightness = heat.screenBrightness
             logged.batteryLevel = deviceStatus.batteryLevel
             if let counted = result?.counted, !counted.isEmpty {
                 logged.eventDetail = counted.joined(separator: "; ")
@@ -1506,6 +1545,15 @@ extension ScanEngine: AVCaptureVideoDataOutputSampleBufferDelegate {
                 sideInsetLogged = true
                 pendingEventName = "side_inset"
                 logged.eventDetail = String(format: "side_inset_fields=%.2f", inset)
+            }
+            if let change = pendingHeatChange, logged.eventDetail.isEmpty, pendingEventName.isEmpty {
+                pendingHeatChange = nil
+                pendingEventName = "heat_mode_changed"
+                logged.eventDetail = change
+            }
+            if let layout = result?.outputLayout, logged.eventDetail.isEmpty, pendingEventName.isEmpty {
+                pendingEventName = "detector_output_layout"
+                logged.eventDetail = layout
             }
             if let id = pendingEdgeQuestionID {
                 logged.eventDetail =
@@ -1538,6 +1586,22 @@ extension ScanEngine: AVCaptureVideoDataOutputSampleBufferDelegate {
 
     /// Publishes the count when it changed, through the throttle. Analysis queue. Called for
     /// every analysed frame, and when the detector queue finishes a result.
+    /// Feeds the heat policy this frame's thermal state; on a change, sheds or restores the work
+    /// that is allowed to go: the edge probe's rate now, the model's through the skip reasons,
+    /// the screen's brightness on the main queue. Analysis queue.
+    private func updateHeat(at time: Double) {
+        let mode = heat.update(ProcessInfo.processInfo.thermalState, seconds: time)
+        guard mode != lastHeatMode else { return }
+        pendingHeatChange = "\(lastHeatMode.csvName)->\(mode.csvName) thermal=\(LabDeviceStatus.thermalName)"
+        lastHeatMode = mode
+        edgeProbe.frameStep =
+            mode == .normal ? EdgeLineProbe.everyNthFrame : heatThresholds.coolDownEdgeProbeEveryNthFrame
+        DispatchQueue.main.async { [weak self] in
+            self?.heatMode = mode
+            self?.heat.apply(mode)
+        }
+    }
+
     private func publishCount(isActive: Bool, frameSize: CGSize) {
         let info = live.info(isActive: isActive, frameSize: frameSize)
         guard info != lastCountInfo else { return }

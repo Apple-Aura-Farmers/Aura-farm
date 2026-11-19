@@ -51,6 +51,12 @@ struct GuideRunRecord: Codable, Equatable {
     var edges: [RunMapEdge] = []
     var mapMapping = ScreenMapping.asIs.rawValue
     var mapMirrored = false
+    /// Seconds spent in each heat mode (`HeatMode.csvName`: "normal", "cool_down", "too_hot").
+    /// Earlier records have none.
+    var heatSeconds: [String: Double] = [:]
+    /// The cap on the model's runs a second in force (5), or nil when the lab turned it off.
+    /// Earlier records have none.
+    var modelRateCap: Double?
     /// The lens video saved with this run (a file in the sweep's folder) and where "Start scan" falls
     /// in it, in seconds. Earlier records have none.
     var lensVideoFile: String?
@@ -130,7 +136,9 @@ extension GuideRunRecord {
             edges: try c.decodeIfPresent([RunMapEdge].self, forKey: .edges) ?? [],
             mapMapping: try c.decodeIfPresent(String.self, forKey: .mapMapping)
                 ?? ScreenMapping.asIs.rawValue,
-            mapMirrored: try c.decodeIfPresent(Bool.self, forKey: .mapMirrored) ?? false)
+            mapMirrored: try c.decodeIfPresent(Bool.self, forKey: .mapMirrored) ?? false,
+            heatSeconds: try c.decodeIfPresent([String: Double].self, forKey: .heatSeconds) ?? [:],
+            modelRateCap: try c.decodeIfPresent(Double.self, forKey: .modelRateCap))
         lensVideoFile = try c.decodeIfPresent(String.self, forKey: .lensVideoFile)
         lensVideoScanStartSeconds = try c.decodeIfPresent(
             Double.self, forKey: .lensVideoScanStartSeconds)

@@ -74,6 +74,10 @@ struct RunMonitorThresholds {
     /// A pause also ends when box sharpness is back to this share of the reference for
     /// `resumeSeconds`. PLACEHOLDER.
     var sharpnessResumeShare: Double = 0.8
+    /// The focus index is read a few times a second. If none has arrived for longer than this,
+    /// the counts are cleared when the next one does, so a countdown cannot carry across a long
+    /// gap (tracking lost for a while). PLACEHOLDER: three times the reading interval.
+    var focusReadingGapSeconds: Double = 1.0
 }
 
 /// A run of readings without detail, judged against the detail readings just before it.
@@ -116,6 +120,8 @@ struct RunMonitor {
     private var sharpnessHistory: [(seconds: Double, value: Double)] = []
     private var referenceClock = 0.0
     private var lastUpdateSeconds: Double?
+    /// When the last focus reading arrived, for the gap guard.
+    private var lastFocusReadingAt: Double?
     /// The median of `sharpnessHistory`, once it spans `referenceMinimumSeconds`; for the CSV.
     private(set) var sharpnessReference: Double?
     /// The latest box sharpness over the reference; nil without either.
@@ -279,10 +285,13 @@ struct RunMonitor {
         let baseline = focusBaseline ?? 0
         var share = 1.0
         if baseline > 0 {
-            guard let index else {
+            // Not measured on this frame (the caller reads it a few times a second): the counts
+            // run on by time, neither added to nor cleared.
+            guard let index else { return }
+            if let last = lastFocusReadingAt, now - last > thresholds.focusReadingGapSeconds {
                 clearFocusCounts()
-                return
             }
+            lastFocusReadingAt = now
             share = index / baseline
         } else if state != .pausedFocus {
             if let index { collectBaseline(index, now) }
