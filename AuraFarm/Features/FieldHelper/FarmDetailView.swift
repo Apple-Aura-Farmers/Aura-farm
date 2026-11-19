@@ -32,7 +32,8 @@ struct FarmDetailView: View {
         Group {
             if let farm {
                 details(for: farm)
-                    .navigationTitle(farm.name)
+                    .navigationTitle(farm.farmerName)
+                    .navigationSubtitle(farm.plots.count == 1 ? "1 plot" : "\(farm.plots.count) plots")
                     .toolbar {
                         ToolbarItem(placement: .topBarTrailing) {
                             Button("Edit") { presented = .editFarm }
@@ -73,22 +74,13 @@ struct FarmDetailView: View {
     private func details(for farm: Farm) -> some View {
         List {
             Group {
-                Section("Farm") {
-                    LabeledContent("Farmer", value: farm.farmerName)
-                    if let area = farm.areaSquareMetres {
-                        LabeledContent(
-                            "Total area", value: LandGeometry.areaDescription(squareMetres: area))
-                    }
-                    LabeledContent("Added") {
-                        Text(farm.createdAt, format: .dateTime.day().month().year())
-                    }
-                }
-
                 plots(of: farm)
 
             }
-            .listRowBackground(Color.auraRow)
+            .listRowBackground(RoundedRectangle(cornerRadius: 16).fill(Color.auraRow))
+            .listRowSeparator(.hidden)
         }
+        .listRowSpacing(12)
     }
 
     private func plots(of farm: Farm) -> some View {
@@ -117,13 +109,8 @@ struct FarmDetailView: View {
             } label: {
                 Label("Add a plot", systemImage: "plus")
             }
-        } header: {
-            Text("Plots")
         } footer: {
-            Text(
-                farm.plots.isEmpty
-                    ? "Mark each piece of this farmer's land as its own plot."
-                    : "Choose a plot for its soil measurements, lab results and advice.")
+            if farm.plots.isEmpty { Text("Mark each piece of this farmer's land as its own plot.") }
         }
     }
 

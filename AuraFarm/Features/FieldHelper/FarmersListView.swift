@@ -63,8 +63,10 @@ struct FarmersListView: View {
                     }
                 }
             }
-            .listRowBackground(Color.auraRow)
+            .listRowBackground(RoundedRectangle(cornerRadius: 16).fill(Color.auraRow))
+            .listRowSeparator(.hidden)
         }
+        .listRowSpacing(12)
         .animation(.snappy, value: shown.map(\.id))
         .refreshable { await store.pull() }
         .overlay { emptyState }
