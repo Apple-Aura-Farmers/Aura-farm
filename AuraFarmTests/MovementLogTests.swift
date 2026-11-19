@@ -262,9 +262,10 @@ final class MovementLogTests: XCTestCase {
 
     /// Phase 2u: the edge-acceptance, prediction and camera-drop columns are appended last.
     func testThePhase2uColumnsAreAppendedLast() {
-        // `knob_words` came after these, in Phase 3c, and the heat columns in performance step 3.
+        // `knob_words` came after these, in Phase 3c, then the two heat columns (performance
+        // step 3) and the two lens video columns.
         XCTAssertEqual(
-            Array(MovementLog.header.suffix(8).dropLast(3)),
+            Array(MovementLog.header.suffix(10).prefix(5)),
             ["line_accept", "area_ahead_share", "predicted_edge_along", "expected_edge_ask", "camera_drops"])
         var logged = row()
         logged.lineState = "attached"
@@ -277,17 +278,34 @@ final class MovementLogTests: XCTestCase {
             separator: ",", omittingEmptySubsequences: false
         ).map(String.init)
         XCTAssertEqual(fields.count, MovementLog.header.count)
-        XCTAssertEqual(Array(fields.suffix(8).dropLast(3)), ["area", "0.051", "-9.123", "1", "7"])
+        XCTAssertEqual(Array(fields.suffix(10).prefix(5)), ["area", "0.051", "-9.123", "1", "7"])
     }
 
-    /// Performance step 3: the heat mode and the screen brightness are the last two columns.
-    func testTheHeatModeAndScreenBrightnessAreAppendedLast() {
+    /// Performance step 3: the heat mode and the screen brightness come before the lens video's
+    /// two columns.
+    func testTheHeatModeAndScreenBrightnessComeBeforeTheLensVideoColumns() {
         var logged = row()
         logged.heatMode = "cool_down"
         logged.screenBrightness = 0.35
         let lines = MovementLog.csv([logged]).split(separator: "\n")
         let fields = lines[1].split(separator: ",", omittingEmptySubsequences: false)
         XCTAssertEqual(fields.count, MovementLog.header.count)
-        XCTAssertEqual(fields.suffix(2).map(String.init), ["cool_down", "0.35"])
+        XCTAssertEqual(fields.suffix(4).prefix(2).map(String.init), ["cool_down", "0.35"])
+    }
+
+    func testTheLensVideoColumnsAreAppendedLast() {
+        var logged = row()
+        logged.lensRecording = true
+        logged.videoDrops = 4
+        let fields = MovementLog.csv([logged]).split(separator: "\n")[1].split(
+            separator: ",", omittingEmptySubsequences: false
+        ).map(String.init)
+        XCTAssertEqual(fields.count, MovementLog.header.count)
+        XCTAssertEqual(Array(fields.suffix(2)), ["1", "4"])
+        XCTAssertEqual(
+            Array(
+                MovementLog.csv([row()]).split(separator: "\n")[1].split(
+                    separator: ",", omittingEmptySubsequences: false
+                ).suffix(2)), ["0", ""])
     }
 }

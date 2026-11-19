@@ -304,9 +304,10 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = "Terraloka_App Icon_SF26";
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 3;
-				DEVELOPMENT_TEAM = 38YF89G59F;
+				DEVELOPMENT_TEAM = Q7PFUBX7QB;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Config/AuraFarm-Info.plist";
@@ -316,6 +317,7 @@
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
 				INFOPLIST_KEY_NSCameraUsageDescription = "The camera looks through the microscope to check image quality and record soil samples.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Your location centres the map and lets you drop a dot where you are standing, to mark out a farmer's land.";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Saves the recorded microscope video to your photos when you choose Save Video.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UIFileSharingEnabled = YES;
@@ -327,8 +329,9 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = huy.terraloka;
+				PRODUCT_BUNDLE_IDENTIFIER = com.terraloka;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = iphoneos;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
@@ -361,7 +364,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 3;
-				DEVELOPMENT_TEAM = 38YF89G59F;
+				DEVELOPMENT_TEAM = Q7PFUBX7QB;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Config/AuraFarm-Info.plist";
@@ -371,6 +374,7 @@
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
 				INFOPLIST_KEY_NSCameraUsageDescription = "The camera looks through the microscope to check image quality and record soil samples.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Your location centres the map and lets you drop a dot where you are standing, to mark out a farmer's land.";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Saves the recorded microscope video to your photos when you choose Save Video.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UIFileSharingEnabled = YES;
@@ -382,7 +386,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = huy.terraloka;
+				PRODUCT_BUNDLE_IDENTIFIER = com.terraloka;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;

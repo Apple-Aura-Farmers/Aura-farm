@@ -36,6 +36,33 @@ struct PlotDetailView: View {
     }
 
     private func details(for plot: Plot, in farm: Farm) -> some View {
+        ScrollViewReader { proxy in
+            list(for: plot, in: farm)
+                .safeAreaInset(edge: .bottom) {
+                    Button {
+                        withAnimation { proxy.scrollTo(Self.adviceID, anchor: .top) }
+                    } label: {
+                        Label("Recommendation", systemImage: "sparkle")
+                            .font(.headline)
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 28)
+                            .padding(.vertical, 14)
+                            .background(
+                                LinearGradient(
+                                    colors: [.indigo, .purple, .pink, .orange],
+                                    startPoint: .leading, endPoint: .trailing),
+                                in: .capsule)
+                    }
+                    .shadow(color: .purple.opacity(0.5), radius: 12)
+                    .padding(.bottom, 8)
+                }
+        }
+    }
+
+    /// Where the Recommendation button scrolls to: the start of "What to do next".
+    fileprivate static let adviceID = "advice"
+
+    private func list(for plot: Plot, in farm: Farm) -> some View {
         List {
             Group {
                 if !plot.corners.isEmpty {
@@ -94,33 +121,59 @@ struct PlotDetailView: View {
 
     // MARK: Soil measurements
 
-    /// What the field helper has recorded: only the values that are filled in.
+    /// The newest measurement, laid out as the editor is but read-only, then the log of every
+    /// visit to open, change or delete. The advice is written from the newest.
+    @ViewBuilder
     private func soilSection(for plot: Plot) -> some View {
+        // Changing a measurement is done on its own page, not here.
+        let today = plot.soilLog.filter { Calendar.current.isDateInToday($0.measuredAt) }
+            .max { $0.updatedAt < $1.updatedAt }
         Section {
-            if let soil = plot.soil, !soil.isEmpty {
-                ForEach(soil.rows) { row in
-                    SoilMeasurementRow(row: row)
-                }
-            } else {
+            NavigationLink {
+                SoilMeasurementsView(farmID: farmID, plotID: plot.id, entryID: today?.id)
+            } label: {
+                Label(
+                    today == nil ? "Add today's measurement" : "Edit today's measurement",
+                    systemImage: "square.and.pencil")
+            }
+        }
+        if let soil = plot.soil {
+            // The same sections as the editor, which the helper opens from the log below.
+            SoilMeasurementSections(
+                draft: .constant(soil), isEditable: false,
+                biodiversity: tests?.first {
+                    Calendar.current.isDate($0.result.recordedAt, inSameDayAs: soil.measuredAt)
+                })
+        } else {
+            Section("Soil measurements") {
                 Text("Nothing recorded yet.")
                     .foregroundStyle(.secondary)
             }
-            NavigationLink {
-                SoilMeasurementsView(farmID: farmID, plotID: plot.id)
-            } label: {
-                Label(
-                    plot.soil?.isEmpty == false ? "Edit measurements" : "Add measurements",
-                    systemImage: "square.and.pencil")
+        }
+        let log = plot.soilLog.filter { !$0.isEmpty }.sorted { $0.measuredAt > $1.measuredAt }
+        Section {
+            ForEach(log) { entry in
+                NavigationLink {
+                    SoilMeasurementsView(farmID: farmID, plotID: plot.id, entryID: entry.id)
+                } label: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(entry.measuredAt.formatted(date: .abbreviated, time: .omitted))
+                            .font(.headline)
+                        Text(entry.rows.map { "\($0.label) \($0.value)" }.joined(separator: " · "))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .onDelete { offsets in
+                guard let farm else { return }
+                let doomed = offsets.map { log[$0].id }
+                Task { for id in doomed { await store.deleteSoil(id, for: plot, in: farm) } }
             }
         } header: {
-            Text("Soil measurements")
+            Text("Measurement log")
         } footer: {
-            if let soil = plot.soil, !soil.isEmpty {
-                Text(
-                    "Updated \(soil.updatedAt.formatted(date: .abbreviated, time: .omitted)). "
-                        + "Tap a value for what it means. The standards and guidance are placeholders and have not been reviewed by an agronomist."
-                )
-            }
+            if !log.isEmpty { Text("Swipe left on a measurement to delete it.") }
         }
     }
 
@@ -204,6 +257,7 @@ struct PlotDetailView: View {
             } header: {
                 Text("What to do next")
             }
+            .id(Self.adviceID)
         }
     }
 }
@@ -248,6 +302,7 @@ private struct FarmAdvice: View {
                         ? ", with the soil measurements above."
                         : " only.")
             )
+            .id(PlotDetailView.adviceID)
             exportSection
         }
     }

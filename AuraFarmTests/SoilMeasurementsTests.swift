@@ -129,4 +129,25 @@ final class SoilMeasurementsTests: XCTestCase {
         let farm = try JSONDecoder().decode(Farm.self, from: Data(json.utf8))
         XCTAssertEqual(farm.plots.first?.soil?.nitrogen, 100)
     }
+
+    /// The advice reads the newest measurement, whatever order they were added in.
+    func testPlotReadsTheNewestMeasurementWithSomethingInIt() {
+        let old = SoilMeasurements(nitrogen: 50, measuredAt: Date(timeIntervalSince1970: 100))
+        let new = SoilMeasurements(nitrogen: 100, measuredAt: Date(timeIntervalSince1970: 200))
+        let alertOnly = SoilMeasurements(
+            scientistAlertedAt: Date(), measuredAt: Date(timeIntervalSince1970: 300))
+        let plot = Plot(corners: [], soilLog: [new, alertOnly, old])
+        XCTAssertEqual(plot.soil?.nitrogen, 100)
+        XCTAssertNotNil(plot.scientistAlertedAt)
+    }
+
+    /// A plot saved with a single soil becomes a log of one.
+    func testPlotSavedWithOneSoilBecomesALog() throws {
+        let json = """
+            {"id":"6F9619FF-8B86-D011-B42D-00C04FC964FF","corners":[],"soil":{"nitrogen":100,"updatedAt":0}}
+            """
+        let plot = try JSONDecoder().decode(Plot.self, from: Data(json.utf8))
+        XCTAssertEqual(plot.soilLog.count, 1)
+        XCTAssertEqual(plot.soil?.measuredAt, Date(timeIntervalSinceReferenceDate: 0))
+    }
 }

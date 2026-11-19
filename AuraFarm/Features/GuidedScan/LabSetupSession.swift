@@ -151,6 +151,7 @@ final class LabSetupSession {
 
     /// Back to align: the checks start afresh and the stage is forgotten.
     func redo() {
+        skipsAllChecks = false
         stepConfirmed = false
         flow.redo()
         alignment.reset()
@@ -175,6 +176,20 @@ final class LabSetupSession {
         info.step = .field
         info.resumeStep = nil
         info.stage = nil
+    }
+
+    /// "Skip setup": straight to done with no stage measured, and the run monitor never checks
+    /// alignment or focus. `redo` brings the checks back.
+    private(set) var skipsAllChecks = false
+
+    func skipEverything() {
+        flow.skip()
+        stageAxes = .identity
+        info.step = .done
+        info.resumeStep = nil
+        info.stageAxes = .identity
+        info.monitor = RunMonitorInfo(circle: nil)
+        skipsAllChecks = true
     }
 
     /// The helper skips the stage step: the picture and the guide stay as they are.
@@ -436,6 +451,7 @@ final class LabSetupSession {
         _ step: SlideMovementStep, _ buffer: CVPixelBuffer, reading: AlignmentReading?,
         tracking: TrackingState, viewClass: ViewClass, isStill: Bool, seconds: Double
     ) {
+        guard !skipsAllChecks else { return }
         var index: Double?
         if let box = step.registrationRect,
             Self.isDue(lastRunFocusAt, now: seconds, interval: Self.runFocusIntervalSeconds)

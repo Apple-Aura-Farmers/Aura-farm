@@ -10,9 +10,9 @@ extension View {
 }
 
 extension Color {
-    /// The screens' background: dark brown, or the design's cream (#F8F7EA) in light mode.
+    /// The screens' background: dark brown, or the design's yellowish cream (#FBF4CB) in light mode.
     static let auraBase = Color(
-        light: Color(red: 0xF8 / 255, green: 0xF7 / 255, blue: 0xEA / 255),
+        light: Color(red: 0xFB / 255, green: 0xF4 / 255, blue: 0xCB / 255),
         dark: Color(red: 0x1B / 255, green: 0x13 / 255, blue: 0x11 / 255))
     /// The fill of list rows and fields: the design's tertiary fill, which reads brownish over
     /// the screen rather than the system's flat grey.

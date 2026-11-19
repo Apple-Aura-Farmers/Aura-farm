@@ -118,8 +118,10 @@ final class KnobRuleTests: XCTestCase {
         XCTAssertTrue(KnobRule.xAxisIsVertical(CGPoint(x: 0.2, y: 0.98)))
     }
 
-    func testTheKnobWordsColumnIsFollowedOnlyByTheHeatColumns() {
-        // `heat_mode` and `screen_brightness` were appended after it in performance step 3.
-        XCTAssertEqual(MovementLog.header[MovementLog.header.count - 3], "knob_words")
+    func testTheKnobWordsColumnIsFollowedOnlyByTheHeatAndLensVideoColumns() {
+        // `heat_mode` and `screen_brightness` (performance step 3), then the lens video's two.
+        XCTAssertEqual(
+            Array(MovementLog.header.suffix(5)),
+            ["knob_words", "heat_mode", "screen_brightness", "lens_recording", "video_drops"])
     }
 }

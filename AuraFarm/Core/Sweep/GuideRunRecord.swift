@@ -57,6 +57,10 @@ struct GuideRunRecord: Codable, Equatable {
     /// The cap on the model's runs a second in force (5), or nil when the lab turned it off.
     /// Earlier records have none.
     var modelRateCap: Double?
+    /// The lens video saved with this run (a file in the sweep's folder) and where "Start scan" falls
+    /// in it, in seconds. Earlier records have none.
+    var lensVideoFile: String?
+    var lensVideoScanStartSeconds: Double?
 
     /// The share of the edge span the columns reach; nil unless the span is known and positive.
     static func coverageShare(columns: Int, step: Double, edgeSpanFields: Double?) -> Double? {
@@ -135,5 +139,8 @@ extension GuideRunRecord {
             mapMirrored: try c.decodeIfPresent(Bool.self, forKey: .mapMirrored) ?? false,
             heatSeconds: try c.decodeIfPresent([String: Double].self, forKey: .heatSeconds) ?? [:],
             modelRateCap: try c.decodeIfPresent(Double.self, forKey: .modelRateCap))
+        lensVideoFile = try c.decodeIfPresent(String.self, forKey: .lensVideoFile)
+        lensVideoScanStartSeconds = try c.decodeIfPresent(
+            Double.self, forKey: .lensVideoScanStartSeconds)
     }
 }

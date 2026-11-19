@@ -49,6 +49,32 @@ final class GuidedScanSavingTests: XCTestCase {
         XCTAssertTrue(sweep.frameURLs.isEmpty)
     }
 
+    func testTheLensVideoIsLinkedIntoTheSweepAndNamedInItsRecord() throws {
+        let video = directory.appending(path: "lens-test.mov")
+        try Data("video".utf8).write(to: video)
+        var withVideo = record
+        withVideo.lensVideoFile = "lens-test.mov"
+        withVideo.lensVideoScanStartSeconds = 12
+        let name = try GuidedScanSaver.save(
+            details: details, record: withVideo, movementCSV: nil, lensVideo: video, in: directory)
+        let folder = directory.appending(path: name)
+        XCTAssertEqual(try Data(contentsOf: folder.appending(path: "lens-test.mov")), Data("video".utf8))
+        XCTAssertEqual(GuidedScanSaver.runRecord(in: folder)?.lensVideoFile, "lens-test.mov")
+        XCTAssertEqual(GuidedScanSaver.runRecord(in: folder)?.lensVideoScanStartSeconds, 12)
+    }
+
+    func testAVideoThatCannotBeKeptIsNotNamedInTheRecord() throws {
+        var withVideo = record
+        withVideo.lensVideoFile = "lens-gone.mov"
+        withVideo.lensVideoScanStartSeconds = 12
+        let name = try GuidedScanSaver.save(
+            details: details, record: withVideo, movementCSV: nil,
+            lensVideo: directory.appending(path: "missing.mov"), in: directory)
+        let saved = GuidedScanSaver.runRecord(in: directory.appending(path: name))
+        XCTAssertNil(saved?.lensVideoFile)
+        XCTAssertNil(saved?.lensVideoScanStartSeconds)
+    }
+
     func testItNeverReportsNoFramesWereKept() throws {
         // The failure belongs to the frame recorder (the stitch tool's), which this path does not use; the
         // result screen reads the sweep without any failure.

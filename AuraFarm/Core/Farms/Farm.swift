@@ -28,13 +28,52 @@ struct Plot: Codable, Identifiable, Equatable {
     /// what it grows. Empty on a plot marked before the form asked for one.
     var name = ""
     var corners: [GeoPoint]
-    /// What the field helper has recorded about this plot's soil, apart from the microscope
-    /// tests. nil until they record something. Each plot has its own, because the readings
-    /// are taken on the plot and differ from one to the next.
-    var soil: SoilMeasurements? = nil
+    /// What the field helper has measured on this plot's soil, apart from the microscope tests:
+    /// one entry per visit, in any order. Each plot has its own, because the readings are taken
+    /// on the plot and differ from one to the next.
+    var soilLog: [SoilMeasurements] = []
+
+    /// The newest measurement with something in it, which the advice is written from. nil until
+    /// the helper records something.
+    var soil: SoilMeasurements? { SoilMeasurements.latest(in: soilLog) }
+
+    /// When the helper last asked a scientist to look at this plot, if they have.
+    var scientistAlertedAt: Date? { soilLog.compactMap(\.scientistAlertedAt).max() }
 
     /// nil until there are at least three corners.
     var areaSquareMetres: Double? { LandGeometry.areaSquareMetres(of: corners) }
+}
+
+extension Plot {
+    init(id: UUID = UUID(), name: String = "", corners: [GeoPoint], soil: SoilMeasurements?) {
+        self.init(id: id, name: name, corners: corners, soilLog: soil.map { [$0] } ?? [])
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, corners, soilLog
+        /// A plot used to keep a single soil.
+        case soil
+    }
+
+    init(from decoder: any Decoder) throws {
+        let stored = try decoder.container(keyedBy: CodingKeys.self)
+        id = try stored.decode(UUID.self, forKey: .id)
+        name = try stored.decodeIfPresent(String.self, forKey: .name) ?? ""
+        corners = try stored.decode([GeoPoint].self, forKey: .corners)
+        if let log = try stored.decodeIfPresent([SoilMeasurements].self, forKey: .soilLog) {
+            soilLog = log
+        } else if let soil = try stored.decodeIfPresent(SoilMeasurements.self, forKey: .soil) {
+            soilLog = [soil]
+        }
+    }
+
+    func encode(to encoder: any Encoder) throws {
+        var stored = encoder.container(keyedBy: CodingKeys.self)
+        try stored.encode(id, forKey: .id)
+        try stored.encode(name, forKey: .name)
+        try stored.encode(corners, forKey: .corners)
+        try stored.encode(soilLog, forKey: .soilLog)
+    }
 }
 
 /// A farm the field helper looks after: what it is called, whose it is, and the plots it is
@@ -103,9 +142,9 @@ extension Farm {
         // Soil used to belong to the farm as a whole. It goes to the first plot, the land a
         // farm had before it could have more than one.
         if let soil = try stored.decodeIfPresent(SoilMeasurements.self, forKey: .soil),
-            !plots.isEmpty, plots[0].soil == nil
+            !plots.isEmpty, plots[0].soilLog.isEmpty
         {
-            plots[0].soil = soil
+            plots[0].soilLog = [soil]
         }
     }
 }
