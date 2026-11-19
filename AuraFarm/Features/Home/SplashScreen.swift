@@ -11,10 +11,16 @@ struct SplashScreen: View {
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        Image(scheme == .dark ? "Splash_Screen" : "Splash_Screen_Light")
-            .resizable()
-            .scaledToFill()
-            .ignoresSafeArea()
+        ZStack {
+            Image(scheme == .dark ? "Splash_Screen" : "Splash_Screen_Light")
+                .resizable()
+                .scaledToFill()
+                .ignoresSafeArea()
+            Image("Icon")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 132)
+        }
     }
 }
 

@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-/// One farm, where the plot is chosen: the plots on the map and a row for each. The soil
+/// One farm, where the plot is chosen: a row for each plot. The soil
 /// measurements, tests and advice are on the page of the plot opened from here, because they
 /// are different for each plot.
 struct FarmDetailView: View {
@@ -65,21 +65,14 @@ struct FarmDetailView: View {
             }
         }
         .navigationBarTitleDisplayMode(.inline)
+        // The tab bar is for browsing and adding plots; inside one farmer it is just in the way.
+        .toolbar(.hidden, for: .tabBar)
         .auraBackground()
     }
 
     private func details(for farm: Farm) -> some View {
         List {
             Group {
-                if !farm.allCorners.isEmpty {
-                    Section {
-                        LandMapView(outlines: farm.plots.map(\.corners), isInteractive: true)
-                            .id(farm.allCorners)
-                            .frame(height: 260)
-                            .listRowInsets(EdgeInsets())
-                    }
-                }
-
                 Section("Farm") {
                     LabeledContent("Farmer", value: farm.farmerName)
                     if let area = farm.areaSquareMetres {

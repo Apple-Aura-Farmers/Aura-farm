@@ -390,7 +390,7 @@ final class SoilEducationReportTests: XCTestCase {
     func testChangingTheFertilizerUpdatesTheReport() throws {
         let (farm, test) = farmAndTest(SoilMeasurements(fertilizerType: .organic))
         var changed = farm
-        changed.plots[0].soil = SoilMeasurements(fertilizerType: .inorganic)
+        changed.plots[0].soilLog = [SoilMeasurements(fertilizerType: .inorganic)]
         let recommendation = AdviceReport.sample().recommendation
         let first = try pdfText(
             AdviceReport.make(farm: farm, test: test, recommendation: recommendation, basis: nil))
