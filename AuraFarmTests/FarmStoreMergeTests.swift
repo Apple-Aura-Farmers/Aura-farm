@@ -33,6 +33,30 @@ final class FarmStoreMergeTests: XCTestCase {
         XCTAssertTrue(store.farms.contains { $0.id == unpublished.id })
     }
 
+    func testAFarmTheRecordsHaveStoppedMentioningIsRemoved() {
+        // Handed back once, so the records knew it; gone from a later pull, so somebody has
+        // deleted it and this phone should not go on showing the land.
+        let store = FarmStore(fileURL: nil)
+        let deleted = farm(name: "Deleted elsewhere")
+        store.merge([deleted])
+        XCTAssertEqual(store.farms.count, 1)
+
+        store.merge([farm(name: "Still there")])
+
+        XCTAssertEqual(store.farms.map(\.name), ["Still there"])
+    }
+
+    func testAFarmMadeHereSurvivesAPullThatDoesNotMentionIt() {
+        // The records have never handed this one back, so a pull without it says nothing
+        // about it. Dropping it would lose land marked while the phone was offline.
+        let store = FarmStore(fileURL: nil, farms: [farm(name: "Marked offline")])
+
+        store.merge([farm(name: "From the records")])
+        store.merge([farm(name: "From the records")])
+
+        XCTAssertTrue(store.farms.contains { $0.name == "Marked offline" })
+    }
+
     func testAFarmOnlyTheRecordsHaveIsTakenIn() {
         let store = FarmStore(fileURL: nil)
 
