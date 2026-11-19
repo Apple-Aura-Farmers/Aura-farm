@@ -105,6 +105,8 @@
     struct RunSummaryCard: View {
         var record: GuideRunRecord
         var shareItems: [URL]
+        /// "Video saved (2.3 GB available)" or why it stopped; empty when nothing was recorded.
+        var videoNote = ""
         var onDone: () -> Void = {}
         /// The type highlighted on the map by a tap on its legend row.
         @State private var highlight: String?
@@ -139,6 +141,7 @@
                     row("Seconds per spot", record.secondsPerSpot.map { String(format: "%.1f", $0) } ?? "-")
                 }
                 .font(.subheadline.monospacedDigit())
+                if !videoNote.isEmpty { Text(videoNote).font(.subheadline) }
                 HStack {
                     if shareItems.isEmpty {
                         Button("Share run") {}.disabled(true)

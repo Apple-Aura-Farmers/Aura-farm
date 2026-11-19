@@ -26,6 +26,9 @@ struct LabSettings: Equatable {
     var detectorModelName = DetectorModel.v2.rawValue
     var detectorUnitsName = DetectorUnits.neuralEngine.rawValue
     var cameraRateName = CameraRate.fps20.rawValue
+    /// Records the camera's frames to Documents/LensVideos. Off in the lab; the guided scan's own
+    /// switch decides there.
+    var recordsLensVideo = false
 
     /// What the guided scan uses in Release, where there is no lab to store settings: the
     /// lab's own defaults, except the three that are the chosen ones (rotate 90 degrees left,
@@ -43,8 +46,9 @@ struct LabSettings: Equatable {
 
     /// The guided scan page's settings: the lab's own, with the guide on, the operator's
     /// coverage and no detection boxes. Nothing else differs.
-    func forGuidedScan(coverage: Double) -> LabSettings {
+    func forGuidedScan(coverage: Double, recordsVideo: Bool = false) -> LabSettings {
         var copy = self
+        copy.recordsLensVideo = recordsVideo
         copy.guideDryRun = true
         copy.coverageStep = coverage
         copy.showsDetections = false
@@ -74,6 +78,7 @@ struct LabSettings: Equatable {
         model.setCameraRate(CameraRate(rawValue: cameraRateName) ?? .fps20)
         model.setGuideDryRun(guideDryRun)
         model.setScreenMapping(mapping, mirrored: mirrored)
+        model.setRecordsLensVideo(recordsLensVideo)
     }
 
     /// The lab's `.onChange` handlers: only what changed is handed over.
@@ -108,6 +113,7 @@ struct LabSettings: Equatable {
         if cameraRateName != old.cameraRateName {
             model.setCameraRate(CameraRate(rawValue: cameraRateName) ?? .fps20)
         }
+        if recordsLensVideo != old.recordsLensVideo { model.setRecordsLensVideo(recordsLensVideo) }
         if mappingName != old.mappingName || mirrored != old.mirrored {
             model.setScreenMapping(mapping, mirrored: mirrored)
         }
@@ -146,6 +152,7 @@ struct LabSettingsSync: ViewModifier {
         @AppStorage("slideLab.detectorUnits") private var detectorUnitsName = DetectorUnits
             .neuralEngine.rawValue
         @AppStorage("slideLab.cameraRate") private var cameraRateName = CameraRate.fps20.rawValue
+        @AppStorage("slideLab.recordLensVideo") private var recordsLensVideo = false
     #endif
 
     private var settings: LabSettings {
@@ -161,7 +168,8 @@ struct LabSettingsSync: ViewModifier {
                     coverageStep: coverageStep, countsOrganisms: countsOrganisms,
                     showsDetections: showsDetections, cropsToEyepiece: cropsToEyepiece,
                     confidence: confidence, detectorModelName: detectorModelName,
-                    detectorUnitsName: detectorUnitsName, cameraRateName: cameraRateName))
+                    detectorUnitsName: detectorUnitsName, cameraRateName: cameraRateName,
+                    recordsLensVideo: recordsLensVideo))
         #else
             // No lab in Release: the chosen defaults.
             transform(LabSettings.releaseDefaults)

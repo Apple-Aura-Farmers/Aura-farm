@@ -25,17 +25,35 @@ enum GuidedScanSaver {
     /// Writes the sweep's folder and returns its name.
     /// - Parameters:
     ///   - movementCSV: the run's movement log, copied in; nil when there is none.
+    ///   - lensVideo: the recorded video, hard-linked in (copied when that is not possible); if
+    ///     neither works the sweep is saved without it and the record does not name it.
     ///   - directory: where sweeps live.
     @discardableResult
     static func save(
-        details: SampleDetails, record: GuideRunRecord, movementCSV: URL?,
+        details: SampleDetails, record: GuideRunRecord, movementCSV: URL?, lensVideo: URL? = nil,
         in directory: URL = SweepStore.sweepsDirectory
     ) throws -> String {
+        var record = record
         let folder = SweepStore.freeURL(base: details.fileBaseName, in: directory)
         do {
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         } catch {
             throw Failure.folderNotCreated
+        }
+
+        if let name = record.lensVideoFile {
+            let target = folder.appending(path: name)
+            let fileManager = FileManager.default
+            var kept = false
+            if let lensVideo {
+                kept =
+                    (try? fileManager.linkItem(at: lensVideo, to: target)) != nil
+                    || (try? fileManager.copyItem(at: lensVideo, to: target)) != nil
+            }
+            if !kept {
+                record.lensVideoFile = nil
+                record.lensVideoScanStartSeconds = nil
+            }
         }
 
         do {

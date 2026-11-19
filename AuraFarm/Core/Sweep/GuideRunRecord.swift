@@ -51,6 +51,10 @@ struct GuideRunRecord: Codable, Equatable {
     var edges: [RunMapEdge] = []
     var mapMapping = ScreenMapping.asIs.rawValue
     var mapMirrored = false
+    /// The lens video saved with this run (a file in the sweep's folder) and where "Start scan" falls
+    /// in it, in seconds. Earlier records have none.
+    var lensVideoFile: String?
+    var lensVideoScanStartSeconds: Double?
 
     /// The share of the edge span the columns reach; nil unless the span is known and positive.
     static func coverageShare(columns: Int, step: Double, edgeSpanFields: Double?) -> Double? {
@@ -127,5 +131,8 @@ extension GuideRunRecord {
             mapMapping: try c.decodeIfPresent(String.self, forKey: .mapMapping)
                 ?? ScreenMapping.asIs.rawValue,
             mapMirrored: try c.decodeIfPresent(Bool.self, forKey: .mapMirrored) ?? false)
+        lensVideoFile = try c.decodeIfPresent(String.self, forKey: .lensVideoFile)
+        lensVideoScanStartSeconds = try c.decodeIfPresent(
+            Double.self, forKey: .lensVideoScanStartSeconds)
     }
 }

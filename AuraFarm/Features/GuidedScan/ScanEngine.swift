@@ -51,6 +51,8 @@ class ScanEngine: NSObject {
     /// What the run came to, once the route finishes; with the files to share.
     private(set) var runSummary: GuideRunRecord?
     private(set) var summaryItems: [URL] = []
+    /// "Video saved (2.3 GB available)" or why it stopped; empty when nothing was recorded. Main queue.
+    var lensVideoNote = ""
     /// Counts the haptic for "End now" and "End after this column".
     private(set) var endActionCount = 0
     /// The setup's state: align, focus, field, done. See `LabSetupSession`.
@@ -202,6 +204,14 @@ class ScanEngine: NSObject {
     @ObservationIgnored private var pendingEdgeQuestionID: Int?
     /// The `side_inset` event has been written for this run. Analysis queue.
     @ObservationIgnored private var sideInsetLogged = false
+    // Lens video (see ScanEngine+LensVideo.swift). Analysis queue only.
+    @ObservationIgnored var lensRecorder: LensRecorder?
+    @ObservationIgnored var lensResult: LensRecorder.Result?
+    @ObservationIgnored var recordsLensVideo = false
+    @ObservationIgnored var cameraRunning = false
+    @ObservationIgnored var lensScanStartOffset: Double?
+    @ObservationIgnored var lensEvents: [(name: String, detail: String)] = []
+    @ObservationIgnored var lastCapturedSeconds = 0.0
 
     /// What the throttled panels are set to, in one piece.
     struct PanelUpdate {
@@ -232,6 +242,7 @@ class ScanEngine: NSObject {
             guard let self, self.showsThumbnail else { return }
             self.thumbnailImage = image
         }
+        observeLensVideoEnders()
     }
 
     private func apply(_ update: PanelUpdate) {
@@ -323,6 +334,26 @@ class ScanEngine: NSObject {
         }
     }
 
+    /// "Skip setup" in the More menu: no align, focus, field review or stage, and no alignment or
+    /// focus pauses afterwards. Redo setup brings the checks back.
+    func skipSetup() {
+        analysisQueue.async { [weak self] in
+            guard let self else { return }
+            self.pipeline.requiresReview = false
+            self.pipeline.redetectField()
+            self.setup.skipEverything()
+            self.pausesOnMonitorFlag = false
+            self.lastPublishedStep = .done
+            self.clearTrackingDisplay()
+            self.resetGuide()
+            let info = self.setup.info
+            DispatchQueue.main.async {
+                self.setupInfo = info
+                self.focusMeter.update(nil)
+            }
+        }
+    }
+
     /// Skips the stage step: the picture and the guide stay as they are (the identity).
     func skipStage() {
         analysisQueue.async { [weak self] in
@@ -359,10 +390,13 @@ class ScanEngine: NSObject {
 
     /// All of the setup again, from align: any log is ended and the field is forgotten.
     func redoSetup() {
+        let pauses = pausesOnMonitor
         stopLog()
         analysisQueue.async { [weak self] in
             guard let self else { return }
             self.setup.redo()
+            self.pipeline.requiresReview = true
+            self.pausesOnMonitorFlag = pauses
             self.pipeline.redetectField()
             self.clearTrackingDisplay()
             self.resetGuide()
@@ -392,6 +426,11 @@ class ScanEngine: NSObject {
         countThrottle.flush()
         deviceStatus.end()
         endAnalysis()
+        // Strong self: the file is finished even if the page lets go of the engine first.
+        analysisQueue.async { [self] in
+            cameraRunning = false
+            finishLensVideo()
+        }
         sessionQueue.async { [weak self] in
             guard let self, self.session.isRunning else { return }
             self.session.stopRunning()
@@ -787,6 +826,7 @@ class ScanEngine: NSObject {
             guard let self else { return }
             // The counting model opens now, not at column 1's first spot.
             self.live.prepare()
+            self.noteLensScanStart()
             self.pendingMark.place(PendingMark(name: "start", millimetres: nil))
             self.setup.rearmMonitor()
             self.pipeline.setStartPicture()
@@ -840,6 +880,8 @@ class ScanEngine: NSObject {
             self.analysisQueue.async {
                 self.frameCount = 0
                 self.beginSetup()
+                self.cameraRunning = true
+                self.startLensVideo()
             }
             if !self.session.isRunning { self.session.startRunning() }
         }
@@ -1093,20 +1135,44 @@ class ScanEngine: NSObject {
             },
             path: RunMapContent.thinned(runPath), edges: runMapEdges(),
             mapMapping: dryRun.mapping.rawValue, mapMirrored: dryRun.mirrored)
+        // The route is over, so the video is too; the file is finished before the record names it.
+        finishLensVideo { [self] result in
+            var record = record
+            let video = lensVideoForRun(result)
+            record.lensVideoFile = video?.lastPathComponent
+            record.lensVideoScanStartSeconds = video == nil ? nil : lensScanStartOffset
+            publishRun(record, spots: spots, video: video, result: result)
+        }
+    }
+
+    /// Writes the run record and the CSV and shows the summary card. Analysis queue only.
+    private func publishRun(
+        _ record: GuideRunRecord, spots: Int, video: URL?, result: LensRecorder.Result?
+    ) {
         var items: [URL] = []
         if let json = Self.writeRun(record) { items.append(json) }
         if logging, var last = rows.last {
+            // Video events still waiting (the finished one lands here) get a row each.
+            for event in lensEvents {
+                last.event = event.name
+                last.eventDetail = event.detail
+                rows.append(last)
+            }
+            lensEvents = []
             last.event = "summary"
             last.eventDetail =
                 "\(record.title); \(record.totalCount) organisms; \(record.columns) columns; \(spots) spots"
             rows.append(last)
             if let csv = Self.write(rows, test: currentTest) { items.append(csv) }
         }
+        if let video { items.append(video) }
+        let note = Self.lensVideoNote(for: result)
         DispatchQueue.main.async { [weak self] in
             // The map as a picture, shared with the JSON and the CSV.
             if let data = RunMapExport.pngData(for: record), let png = Self.writeMapPNG(data) {
                 items.append(png)
             }
+            self?.lensVideoNote = note
             self?.runSummary = record
             self?.summaryItems = items
             self?.runMarked = false
@@ -1191,6 +1257,8 @@ extension ScanEngine: AVCaptureVideoDataOutputSampleBufferDelegate {
         didOutput sampleBuffer: CMSampleBuffer,
         from connection: AVCaptureConnection
     ) {
+        // A passive copy of every delivered frame, before the gating; never blocks.
+        lensRecorder?.offer(sampleBuffer)
         frameCount += 1
         if reportsRunningConfig, let device {
             reportsRunningConfig = false
@@ -1198,6 +1266,7 @@ extension ScanEngine: AVCaptureVideoDataOutputSampleBufferDelegate {
         }
         // The camera's own rate, from the capture timestamps of the last second.
         let captured = CMSampleBufferGetPresentationTimeStamp(sampleBuffer).seconds
+        lastCapturedSeconds = captured
         frameTimes.append(captured)
         frameTimes.removeAll { captured - $0 > 1 }
         guard analyzing, frameCount % analyzeEveryNthFrame == 0,
@@ -1420,6 +1489,8 @@ extension ScanEngine: AVCaptureVideoDataOutputSampleBufferDelegate {
             logged.cameraFps = Double(frameTimes.count)
             logged.cameraDrops = lateFrameDrops
             logged.knobWords = helperWords
+            logged.lensRecording = lensRecorder.map { !$0.isStopped } ?? false
+            logged.videoDrops = lensVideoDrops
             logged.exposureMs = device.map { $0.exposureDuration.seconds * 1000 }
             logged.iso = device.map { Double($0.iso) }
             logged.thermalState = LabDeviceStatus.thermalName
@@ -1445,6 +1516,11 @@ extension ScanEngine: AVCaptureVideoDataOutputSampleBufferDelegate {
                 cameraConfigPending = false
                 pendingEventName = "camera_config"
                 logged.eventDetail = cameraConfigText
+            }
+            if !lensEvents.isEmpty, logged.eventDetail.isEmpty, pendingEventName.isEmpty {
+                let event = lensEvents.removeFirst()
+                pendingEventName = event.name
+                logged.eventDetail = event.detail
             }
             if !pendingEventName.isEmpty { logged.event = pendingEventName }
             rows.append(logged)
