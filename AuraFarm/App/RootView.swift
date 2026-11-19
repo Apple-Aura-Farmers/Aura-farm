@@ -20,6 +20,7 @@ struct RootView: View {
     @AppStorage("userRole") private var role: UserRole?
 
     @Environment(SupabaseSession.self) private var session
+    @Environment(FarmStore.self) private var store
 
     var body: some View {
         Group {
@@ -38,6 +39,20 @@ struct RootView: View {
         // Reports the session restored from the keychain first, so an operator who signed in
         // last week is not asked again.
         .task { await session.follow() }
+        // The records are read again every minute, not only when a screen appears. The two
+        // roles work the same farms from different phones: a scientist files a result while
+        // the helper is still out in the field, and the helper marks land while the
+        // scientist is at the microscope. Here rather than on either role's screens, because
+        // both of them show what the other one filed.
+        //
+        // A pull that fails says so in the banner and the next minute tries again. The loop
+        // ends with the view, and iOS suspends it with the app.
+        .task {
+            while !Task.isCancelled {
+                await store.pull()
+                try? await Task.sleep(for: .seconds(60))
+            }
+        }
         // Signs this phone in once there is a name and a role to sign in under, and never
         // again while that session lasts.
         .task(id: signInKey) {

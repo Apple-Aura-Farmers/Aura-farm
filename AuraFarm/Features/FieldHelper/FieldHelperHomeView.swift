@@ -88,9 +88,6 @@ struct FieldHelperHomeView: View {
             .overlay(alignment: .top) { searchResults }
             .overlay(alignment: .top) { problemBanner }
             .overlay(alignment: .top) { filedBanner }
-            // On the screen rather than on the map, because a phone with no farms yet shows no
-            // map, and that is exactly the phone with everything to read.
-            .task { await store.pull() }
             .navigationBarTitleDisplayMode(.inline)
             // There is nothing scrolling under these bars, only the map, so the system has no
             // edge to fade against and draws a hard band of tinted blur across the land. The
