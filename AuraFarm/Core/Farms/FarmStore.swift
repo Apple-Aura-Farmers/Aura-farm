@@ -50,12 +50,22 @@ final class FarmStore {
     /// Takes in what the records hold.
     ///
     /// A farm in both is replaced by the records' copy, which is the one every other phone
-    /// can see. A farm only this phone has is left alone rather than swept away, because it
-    /// is one nobody has published yet, not one somebody deleted.
+    /// can see. A farm only this phone has is kept or dropped on whether the records have
+    /// ever handed it back: never, and it is one nobody has published yet; before but not
+    /// now, and it is one somebody has deleted.
     func merge(_ records: [Farm]) {
         var byID: [UUID: Farm] = [:]
-        for farm in farms { byID[farm.id] = farm }
-        for farm in records { byID[farm.id] = farm }
+        // A farm the records have never handed back is one nobody has published yet, so it
+        // stays on the phone. One they handed back before and no longer mention is one
+        // somebody has deleted, so it goes rather than sitting here as land that no other
+        // phone can see. Only a pull that worked gets this far, so a lost connection takes
+        // nothing away.
+        for farm in farms where farm.publishedAt == nil { byID[farm.id] = farm }
+        for farm in records {
+            var farm = farm
+            farm.publishedAt = Date()
+            byID[farm.id] = farm
+        }
         farms = byID.values.sorted { $0.createdAt < $1.createdAt }
         save()
     }

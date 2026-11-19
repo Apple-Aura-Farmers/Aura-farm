@@ -87,6 +87,10 @@ struct Farm: Codable, Identifiable, Equatable {
     var farmerName: String
     var plots: [Plot] = []
     var createdAt = Date()
+    /// When a pull last returned this farm from the records. nil on one this phone has made
+    /// and never had back, which is what tells a farm nobody has published yet from a farm
+    /// somebody has since deleted.
+    var publishedAt: Date?
 
     /// Every corner of every plot, for fitting a map around the whole farm.
     var allCorners: [GeoPoint] { plots.flatMap(\.corners) }
