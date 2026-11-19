@@ -27,6 +27,9 @@ struct GuidedScanPage: View {
     // The lab's own display settings.
     @AppStorage("slideLab.centreField") private var centresField = true
     @AppStorage("slideLab.straighten") private var straightens = true
+    /// Records the camera's frames in the background; read when the camera starts, so changing it
+    /// here starts or stops the recording from that point.
+    @AppStorage("guidedScan.recordLensVideo") private var recordsVideo = true
 
     var body: some View {
         scanBody
@@ -59,7 +62,9 @@ struct GuidedScanPage: View {
             .modifier(
                 LabSettingsSync(
                     model: model,
-                    transform: { $0.forGuidedScan(coverage: coverage.rawValue) },
+                    transform: {
+                        $0.forGuidedScan(coverage: coverage.rawValue, recordsVideo: recordsVideo)
+                    },
                     onReady: {
                         // Align and focus wait for a Confirm tap, like the field review.
                         model.setConfirmsSetupSteps(true)
@@ -137,6 +142,7 @@ struct GuidedScanPage: View {
                 Text(stage.indicator).bold().lineLimit(1).minimumScaleFactor(0.7)
                 Spacer()
                 Menu("More", systemImage: "ellipsis.circle") {
+                    Button("Skip setup", systemImage: "forward.end") { model.skipSetup() }
                     Button("Redo setup", systemImage: "arrow.counterclockwise") {
                         model.redoSetup()
                     }
@@ -308,6 +314,12 @@ struct GuidedScanPage: View {
                         passed: model.setupInfo.isAlignmentPassed) : nil)
             if stage == .ready {
                 CoverageChoiceView(coverage: $coverage)
+                VStack(alignment: .leading, spacing: 2) {
+                    Toggle("Record video of the sample", isOn: $recordsVideo)
+                    Text("Uses about 60 MB a minute.").font(.caption).foregroundStyle(.secondary)
+                }
+                .padding(12)
+                .background(.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 14))
                 bigButton("Start scan", action: startScan)
             }
         }
@@ -368,7 +380,9 @@ struct GuidedScanPage: View {
     private func save(_ record: GuideRunRecord) {
         let csv = model.summaryItems.first { $0.pathExtension == "csv" }
         do {
-            let name = try GuidedScanSaver.save(details: details, record: record, movementCSV: csv)
+            let video = model.summaryItems.first { $0.pathExtension == "mov" }
+            let name = try GuidedScanSaver.save(
+                details: details, record: record, movementCSV: csv, lensVideo: video)
             model.stop()
             onSaved(name)
             dismiss()

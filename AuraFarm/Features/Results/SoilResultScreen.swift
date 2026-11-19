@@ -132,7 +132,15 @@ private struct SoilResultContent: View {
             )
 
             if let runRecord {
-                Section("Run map") { RunMapPanel(record: runRecord) }
+                Section("Run map") {
+                    RunMapPanel(record: runRecord)
+                    // The microscope video kept with the run, to share or save to Photos.
+                    if let file = runRecord.lensVideoFile, let folder = viewModel.result.sweep?.url,
+                        FileManager.default.fileExists(atPath: folder.appending(path: file).path)
+                    {
+                        ShareLink("Share microscope video", item: folder.appending(path: file))
+                    }
+                }
             }
 
             if showsAdvice {
