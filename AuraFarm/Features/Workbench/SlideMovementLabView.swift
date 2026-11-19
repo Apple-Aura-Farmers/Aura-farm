@@ -48,6 +48,7 @@
             .rawValue
         @AppStorage("slideLab.cameraRate") private var cameraRateName = CameraRate.fps20.rawValue
         @AppStorage("slideLab.confidence") private var confidence = 0.3
+        @AppStorage("slideLab.recordLensVideo") private var recordsLensVideo = false
         @State private var noteText = ""
 
         // Recorded video.
@@ -163,6 +164,7 @@
                 if let record = model.runSummary {
                     RunSummaryCard(
                         record: record, shareItems: model.summaryItems,
+                        videoNote: model.lensVideoNote,
                         onDone: { model.dismissSummary() }
                     )
                     .presentationDetents([.medium, .large])
@@ -371,6 +373,7 @@
                 Toggle("Full cover slip (line edges)", isOn: $fullCoverSlip)
                 Toggle("Ask me to confirm edges", isOn: $asksEdges)
                 Toggle("Show life on map", isOn: $showsLifeOnMap)
+                Toggle("Record lens video", isOn: $recordsLensVideo)
                 Toggle("Swap knobs", isOn: $swapsKnobs)
                 Toggle("Reverse X", isOn: $reversesKnobX)
                 Toggle("Reverse Y", isOn: $reversesKnobY)

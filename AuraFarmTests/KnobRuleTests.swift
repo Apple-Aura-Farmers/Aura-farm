@@ -118,7 +118,7 @@ final class KnobRuleTests: XCTestCase {
         XCTAssertTrue(KnobRule.xAxisIsVertical(CGPoint(x: 0.2, y: 0.98)))
     }
 
-    func testTheKnobWordsColumnIsLastInTheCSV() {
-        XCTAssertEqual(MovementLog.header.last, "knob_words")
+    func testTheKnobWordsColumnIsFollowedOnlyByTheLensVideoColumns() {
+        XCTAssertEqual(MovementLog.header.suffix(3), ["knob_words", "lens_recording", "video_drops"])
     }
 }
