@@ -140,7 +140,8 @@ struct SoilMeasurementsView: View {
     private func advice(for farm: Farm) -> some View {
         if let latest = tests?.first {
             // The newest measurement, which may be this one or a later one already kept.
-            let soil = SoilMeasurements.latest(in: (plot?.soilLog ?? []).filter { $0.id != draft.id } + [draft])
+            let soil = SoilMeasurements.latest(
+                in: (plot?.soilLog ?? []).filter { $0.id != draft.id } + [draft])
             SoilAdviceSection(test: latest, soil: soil)
                 // A different test, or different numbers, is advice to look at afresh.
                 .id(AdviceKey(test: latest.id, soil: SoilInputs(soil)))
@@ -158,7 +159,6 @@ struct SoilMeasurementsView: View {
             }
         }
     }
-
 
     private func save(closing: Bool = true) {
         guard let farm, let plot, draft.problems.isEmpty else { return }

@@ -45,87 +45,87 @@ struct SoilMeasurementSections: View {
     @ViewBuilder
     var npk: some View {
         if isEditable || draft.npkHealth != nil {
-        Section {
-            NutrientBar(health: draft.npkHealth)
-                .listRowSeparator(.hidden)
-            if isEditable || draft.nitrogen != nil {
-                numberRow("Nitrogen (N)", value: $draft.nitrogen, unit: "mg/kg")
+            Section {
+                NutrientBar(health: draft.npkHealth)
+                    .listRowSeparator(.hidden)
+                if isEditable || draft.nitrogen != nil {
+                    numberRow("Nitrogen (N)", value: $draft.nitrogen, unit: "mg/kg")
+                }
+                if isEditable || draft.phosphorus != nil {
+                    numberRow("Phosphorous (P)", value: $draft.phosphorus, unit: "mg/kg")
+                }
+                if isEditable || draft.potassium != nil {
+                    numberRow("Potassium (K)", value: $draft.potassium, unit: "mg/kg")
+                }
+            } header: {
+                Text("NPK")
+            } footer: {
+                Text(
+                    "Milligrams per kilogram of soil. Standard: N \(SoilStandards.nitrogen.description), "
+                        + "P \(SoilStandards.phosphorus.description), "
+                        + "K \(SoilStandards.potassium.description). The standards are placeholders "
+                        + "and have not been checked by an agronomist."
+                )
             }
-            if isEditable || draft.phosphorus != nil {
-                numberRow("Phosphorous (P)", value: $draft.phosphorus, unit: "mg/kg")
-            }
-            if isEditable || draft.potassium != nil {
-                numberRow("Potassium (K)", value: $draft.potassium, unit: "mg/kg")
-            }
-        } header: {
-            Text("NPK")
-        } footer: {
-            Text(
-                "Milligrams per kilogram of soil. Standard: N \(SoilStandards.nitrogen.description), "
-                    + "P \(SoilStandards.phosphorus.description), "
-                    + "K \(SoilStandards.potassium.description). The standards are placeholders "
-                    + "and have not been checked by an agronomist."
-            )
-        }
         }
     }
 
     @ViewBuilder
     var acidity: some View {
         if isEditable || draft.ph != nil {
-        Section {
-            VStack(spacing: 6) {
-                Slider(
-                    value: Binding(get: { draft.ph ?? 7 }, set: { draft.ph = $0 }),
-                    in: 0...14, step: 0.1
+            Section {
+                VStack(spacing: 6) {
+                    Slider(
+                        value: Binding(get: { draft.ph ?? 7 }, set: { draft.ph = $0 }),
+                        in: 0...14, step: 0.1
+                    )
+                    .accessibilityLabel("Acidity")
+                    .accessibilityValue(reading(draft.ph))
+                    .disabled(!isEditable)
+                    HStack {
+                        Text("acidic")
+                        Spacer()
+                        Text("neutral")
+                        Spacer()
+                        Text("alkaline")
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+                LabeledContent("pH", value: reading(draft.ph))
+                if isEditable, draft.ph != nil {
+                    Button("Clear", role: .destructive) { draft.ph = nil }
+                }
+                if isEditable {
+                    Picker("Field at the time", selection: $draft.phFieldWater) {
+                        Text("Not recorded").tag(PHFieldWater?.none)
+                        ForEach(PHFieldWater.allCases) { Text($0.label).tag(PHFieldWater?.some($0)) }
+                    }
+                } else if let water = draft.phFieldWater {
+                    LabeledContent("Field at the time", value: water.label)
+                }
+            } header: {
+                Text("Acidity (pH)")
+            } footer: {
+                Text(
+                    "Provisional target for flooded rice: about pH \(SoilStandards.ph.description). "
+                        + "Flooding often moves pH toward neutral, so a reading from dry soil may "
+                        + "differ from the pH around the roots once the field is flooded."
                 )
-                .accessibilityLabel("Acidity")
-                .accessibilityValue(reading(draft.ph))
-                .disabled(!isEditable)
-                HStack {
-                    Text("acidic")
-                    Spacer()
-                    Text("neutral")
-                    Spacer()
-                    Text("alkaline")
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
             }
-            LabeledContent("pH", value: reading(draft.ph))
-            if isEditable, draft.ph != nil {
-                Button("Clear", role: .destructive) { draft.ph = nil }
-            }
-            if isEditable {
-                Picker("Field at the time", selection: $draft.phFieldWater) {
-                    Text("Not recorded").tag(PHFieldWater?.none)
-                    ForEach(PHFieldWater.allCases) { Text($0.label).tag(PHFieldWater?.some($0)) }
-                }
-            } else if let water = draft.phFieldWater {
-                LabeledContent("Field at the time", value: water.label)
-            }
-        } header: {
-            Text("Acidity (pH)")
-        } footer: {
-            Text(
-                "Provisional target for flooded rice: about pH \(SoilStandards.ph.description). "
-                    + "Flooding often moves pH toward neutral, so a reading from dry soil may "
-                    + "differ from the pH around the roots once the field is flooded."
-            )
-        }
         }
     }
 
     @ViewBuilder
     var organicCarbon: some View {
         if isEditable || draft.organicCarbonPercent != nil {
-        Section {
-            numberRow("SOC", value: $draft.organicCarbonPercent, unit: "%")
-        } header: {
-            Text("Soil Organic Carbon")
-        } footer: {
-            Text("Standard: \(SoilStandards.organicCarbon.description) percent by weight.")
-        }
+            Section {
+                numberRow("SOC", value: $draft.organicCarbonPercent, unit: "%")
+            } header: {
+                Text("Soil Organic Carbon")
+            } footer: {
+                Text("Standard: \(SoilStandards.organicCarbon.description) percent by weight.")
+            }
         }
     }
 
@@ -134,43 +134,42 @@ struct SoilMeasurementSections: View {
         if isEditable || draft.fertilizerType != nil || draft.fertilizerProduct != nil
             || draft.fertilizerKilogramsPerHectare != nil
         {
-        Section {
-            // Picked from a short list, not typed, so the same answer always reads the same.
-            if isEditable {
-                Picker("Type", selection: $draft.fertilizerType) {
-                    Text("Choose…").tag(FertilizerType?.none)
-                    ForEach(FertilizerType.allCases) { Text($0.label).tag(FertilizerType?.some($0)) }
+            Section {
+                // Picked from a short list, not typed, so the same answer always reads the same.
+                if isEditable {
+                    Picker("Type", selection: $draft.fertilizerType) {
+                        Text("Choose…").tag(FertilizerType?.none)
+                        ForEach(FertilizerType.allCases) { Text($0.label).tag(FertilizerType?.some($0)) }
+                    }
+                } else if let type = draft.fertilizerType {
+                    LabeledContent("Type", value: type.label)
                 }
-            } else if let type = draft.fertilizerType {
-                LabeledContent("Type", value: type.label)
+                if let fertilizerType = draft.fertilizerType {
+                    Text(fertilizerType.definition)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                if isEditable {
+                    TextField(
+                        "Product name (optional)",
+                        text: Binding(
+                            get: { draft.fertilizerProduct ?? "" },
+                            set: { draft.fertilizerProduct = $0.isEmpty ? nil : $0 })
+                    )
+                    .textInputAutocapitalization(.sentences)
+                } else if let product = draft.fertilizerProduct {
+                    LabeledContent("Product", value: product)
+                }
+                if isEditable || draft.fertilizerKilogramsPerHectare != nil {
+                    numberRow("Amount", value: $draft.fertilizerKilogramsPerHectare, unit: "kg/ha")
+                }
+            } header: {
+                Text("Fertilizer")
+            } footer: {
+                Text("What has been put on this land, and how much per hectare.")
             }
-            if let fertilizerType = draft.fertilizerType {
-                Text(fertilizerType.definition)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-            if isEditable {
-                TextField(
-                    "Product name (optional)",
-                    text: Binding(
-                        get: { draft.fertilizerProduct ?? "" },
-                        set: { draft.fertilizerProduct = $0.isEmpty ? nil : $0 })
-                )
-                .textInputAutocapitalization(.sentences)
-            } else if let product = draft.fertilizerProduct {
-                LabeledContent("Product", value: product)
-            }
-            if isEditable || draft.fertilizerKilogramsPerHectare != nil {
-                numberRow("Amount", value: $draft.fertilizerKilogramsPerHectare, unit: "kg/ha")
-            }
-        } header: {
-            Text("Fertilizer")
-        } footer: {
-            Text("What has been put on this land, and how much per hectare.")
-        }
         }
     }
-
 
     // MARK: Pieces
 
