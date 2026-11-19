@@ -279,10 +279,9 @@ struct RunMonitor {
         let baseline = focusBaseline ?? 0
         var share = 1.0
         if baseline > 0 {
-            guard let index else {
-                clearFocusCounts()
-                return
-            }
+            // Not measured on this frame (the caller reads it a few times a second): the counts
+            // run on by time, neither added to nor cleared.
+            guard let index else { return }
             share = index / baseline
         } else if state != .pausedFocus {
             if let index { collectBaseline(index, now) }
