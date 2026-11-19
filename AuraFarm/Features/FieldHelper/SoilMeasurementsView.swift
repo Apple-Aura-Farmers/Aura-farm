@@ -41,6 +41,9 @@ struct SoilMeasurementsView: View {
         _isEditing = State(initialValue: entryID == nil && day == nil)
     }
 
+    /// A new measurement has no lab test yet, so none is shown (or used for advice) until it is saved.
+    private var labTests: [FarmTest]? { entryID == nil && day == nil && isEditing ? [] : tests }
+
     private var farm: Farm? { store.farms.first { $0.id == farmID } }
     private var plot: Plot? { farm?.plots.first { $0.id == plotID } }
 
@@ -113,7 +116,7 @@ struct SoilMeasurementsView: View {
                 .listRowBackground(Color.auraRow)
             }
             .safeAreaInset(edge: .bottom) {
-                if tests?.isEmpty == false || SoilInputs(draft) != nil {
+                if labTests?.isEmpty == false || SoilInputs(draft) != nil {
                     Button {
                         withAnimation { proxy.scrollTo(Self.adviceID, anchor: .top) }
                     } label: {
@@ -140,13 +143,13 @@ struct SoilMeasurementsView: View {
     @ViewBuilder
     private func biodiversity(for farm: Farm) -> some View {
         Section("Biodiversity") {
-            if let latest = tests?.first {
+            if let latest = labTests?.first {
                 NavigationLink {
                     SoilResultScreen(sweep: latest.sweep)
                 } label: {
-                    BiodiversityRow(test: latest, others: (tests?.count ?? 1) - 1)
+                    BiodiversityRow(test: latest, others: (labTests?.count ?? 1) - 1)
                 }
-            } else if tests == nil {
+            } else if labTests == nil {
                 ProgressView()
             } else {
                 waitingCard(for: farm)
@@ -157,7 +160,8 @@ struct SoilMeasurementsView: View {
     /// The two states before a result: nobody asked yet, and asked and waiting.
     private func waitingCard(for farm: Farm) -> some View {
         VStack(spacing: 14) {
-            if let asked = plot?.scientistAlertedAt {
+            // An alert is answered once a test newer than it exists, so a later visit asks afresh.
+            if let asked = plot?.scientistAlertedAt, asked > (tests?.first?.sweep.recordedAt ?? .distantPast) {
                 Text("Wait for the scientist to send you the result.")
                     .multilineTextAlignment(.center)
                     .foregroundStyle(.secondary)
@@ -189,7 +193,7 @@ struct SoilMeasurementsView: View {
     /// The advice for the newest test, written on the phone from these measurements.
     @ViewBuilder
     private func advice(for farm: Farm) -> some View {
-        if let plot, let tests {
+        if let plot, let tests = labTests {
             // The newest measurement, which may be this one or a later one already kept.
             let soil = SoilMeasurements.latest(in: plot.soilLog.filter { $0.id != draft.id } + [draft])
             // Without a test the advice comes from the measurements alone, once there are some.
