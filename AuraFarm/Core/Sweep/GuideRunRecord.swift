@@ -54,6 +54,9 @@ struct GuideRunRecord: Codable, Equatable {
     /// Seconds spent in each heat mode (`HeatMode.csvName`: "normal", "cool_down", "too_hot").
     /// Earlier records have none.
     var heatSeconds: [String: Double] = [:]
+    /// The cap on the model's runs a second in force (5), or nil when the lab turned it off.
+    /// Earlier records have none.
+    var modelRateCap: Double?
 
     /// The share of the edge span the columns reach; nil unless the span is known and positive.
     static func coverageShare(columns: Int, step: Double, edgeSpanFields: Double?) -> Double? {
@@ -130,6 +133,7 @@ extension GuideRunRecord {
             mapMapping: try c.decodeIfPresent(String.self, forKey: .mapMapping)
                 ?? ScreenMapping.asIs.rawValue,
             mapMirrored: try c.decodeIfPresent(Bool.self, forKey: .mapMirrored) ?? false,
-            heatSeconds: try c.decodeIfPresent([String: Double].self, forKey: .heatSeconds) ?? [:])
+            heatSeconds: try c.decodeIfPresent([String: Double].self, forKey: .heatSeconds) ?? [:],
+            modelRateCap: try c.decodeIfPresent(Double.self, forKey: .modelRateCap))
     }
 }

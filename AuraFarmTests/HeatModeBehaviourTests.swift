@@ -35,7 +35,7 @@ final class HeatModeBehaviourTests: XCTestCase {
         XCTAssertEqual(reason(heat: .normal, tracking: .paused), "not_tracking")
     }
 
-    func testCoolDownHoldsTheModelToThreeRunsASecond() {
+    func testCoolDownHoldsTheModelToFourRunsASecond() {
         XCTAssertEqual(reason(heat: .coolDown, since: 0.2), "heat")
         XCTAssertNil(reason(heat: .coolDown, since: 0.34))
         XCTAssertNil(reason(heat: .coolDown, since: nil), "the first run goes")
@@ -103,9 +103,9 @@ final class HeatModeBehaviourTests: XCTestCase {
         XCTAssertTrue(result.skips.isEmpty)
     }
 
-    func testCoolDownRunsTheModelAtMostThreeTimesASecond() {
+    func testCoolDownRunsTheModelAtMostFourTimesASecond() {
         let result = run { _ in .coolDown }
-        XCTAssertLessThanOrEqual(result.ran, 31, "3 a second over 10 s")
+        XCTAssertLessThanOrEqual(result.ran, 41, "4 a second over 10 s")
         XCTAssertGreaterThan(result.ran, 24)
         XCTAssertEqual(result.skips["heat"], 84 - result.ran, "every other frame is a carried skip")
     }

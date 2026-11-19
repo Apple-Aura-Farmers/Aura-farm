@@ -188,6 +188,9 @@ class ScanEngine: NSObject {
     /// "normal->cool_down thermal=serious", waiting for a CSV row to carry it. Analysis queue.
     @ObservationIgnored private var pendingHeatChange: String?
     @ObservationIgnored private var keepsScreenAwake = false
+    /// The lab's "Cap model at 5 a second" toggle. Analysis queue.
+    @ObservationIgnored private var modelRateCap = true
+    @ObservationIgnored private let countThresholds = LiveCountThresholds()
     @ObservationIgnored private var lastHaptics = SlideMovementInfo.Haptics()
     @ObservationIgnored private var lastRunControl = SlideMovementInfo.RunControl()
     @ObservationIgnored private var lastSpeed = (
@@ -286,6 +289,11 @@ class ScanEngine: NSObject {
     /// Heat-adaptive mode on or off (the lab's toggle; always on in the guided scan).
     func setHeatAdaptive(_ on: Bool) {
         analysisQueue.async { [weak self] in self?.heat.isEnabled = on }
+    }
+
+    /// The model's rate cap on or off (the lab's toggle; always on in the guided scan).
+    func setModelRateCap(_ on: Bool) {
+        analysisQueue.async { [weak self] in self?.modelRateCap = on }
     }
 
     /// The guided scan keeps the screen awake from `start()` until `stop()`.
@@ -1116,7 +1124,8 @@ class ScanEngine: NSObject {
             },
             path: RunMapContent.thinned(runPath), edges: runMapEdges(),
             mapMapping: dryRun.mapping.rawValue, mapMirrored: dryRun.mirrored,
-            heatSeconds: heat.secondsByMode)
+            heatSeconds: heat.secondsByMode,
+            modelRateCap: modelRateCap ? countThresholds.maxModelRunsPerSecond : nil)
         var items: [URL] = []
         if let json = Self.writeRun(record) { items.append(json) }
         if logging, var last = rows.last {
@@ -1313,6 +1322,7 @@ extension ScanEngine: AVCaptureVideoDataOutputSampleBufferDelegate {
                     stillSeconds: indicators.stillSeconds,
                     secondsSinceLastDetection: live.secondsSinceDetection(
                         at: time - runStartSeconds),
+                    maxModelRunsPerSecond: modelRateCap ? countThresholds.maxModelRunsPerSecond : nil,
                     heat: lastHeatMode, heatThresholds: heatThresholds)
                 countLog = live.process(
                     buffer: buffer, skipReason: reason,

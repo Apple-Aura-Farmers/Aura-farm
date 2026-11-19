@@ -23,7 +23,7 @@ struct HeatThresholds {
     /// the cooler level this long, and then one level at a time.
     var stepDownSeconds = 30.0
     /// In `coolDown` the model runs at most this often a second.
-    var coolDownModelMaxPerSecond = 3.0
+    var coolDownModelMaxPerSecond = 4.0
     /// In `coolDown` the edge-line probe runs on every Nth frame (2 when normal).
     var coolDownEdgeProbeEveryNthFrame = 4
     /// In `coolDown` and `tooHot` the screen goes this far below the person's own level...
