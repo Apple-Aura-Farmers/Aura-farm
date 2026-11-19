@@ -26,6 +26,8 @@ final class EdgeLineState {
 final class EdgeLineProbe {
     /// Run on every Nth analyzed frame. PLACEHOLDER: 5 a second is plenty to log and draw.
     static let everyNthFrame = 2
+    /// The Nth frame the probe runs on now: `everyNthFrame`, or more while the phone is hot.
+    var frameStep = EdgeLineProbe.everyNthFrame
     /// Cell size in frame pixels; 3 when a call takes longer than `slowMilliseconds`.
     static let fineStep = 2
     static let coarseStep = 3
@@ -67,7 +69,7 @@ final class EdgeLineProbe {
             chainShift = CGPoint(x: chainShift.x + shake.x, y: chainShift.y + shake.y)
             chainFrames += 1
         }
-        guard counter % Self.everyNthFrame == 0 else { return nil }
+        guard counter % frameStep == 0 else { return nil }
         let started = ContinuousClock.now
         defer {
             let taken = ContinuousClock.now - started

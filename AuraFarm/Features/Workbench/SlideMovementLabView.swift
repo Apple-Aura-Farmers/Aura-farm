@@ -48,6 +48,7 @@
             .rawValue
         @AppStorage("slideLab.cameraRate") private var cameraRateName = CameraRate.fps20.rawValue
         @AppStorage("slideLab.confidence") private var confidence = 0.3
+        @AppStorage("slideLab.heatAdaptive") private var heatAdaptive = true
         @State private var noteText = ""
 
         // Recorded video.
@@ -417,6 +418,7 @@
                 Toggle("Count organisms", isOn: $countsOrganisms)
                 Toggle("Show detections", isOn: $showsDetections)
                 Toggle("Crop to eyepiece circle", isOn: $cropsToEyepiece)
+                Toggle("Heat-adaptive mode", isOn: $heatAdaptive)
                 VStack(alignment: .leading) {
                     Text("Confidence \(confidence, specifier: "%.2f")").font(.caption)
                     Slider(value: $confidence, in: 0.1...0.6, step: 0.05)

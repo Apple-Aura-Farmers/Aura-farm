@@ -67,13 +67,14 @@ struct HelperCardView: View {
         case .waiting: "hourglass"
         case .question: "questionmark.circle.fill"
         case .stop: "hand.raised.fill"
+        case .tooHot: "thermometer.high"
         case .turn, .backALittle: nil
         }
     }
 
     private var tint: Color {
         switch card {
-        case .phoneMoved: .orange
+        case .phoneMoved, .tooHot: .orange
         case .edgeFound, .finished, .lastColumn: .green
         default: .white
         }
@@ -109,6 +110,7 @@ struct HelperCardView: View {
             HelperCardView(card: .finished)
             HelperCardView(card: .waiting("Loading the counting model…"))
             HelperCardView(card: .question)
+            HelperCardView(card: .tooHot)
         }
         .padding()
     }

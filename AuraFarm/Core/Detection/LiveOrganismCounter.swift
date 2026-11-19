@@ -183,11 +183,12 @@ struct LiveCountThresholds {
 
 extension LiveOrganismCounter {
     /// Why a frame is NOT sent to the detector while counting is on, or nil when it goes. The
-    /// reasons are checked in this order.
+    /// reasons are checked in this order; `heat` and `heat_critical` come last.
     static func skipReason(
         tracking: TrackingState, isGhostOrSparseSkip: Bool, monitorPaused: Bool,
         viewClass: ViewClass, speedFraction: Double, stillSeconds: Double = 0,
-        secondsSinceLastDetection: Double? = nil,
+        secondsSinceLastDetection: Double? = nil, heat: HeatMode = .normal,
+        heatThresholds: HeatThresholds = HeatThresholds(),
         thresholds: LiveCountThresholds = LiveCountThresholds()
     ) -> String? {
         if tracking != .tracking { return "not_tracking" }
@@ -199,6 +200,14 @@ extension LiveOrganismCounter {
             let since = secondsSinceLastDetection, since < thresholds.refreshSeconds - 1e-9
         {
             return "unchanged"
+        }
+        // Heat comes last, so every other reason still names itself first. Too hot: counting is
+        // paused. Cooling down: the model is held to a few runs a second.
+        if heat == .tooHot { return "heat_critical" }
+        if heat == .coolDown, let since = secondsSinceLastDetection,
+            since < 1 / heatThresholds.coolDownModelMaxPerSecond - 1e-9
+        {
+            return "heat"
         }
         return nil
     }

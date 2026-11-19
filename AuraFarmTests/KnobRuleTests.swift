@@ -118,7 +118,8 @@ final class KnobRuleTests: XCTestCase {
         XCTAssertTrue(KnobRule.xAxisIsVertical(CGPoint(x: 0.2, y: 0.98)))
     }
 
-    func testTheKnobWordsColumnIsLastInTheCSV() {
-        XCTAssertEqual(MovementLog.header.last, "knob_words")
+    func testTheKnobWordsColumnIsFollowedOnlyByTheHeatColumns() {
+        // `heat_mode` and `screen_brightness` were appended after it in performance step 3.
+        XCTAssertEqual(MovementLog.header[MovementLog.header.count - 3], "knob_words")
     }
 }

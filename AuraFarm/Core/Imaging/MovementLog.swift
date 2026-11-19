@@ -208,6 +208,9 @@ struct MovementLogRow: Equatable {
     var iso: Double?
     var thermalState = ""
     var batteryLevel: Double?
+    /// The heat mode ("normal", "cool_down", "too_hot") and the screen's brightness (0 to 1).
+    var heatMode = ""
+    var screenBrightness: Double?
     /// The focus pause's second signal: the rolling box-sharpness reference, the latest sharpness
     /// over it, and why the run is paused ("index_and_sharpness", "detail_lost", "alignment").
     var sharpnessRef: Double?
@@ -272,7 +275,7 @@ enum MovementLog {
         "sharpness_ref", "sharpness_share", "pause_cause", "det_frame_seconds", "det_pre_ms",
         "det_infer_ms", "det_decode_ms",
         "line_accept", "area_ahead_share", "predicted_edge_along", "expected_edge_ask",
-        "camera_drops", "knob_words",
+        "camera_drops", "knob_words", "heat_mode", "screen_brightness",
     ]
 
     static func csv(_ rows: [MovementLogRow]) -> String {
@@ -351,7 +354,8 @@ enum MovementLog {
             number(row.detDecodeMs, 1),
             row.lineAccept, number(row.areaAheadShare, 3), number(row.predictedEdgeAlong, 3),
             row.lineState.isEmpty ? "" : (row.expectedEdgeAsk ? "1" : "0"),
-            row.cameraDrops.map(String.init) ?? "", row.knobWords,
+            row.cameraDrops.map(String.init) ?? "", row.knobWords, row.heatMode,
+            number(row.screenBrightness, 2),
         ]
     }
 

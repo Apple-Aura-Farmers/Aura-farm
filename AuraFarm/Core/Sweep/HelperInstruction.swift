@@ -19,6 +19,8 @@ enum HelperInstruction: Equatable {
     case waiting(String)
     /// "Is this the edge of the sample?" Yes / No.
     case question
+    /// Heat mode "too hot": counting is paused until the phone has cooled.
+    case tooHot
 
     /// The one line the card shows.
     var text: String {
@@ -33,6 +35,7 @@ enum HelperInstruction: Equatable {
         case .finished: "Done"
         case .waiting(let text): text
         case .question: "Is this the edge of the sample?"
+        case .tooHot: "The phone is too hot. Let it cool for a minute"
         }
     }
 
@@ -64,6 +67,7 @@ enum HelperInstruction: Equatable {
         case .finished: "finished"
         case .waiting(let text): "waiting \(text)"
         case .question: "question"
+        case .tooHot: "tooHot"
         }
     }
 
@@ -71,7 +75,7 @@ enum HelperInstruction: Equatable {
     /// question), or has to hear it now (the phone moved, done).
     var isImmediate: Bool {
         switch self {
-        case .stop, .question, .phoneMoved, .finished: true
+        case .stop, .question, .phoneMoved, .finished, .tooHot: true
         case .turn, .backALittle, .refocus, .edgeFound, .lastColumn, .waiting: false
         }
     }
@@ -91,7 +95,7 @@ enum HelperInstruction: Equatable {
         case .backALittle: .threeLight
         case .edgeFound: .success
         case .finished: .longSuccess
-        case .turn, .refocus, .phoneMoved, .lastColumn, .waiting: .none
+        case .turn, .refocus, .phoneMoved, .lastColumn, .waiting, .tooHot: .none
         }
     }
 

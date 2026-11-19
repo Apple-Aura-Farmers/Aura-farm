@@ -19,6 +19,8 @@ struct GuidedScanInput: Equatable {
     /// Spots ticked so far; a rise is a tick.
     var captureCount: Int
     var isFinished: Bool
+    /// The heat mode is "too hot": the card says so until it is not.
+    var isTooHot = false
 }
 
 /// What the page shows and plays after one reading.
@@ -82,6 +84,9 @@ struct GuidedScanPresenter {
         var offered: HelperInstruction?
         if input.isFinished {
             offered = .finished
+        } else if input.isTooHot, !asking {
+            // Shown at once and held for as long as the mode lasts; a question still wins.
+            offered = .tooHot
         } else if input.lastColumn, !wasLastColumn {
             // Said once, when the last column begins; the words stay in the column text.
             offered = .lastColumn
@@ -104,7 +109,7 @@ struct GuidedScanPresenter {
             step: coverageStep, measuredHeightFields: input.slipHeightFields,
             column: max(input.column, 1), isLastColumn: input.lastColumn,
             sideInsetFields: input.sideInsetFields)
-        if let card, card != .question, !card.isNotice { lastOrdinary = card }
+        if let card, card != .question, card != .tooHot, !card.isNotice { lastOrdinary = card }
         lastColumnText = "Column \(max(input.column, 1)) of \(count)"
         return GuidedScanDisplay(
             card: card, haptic: haptic, columnText: lastColumnText,

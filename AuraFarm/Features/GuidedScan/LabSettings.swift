@@ -26,6 +26,8 @@ struct LabSettings: Equatable {
     var detectorModelName = DetectorModel.v2.rawValue
     var detectorUnitsName = DetectorUnits.neuralEngine.rawValue
     var cameraRateName = CameraRate.fps20.rawValue
+    /// Heat-adaptive mode (see `HeatPolicy`): on by default; the lab can turn it off to compare.
+    var heatAdaptive = true
 
     /// What the guided scan uses in Release, where there is no lab to store settings: the
     /// lab's own defaults, except the three that are the chosen ones (rotate 90 degrees left,
@@ -74,6 +76,7 @@ struct LabSettings: Equatable {
         model.setCameraRate(CameraRate(rawValue: cameraRateName) ?? .fps20)
         model.setGuideDryRun(guideDryRun)
         model.setScreenMapping(mapping, mirrored: mirrored)
+        model.setHeatAdaptive(heatAdaptive)
     }
 
     /// The lab's `.onChange` handlers: only what changed is handed over.
@@ -108,6 +111,7 @@ struct LabSettings: Equatable {
         if cameraRateName != old.cameraRateName {
             model.setCameraRate(CameraRate(rawValue: cameraRateName) ?? .fps20)
         }
+        if heatAdaptive != old.heatAdaptive { model.setHeatAdaptive(heatAdaptive) }
         if mappingName != old.mappingName || mirrored != old.mirrored {
             model.setScreenMapping(mapping, mirrored: mirrored)
         }
@@ -146,6 +150,7 @@ struct LabSettingsSync: ViewModifier {
         @AppStorage("slideLab.detectorUnits") private var detectorUnitsName = DetectorUnits
             .neuralEngine.rawValue
         @AppStorage("slideLab.cameraRate") private var cameraRateName = CameraRate.fps20.rawValue
+        @AppStorage("slideLab.heatAdaptive") private var heatAdaptive = true
     #endif
 
     private var settings: LabSettings {
@@ -161,7 +166,8 @@ struct LabSettingsSync: ViewModifier {
                     coverageStep: coverageStep, countsOrganisms: countsOrganisms,
                     showsDetections: showsDetections, cropsToEyepiece: cropsToEyepiece,
                     confidence: confidence, detectorModelName: detectorModelName,
-                    detectorUnitsName: detectorUnitsName, cameraRateName: cameraRateName))
+                    detectorUnitsName: detectorUnitsName, cameraRateName: cameraRateName,
+                    heatAdaptive: heatAdaptive))
         #else
             // No lab in Release: the chosen defaults.
             transform(LabSettings.releaseDefaults)

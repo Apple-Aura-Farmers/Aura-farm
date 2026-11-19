@@ -131,4 +131,38 @@ final class RunCadenceTests: XCTestCase {
         XCTAssertEqual(Double(focusReads), 28, accuracy: 3, "about three a second over 10 s")
         XCTAssertEqual(Double(alignmentReads), 10, accuracy: 1, "about one a second over 10 s")
     }
+
+    // MARK: Gap guard
+
+    func testALongGapWithNoFocusReadingClearsTheCountdown() {
+        var monitor = RunMonitor()
+        monitor.setFocusBaseline(1)
+        func low(_ seconds: Double) -> RunMonitorState {
+            monitor.update(
+                alignment: nil, confirmedCircle: confirmed, focusIndex: 0.3, boxSharpness: 500,
+                viewClass: .sample, tracking: .tracking, seconds: seconds)
+        }
+        // Two seconds of low readings, a 3 s gap, then one low reading.
+        var time = 0.0
+        while time < 2.0 {
+            time += 0.36
+            _ = low(time)
+        }
+        XCTAssertEqual(monitor.state, .ok, "not yet 2.5 s")
+        time += 3
+        XCTAssertEqual(low(time), .ok, "no immediate pause: the countdown starts again")
+        // 2.5 s from that reading.
+        var state = RunMonitorState.ok
+        let restart = time
+        while time - restart < 2.0 {
+            time += 0.36
+            state = low(time)
+        }
+        XCTAssertEqual(state, .ok, "under 2.5 s since the restart")
+        while time - restart < 2.9 {
+            time += 0.36
+            state = low(time)
+        }
+        XCTAssertEqual(state, .pausedFocus)
+    }
 }
