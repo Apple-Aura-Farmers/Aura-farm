@@ -1436,6 +1436,10 @@ extension ScanEngine: AVCaptureVideoDataOutputSampleBufferDelegate {
                 pendingEventName = "side_inset"
                 logged.eventDetail = String(format: "side_inset_fields=%.2f", inset)
             }
+            if let layout = result?.outputLayout, logged.eventDetail.isEmpty, pendingEventName.isEmpty {
+                pendingEventName = "detector_output_layout"
+                logged.eventDetail = layout
+            }
             if let id = pendingEdgeQuestionID {
                 logged.eventDetail =
                     (logged.eventDetail.isEmpty ? "" : logged.eventDetail + "; ") + "question=\(id)"

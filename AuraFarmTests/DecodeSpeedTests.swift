@@ -170,4 +170,83 @@ final class DecodeSpeedTests: XCTestCase {
         // Printed, not asserted: a Debug build on a shared machine is no place for a speed limit.
         print("DECODETIME before \(before) ms after \(after) ms")
     }
+
+    // MARK: Padded layouts
+
+    /// `source`'s values in a new array with the given strides (extra room is left at zero).
+    private func relaid(_ source: MLMultiArray, strides: [Int]) throws -> MLMultiArray {
+        let shape = source.shape.map(\.intValue)
+        let size = source.dataType == .double ? 8 : source.dataType == .float32 ? 4 : 2
+        let elements = (0..<shape.count).map { (shape[$0] - 1) * strides[$0] }.reduce(1, +)
+        let memory = UnsafeMutableRawPointer.allocate(byteCount: elements * size, alignment: 8)
+        memory.initializeMemory(as: UInt8.self, repeating: 0, count: elements * size)
+        let array = try MLMultiArray(
+            dataPointer: memory, shape: source.shape, dataType: source.dataType,
+            strides: strides.map { NSNumber(value: $0) }, deallocator: { $0.deallocate() })
+        for query in 0..<shape[1] {
+            for column in 0..<shape[2] {
+                let index = [0, query, column] as [NSNumber]
+                array[index] = source[index]
+            }
+        }
+        return array
+    }
+
+    /// Contiguous, padded rows, and a padded batch stride, for a [1, 300, width] array.
+    private func layouts(_ array: MLMultiArray, paddedWidth: Int) throws -> [(String, MLMultiArray)] {
+        let width = array.shape[2].intValue
+        return [
+            ("contiguous", try relaid(array, strides: [300 * width, width, 1])),
+            ("padded rows", try relaid(array, strides: [300 * paddedWidth, paddedWidth, 1])),
+            ("padded batch", try relaid(array, strides: [300 * width + 16, width, 1])),
+        ]
+    }
+
+    func testTheRowDecodeGivesTheReferenceDetectionsInEveryLayout() throws {
+        for type in [MLMultiArrayDataType.float32, .float16, .double] {
+            for (classes, probabilities, padded, classNames) in [
+                (24, true, 32, DetectorModel.v2ClassNames),
+                (6, false, 8, OrganismDetector.classNames),
+            ] {
+                let (scores, boxes) = try answer(classes: classes, type: type, probabilities: probabilities)
+                for ((name, s), (_, b)) in zip(
+                    try layouts(scores, paddedWidth: padded), try layouts(boxes, paddedWidth: 8))
+                {
+                    let old = referenceDecode(
+                        scores: s, boxes: b, classNames: classNames,
+                        scoresAreProbabilities: probabilities, minimumConfidence: 0.3)
+                    let new = OrganismDetector.decode(
+                        scores: s, boxes: b, classNames: classNames,
+                        scoresAreProbabilities: probabilities)
+                    XCTAssertFalse(old.isEmpty)
+                    assertSame(old, new, "\(type.rawValue) \(classes) classes \(name)")
+                }
+            }
+        }
+    }
+
+    func testPaddedRowsDecodeInUnderHalfTheGeneralPathsTime() throws {
+        let (scores, boxes) = try answer(classes: 24, type: .float16, probabilities: true)
+        let paddedScores = try relaid(scores, strides: [300 * 32, 32, 1])
+        let paddedBoxes = try relaid(boxes, strides: [300 * 8, 8, 1])
+        let names = DetectorModel.v2ClassNames
+        func time(_ body: () -> Void) -> Double {
+            body()
+            let started = CFAbsoluteTimeGetCurrent()
+            for _ in 0..<50 { body() }
+            return (CFAbsoluteTimeGetCurrent() - started) * 1000 / 50
+        }
+        let general = time {
+            _ = OrganismDetector.decodeGeneral(
+                scores: paddedScores, boxes: paddedBoxes, classNames: names,
+                scoresAreProbabilities: true)
+        }
+        let rows = time {
+            _ = OrganismDetector.decode(
+                scores: paddedScores, boxes: paddedBoxes, classNames: names,
+                scoresAreProbabilities: true)
+        }
+        print("DECODETIME padded Float16: general \(general) ms, rows \(rows) ms")
+        XCTAssertLessThan(rows, general / 2)
+    }
 }

@@ -24,6 +24,8 @@ struct LiveCountFrameLog: Equatable {
     var units = ""
     /// "Volvox id=7 slide=(12,-40) column=2", one per organism counted on this frame.
     var counted: [String] = []
+    /// The model's output layout, on the first decode only.
+    var outputLayout: String?
     /// For a result that arrived after its frame: when that frame was taken (run seconds),
     /// and where the detection's time went, in milliseconds.
     var frameSeconds: Double?
@@ -403,6 +405,7 @@ final class LiveCountSession {
         log.preMilliseconds = output.timing.preMilliseconds
         log.inferMilliseconds = output.timing.inferMilliseconds
         log.decodeMilliseconds = output.timing.decodeMilliseconds
+        log.outputLayout = output.timing.outputLayout
         log.tallyTotal = counterState.tallyTotal
         log.mapTotal = counterState.helperTotal
         log.model = model.rawValue
