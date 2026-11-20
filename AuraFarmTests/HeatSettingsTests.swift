@@ -9,9 +9,9 @@ final class HeatSettingsTests: XCTestCase {
         XCTAssertEqual(DetectorUnits.graphics.computeUnits, .cpuAndGPU)
         XCTAssertEqual(DetectorUnits.neuralEngine.rawValue, "ne")
         XCTAssertEqual(DetectorUnits.graphics.rawValue, "gpu")
-        let detector = try OrganismDetector(model: .v2, computeUnits: DetectorUnits.neuralEngine.computeUnits)
+        let detector = try OrganismDetector(model: .v3, computeUnits: DetectorUnits.neuralEngine.computeUnits)
         XCTAssertEqual(detector.computeUnits, .cpuAndNeuralEngine)
-        XCTAssertEqual(try OrganismDetector().computeUnits, .all, "no arguments is today's V1")
+        XCTAssertEqual(try OrganismDetector().computeUnits, .all, "no arguments is today's V3")
     }
 
     func testTheLiveCountSessionOpensOnTheNeuralEngineUnlessToldOtherwise() throws {
@@ -49,13 +49,13 @@ final class HeatSettingsTests: XCTestCase {
         XCTAssertEqual(LabDeviceStatus.name(of: .critical), "critical")
     }
 
-    func testTheModelTestLabOpensOnV2WithTheCropOn() {
-        XCTAssertEqual(ModelTestLabDefaults.model, .v2)
+    func testTheModelTestLabOpensOnV3WithTheCropOn() {
+        XCTAssertEqual(ModelTestLabDefaults.model, .v3)
         XCTAssertTrue(ModelTestLabDefaults.cropsToCentre)
         // It no longer reads or writes the old remembered choices.
         UserDefaults.standard.set("v1", forKey: "modelTest.detectorModel")
         UserDefaults.standard.set(false, forKey: "modelTest.cropCentre")
-        XCTAssertEqual(ModelTestLabDefaults.model, .v2)
+        XCTAssertEqual(ModelTestLabDefaults.model, .v3)
         UserDefaults.standard.removeObject(forKey: "modelTest.detectorModel")
         UserDefaults.standard.removeObject(forKey: "modelTest.cropCentre")
     }

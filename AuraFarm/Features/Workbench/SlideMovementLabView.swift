@@ -43,7 +43,7 @@
         @AppStorage("slideLab.countOrganisms") private var countsOrganisms = true
         @AppStorage("slideLab.showDetections") private var showsDetections = false
         @AppStorage("slideLab.cropEyepiece") private var cropsToEyepiece = true
-        @AppStorage("slideLab.detectorModel") private var detectorModelName = DetectorModel.v2.rawValue
+        @AppStorage("slideLab.detectorModel") private var detectorModelName = DetectorModel.v3.rawValue
         @AppStorage("slideLab.detectorUnits") private var detectorUnitsName = DetectorUnits.neuralEngine
             .rawValue
         @AppStorage("slideLab.cameraRate") private var cameraRateName = CameraRate.fps20.rawValue

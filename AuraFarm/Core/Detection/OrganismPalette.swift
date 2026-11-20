@@ -33,7 +33,7 @@ enum OrganismPalette {
     /// slot left out.
     static let knownLabels: [String] = {
         var labels: [String] = []
-        for name in OrganismDetector.classNames + DetectorModel.v2ClassNames
+        for name in DetectorModel.v3ClassNames
         where name != "no-object" && !labels.contains(name) {
             labels.append(name)
         }

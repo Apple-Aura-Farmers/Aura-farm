@@ -47,7 +47,7 @@ class ScanEngine: NSObject {
     let speedState = SlideMovementInfo.SpeedState()
     /// The model counting. It is locked from Mark start until the run finishes or the guide
     /// starts afresh, so a run never mixes models.
-    private(set) var detectorModel = DetectorModel.v2
+    private(set) var detectorModel = DetectorModel.v3
     private(set) var runMarked = false
     var modelLocked: Bool { runMarked || countInfo.isActive }
     private(set) var spotMode = SpotConfirmMode.briefTouch
