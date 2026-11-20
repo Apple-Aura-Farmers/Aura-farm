@@ -23,6 +23,17 @@ struct RuleBasedRecommender: RecommendationProviding {
     /// action marked must-check always comes with "talk to your extension officer". A sweep
     /// that was never counted gets fixed steps instead, because no catalogue action fits it.
     static func steps(for context: AdviceContext) -> [Recommendation.Step] {
+        if context.result.isSoilOnly {
+            // No test was taken, so only what the soil measurements call for is offered.
+            let soil = context.actions.filter(\.fromSoil)
+                .sorted { rank($0.action.id) < rank($1.action.id) }
+            let picked = soil.prefix(AdviceComposer.maxSoilSteps).map { suggested -> Recommendation.Step in
+                var step = AdviceStepRules.step(for: suggested, why: nil)
+                step.group = .soil
+                return step
+            }
+            return AdviceStepRules.ensuringExtensionStep(Array(picked), offered: context.actions)
+        }
         guard context.estimate.level != .notCounted else {
             return [
                 Recommendation.Step(
@@ -40,7 +51,16 @@ struct RuleBasedRecommender: RecommendationProviding {
         return AdviceStepRules.ensuringExtensionStep(Array(picked), offered: offered)
     }
 
+    private static func rank(_ id: AdviceAction.ID) -> Int {
+        AdviceActions.fallbackPriority.firstIndex(of: id) ?? Int.max
+    }
+
     static func summary(for context: AdviceContext) -> String {
+        if context.result.isSoilOnly {
+            return context.actions.contains(where: \.fromSoil)
+                ? "This is from the soil measurements only. No microscope test has been taken yet."
+                : AdviceComposer.soilAllGood
+        }
         let base = labSummary(for: context)
         // One more sentence when the soil measurements call for steps of their own, so the summary
         // does not read as if only the microscope was looked at.
