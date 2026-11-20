@@ -29,19 +29,23 @@ final class FoundationModelRecommender: RecommendationProviding {
         guard Bundle.main.preferredLocalizations.first == "en" else {
             return .unavailable(
                 reason: String(
-                    localized: "Apple Intelligence writes advice in English only, so standard advice is shown."))
+                    localized:
+                        "Apple Intelligence writes advice in English only, so standard advice is shown."))
         }
         switch model.availability {
         case .available:
             return model.supportsLocale()
                 ? .available
-                : .unavailable(reason: String(localized: "Apple Intelligence doesn't support this phone's language yet."))
+                : .unavailable(
+                    reason: String(localized: "Apple Intelligence doesn't support this phone's language yet.")
+                )
         case .unavailable(.deviceNotEligible):
             return .unavailable(reason: String(localized: "This iPhone cannot run Apple Intelligence."))
         case .unavailable(.appleIntelligenceNotEnabled):
             return .unavailable(reason: String(localized: "Apple Intelligence is turned off in Settings."))
         case .unavailable(.modelNotReady):
-            return .unavailable(reason: String(localized: "Apple Intelligence is still downloading. Try again later."))
+            return .unavailable(
+                reason: String(localized: "Apple Intelligence is still downloading. Try again later."))
         case .unavailable:
             return .unavailable(reason: String(localized: "Apple Intelligence is not available right now."))
         }

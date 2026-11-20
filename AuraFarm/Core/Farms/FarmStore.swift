@@ -88,7 +88,8 @@ final class FarmStore {
                 .appending(path: "Farms-unreadable-\(stamp).json")
             try? FileManager.default.moveItem(at: fileURL, to: aside)
             problem = String(
-                localized: "The saved farms could not be read. The old file was kept aside and the list started empty."
+                localized:
+                    "The saved farms could not be read. The old file was kept aside and the list started empty."
             )
         }
     }

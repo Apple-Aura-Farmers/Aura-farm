@@ -148,7 +148,9 @@ private struct SoilResultContent: View {
                     viewModel: viewModel,
                     footer: viewModel.result.soil == nil
                         ? String(
-                            localized: "Lab-only advice: from this microscope test, without the farm's soil measurements.")
+                            localized:
+                                "Lab-only advice: from this microscope test, without the farm's soil measurements."
+                        )
                         : nil)
             } else {
                 Section {

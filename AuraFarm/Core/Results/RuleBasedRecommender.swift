@@ -58,7 +58,9 @@ struct RuleBasedRecommender: RecommendationProviding {
     static func summary(for context: AdviceContext) -> String {
         if context.result.isSoilOnly {
             return context.actions.contains(where: \.fromSoil)
-                ? String(localized: "This is from the soil measurements only. No microscope test has been taken yet.")
+                ? String(
+                    localized:
+                        "This is from the soil measurements only. No microscope test has been taken yet.")
                 : AdviceComposer.soilAllGood
         }
         let base = labSummary(for: context)
@@ -78,7 +80,8 @@ struct RuleBasedRecommender: RecommendationProviding {
         switch context.estimate.level {
         case .good: return String(localized: "Plenty of soil life was seen. Keep doing what is working.")
         case .fair: return String(localized: "Some soil life was seen. Small changes may help it grow.")
-        case .poor: return String(localized: "Little soil life was seen. It is worth checking before changing much.")
+        case .poor:
+            return String(localized: "Little soil life was seen. It is worth checking before changing much.")
         case .tooFewToSay: return String(localized: "Too little was seen to suggest anything about the soil.")
         case .notCounted: return String(localized: "This sweep was not counted, so there is no advice yet.")
         }

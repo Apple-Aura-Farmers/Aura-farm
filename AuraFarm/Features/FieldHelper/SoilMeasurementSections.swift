@@ -63,7 +63,8 @@ struct SoilMeasurementSections: View {
                     let p = SoilStandards.phosphorus.description
                     let k = SoilStandards.potassium.description
                     return String(
-                        localized: "Milligrams per kilogram of soil. Standard: N \(n), P \(p), K \(k). The standards are placeholders and have not been checked by an agronomist."
+                        localized:
+                            "Milligrams per kilogram of soil. Standard: N \(n), P \(p), K \(k). The standards are placeholders and have not been checked by an agronomist."
                     )
                 }
             }
@@ -99,7 +100,9 @@ struct SoilMeasurementSections: View {
                 if isEditable {
                     Picker("Field at the time", selection: $draft.phFieldWater) {
                         Text("Not recorded").tag(PHFieldWater?.none)
-                        ForEach(PHFieldWater.allCases) { Text($0.label.translated).tag(PHFieldWater?.some($0)) }
+                        ForEach(PHFieldWater.allCases) {
+                            Text($0.label.translated).tag(PHFieldWater?.some($0))
+                        }
                     }
                 } else if let water = draft.phFieldWater {
                     LabeledContent("Field at the time", value: water.label.translated)
@@ -108,7 +111,8 @@ struct SoilMeasurementSections: View {
                 InfoHeader(String(localized: "Acidity (pH)")) {
                     let target = SoilStandards.ph.description
                     return String(
-                        localized: "Provisional target for flooded rice: about pH \(target). Flooding often moves pH toward neutral, so a reading from dry soil may differ from the pH around the roots once the field is flooded."
+                        localized:
+                            "Provisional target for flooded rice: about pH \(target). Flooding often moves pH toward neutral, so a reading from dry soil may differ from the pH around the roots once the field is flooded."
                     )
                 }
             }
@@ -139,7 +143,9 @@ struct SoilMeasurementSections: View {
                 if isEditable {
                     Picker("Type", selection: $draft.fertilizerType) {
                         Text("Choose…").tag(FertilizerType?.none)
-                        ForEach(FertilizerType.allCases) { Text($0.label.translated).tag(FertilizerType?.some($0)) }
+                        ForEach(FertilizerType.allCases) {
+                            Text($0.label.translated).tag(FertilizerType?.some($0))
+                        }
                     }
                 } else if let type = draft.fertilizerType {
                     LabeledContent("Type", value: type.label.translated)

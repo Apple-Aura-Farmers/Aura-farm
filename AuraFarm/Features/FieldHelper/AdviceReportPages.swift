@@ -164,7 +164,8 @@ private struct ReportPage<Content: View>: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .firstTextBaseline) {
                 (Text("Aura Farm").font(Style.body(10, weight: .bold))
-                    + Text(verbatim: "   \(section.translated)").font(Style.body(10)).foregroundColor(Style.muted))
+                    + Text(verbatim: "   \(section.translated)").font(Style.body(10)).foregroundColor(
+                        Style.muted))
                 Spacer()
                 Text("\(place) · \(day(report.sampledAt)) · \(number)/\(total)")
                     .font(Style.mono(8, weight: .regular))
@@ -361,7 +362,8 @@ private struct SummaryPage: View {
                 if report.organisms.count > 6 || report.moreKinds > 0 {
                     let extra = report.organisms.dropFirst(6).map(\.name)
                     let names =
-                        extra.isEmpty ? String(localized: "\(report.moreKinds) more kinds") : extra.joined(separator: ", ")
+                        extra.isEmpty
+                        ? String(localized: "\(report.moreKinds) more kinds") : extra.joined(separator: ", ")
                     Text("Also counted: \(names).")
                         .font(Style.body(8.5))
                         .foregroundStyle(Style.muted)
@@ -605,7 +607,8 @@ private struct MeasurementsPage: View {
 
     private var intro: String {
         var text = String(
-            localized: "Recorded by the field helper, separately from the microscope. Each reading is placed against provisional standards for flooded rice, not graded."
+            localized:
+                "Recorded by the field helper, separately from the microscope. Each reading is placed against provisional standards for flooded rice, not graded."
         )
         if let updated = report.soilUpdatedAt {
             let measured = day(updated)
@@ -945,7 +948,8 @@ private struct AboutBlock: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             if let fertilizer = education.fertilizer {
-                (Text("Fertilizer · \(fertilizer.label.translated).  ").font(Style.body(8.5, weight: .semibold))
+                (Text("Fertilizer · \(fertilizer.label.translated).  ").font(
+                    Style.body(8.5, weight: .semibold))
                     + Text(fertilizer.education ?? fertilizer.definition.translated).font(Style.body(8.5)))
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -961,15 +965,21 @@ private struct NotesBlock: View {
             return String(localized: "No pH was recorded for this farm.")
         }
         if let context = ph.context { return String(localized: "This farm's pH reading: \(context).") }
-        return String(localized: "How and when this farm's pH was measured was not recorded, so read it with care.")
+        return String(
+            localized: "How and when this farm's pH was measured was not recorded, so read it with care.")
     }
 
     private var madeLine: String {
         let shownOn = day(report.generatedAt)
         return [
-            String(localized: "The app's fixed rules chose every step from the microscope test and the soil measurements."),
+            String(
+                localized:
+                    "The app's fixed rules chose every step from the microscope test and the soil measurements."
+            ),
             report.recommendation.source == .foundationModel
-                ? String(localized: "Apple Intelligence on the phone only wrote the wording, which was checked first.")
+                ? String(
+                    localized:
+                        "Apple Intelligence on the phone only wrote the wording, which was checked first.")
                 : String(localized: "The wording is the app's standard advice."),
             String(localized: "This report shows the advice the app showed on \(shownOn)."),
         ].joined(separator: " ")
@@ -983,13 +993,16 @@ private struct NotesBlock: View {
                     note(
                         "Standards",
                         String(
-                            localized: "A provisional first draft for flooded rice paddies. No agronomist has reviewed it yet.")
+                            localized:
+                                "A provisional first draft for flooded rice paddies. No agronomist has reviewed it yet."
+                        )
                     )
                     note("pH in flooded rice", SoilEducation.phCaveat.translated + " " + phLine)
                     note(
                         "Using this report",
                         String(
-                            localized: "For monitoring and learning, not a diagnosis. Ask an extension officer before making a major change."
+                            localized:
+                                "For monitoring and learning, not a diagnosis. Ask an extension officer before making a major change."
                         )
                     )
                 }
@@ -998,13 +1011,15 @@ private struct NotesBlock: View {
                     note(
                         "Measurements",
                         String(
-                            localized: "Probe and laboratory readings can differ, and a reading depends on where, how deep and when the soil was sampled. Only the latest measurements are kept."
+                            localized:
+                                "Probe and laboratory readings can differ, and a reading depends on where, how deep and when the soil was sampled. Only the latest measurements are kept."
                         )
                     )
                     note(
                         "Fertilizer",
                         String(
-                            localized: "The type is what the field helper chose from a list. “No fertilizer recorded” does not mean none was used, and “Not sure” is never guessed at. No step gives a product, an amount or a rate."
+                            localized:
+                                "The type is what the field helper chose from a list. “No fertilizer recorded” does not mean none was used, and “Not sure” is never guessed at. No step gives a product, an amount or a rate."
                         )
                     )
                     note("How the advice was made", madeLine)

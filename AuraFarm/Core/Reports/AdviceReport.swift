@@ -133,13 +133,15 @@ extension AdviceReport {
             let pastFrames = Double(max(past.result.framesKept, 1))
             var byGroup: [String: Double] = [:]
             for row in OrganismTaxonomy.modelClass.rows(from: past.result.countsByClass ?? [:]) {
-                let name = (OrganismNotes.note(forLabel: row.label ?? row.name)?.displayName ?? row.name).translated
+                let name = (OrganismNotes.note(forLabel: row.label ?? row.name)?.displayName ?? row.name)
+                    .translated
                 byGroup[name, default: 0] += Double(row.count) / pastFrames
             }
             return HistoryPoint(
                 date: past.result.recordedAt,
                 perFrame: Double(past.result.totalCount ?? 0) / pastFrames,
-                moisture: past.result.moisture.label.translated, isThisSample: past.id == test?.id, byGroup: byGroup)
+                moisture: past.result.moisture.label.translated, isThisSample: past.id == test?.id,
+                byGroup: byGroup)
         }
         .sorted { $0.date < $1.date }
 
@@ -182,7 +184,8 @@ extension AdviceReport {
             FrameSource(
                 url: urls[index],
                 caption: String(
-                    localized: "Microscope frame \(index + 1) of \(urls.count) from this sample, chosen by its place in the sweep, not by what it shows."
+                    localized:
+                        "Microscope frame \(index + 1) of \(urls.count) from this sample, chosen by its place in the sweep, not by what it shows."
                 )
             )
         }

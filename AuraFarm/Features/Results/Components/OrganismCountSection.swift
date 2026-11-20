@@ -57,7 +57,9 @@ struct OrganismCountSection: View {
             Text("Counted")
         } footer: {
             if taxonomy == .organismGroup, isExpanded {
-                Text("Organism groups are matched to the model's classes provisionally, for the team to confirm.")
+                Text(
+                    "Organism groups are matched to the model's classes provisionally, for the team to confirm."
+                )
             }
         }
     }

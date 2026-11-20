@@ -87,7 +87,8 @@ struct PlaceholderSoilHealthEstimator: SoilHealthEstimating {
                         : String(localized: "Only \(total) organisms were counted, too few to go on.")
                 ],
                 followUp: String(
-                    localized: "An empty slide is usually a sampling problem. Make a fresh slide and sweep again before drawing any conclusion."
+                    localized:
+                        "An empty slide is usually a sampling problem. Make a fresh slide and sweep again before drawing any conclusion."
                 )
             )
         }
@@ -113,8 +114,11 @@ struct PlaceholderSoilHealthEstimator: SoilHealthEstimating {
             reasons: [
                 result.isGuidedScan
                     ? String(
-                        localized: "About \(about) organisms per field of view across \(result.viewsLooked) fields of view.")
-                    : String(localized: "About \(about) organisms per frame across \(result.framesKept) frames."),
+                        localized:
+                            "About \(about) organisms per field of view across \(result.viewsLooked) fields of view."
+                    )
+                    : String(
+                        localized: "About \(about) organisms per frame across \(result.framesKept) frames."),
                 kinds == 1
                     ? String(localized: "1 kind of organism found.")
                     : String(localized: "\(kinds) kinds of organism found."),
@@ -122,7 +126,8 @@ struct PlaceholderSoilHealthEstimator: SoilHealthEstimating {
             ],
             followUp: level == .good
                 ? String(localized: "Test again next season, or sooner if the crop changes.")
-                : String(localized: "Test again in 2 to 4 weeks. If the result stays low, send a sample to a lab.")
+                : String(
+                    localized: "Test again in 2 to 4 weeks. If the result stays low, send a sample to a lab.")
         )
     }
 }

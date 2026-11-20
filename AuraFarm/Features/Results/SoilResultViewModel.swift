@@ -234,7 +234,8 @@ final class SoilResultViewModel {
 
     /// Said when the soil measurements changed and Apple Intelligence could not write new wording.
     static let measurementsChangedNote = String(
-        localized: "The soil measurements changed and Apple Intelligence couldn't write new wording, so standard advice for the new measurements is shown."
+        localized:
+            "The soil measurements changed and Apple Intelligence couldn't write new wording, so standard advice for the new measurements is shown."
     )
 
     /// After a failed Write again the saved advice stays on screen, with a note. The file is not

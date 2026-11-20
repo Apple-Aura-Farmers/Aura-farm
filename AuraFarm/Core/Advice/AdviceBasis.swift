@@ -13,7 +13,8 @@ enum AdviceBasis {
         if context.interpreted.isEmpty {
             return unused == 1
                 ? String(localized: "Nothing in this sample could be read yet. 1 organism wasn't used.")
-                : String(localized: "Nothing in this sample could be read yet. \(unused) organisms weren't used.")
+                : String(
+                    localized: "Nothing in this sample could be read yet. \(unused) organisms weren't used.")
         }
 
         let total = context.interpreted.reduce(0) { $0 + $1.count }
@@ -53,7 +54,8 @@ enum AdviceBasis {
 
     private static func views(_ number: Int, guided: Bool) -> String {
         if guided {
-            return number == 1 ? String(localized: "1 field of view") : String(localized: "\(number) fields of view")
+            return number == 1
+                ? String(localized: "1 field of view") : String(localized: "\(number) fields of view")
         }
         return number == 1 ? String(localized: "1 frame") : String(localized: "\(number) frames")
     }

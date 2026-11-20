@@ -13,7 +13,8 @@ enum AdviceProgress: Equatable {
         switch self {
         case .noticing: return String(localized: "Looking at the sample…")
         case .choosingSteps(let chosen):
-            return chosen == 0 ? String(localized: "Choosing steps…") : String(localized: "Choosing steps (\(chosen) of 3)…")
+            return chosen == 0
+                ? String(localized: "Choosing steps…") : String(localized: "Choosing steps (\(chosen) of 3)…")
         case .summarizing: return String(localized: "Writing a summary…")
         }
     }

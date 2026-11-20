@@ -236,9 +236,13 @@ struct FarmAdvice: View {
                 footer: testedOn.map {
                     let day = $0.formatted(date: .abbreviated, time: .omitted)
                     return usesSoil
-                        ? String(localized: "From the microscope test on \(day), with the soil measurements above.")
+                        ? String(
+                            localized: "From the microscope test on \(day), with the soil measurements above."
+                        )
                         : String(localized: "From the microscope test on \(day) only.")
-                } ?? String(localized: "From the soil measurements above only. A microscope test will add to it.")
+                }
+                    ?? String(
+                        localized: "From the soil measurements above only. A microscope test will add to it.")
             )
             .id(SoilMeasurementsView.adviceID)
             exportSection
