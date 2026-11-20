@@ -62,7 +62,8 @@ final class V2DetectorTests: XCTestCase {
         XCTAssertEqual(detector.classNames[6], "Didinium_Phacus_Collodictyon")
         XCTAssertEqual(detector.classNames, DetectorModel.v2ClassNames, "metadata matches the built-in list")
         XCTAssertEqual(OrganismDetector.modelName, "SoilDetector", "V1's name is unchanged")
-        XCTAssertEqual(try OrganismDetector().kind, .v1, "no arguments still means V1")
+        // V1's package is no longer in the app, so the no-argument detector is not opened here.
+        XCTAssertEqual(DetectorModel.v1.resourceName, OrganismDetector.modelName)
     }
 
     /// Documents the problem: this is expected to pass.
