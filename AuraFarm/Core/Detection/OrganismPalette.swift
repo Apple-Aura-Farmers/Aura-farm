@@ -34,7 +34,7 @@ enum OrganismPalette {
     static let knownLabels: [String] = {
         var labels: [String] = []
         for name in DetectorModel.v3ClassNames
-        where name != "no-object" && !labels.contains(name) {
+        where name != "background" && !labels.contains(name) {
             labels.append(name)
         }
         return Array(labels.prefix(colours.count))
