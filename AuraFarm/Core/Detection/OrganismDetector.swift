@@ -142,10 +142,10 @@ struct OrganismDetector {
     /// - Parameter crop: a square in frame pixels, origin at the top left; only it is squashed to
     ///   the model's input, and the boxes come back as shares of the WHOLE frame. nil feeds the
     ///   whole frame, as the model was trained.
-    /// The class names of `kind`: V1's are fixed; V2's are read from the model's metadata
-    /// ("classes", comma separated) and checked against the scores' width.
+    /// The class names of `kind`: V1's are fixed; V2's and V3's are read from the model's
+    /// metadata ("classes", comma separated) and checked against the scores' width.
     static func names(for kind: DetectorModel, in network: MLModel) -> [String] {
-        guard kind == .v2 else { return Self.classNames }
+        guard let builtIn = kind.builtInClassNames else { return Self.classNames }
         let width = network.modelDescription.outputDescriptionsByName[kind.scoresOutput]?
             .multiArrayConstraint?.shape.last?.intValue
         let metadata = network.modelDescription.metadata[.creatorDefinedKey] as? [String: String]
@@ -159,7 +159,7 @@ struct OrganismDetector {
                     + "(\(fromModel?.count ?? 0) names, scores \(width ?? 0) wide); using the built-in list"
             )
         #endif
-        return DetectorModel.v2ClassNames
+        return builtIn
     }
 
     func detections(in image: CGImage, crop: CGRect? = nil) throws -> [Detection] {
