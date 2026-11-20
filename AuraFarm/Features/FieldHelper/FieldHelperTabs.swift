@@ -1,12 +1,10 @@
 import MapKit
 import SwiftUI
 
-/// The Field Helper's screens: the land on a map, with the search field over it, and the
-/// farmers as a list.
+/// The Field Helper's screens: the land on a map, and the farmers as a list.
 ///
-/// The add button is a tab given the search role, which is how the system draws it as its own
-/// circle at the trailing end of the bar. It is not a screen: tapping it puts the helper back
-/// where they were and starts marking land on the map.
+/// The search button is a tab given the search role, which is how the system draws it as its own
+/// circle at the trailing end of the bar. Adding land is a button at the top of the map.
 struct FieldHelperTabs: View {
     /// Sends the person back to the role picker.
     var onSwitchRole: () -> Void
@@ -14,8 +12,8 @@ struct FieldHelperTabs: View {
     @Environment(FarmStore.self) private var store
 
     @State private var screen: Screen = .plots
-    /// Raised when the add button is tapped, for the map screen to take.
-    @State private var markPlot = false
+    /// The screen the search tab was opened from, which decides what it searches.
+    @State private var searchedFrom: Screen = .plots
     /// Where the map is looking, shared by both copies of it. Held here rather than in the map
     /// screen so that switching to the search tab, or back, leaves the land where it was.
     @State private var camera: MapCameraPosition = .automatic
@@ -27,7 +25,7 @@ struct FieldHelperTabs: View {
     @State private var hasPlacedCamera = false
 
     private enum Screen: Hashable {
-        case plots, results, add, search
+        case plots, results, search
     }
 
     var body: some View {
@@ -36,33 +34,28 @@ struct FieldHelperTabs: View {
                 "Plots", systemImage: "point.topleft.down.to.point.bottomright.curvepath",
                 value: Screen.plots
             ) {
-                FieldHelperHomeView(camera: $camera, markPlot: $markPlot)
+                FieldHelperHomeView(camera: $camera)
             }
 
             Tab("Results", systemImage: "doc.text", value: Screen.results) {
                 FarmersListView(onSwitchRole: onSwitchRole)
             }
 
-            // The circle at the end is Add over the map and a farmer search everywhere else.
-            if screen == .plots {
-                Tab("Add", systemImage: "plus", value: Screen.add, role: .search) {
-                    Color.clear
-                }
-            } else {
-                Tab("Search", systemImage: "magnifyingglass", value: Screen.search, role: .search) {
+            // The circle at the end, a search of the map, or of the farmers from the other screens.
+            Tab("Search", systemImage: "magnifyingglass", value: Screen.search, role: .search) {
+                if searchedFrom == .plots {
+                    FieldHelperHomeView(camera: $camera, isSearch: true)
+                } else {
                     FarmersListView(isSearch: true)
                 }
             }
         }
         .onChange(of: screen) { old, new in
-            if new == .add {
-                screen = old
-                markPlot = true
-            }
+            if new == .search { searchedFrom = old }
         }
         // The selected tab takes the accent, which the bar does not pick up from the app.
         .tint(.aura)
-        // What draws the add tab as its own circle: without it the system puts the search-role
+        // What draws the search tab as its own circle: without it the system puts the search-role
         // tab back in the capsule with Plots and Results.
         .tabViewSearchActivation(.searchTabSelection)
         .task { location.start() }
