@@ -322,7 +322,9 @@ final class SoilEducationReportTests: XCTestCase {
         XCTAssertTrue(
             squash(text).contains(squash("No soil measurements or fertilizer information have been recorded"))
         )
-        XCTAssertEqual(AdviceReportPages.titles(for: report), ["Field summary", "What to do next"])
+        XCTAssertEqual(
+            AdviceReportPages.titles(for: report),
+            ["Field summary", "What to do next", "Notes and limitations"])
         XCTAssertTrue(squash(text).contains(squash("More samples are needed before a trend can be shown.")))
     }
 
@@ -334,10 +336,10 @@ final class SoilEducationReportTests: XCTestCase {
         XCTAssertEqual(pages, AdviceReportPages.titles(for: report).count)
         for needle in [
             "60 mg/kg", "Low", 5.6.formatted(.number.precision(.fractionLength(0...2))),
-            SoilEducation.nitrogen.whatItDoes, SoilEducation.nitrogen.meaning[.low]!,
             "Organic fertilizer", "Compost", "500 kg/ha", SoilEducation.phCaveat,
-            report.basis!, report.recommendation.summary, "From the microscope test",
-            "From your soil measurements", "About your soil measurements", "not a diagnosis",
+            report.basis!, report.recommendation.summary, "Microscope test",
+            "Soil measurements", "Things you can do now", "After harvest", "Before acting",
+            "not a diagnosis",
         ] {
             XCTAssertTrue(flat.lowercased().contains(squash(needle).lowercased()), needle)
         }
@@ -401,13 +403,15 @@ final class SoilEducationReportTests: XCTestCase {
         XCTAssertFalse(second.text.contains("Organic fertilizer"))
     }
 
-    func testLongContentGoesOnMorePagesNotSmallerText() {
-        let short = AdviceReport.sample(soil: SoilMeasurements(ph: 6.5), steps: 3)
-        let long = AdviceReport.sample(steps: 9)
-        XCTAssertEqual(
-            AdviceReportPages.titles(for: short),
-            ["Field summary", "Your soil measurements", "What to do next"])
-        XCTAssertEqual(AdviceReportPages.titles(for: long).last, "Trends and notes")
+    func testStepsAreSplitByWhenTheyCanBeDone() {
+        typealias When = AdviceReportPages.When
+        XCTAssertEqual(When(timing: "Now"), .now)
+        XCTAssertEqual(When(timing: "2 to 4 weeks"), .now)
+        XCTAssertEqual(When(timing: nil), .now)
+        XCTAssertEqual(When(timing: "After harvest"), .afterHarvest)
+        XCTAssertEqual(When(timing: "Next fallow"), .afterHarvest)
+        XCTAssertEqual(When(timing: "Before acting"), .beforeActing)
+        XCTAssertEqual(When(timing: "Before next application"), .beforeActing)
     }
 
     func testATrendNeedsEnoughTests() throws {

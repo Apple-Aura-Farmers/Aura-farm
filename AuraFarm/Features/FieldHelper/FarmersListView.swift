@@ -3,7 +3,7 @@ import SwiftUI
 /// Every farmer the helper looks after, one row each, with the way through to their land and
 /// its test results.
 ///
-/// The same list serves the Results tab and the search tab beside it. Only the search tab
+/// The same list serves the Farmers tab and the search tab beside it. Only the search tab
 /// carries a field to type into; Results is the whole list, in order. This screen has the
 /// navigation bar the map has not, so switching role lives here rather than over the land.
 struct FarmersListView: View {

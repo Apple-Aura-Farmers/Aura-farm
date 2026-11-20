@@ -47,8 +47,8 @@ struct FarmsOverviewMap: View {
                                 Button {
                                     onOpen(farm, plot)
                                 } label: {
-                                    number(
-                                        farm.number(of: plot), in: colour,
+                                    label(
+                                        farm.title(of: plot), farm.name, in: colour,
                                         isSelected: plot.id == selected)
                                 }
                                 .buttonStyle(.plain)
@@ -89,15 +89,23 @@ struct FarmsOverviewMap: View {
         FarmerColour.colour(for: farm.farmerName, among: farms.map(\.farmerName))
     }
 
-    /// The plot's number on its own land. Big enough to tap, and in the farmer's colour so it
+    /// The plot's number over the farm's name, on its land. Big enough to tap, and in the farmer's colour so it
     /// reads as part of the shape under it rather than as a pin dropped on top.
-    private func number(_ value: Int, in colour: Color, isSelected: Bool) -> some View {
-        Text(value, format: .number)
-            .font(.headline)
+    private func label(_ title: String, _ name: String, in colour: Color, isSelected: Bool)
+        -> some View
+    {
+        let shape = RoundedRectangle(cornerRadius: 14)
+        return VStack(spacing: 0) {
+            Text(title).font(.caption2.weight(.medium))
+            Text(name).font(.subheadline.weight(.semibold))
+        }
             .foregroundStyle(.white)
-            .frame(width: 32, height: 32)
-            .background(colour, in: Circle())
-            .overlay(Circle().stroke(.white.opacity(0.9), lineWidth: 2))
+            .lineLimit(1)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .frame(minHeight: 32)
+            .background(colour, in: shape)
+            .overlay(shape.stroke(.white.opacity(0.9), lineWidth: 2))
             .shadow(radius: 2)
             .scaleEffect(isSelected ? 1.2 : 1)
             .animation(.snappy, value: isSelected)

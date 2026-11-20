@@ -105,6 +105,7 @@ struct FieldHelperHomeView: View {
                                 .font(.title2.weight(.medium))
                                 .frame(width: 44, height: 44)
                         }
+                        .buttonBorderShape(.circle)
                         .accessibilityLabel("Add")
                     }
                 }

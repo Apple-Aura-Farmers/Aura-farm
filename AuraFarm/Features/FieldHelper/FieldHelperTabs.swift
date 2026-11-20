@@ -37,7 +37,7 @@ struct FieldHelperTabs: View {
                 FieldHelperHomeView(camera: $camera)
             }
 
-            Tab("Results", systemImage: "doc.text", value: Screen.results) {
+            Tab("Farmers", systemImage: "person.3.fill", value: Screen.results) {
                 FarmersListView(onSwitchRole: onSwitchRole)
             }
 
@@ -56,7 +56,7 @@ struct FieldHelperTabs: View {
         // The selected tab takes the accent, which the bar does not pick up from the app.
         .tint(.aura)
         // What draws the search tab as its own circle: without it the system puts the search-role
-        // tab back in the capsule with Plots and Results.
+        // tab back in the capsule with Plots and Farmers.
         .tabViewSearchActivation(.searchTabSelection)
         .task { location.start() }
         .onDisappear { location.stop() }
