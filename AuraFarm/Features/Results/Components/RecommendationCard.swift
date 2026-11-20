@@ -19,9 +19,15 @@ struct RecommendationCard: View {
     var rating: AdviceFeedback.Rating?
     /// Called with a rating, and the reasons when it is not useful. nil hides the question.
     var onRate: ((AdviceFeedback.Rating, [AdviceFeedback.Reason]) -> Void)?
+    /// Writes the advice again with fresh wording. nil hides the button.
+    var onWriteAgain: (() -> Void)?
     let onRetry: () -> Void
 
     @State private var asksWhatWasWrong = false
+    @State private var showsAllSteps = false
+
+    /// Steps shown before "See More". Steps come in order of importance.
+    private let collapsedStepCount = 3
 
     var body: some View {
         switch state {
@@ -32,7 +38,7 @@ struct RecommendationCard: View {
                     .foregroundStyle(.secondary)
             }
         case .ready(let recommendation):
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 12) {
                 Text(recommendation.summary)
                     .font(.body.weight(.semibold))
                     .fixedSize(horizontal: false, vertical: true)
@@ -49,7 +55,9 @@ struct RecommendationCard: View {
                         }
                     }
                 }
-                ForEach(groups(of: recommendation.steps), id: \.title) { group in
+                ForEach(
+                    groups(of: recommendation.steps, showing: visibleCount(of: recommendation)), id: \.title
+                ) { group in
                     VStack(alignment: .leading, spacing: 8) {
                         if let title = group.title {
                             Text(title)
@@ -62,6 +70,20 @@ struct RecommendationCard: View {
                             stepRow(recommendation.steps[index], number: index + 1)
                         }
                     }
+                }
+                if recommendation.steps.count > collapsedStepCount {
+                    Button {
+                        withAnimation { showsAllSteps.toggle() }
+                    } label: {
+                        Label(
+                            showsAllSteps ? "See Less" : "See More",
+                            systemImage: showsAllSteps ? "chevron.up" : "chevron.down")
+                    }
+                    .font(.footnote.weight(.medium))
+                    .buttonStyle(.bordered)
+                    .buttonBorderShape(.capsule)
+                    .controlSize(.small)
+                    .frame(maxWidth: .infinity)
                 }
                 SourceTag(source: recommendation.source)
                 if let basis {
@@ -97,8 +119,24 @@ struct RecommendationCard: View {
                 if let onRate {
                     feedbackRow(onRate)
                 }
+                if let onWriteAgain {
+                    Button("Write again", systemImage: "arrow.clockwise", action: onWriteAgain)
+                        .font(.footnote.weight(.medium))
+                        .buttonStyle(.bordered)
+                        .buttonBorderShape(.capsule)
+                        .controlSize(.small)
+                        .frame(maxWidth: .infinity)
+                }
             }
-            .padding(.vertical, 4)
+            .padding(16)
+            .background(Color.black.opacity(0.35), in: RoundedRectangle(cornerRadius: 24))
+            .overlay {
+                RoundedRectangle(cornerRadius: 24)
+                    .strokeBorder(Self.rainbowBorder, lineWidth: 2.5)
+            }
+            // The card draws its own edge, so the row's gray background would show as a second box.
+            .listRowBackground(Color.clear)
+            .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
         case .failed(let message):
             VStack(alignment: .leading, spacing: 8) {
                 Label(message, systemImage: "exclamationmark.bubble")
@@ -150,6 +188,20 @@ extension RecommendationCard {
 
 /// Says where the advice came from, so generated text is never mistaken for an expert's.
 extension RecommendationCard {
+    /// The colourful card border from the design.
+    fileprivate static let rainbowBorder = AngularGradient(
+        colors: [
+            Color(red: 1, green: 0.80, blue: 0.80), Color(red: 0.75, green: 0.45, blue: 1),
+            Color(red: 0.35, green: 0.40, blue: 1), Color(red: 0.75, green: 0.45, blue: 1),
+            Color(red: 1, green: 0.45, blue: 0.75), Color(red: 1, green: 0.85, blue: 0.40),
+            Color(red: 1, green: 0.80, blue: 0.80),
+        ],
+        center: .center)
+
+    fileprivate func visibleCount(of recommendation: Recommendation) -> Int {
+        showsAllSteps ? recommendation.steps.count : collapsedStepCount
+    }
+
     /// The steps in runs by where they come from, keeping their order and their numbers. Steps
     /// with no group (advice written before steps were grouped) form one run with no title.
     struct StepRun {
@@ -157,9 +209,9 @@ extension RecommendationCard {
         let indices: [Int]
     }
 
-    func groups(of steps: [Recommendation.Step]) -> [StepRun] {
+    func groups(of steps: [Recommendation.Step], showing limit: Int = .max) -> [StepRun] {
         var runs: [StepRun] = []
-        for (index, step) in steps.enumerated() {
+        for (index, step) in steps.enumerated().prefix(limit) {
             let title: String? =
                 switch step.group {
                 case .microscope?: "FROM THE MICROSCOPE TEST"
@@ -176,31 +228,30 @@ extension RecommendationCard {
     }
 
     func stepRow(_ step: Recommendation.Step, number: Int) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text("\(number).")
-                .monospacedDigit()
-                .foregroundStyle(.secondary)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(step.text)
+        VStack(alignment: .leading, spacing: 2) {
+            Text("\(number). \(step.text)")
+                .font(.subheadline.weight(.semibold))
+                .fixedSize(horizontal: false, vertical: true)
+            if let why = step.why {
+                Text(why)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                if let why = step.why {
-                    Text(why)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                if let timing = step.timing {
-                    Label(timing, systemImage: "clock")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                if step.alsoFromSoil {
-                    Text("Also supported by your soil measurements")
-                        .font(.caption2.weight(.medium))
-                        .foregroundStyle(.secondary)
-                }
+            }
+            if let timing = step.timing {
+                Label(timing, systemImage: "clock")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            if step.alsoFromSoil {
+                Text("Also supported by your soil measurements")
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(.secondary)
             }
         }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 18))
     }
 }
 

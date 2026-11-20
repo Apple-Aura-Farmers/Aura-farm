@@ -58,14 +58,12 @@ struct SoilMeasurementSections: View {
                     numberRow("Potassium (K)", value: $draft.potassium, unit: "mg/kg")
                 }
             } header: {
-                Text("NPK")
-            } footer: {
-                Text(
+                InfoHeader("NPK") {
                     "Milligrams per kilogram of soil. Standard: N \(SoilStandards.nitrogen.description), "
                         + "P \(SoilStandards.phosphorus.description), "
                         + "K \(SoilStandards.potassium.description). The standards are placeholders "
                         + "and have not been checked by an agronomist."
-                )
+                }
             }
         }
     }
@@ -105,13 +103,11 @@ struct SoilMeasurementSections: View {
                     LabeledContent("Field at the time", value: water.label)
                 }
             } header: {
-                Text("Acidity (pH)")
-            } footer: {
-                Text(
+                InfoHeader("Acidity (pH)") {
                     "Provisional target for flooded rice: about pH \(SoilStandards.ph.description). "
                         + "Flooding often moves pH toward neutral, so a reading from dry soil may "
                         + "differ from the pH around the roots once the field is flooded."
-                )
+                }
             }
         }
     }
@@ -122,9 +118,9 @@ struct SoilMeasurementSections: View {
             Section {
                 numberRow("SOC", value: $draft.organicCarbonPercent, unit: "%")
             } header: {
-                Text("Soil Organic Carbon")
-            } footer: {
-                Text("Standard: \(SoilStandards.organicCarbon.description) percent by weight.")
+                InfoHeader("Soil Organic Carbon") {
+                    "Standard: \(SoilStandards.organicCarbon.description) percent by weight."
+                }
             }
         }
     }
@@ -144,11 +140,6 @@ struct SoilMeasurementSections: View {
                 } else if let type = draft.fertilizerType {
                     LabeledContent("Type", value: type.label)
                 }
-                if let fertilizerType = draft.fertilizerType {
-                    Text(fertilizerType.definition)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
                 if isEditable {
                     TextField(
                         "Product name (optional)",
@@ -164,9 +155,10 @@ struct SoilMeasurementSections: View {
                     numberRow("Amount", value: $draft.fertilizerKilogramsPerHectare, unit: "kg/ha")
                 }
             } header: {
-                Text("Fertilizer")
-            } footer: {
-                Text("What has been put on this land, and how much per hectare.")
+                InfoHeader("Fertilizer") {
+                    let about = "What has been put on this land, and how much per hectare."
+                    return draft.fertilizerType.map { "\(about)\n\n\($0.label): \($0.definition)" } ?? about
+                }
             }
         }
     }
@@ -194,5 +186,39 @@ struct SoilMeasurementSections: View {
     func reading(_ value: Double?) -> String {
         guard let value else { return "Not recorded" }
         return value.formatted(.number.precision(.fractionLength(0...1)))
+    }
+}
+
+/// A section title with an (i) button that shows the small print in a popover, so it stays out of the way.
+private struct InfoHeader: View {
+    let title: String
+    let info: String
+    @State private var isShowing = false
+
+    init(_ title: String, info: () -> String) {
+        self.title = title
+        self.info = info()
+    }
+
+    var body: some View {
+        HStack {
+            Text(title)
+            Spacer()
+            Button {
+                isShowing = true
+            } label: {
+                Image(systemName: "info.circle")
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("About \(title)")
+            .popover(isPresented: $isShowing) {
+                Text(info)
+                    .font(.subheadline)
+                    .textCase(nil)
+                    .padding()
+                    .frame(idealWidth: 280)
+                    .presentationCompactAdaptation(.popover)
+            }
+        }
     }
 }

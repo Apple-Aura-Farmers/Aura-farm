@@ -27,7 +27,7 @@ struct FieldHelperTabs: View {
     @State private var hasPlacedCamera = false
 
     private enum Screen: Hashable {
-        case plots, results, add
+        case plots, results, add, search
     }
 
     var body: some View {
@@ -43,8 +43,15 @@ struct FieldHelperTabs: View {
                 FarmersListView(onSwitchRole: onSwitchRole)
             }
 
-            Tab("Add", systemImage: "plus", value: Screen.add, role: .search) {
-                Color.clear
+            // The circle at the end is Add over the map and a farmer search everywhere else.
+            if screen == .plots {
+                Tab("Add", systemImage: "plus", value: Screen.add, role: .search) {
+                    Color.clear
+                }
+            } else {
+                Tab("Search", systemImage: "magnifyingglass", value: Screen.search, role: .search) {
+                    FarmersListView(isSearch: true)
+                }
             }
         }
         .onChange(of: screen) { old, new in

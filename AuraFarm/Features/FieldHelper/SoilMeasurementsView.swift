@@ -14,6 +14,11 @@ struct SoilMeasurementsView: View {
     let plotID: UUID
     /// The measurement being edited, or nil to add a new one.
     var entryID: UUID? = nil
+    /// The day a new measurement is for, when it is opened from a day that has none yet.
+    var day: Date? = nil
+
+    /// Where the Recommendation button scrolls to: the start of "What to do next".
+    static let adviceID = "advice"
 
     @Environment(FarmStore.self) private var store
     @Environment(\.dismiss) private var dismiss
@@ -24,6 +29,20 @@ struct SoilMeasurementsView: View {
     /// The tests taken on this plot, newest first. nil while they are read from disk.
     @State private var tests: [FarmTest]?
     @State private var isSaving = false
+    /// Opening an existing reading shows it read-only until Edit is tapped; a new one has nothing to read yet.
+    @State private var isEditing: Bool
+
+    init(farmID: UUID, plotID: UUID, entryID: UUID? = nil, day: Date? = nil) {
+        self.farmID = farmID
+        self.plotID = plotID
+        self.entryID = entryID
+        self.day = day
+        // A day opened from the list is read first, even when only a lab test was taken that day.
+        _isEditing = State(initialValue: entryID == nil && day == nil)
+    }
+
+    /// A new measurement has no lab test yet, so none is shown (or used for advice) until it is saved.
+    private var labTests: [FarmTest]? { entryID == nil && day == nil && isEditing ? [] : tests }
 
     private var farm: Farm? { store.farms.first { $0.id == farmID } }
     private var plot: Plot? { farm?.plots.first { $0.id == plotID } }
@@ -38,17 +57,30 @@ struct SoilMeasurementsView: View {
             }
         }
         .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(isEditing)
         .toolbar {
+            if isEditing {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel") { cancelEditing() }
+                        .disabled(isSaving)
+                }
+            }
             ToolbarItem(placement: .principal) { title }
             ToolbarItem(placement: .topBarTrailing) {
-                Button("Save") { save() }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(isSaving || !draft.problems.isEmpty)
+                Button(isEditing ? "Save" : "Edit") {
+                    if isEditing { save() } else { isEditing = true }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(isEditing && (isSaving || !draft.problems.isEmpty))
             }
         }
         .task(id: plotID) {
-            if !hasLoaded, let entry = plot?.soilLog.first(where: { $0.id == entryID }) {
-                draft = entry
+            if !hasLoaded {
+                if let entry = plot?.soilLog.first(where: { $0.id == entryID }) {
+                    draft = entry
+                } else if let day {
+                    draft.measuredAt = day
+                }
             }
             hasLoaded = true
             guard let farm, let plot else { return }
@@ -73,14 +105,36 @@ struct SoilMeasurementsView: View {
     }
 
     private func form(for farm: Farm) -> some View {
-        List {
-            Group {
-                biodiversity(for: farm)
-                SoilMeasurementSections(draft: $draft, isEditable: true)
-                advice(for: farm)
-                problems
+        ScrollViewReader { proxy in
+            List {
+                Group {
+                    biodiversity(for: farm)
+                    SoilMeasurementSections(draft: $draft, isEditable: isEditing)
+                    advice(for: farm)
+                    problems
+                }
+                .listRowBackground(Color.auraRow)
             }
-            .listRowBackground(Color.auraRow)
+            .safeAreaInset(edge: .bottom) {
+                if labTests?.isEmpty == false || SoilInputs(draft) != nil {
+                    Button {
+                        withAnimation { proxy.scrollTo(Self.adviceID, anchor: .top) }
+                    } label: {
+                        Label("Recommendation", systemImage: "sparkle")
+                            .font(.headline)
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 28)
+                            .padding(.vertical, 14)
+                            .background(
+                                LinearGradient(
+                                    colors: [.indigo, .purple, .pink, .orange],
+                                    startPoint: .leading, endPoint: .trailing),
+                                in: .capsule)
+                    }
+                    .shadow(color: .purple.opacity(0.5), radius: 12)
+                    .padding(.bottom, 8)
+                }
+            }
         }
     }
 
@@ -89,13 +143,13 @@ struct SoilMeasurementsView: View {
     @ViewBuilder
     private func biodiversity(for farm: Farm) -> some View {
         Section("Biodiversity") {
-            if let latest = tests?.first {
+            if let latest = labTests?.first {
                 NavigationLink {
                     SoilResultScreen(sweep: latest.sweep)
                 } label: {
-                    BiodiversityRow(test: latest, others: (tests?.count ?? 1) - 1)
+                    BiodiversityRow(test: latest, others: (labTests?.count ?? 1) - 1)
                 }
-            } else if tests == nil {
+            } else if labTests == nil {
                 ProgressView()
             } else {
                 waitingCard(for: farm)
@@ -106,7 +160,9 @@ struct SoilMeasurementsView: View {
     /// The two states before a result: nobody asked yet, and asked and waiting.
     private func waitingCard(for farm: Farm) -> some View {
         VStack(spacing: 14) {
-            if let asked = plot?.scientistAlertedAt {
+            // An alert is answered once a test newer than it exists, so a later visit asks afresh.
+            if let asked = plot?.scientistAlertedAt, asked > (tests?.first?.sweep.recordedAt ?? .distantPast)
+            {
                 Text("Wait for the scientist to send you the result.")
                     .multilineTextAlignment(.center)
                     .foregroundStyle(.secondary)
@@ -138,13 +194,15 @@ struct SoilMeasurementsView: View {
     /// The advice for the newest test, written on the phone from these measurements.
     @ViewBuilder
     private func advice(for farm: Farm) -> some View {
-        if let latest = tests?.first {
+        if let plot, let tests = labTests {
             // The newest measurement, which may be this one or a later one already kept.
-            let soil = SoilMeasurements.latest(
-                in: (plot?.soilLog ?? []).filter { $0.id != draft.id } + [draft])
-            SoilAdviceSection(test: latest, soil: soil)
-                // A different test, or different numbers, is advice to look at afresh.
-                .id(AdviceKey(test: latest.id, soil: SoilInputs(soil)))
+            let soil = SoilMeasurements.latest(in: plot.soilLog.filter { $0.id != draft.id } + [draft])
+            // Without a test the advice comes from the measurements alone, once there are some.
+            if tests.first != nil || SoilInputs(soil) != nil {
+                FarmAdvice(farm: farm, plot: plot, test: tests.first, soil: soil, history: tests)
+                    // A different test, or different numbers, is advice to look at afresh.
+                    .id(AdviceKey(test: tests.first?.id, soil: SoilInputs(soil)))
+            }
         }
     }
 
@@ -160,7 +218,20 @@ struct SoilMeasurementsView: View {
         }
     }
 
-    private func save(closing: Bool = true) {
+    /// Drops the changes and shows the kept reading again; a new reading has none, so it closes.
+    private func cancelEditing() {
+        guard let entry = plot?.soilLog.first(where: { $0.id == draft.id }) else {
+            guard day != nil else { return dismiss() }
+            // A day with only a lab test has no reading to go back to: it goes back to the test.
+            draft = SoilMeasurements(measuredAt: day)
+            isEditing = false
+            return
+        }
+        draft = entry
+        isEditing = false
+    }
+
+    private func save() {
         guard let farm, let plot, draft.problems.isEmpty else { return }
         var saved = draft
         saved.updatedAt = Date()
@@ -169,14 +240,14 @@ struct SoilMeasurementsView: View {
         Task {
             await store.saveSoil(saved, for: plot, in: farm)
             isSaving = false
-            if closing { dismiss() }
+            isEditing = false
         }
     }
 }
 
 /// What the advice on this screen is for. When it changes, the advice is written again.
 private struct AdviceKey: Hashable {
-    let test: URL
+    let test: URL?
     let soil: SoilInputs?
 }
 
@@ -257,28 +328,6 @@ struct NutrientBar: View {
             }
         }
         .animation(.snappy, value: health)
-    }
-}
-
-/// "What to do next" for one test, with these measurements. Owns the view model so it lives
-/// across redraws of the screen around it.
-private struct SoilAdviceSection: View {
-    @State private var viewModel: SoilResultViewModel
-    private let testedOn: Date
-
-    init(test: FarmTest, soil: SoilMeasurements?) {
-        testedOn = test.result.recordedAt
-        var result = test.result
-        result.soil = soil
-        _viewModel = State(wrappedValue: SoilResultViewModel(result: result))
-    }
-
-    var body: some View {
-        WhatToDoNextSection(
-            viewModel: viewModel,
-            footer: "From the microscope test on "
-                + "\(testedOn.formatted(date: .abbreviated, time: .omitted)), with the "
-                + "measurements above.")
     }
 }
 

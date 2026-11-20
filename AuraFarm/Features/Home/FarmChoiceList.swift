@@ -15,6 +15,9 @@ struct FarmChoiceList: View {
     @Environment(FarmStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     @State private var search = ""
+    /// A plot was chosen on the plot list. This list closes itself once that one has gone, so
+    /// the two never pop together.
+    @State private var chosen = false
 
     var body: some View {
         Group {
@@ -31,7 +34,7 @@ struct FarmChoiceList: View {
                     // A farm with several plots asks which one the soil came from.
                     if farm.plots.count > 1 {
                         NavigationLink {
-                            plotList(for: farm)
+                            PlotChoiceList(farm: farm, details: $details) { chosen = true }
                         } label: {
                             row(for: farm)
                         }
@@ -52,6 +55,7 @@ struct FarmChoiceList: View {
         }
         .navigationTitle("Choose a farm")
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear { if chosen { dismiss() } }
     }
 
     private var matching: [Farm] {
@@ -68,38 +72,6 @@ struct FarmChoiceList: View {
     private func choose(_ plot: Plot?, of farm: Farm) {
         details.use(plot, of: farm)
         dismiss()
-    }
-
-    private func plotList(for farm: Farm) -> some View {
-        List(farm.plots) { plot in
-            Button {
-                choose(plot, of: farm)
-            } label: {
-                HStack(spacing: 14) {
-                    FarmOutlineThumbnail(corners: plot.corners)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(farm.title(of: plot))
-                            .font(.headline)
-                        if !plot.name.isEmpty {
-                            Text(plot.name)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    Spacer()
-                    if details.plotID == plot.id {
-                        Image(systemName: "checkmark")
-                            .font(.body.weight(.semibold))
-                            .foregroundStyle(.tint)
-                            .accessibilityLabel("Chosen")
-                    }
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-        }
-        .navigationTitle("Choose a plot")
-        .navigationBarTitleDisplayMode(.inline)
     }
 
     private func row(for farm: Farm) -> some View {
@@ -127,6 +99,49 @@ struct FarmChoiceList: View {
             }
         }
         .contentShape(Rectangle())
+    }
+}
+
+/// The plots of one farm, to choose which one the soil came from.
+private struct PlotChoiceList: View {
+    let farm: Farm
+    @Binding var details: SampleDetails
+    var chosen: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        List(farm.plots) { plot in
+            Button {
+                details.use(plot, of: farm)
+                chosen()
+                dismiss()
+            } label: {
+                HStack(spacing: 14) {
+                    FarmOutlineThumbnail(corners: plot.corners)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(farm.title(of: plot))
+                            .font(.headline)
+                        if !plot.name.isEmpty {
+                            Text(plot.name)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    Spacer()
+                    if details.plotID == plot.id {
+                        Image(systemName: "checkmark")
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(.tint)
+                            .accessibilityLabel("Chosen")
+                    }
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+        .navigationTitle("Choose a plot")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 

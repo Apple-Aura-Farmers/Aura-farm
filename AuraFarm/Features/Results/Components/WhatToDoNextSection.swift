@@ -33,14 +33,10 @@ struct WhatToDoNextSection: View {
                 onRate: { rating, reasons in
                     Task { await viewModel.rate(rating, reasons: reasons) }
                 },
+                onWriteAgain: viewModel.canWriteAgain ? { viewModel.restart(freshWording: true) } : nil,
                 onRetry: { viewModel.restart(freshWording: viewModel.wantsFreshWording) }
             )
             .onAppear { viewModel.startIfNeeded() }
-            if viewModel.canWriteAgain {
-                Button("Write again", systemImage: "arrow.clockwise") {
-                    viewModel.restart(freshWording: true)
-                }
-            }
         } header: {
             Text("What to do next")
         } footer: {
