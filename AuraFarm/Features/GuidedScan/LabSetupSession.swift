@@ -237,6 +237,7 @@ final class LabSetupSession {
         guard let grid = LumaGrid.sample(of: buffer, step: gridStep) else { return nil }
         let frameSize = CGSize(
             width: CVPixelBufferGetWidth(buffer), height: CVPixelBufferGetHeight(buffer))
+        alignment.confirmedCircle = flow.step == .focus ? confirmedFieldCircle : nil
         let reading = alignment.update(
             luma: grid.luma, gridWidth: grid.width, gridHeight: grid.height,
             gridStep: gridStep, seconds: seconds)

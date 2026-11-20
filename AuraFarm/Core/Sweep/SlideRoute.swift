@@ -285,20 +285,25 @@ struct SlideRoute {
     /// cross: for `lineMemoryInstruction`.
     private var lineSeenAt: Double?
     private var lineSeenBehind = false
-    /// The accepted line being followed on this leg, counted by how often the helper passed it
-    /// without it confirming (`trackRepeats`). nil when no line is being counted.
-    private struct RepeatLine {
-        /// Slide position along the heading (reading position dotted with it, plus the offset):
-        /// where the line was first seen, and its latest (frozen once the helper is asked).
-        var firstAlong: Double
+    /// A place on the leg where the helper was told "edge just behind", counted by EPISODES
+    /// (`trackEpisodes`), whether or not the line was accepted in between.
+    private struct EdgeSpot {
+        /// Slide position along the heading (reading position dotted with it, plus the offset).
         var along: Double
         var angle: Double
-        var crossings = 0
-        /// The line has been 0 or more ahead since the last crossing: a crossing starts there.
-        var wasAhead: Bool
-        var asking = false
+        var count = 1
     }
-    private var repeatLine: RepeatLine?
+    private var spots: [EdgeSpot] = []
+    /// The spot the latest episode counted at: for the CSV.
+    private var lastSpot: Int?
+    /// The spot the helper is being asked about (frozen), nil when no repeat question is up.
+    private var repeatAsk: EdgeSpot?
+    /// Spots answered No on this leg: never asked about again.
+    private var rejectedAlongs: [Double] = []
+    /// Where an accepted line last was on this leg (slide position, angle).
+    private var lastLine: (along: Double, angle: Double)?
+    /// "Edge just behind" was being issued on the previous reading.
+    private var inEpisode = false
     /// The repeat question was raised on this reading, for the CSV.
     private var repeatEvent = false
     /// Every confirmed or marked top and bottom edge point, and the lines through them.
@@ -344,9 +349,10 @@ struct SlideRoute {
             if !lineEdge.event.isEmpty { shown.reason = lineEdge.event }
             shown.lineAccept = lineEdge.accept?.rawValue ?? ""
             shown.areaAheadShare = lastAreaAheadShare
-            shown.expectedEdgeAsk = expectedEdgeAsking || (repeatLine?.asking ?? false)
-            shown.lineCrossings = repeatLine?.crossings ?? 0
-            shown.lineAlong = repeatLine?.along
+            let spot = repeatAsk ?? lastSpot.map { spots[$0] }
+            shown.expectedEdgeAsk = expectedEdgeAsking || repeatAsk != nil
+            shown.lineCrossings = spot?.count ?? 0
+            shown.lineAlong = spot?.along
             if repeatEvent { shown.reason = "edge_question_repeat" }
             if let column = current, case .spot(.leg) = phase {
                 shown.predictedEdgeAlong = predictedEdge(for: column)
@@ -416,6 +422,7 @@ struct SlideRoute {
     mutating func update(_ reading: GuideReading) -> Output {
         repeatEvent = false
         lastOutput = advance(reading)
+        trackEpisodes(reading)
         lastPosition = reading.position
         if case .spot(.leg) = phase, let column = current,
             abs(Double(reading.position.x) - column.x) <= thresholds.alignment.alignToleranceFields
@@ -915,7 +922,7 @@ struct SlideRoute {
         detailHistory = []
         cornerBoxHistory = []
         lineEdge.reset()
-        repeatLine = nil
+        inEpisode = false
         emptyAheadSince = nil
         notAnEdgeUntil = nil
         verdict = .none
@@ -1012,10 +1019,9 @@ struct SlideRoute {
         guard let heading = edgeHeading else {
             lineEdge.reset()
             lineSeenAt = nil
-            repeatLine = nil
+            resetEpisodes(keepingRejected: true)
             return
         }
-        let wasBehind = lineSeenBehind
         var seen = reading
         if let line = reading.edgeLine {
             // A line measured along another heading is not this leg's; a known or rejected
@@ -1037,50 +1043,48 @@ struct SlideRoute {
             lineSeenAt = reading.seconds
             lineSeenBehind = lineEdge.state == .behind
         }
-        trackRepeats(reading, heading: heading, wasBehind: wasBehind)
+        if lineEdge.seenNow, let offset = lineEdge.offsetFields, let angle = lineEdge.angleDegrees {
+            let along =
+                Double(reading.position.x * heading.x + reading.position.y * heading.y) + offset
+            lastLine = (along, angle)
+        }
     }
 
-    /// Counts the times the helper passes the same accepted line on a column leg without it
-    /// confirming: ahead (offset 0 or more) to behind, at a slide position within `sameLineFields`
-    /// of where it was first seen. A line elsewhere starts a new count; the count is dropped when no
-    /// line was seen for `lineMemorySeconds`. At `repeatCrossings` the line is held to belong to the
-    /// slide and the helper is asked about it (`edgeQuestionSnapshot`), whatever `asksEdges` says.
-    private mutating func trackRepeats(_ reading: GuideReading, heading: CGPoint, wasBehind: Bool) {
-        guard case .spot(.leg) = phase else {
-            repeatLine = nil
-            return
-        }
-        if let seen = lineSeenAt {
-            if reading.seconds - seen > thresholds.lineEdge.lineMemorySeconds { repeatLine = nil }
+    /// Counts EPISODES of "edge just behind" on a column leg: one starts when the route issues
+    /// `edgeBehind` and ends when it stops. Each is placed at the line's last accepted slide
+    /// position; within `sameLineFields` of a recorded spot it adds 1 to that spot's count, else
+    /// it starts a new spot (the others keep theirs). Dropouts of the line reset nothing. At
+    /// `repeatEpisodes` the helper is asked about that spot (`edgeQuestionSnapshot`), whatever
+    /// `asksEdges` says. Reset by `resetEpisodes`: the leg ending, an edge, an answer.
+    private mutating func trackEpisodes(_ reading: GuideReading) {
+        var behind = false
+        if case .spot(.leg) = phase, case .edgeBehind = lastOutput.instruction { behind = true }
+        defer { inEpisode = behind }
+        guard behind, !inEpisode, repeatAsk == nil, let line = lastLine else { return }
+        let near = thresholds.lineEdge.sameLineFields
+        if rejectedAlongs.contains(where: { abs($0 - line.along) <= near }) { return }
+        if let index = spots.firstIndex(where: { abs($0.along - line.along) <= near }) {
+            spots[index].count += 1
+            spots[index].along = line.along
+            spots[index].angle = line.angle
+            lastSpot = index
         } else {
-            repeatLine = nil
+            spots.append(EdgeSpot(along: line.along, angle: line.angle))
+            lastSpot = spots.count - 1
         }
-        guard lineEdge.seenNow, let offset = lineEdge.offsetFields,
-            let angle = lineEdge.angleDegrees
-        else { return }
-        let along =
-            Double(reading.position.x * heading.x + reading.position.y * heading.y) + offset
-        let fresh = RepeatLine(
-            firstAlong: along, along: along, angle: angle, wasAhead: offset >= 0)
-        var line = repeatLine ?? fresh
-        // Once asked, the question is about the line as it was: it stays until answered.
-        if line.asking { return }
-        if abs(along - line.firstAlong) > thresholds.lineEdge.sameLineFields {
-            line = fresh
-        } else {
-            if offset >= 0 { line.wasAhead = true }
-            if lineEdge.state == .behind, !wasBehind, line.wasAhead {
-                line.crossings += 1
-                line.wasAhead = false
-            }
-            line.along = along
-            line.angle = angle
-        }
-        if line.crossings >= thresholds.lineEdge.repeatCrossings {
-            line.asking = true
+        if let index = lastSpot, spots[index].count >= thresholds.lineEdge.repeatEpisodes {
+            repeatAsk = spots[index]
             repeatEvent = true
         }
-        repeatLine = line
+    }
+
+    private mutating func resetEpisodes(keepingRejected: Bool = false) {
+        spots = []
+        lastSpot = nil
+        repeatAsk = nil
+        lastLine = nil
+        inEpisode = false
+        if !keepingRejected { rejectedAlongs = [] }
     }
 
     /// Where the accepted line is on the column's leg now (guide fields); nil without one.
@@ -1143,7 +1147,7 @@ struct SlideRoute {
         edgeMemory.clearRejected()
         lineEdge.consume()
         lineSeenAt = nil
-        repeatLine = nil
+        resetEpisodes()
         halfEdgeSince = nil
         switch phase {
         case .runToLeftEdge:
@@ -1170,7 +1174,7 @@ struct SlideRoute {
     /// the cross (where it is, in guide fields), or the expected edge. nil when nothing is asked.
     var edgeQuestionSnapshot: EdgeQuestionSnapshot? {
         guard thresholds.fullCoverSlip else { return nil }
-        if let line = repeatLine, line.asking, let heading = edgeHeading {
+        if let line = repeatAsk, let heading = edgeHeading {
             return .line(
                 point: CGPoint(x: heading.x * line.along, y: heading.y * line.along),
                 angleDegrees: line.angle)
@@ -1233,7 +1237,8 @@ struct SlideRoute {
                     angleDegrees: angle))
             lineEdge.reset()
             lineSeenAt = nil
-            repeatLine = nil
+            if let asked = repeatAsk { rejectedAlongs.append(asked.along) }
+            resetEpisodes(keepingRejected: true)
             notAnEdgeUntil = reading.seconds + thresholds.lineEdge.notAnEdgeSeconds
             lastOutput.instruction = .notAnEdge
             return (lastOutput, true)
@@ -1248,7 +1253,7 @@ struct SlideRoute {
     /// Anything that does not apply returns the last answer.
     mutating func userEdge(_ feedback: EdgeFeedback, _ reading: GuideReading) -> Output {
         guard thresholds.fullCoverSlip else { return lastOutput }
-        if feedback != .mark, repeatLine?.asking == true, let snapshot = edgeQuestionSnapshot {
+        if feedback != .mark, repeatAsk != nil, let snapshot = edgeQuestionSnapshot {
             // The repeated line's question: answered about the line's captured slide position.
             let result = answerEdgeQuestion(snapshot, feedback, reading)
             if result.applied { return result.output }
@@ -1301,7 +1306,7 @@ struct SlideRoute {
                     angleDegrees: lineEdge.angleDegrees ?? 0))
             lineEdge.reset()
             lineSeenAt = nil
-            repeatLine = nil
+            resetEpisodes(keepingRejected: true)
             notAnEdgeUntil = reading.seconds + thresholds.lineEdge.notAnEdgeSeconds
             lastOutput.instruction = .notAnEdge
         }
@@ -1324,7 +1329,7 @@ struct SlideRoute {
         {
             return output
         }
-        if kind == .leg, let line = repeatLine, line.asking, let column = current {
+        if kind == .leg, let line = repeatAsk, let column = current {
             // Asked about a line passed again and again: hold still, with the cross on the line.
             return Output(
                 instruction: .edgeDetected,
@@ -1590,7 +1595,7 @@ struct SlideRoute {
                 return Output(
                     instruction: .edgeBehind(toward: back), target: lineAt ?? target, capture: nil)
             }
-            if let lineAt, (repeatLine?.crossings ?? 0) >= 1, instruction != .captured,
+            if let lineAt, (lastSpot.map { spots[$0].count } ?? 0) >= 1, instruction != .captured,
                 lineEdge.state == .ahead || lineEdge.state == .attached,
                 abs(lineEdge.offsetFields ?? .infinity) <= thresholds.lineEdge.atCrossFields
             {
@@ -1709,7 +1714,7 @@ struct SlideRoute {
     @discardableResult
     private mutating func finishLeg(_ reading: GuideReading) -> Output {
         edgeMemory.clearRejected()
-        repeatLine = nil
+        resetEpisodes()
         expectedEdgeAsking = false
         expectedAskDismissed = false
         guard var column = current else { return plain(.aligned) }

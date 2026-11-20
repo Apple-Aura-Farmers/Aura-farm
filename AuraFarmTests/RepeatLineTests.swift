@@ -3,8 +3,9 @@ import XCTest
 
 @testable import AuraFarm
 
-/// The back-and-forth loop at an edge that does not confirm (20 Nov 2026 report): a line passed
-/// again and again without attaching asks the helper, and going back aims at the line.
+/// The back-and-forth loop at an edge that does not confirm (20 Nov 2026 report): "edge just
+/// behind" episodes at one place on the leg ask the helper, whether or not the line stayed
+/// accepted in between; going back aims at the line.
 final class RepeatLineTests: XCTestCase {
     private let up = CGPoint(x: 0, y: -0.1)
     private let down = CGPoint(x: 0, y: 0.1)
@@ -44,84 +45,115 @@ final class RepeatLineTests: XCTestCase {
             beforeEnergy: nil, beyondEnergy: nil)
     }
 
-    /// Moves along the leg to `y` in 0.1 steps, the line in view all the way.
-    private func go(_ route: ScriptedRoute, to y: Double, lineY: Double? = nil) {
+    /// Moves along the leg to `y` in 0.1 steps, the line in view all the way (or never, with
+    /// `showLine` false).
+    private func go(
+        _ route: ScriptedRoute, to y: Double, lineY: Double? = nil, showLine: Bool = true
+    ) {
         while abs(Double(route.position.y) - y) > 0.05 {
             let dy = y < Double(route.position.y) ? -0.1 : 0.1
             let next = Double(route.position.y) + dy
-            route.feed(ScriptedRoute.Frame(line: line(from: next, lineY: lineY)), move: CGPoint(x: 0, y: dy))
+            route.feed(
+                ScriptedRoute.Frame(line: showLine ? line(from: next, lineY: lineY) : nil),
+                move: CGPoint(x: 0, y: dy))
         }
     }
 
-    /// Passes the line going up, then comes back to just before it.
-    private func passAndReturn(_ route: ScriptedRoute) {
-        go(route, to: lineY - 0.5)
-        go(route, to: lineY + 0.2)
+    /// One "edge just behind" episode at the line `at` (slide y): up past it with the line in
+    /// view, then back down far below it with the line out of view (a dropout).
+    private func episode(_ route: ScriptedRoute, at lineY: Double) {
+        go(route, to: lineY - 0.4, lineY: lineY)
+        guard case .edgeBehind = route.last.instruction else { return XCTFail("no episode") }
+        go(route, to: -1.2, showLine: false)
     }
 
-    func testTheSecondPassRaisesTheQuestionAndTheGuideStopsSendingTheHelperForward() throws {
+    private let first = -2.15  // slide position 2.15 along the leg
+    private let second = -2.40  // 2.40: inside sameLineFields of the first
+
+    func testTwoEpisodesWithTheLineDroppedBetweenRaiseTheQuestionOnTheSecond() throws {
         let route = columnOne()
-        go(route, to: lineY - 0.5)
+        episode(route, at: first)
         XCTAssertEqual(route.last.edge.lineCrossings, 1)
         XCTAssertFalse(route.last.edge.expectedEdgeAsk, "once is not a loop")
-        go(route, to: lineY + 0.2)
-        XCTAssertFalse(route.last.edge.expectedEdgeAsk)
-        go(route, to: lineY - 0.5)
+        go(route, to: second - 0.4, lineY: second)
         XCTAssertEqual(route.last.edge.lineCrossings, 2)
         XCTAssertTrue(route.last.edge.expectedEdgeAsk)
         XCTAssertEqual(route.steps.filter { $0.edge.reason == "edge_question_repeat" }.count, 1)
-        XCTAssertEqual(try XCTUnwrap(route.last.edge.lineAlong), -lineY, accuracy: 0.05)
-        // Hold still, the cross on the line: no more "a little further" or "come back".
-        go(route, to: lineY - 0.8)
+        XCTAssertEqual(try XCTUnwrap(route.last.edge.lineAlong), -second, accuracy: 0.1)
+        // Hold still, the cross on the line: no more "back to the line".
+        go(route, to: second - 0.8, lineY: second)
         XCTAssertEqual(route.last.instruction, .edgeDetected)
-        XCTAssertEqual(try XCTUnwrap(route.last.target?.y), lineY, accuracy: 0.05)
+        XCTAssertEqual(try XCTUnwrap(route.last.target?.y), second, accuracy: 0.1)
         guard case .line(let point, _)? = route.guide.edgeQuestionSnapshot else {
             return XCTFail("the question is about the line")
         }
-        XCTAssertEqual(Double(point.y), lineY, accuracy: 0.05)
+        XCTAssertEqual(Double(point.y), second, accuracy: 0.1)
     }
 
-    func testYesConfirmsTheEdgeAtTheLinesSlidePositionAndTheLegEnds() throws {
+    func testALineFarAwayInBetweenDoesNotResetTheCount() {
         let route = columnOne()
-        passAndReturn(route)
-        go(route, to: lineY - 0.5)
+        episode(route, at: first)
+        episode(route, at: -3.5)
+        XCTAssertEqual(route.last.edge.lineCrossings, 1, "its own first episode")
+        XCTAssertFalse(route.last.edge.expectedEdgeAsk)
+        go(route, to: second - 0.4, lineY: second)
+        XCTAssertEqual(route.last.edge.lineCrossings, 2)
+        XCTAssertTrue(route.last.edge.expectedEdgeAsk)
+    }
+
+    func testADropoutLongerThanTheLineMemoryDoesNotResetTheCount() {
+        let route = columnOne()
+        episode(route, at: first)
+        route.feed(ScriptedRoute.Frame(still: true), times: 40)  // 4 s, memory is 2 s
+        go(route, to: second - 0.4, lineY: second)
+        XCTAssertEqual(route.last.edge.lineCrossings, 2)
+        XCTAssertTrue(route.last.edge.expectedEdgeAsk)
+    }
+
+    func testYesConfirmsTheEdgeAtTheLocationAndTheLegEndsClean() throws {
+        let route = columnOne()
+        episode(route, at: first)
+        go(route, to: second - 0.4, lineY: second)
         XCTAssertTrue(route.last.edge.expectedEdgeAsk)
         let edges = route.guide.edgesReached
         let step = route.answer(.yes, ScriptedRoute.Frame(still: true))
         XCTAssertEqual(step.instruction, .edgeReached)
         XCTAssertEqual(route.guide.edgesReached, edges + 1)
         let point = try XCTUnwrap(route.guide.predictedEdges.points.last)
-        XCTAssertEqual(Double(point.y), lineY, accuracy: 0.05)
+        XCTAssertEqual(Double(point.y), second, accuracy: 0.1)
+        XCTAssertNil(route.guide.edgeQuestionSnapshot)
+        route.feed(ScriptedRoute.Frame(still: true))
+        XCTAssertEqual(route.last.edge.lineCrossings, 0, "the leg ended: the list is gone")
     }
 
-    func testNoRejectsTheLineAndItDoesNotAskAgainOnThisLeg() {
+    func testNoRejectsTheLocationAndItDoesNotAskAgainOnThisLeg() {
         let route = columnOne()
-        passAndReturn(route)
-        go(route, to: lineY - 0.5)
+        episode(route, at: first)
+        go(route, to: second - 0.4, lineY: second)
         let edges = route.guide.edgesReached
         XCTAssertEqual(route.answer(.no, ScriptedRoute.Frame(still: true)).instruction, .notAnEdge)
         XCTAssertEqual(route.guide.edgesReached, edges)
         let answered = route.steps.count
+        go(route, to: -1.2, showLine: false)
         for _ in 0..<3 {
-            passAndReturn(route)
-            go(route, to: lineY - 0.5)
+            go(route, to: first - 0.4, lineY: first)
+            go(route, to: -1.2, showLine: false)
         }
         XCTAssertFalse(route.steps[answered...].contains { $0.edge.expectedEdgeAsk })
         XCTAssertNil(route.guide.edgeQuestionSnapshot)
         XCTAssertFalse(route.guide.isFinished)
     }
 
-    func testALineMoreThanASameLineAwayStartsANewCount() {
-        let route = columnOne()
-        go(route, to: lineY - 0.5)
-        XCTAssertEqual(route.last.edge.lineCrossings, 1)
-        // The detector now reports a line 0.6 further on: another line.
-        let other = lineY - 0.6
-        go(route, to: other + 0.3, lineY: other)
-        XCTAssertEqual(route.last.edge.lineCrossings, 0)
-        go(route, to: other - 0.5, lineY: other)
-        XCTAssertEqual(route.last.edge.lineCrossings, 1, "its own first pass")
-        XCTAssertFalse(route.last.edge.expectedEdgeAsk)
+    func testANormalConfirmationStillWorksAndAsksNothing() {
+        let route = columnOne(asksEdges: false)
+        var offset = 1.0
+        while offset >= 0.1 - 1e-9 {
+            route.feed(ScriptedRoute.Frame(line: Self.leftLine(offset)), move: up)
+            offset -= 0.1
+        }
+        route.feed(ScriptedRoute.Frame(still: true, line: Self.leftLine(0.1)), times: 24)
+        XCTAssertTrue(route.instructions.contains(.edgeReached))
+        XCTAssertFalse(route.steps.contains { $0.edge.reason == "edge_question_repeat" })
     }
 
     func testGoingBackAimsAtTheLineAndHoldsWithinTheCrossBand() throws {
@@ -138,10 +170,10 @@ final class RepeatLineTests: XCTestCase {
         XCTAssertNotEqual(route.last.instruction, .edgeDetected)
     }
 
-    func testARepeatedLineAsksWhateverAsksEdgesSays() {
+    func testARepeatedLocationAsksWhateverAsksEdgesSays() {
         let route = columnOne(asksEdges: false)
-        passAndReturn(route)
-        go(route, to: lineY - 0.5)
+        episode(route, at: first)
+        go(route, to: second - 0.4, lineY: second)
         XCTAssertTrue(route.last.edge.expectedEdgeAsk)
         XCTAssertNotNil(route.guide.edgeQuestionSnapshot)
     }

@@ -31,12 +31,12 @@ enum RunMonitorState: Equatable {
 struct RunMonitorThresholds {
     // Alignment, GEOMETRY ONLY: the sample's content would trip evenness and glare.
     /// The circle's centre moved this share of its radius from the confirmed one.
-    var lostCentreShiftShareOfRadius: Double = 0.12
+    var lostCentreShiftShareOfRadius: Double = 0.18
     /// The circle's radius changed by this share.
-    var lostRadiusChange: Double = 0.10
-    var lostMinRoundness: Double = 0.75
+    var lostRadiusChange: Double = 0.15
+    var lostMinRoundness: Double = 0.70
     /// Lost (a clipped circle, no circle, or the limits above) for this long without a break.
-    var lostSeconds: Double = 2.0
+    var lostSeconds: Double = 3.0
     /// Back: within these of the confirmed circle, for `backSeconds`.
     var backCentreShiftShareOfRadius: Double = 0.06
     var backRadiusChange: Double = 0.05

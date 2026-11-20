@@ -68,13 +68,14 @@ struct LineEdgeThresholds {
     var knownEdgeFields = 0.5
     /// "Not an edge. Keep going" stays this long after the helper says so.
     var notAnEdgeSeconds = 2.0
-    /// A line passed again within this of where it was first seen on the leg is the same line.
-    /// PLACEHOLDER: the brief's 0.3 field, about the detector's own scatter on one line.
-    var sameLineFields = 0.3
-    /// Passes (ahead to behind) of the same unconfirmed line after which the helper is asked about
-    /// it instead of being sent forward again. PLACEHOLDER: the brief's 2, from the 20 Nov 2026
-    /// report of the back-and-forth loop at an edge that would not confirm.
-    var repeatCrossings = 2
+    /// "Edge just behind" episodes within this of a recorded location on the leg count at that
+    /// location. PLACEHOLDER; source: the 12.12 to 12.43 spread of one edge in the 20 Nov 2026
+    /// device run.
+    var sameLineFields = 0.4
+    /// Episodes at one location after which the helper is asked about it instead of being sent
+    /// back again. PLACEHOLDER; source: the 20 Nov 2026 run, about 6 episodes at one edge that
+    /// never confirmed.
+    var repeatEpisodes = 2
 }
 
 /// An edge the route has met, in guide coordinates, so the same line is not found twice: the
