@@ -118,10 +118,10 @@ extension AdviceReport {
         let organisms = rows.prefix(maximumOrganisms).map { row -> Organism in
             let note = OrganismNotes.note(forLabel: row.label ?? row.name)
             return Organism(
-                name: note?.displayName ?? row.name,
+                name: (note?.displayName ?? row.name).translated,
                 count: row.count,
                 perFrame: Double(row.count) / Double(frames),
-                about: note?.plainDescription)
+                about: note?.plainDescription.translated)
         }
 
         let plot = result.plotName?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -133,13 +133,13 @@ extension AdviceReport {
             let pastFrames = Double(max(past.result.framesKept, 1))
             var byGroup: [String: Double] = [:]
             for row in OrganismTaxonomy.modelClass.rows(from: past.result.countsByClass ?? [:]) {
-                let name = OrganismNotes.note(forLabel: row.label ?? row.name)?.displayName ?? row.name
+                let name = (OrganismNotes.note(forLabel: row.label ?? row.name)?.displayName ?? row.name).translated
                 byGroup[name, default: 0] += Double(row.count) / pastFrames
             }
             return HistoryPoint(
                 date: past.result.recordedAt,
                 perFrame: Double(past.result.totalCount ?? 0) / pastFrames,
-                moisture: past.result.moisture.label, isThisSample: past.id == test?.id, byGroup: byGroup)
+                moisture: past.result.moisture.label.translated, isThisSample: past.id == test?.id, byGroup: byGroup)
         }
         .sorted { $0.date < $1.date }
 
@@ -150,15 +150,15 @@ extension AdviceReport {
             plotName: (plot?.isEmpty ?? true) ? nil : plot,
             sampledAt: result.recordedAt,
             generatedAt: generatedAt,
-            moisture: result.moisture.label,
-            cropStage: result.cropStage?.label,
-            recentActions: result.recentActions.map(\.label),
+            moisture: result.moisture.label.translated,
+            cropStage: result.cropStage?.label.translated,
+            recentActions: result.recentActions.map(\.label.translated),
             framesKept: result.framesKept,
             totalCount: result.totalCount,
             organisms: Array(organisms),
             moreKinds: max(rows.count - maximumOrganisms, 0),
-            levelTitle: test?.estimate.level.title ?? "Soil measurements",
-            confidence: test?.estimate.confidence.label ?? "",
+            levelTitle: test?.estimate.level.title.translated ?? String(localized: "Soil measurements"),
+            confidence: test?.estimate.confidence.label.translated ?? "",
             reasons: test?.estimate.reasons ?? [],
             followUp: test?.estimate.followUp ?? "",
             education: AdviceEducation(land?.soil),
@@ -181,8 +181,9 @@ extension AdviceReport {
         return picks.prefix(maximumFrames).map { index in
             FrameSource(
                 url: urls[index],
-                caption:
-                    "Microscope frame \(index + 1) of \(urls.count) from this sample, chosen by its place in the sweep, not by what it shows."
+                caption: String(
+                    localized: "Microscope frame \(index + 1) of \(urls.count) from this sample, chosen by its place in the sweep, not by what it shows."
+                )
             )
         }
     }

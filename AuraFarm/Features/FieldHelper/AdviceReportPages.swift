@@ -157,14 +157,14 @@ private struct ReportPage<Content: View>: View {
     }
 
     private var place: String {
-        report.plotName.map { "Plot \($0)" } ?? report.farmName
+        report.plotName.map { String(localized: "Plot \($0)") } ?? report.farmName
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .firstTextBaseline) {
                 (Text("Aura Farm").font(Style.body(10, weight: .bold))
-                    + Text("   \(section)").font(Style.body(10)).foregroundColor(Style.muted))
+                    + Text(verbatim: "   \(section.translated)").font(Style.body(10)).foregroundColor(Style.muted))
                 Spacer()
                 Text("\(place) · \(day(report.sampledAt)) · \(number)/\(total)")
                     .font(Style.mono(8, weight: .regular))
@@ -198,14 +198,15 @@ private struct ReportPage<Content: View>: View {
 
 // MARK: - Small parts
 
-private func smallCaps(_ text: String) -> some View {
+private func smallCaps(_ text: LocalizedStringKey) -> some View {
     Text(text)
         .font(Style.body(9.5, weight: .bold))
         .foregroundStyle(Style.accent)
 }
 
-private func labelled(_ label: String, _ text: String, size: CGFloat = 8.5) -> some View {
-    (Text(label + "  ").font(Style.body(size, weight: .semibold)).foregroundColor(Style.muted)
+private func labelled(_ label: LocalizedStringKey, _ text: String, size: CGFloat = 8.5) -> some View {
+    (Text(label).font(Style.body(size, weight: .semibold)).foregroundColor(Style.muted)
+        + Text(verbatim: "  ").font(Style.body(size, weight: .semibold))
         + Text(text).font(Style.body(size)))
         .fixedSize(horizontal: false, vertical: true)
 }
@@ -276,7 +277,7 @@ private struct SummaryPage: View {
     let report: AdviceReport
 
     private var place: String {
-        report.plotName.map { "Plot \($0)" } ?? report.farmName
+        report.plotName.map { String(localized: "Plot \($0)") } ?? report.farmName
     }
 
     var body: some View {
@@ -288,7 +289,7 @@ private struct SummaryPage: View {
                     .font(Style.body(9.5))
                     .foregroundStyle(Style.muted)
                     .fixedSize(horizontal: false, vertical: true)
-                Text(report.recommendation.summary)
+                Text(report.recommendation.summary.translated)
                     .font(Style.body(11))
                     .padding(.top, 2)
                     .fixedSize(horizontal: false, vertical: true)
@@ -318,13 +319,15 @@ private struct SummaryPage: View {
     }
 
     private var subtitle: String {
-        var parts = ["Farmer \(report.farmerName)"]
+        var parts = [String(localized: "Farmer \(report.farmerName)")]
         if let area = report.areaText { parts.append(area) }
-        parts.append("Sampled \(day(report.sampledAt))")
+        let sampled = day(report.sampledAt)
+        parts.append(String(localized: "Sampled \(sampled)"))
         parts.append(report.moisture)
         if let stage = report.cropStage { parts.append(stage) }
         if !report.recentActions.isEmpty {
-            parts.append("Done recently: " + report.recentActions.joined(separator: ", ").lowercased())
+            let done = report.recentActions.joined(separator: ", ").lowercased()
+            parts.append(String(localized: "Done recently: \(done)"))
         }
         return parts.joined(separator: " · ")
     }
@@ -358,7 +361,7 @@ private struct SummaryPage: View {
                 if report.organisms.count > 6 || report.moreKinds > 0 {
                     let extra = report.organisms.dropFirst(6).map(\.name)
                     let names =
-                        extra.isEmpty ? "\(report.moreKinds) more kinds" : extra.joined(separator: ", ")
+                        extra.isEmpty ? String(localized: "\(report.moreKinds) more kinds") : extra.joined(separator: ", ")
                     Text("Also counted: \(names).")
                         .font(Style.body(8.5))
                         .foregroundStyle(Style.muted)
@@ -373,8 +376,9 @@ private struct SummaryPage: View {
 
     private var countLine: String {
         guard let total = report.totalCount else { return "" }
-        return
-            "\(total == 1 ? "1 organism" : "\(total) organisms") counted across \(report.framesKept) frames."
+        return total == 1
+            ? String(localized: "1 organism counted across \(report.framesKept) frames.")
+            : String(localized: "\(total) organisms counted across \(report.framesKept) frames.")
     }
 
     private func organismCard(_ organism: AdviceReport.Organism) -> some View {
@@ -455,7 +459,9 @@ private struct SummaryPage: View {
 
     private func changeCard(_ name: String, now: Double, before: Double) -> some View {
         let change = now - before
-        let word = abs(change) <= max(before * 0.1, 0.1) ? "Steady" : (change > 0 ? "Up" : "Down")
+        let word =
+            abs(change) <= max(before * 0.1, 0.1)
+            ? String(localized: "Steady") : (change > 0 ? String(localized: "Up") : String(localized: "Down"))
         return Card(fill: .white) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(word)
@@ -536,11 +542,11 @@ private struct SummaryPage: View {
                 Text("Start with")
                     .font(Style.body(8.5, weight: .bold))
                     .foregroundStyle(Style.accent)
-                Text(first.text)
+                Text(first.text.translated)
                     .font(Style.body(11, weight: .bold))
                     .fixedSize(horizontal: false, vertical: true)
                 if let why = first.why {
-                    Text(why).font(Style.body(9)).fixedSize(horizontal: false, vertical: true)
+                    Text(why.translated).font(Style.body(9)).fixedSize(horizontal: false, vertical: true)
                 }
                 Text("All \(report.recommendation.steps.count) steps are on page 3.")
                     .font(Style.body(8))
@@ -598,9 +604,13 @@ private struct MeasurementsPage: View {
     }
 
     private var intro: String {
-        var text =
-            "Recorded by the field helper, separately from the microscope. Each reading is placed against provisional standards for flooded rice, not graded."
-        if let updated = report.soilUpdatedAt { text += " Measured \(day(updated))." }
+        var text = String(
+            localized: "Recorded by the field helper, separately from the microscope. Each reading is placed against provisional standards for flooded rice, not graded."
+        )
+        if let updated = report.soilUpdatedAt {
+            let measured = day(updated)
+            text += " " + String(localized: "Measured \(measured).")
+        }
         return text
     }
 
@@ -608,18 +618,18 @@ private struct MeasurementsPage: View {
         Card {
             VStack(alignment: .leading, spacing: 5) {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text(item.name).font(Style.body(10.5, weight: .semibold))
+                    Text(item.name.translated).font(Style.body(10.5, weight: .semibold))
                     Spacer()
-                    chip(item.band, color: Style.color(for: item.tone))
+                    chip(item.band.translated, color: Style.color(for: item.tone))
                 }
                 Text(item.value).font(Style.mono(16))
                 RangeBar(standard: item.standard, value: item.number)
                 if let context = item.context {
                     Text(context).font(Style.body(8)).foregroundStyle(Style.muted)
                 }
-                labelled("What it does", item.whatItDoes)
-                labelled("This reading", item.meaning)
-                labelled("What to do", item.action ?? SoilEducation.noChange)
+                labelled("What it does", item.whatItDoes.translated)
+                labelled("This reading", item.meaning.translated)
+                labelled("What to do", (item.action ?? SoilEducation.noChange).translated)
             }
         }
     }
@@ -627,7 +637,7 @@ private struct MeasurementsPage: View {
     private func missingCard(_ name: String) -> some View {
         Card {
             VStack(alignment: .leading, spacing: 4) {
-                Text(name).font(Style.body(10.5, weight: .semibold)).foregroundStyle(Style.muted)
+                Text(name.translated).font(Style.body(10.5, weight: .semibold)).foregroundStyle(Style.muted)
                 Text("Not recorded").font(Style.title(14)).foregroundStyle(Style.muted)
                 Text("No reading was entered for this farm, so nothing is shown or assumed.")
                     .font(Style.body(8.5))
@@ -643,20 +653,20 @@ private struct MeasurementsPage: View {
                 Text("Fertilizer").font(Style.body(10.5, weight: .semibold))
                 if let fertilizer = report.education?.fertilizer {
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Text(fertilizer.label).font(Style.title(14))
+                        Text(fertilizer.label.translated).font(Style.title(14))
                         Spacer()
                         if let verdict = fertilizer.verdict {
-                            chip(verdict, color: Style.color(for: fertilizer.tone))
+                            chip(verdict.translated, color: Style.color(for: fertilizer.tone))
                         }
                     }
                     if let details = fertilizer.details {
                         labelled("Recorded", details)
                     }
-                    Text(fertilizer.definition)
+                    Text(fertilizer.definition.translated)
                         .font(Style.body(8.5))
                         .fixedSize(horizontal: false, vertical: true)
                     if let effect = fertilizer.effect {
-                        labelled("On paddy soil", effect)
+                        labelled("On paddy soil", effect.translated)
                     }
                 } else {
                     Text("Not recorded").font(Style.title(14)).foregroundStyle(Style.muted)
@@ -771,7 +781,7 @@ private struct NextStepsPage: View {
         VStack(alignment: .leading, spacing: 8) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("What to do next").font(Style.title(22))
-                Text(report.recommendation.summary)
+                Text(report.recommendation.summary.translated)
                     .font(Style.body(11))
                     .fixedSize(horizontal: false, vertical: true)
                 Text(sourceLine)
@@ -800,7 +810,7 @@ private struct NextStepsPage: View {
     }
 
     private var sourceLine: String {
-        var text = report.recommendation.source.label + "."
+        var text = report.recommendation.source.label.translated + "."
         if let note = report.adviceNote { text += " " + note }
         return text
     }
@@ -818,7 +828,9 @@ private struct NextStepsPage: View {
             if !started || step.group != last {
                 if let group = step.group {
                     let title =
-                        group == .microscope ? "From the microscope test" : "From your soil measurements"
+                        group == .microscope
+                        ? String(localized: "From the microscope test")
+                        : String(localized: "From your soil measurements")
                     rows.append(.header(title))
                 }
                 last = step.group
@@ -867,7 +879,7 @@ private struct NextStepsPage: View {
                 .foregroundStyle(Style.accent)
                 .frame(width: 18, alignment: .leading)
             VStack(alignment: .leading, spacing: 2) {
-                Text(step.text)
+                Text(step.text.translated)
                     .font(Style.body(10, weight: .semibold))
                     .fixedSize(horizontal: false, vertical: true)
                 if step.alsoFromSoil {
@@ -877,11 +889,11 @@ private struct NextStepsPage: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            Text(step.why ?? "")
+            Text(step.why?.translated ?? "")
                 .font(Style.body(8.5))
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(width: 175, alignment: .leading)
-            Text(step.timing ?? "")
+            Text(step.timing?.translated ?? "")
                 .font(Style.body(8.5, weight: .medium))
                 .foregroundStyle(Style.accent)
                 .fixedSize(horizontal: false, vertical: true)
@@ -927,13 +939,14 @@ private struct AboutBlock: View {
         VStack(alignment: .leading, spacing: 4) {
             smallCaps("About your soil measurements")
             ForEach(education.items, id: \.name) { item in
-                (Text("\(item.name) · \(item.band).  ").font(Style.body(8.5, weight: .semibold))
-                    + Text(item.meaning).font(Style.body(8.5)))
+                (Text(verbatim: "\(item.name.translated) · \(item.band.translated).  ")
+                    .font(Style.body(8.5, weight: .semibold))
+                    + Text(item.meaning.translated).font(Style.body(8.5)))
                     .fixedSize(horizontal: false, vertical: true)
             }
             if let fertilizer = education.fertilizer {
-                (Text("Fertilizer · \(fertilizer.label).  ").font(Style.body(8.5, weight: .semibold))
-                    + Text(fertilizer.education ?? fertilizer.definition).font(Style.body(8.5)))
+                (Text("Fertilizer · \(fertilizer.label.translated).  ").font(Style.body(8.5, weight: .semibold))
+                    + Text(fertilizer.education ?? fertilizer.definition.translated).font(Style.body(8.5)))
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -945,20 +958,21 @@ private struct NotesBlock: View {
 
     private var phLine: String {
         guard let ph = report.education?.items.first(where: { $0.name == "pH" }) else {
-            return "No pH was recorded for this farm."
+            return String(localized: "No pH was recorded for this farm.")
         }
-        if let context = ph.context { return "This farm's pH reading: \(context)." }
-        return "How and when this farm's pH was measured was not recorded, so read it with care."
+        if let context = ph.context { return String(localized: "This farm's pH reading: \(context).") }
+        return String(localized: "How and when this farm's pH was measured was not recorded, so read it with care.")
     }
 
     private var madeLine: String {
-        var text =
-            "The app's fixed rules chose every step from the microscope test and the soil measurements. "
-        text +=
+        let shownOn = day(report.generatedAt)
+        return [
+            String(localized: "The app's fixed rules chose every step from the microscope test and the soil measurements."),
             report.recommendation.source == .foundationModel
-            ? "Apple Intelligence on the phone only wrote the wording, which was checked first. "
-            : "The wording is the app's standard advice. "
-        return text + "This report shows the advice the app showed on \(day(report.generatedAt))."
+                ? String(localized: "Apple Intelligence on the phone only wrote the wording, which was checked first.")
+                : String(localized: "The wording is the app's standard advice."),
+            String(localized: "This report shows the advice the app showed on \(shownOn)."),
+        ].joined(separator: " ")
     }
 
     var body: some View {
@@ -968,23 +982,30 @@ private struct NotesBlock: View {
                 VStack(alignment: .leading, spacing: 5) {
                     note(
                         "Standards",
-                        "A provisional first draft for flooded rice paddies. No agronomist has reviewed it yet."
+                        String(
+                            localized: "A provisional first draft for flooded rice paddies. No agronomist has reviewed it yet.")
                     )
-                    note("pH in flooded rice", SoilEducation.phCaveat + " " + phLine)
+                    note("pH in flooded rice", SoilEducation.phCaveat.translated + " " + phLine)
                     note(
                         "Using this report",
-                        "For monitoring and learning, not a diagnosis. Ask an extension officer before making a major change."
+                        String(
+                            localized: "For monitoring and learning, not a diagnosis. Ask an extension officer before making a major change."
+                        )
                     )
                 }
                 .frame(maxWidth: .infinity, alignment: .topLeading)
                 VStack(alignment: .leading, spacing: 5) {
                     note(
                         "Measurements",
-                        "Probe and laboratory readings can differ, and a reading depends on where, how deep and when the soil was sampled. Only the latest measurements are kept."
+                        String(
+                            localized: "Probe and laboratory readings can differ, and a reading depends on where, how deep and when the soil was sampled. Only the latest measurements are kept."
+                        )
                     )
                     note(
                         "Fertilizer",
-                        "The type is what the field helper chose from a list. “No fertilizer recorded” does not mean none was used, and “Not sure” is never guessed at. No step gives a product, an amount or a rate."
+                        String(
+                            localized: "The type is what the field helper chose from a list. “No fertilizer recorded” does not mean none was used, and “Not sure” is never guessed at. No step gives a product, an amount or a rate."
+                        )
                     )
                     note("How the advice was made", madeLine)
                 }
@@ -993,7 +1014,7 @@ private struct NotesBlock: View {
         }
     }
 
-    private func note(_ title: String, _ text: String) -> some View {
+    private func note(_ title: LocalizedStringKey, _ text: String) -> some View {
         VStack(alignment: .leading, spacing: 1) {
             Text(title).font(Style.body(8, weight: .semibold)).foregroundStyle(Style.accent)
             Text(text).font(Style.body(8)).fixedSize(horizontal: false, vertical: true)

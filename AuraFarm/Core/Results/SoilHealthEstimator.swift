@@ -71,8 +71,8 @@ struct PlaceholderSoilHealthEstimator: SoilHealthEstimating {
                 level: .notCounted,
                 score: nil,
                 confidence: .low,
-                reasons: ["The detector did not run on this sweep."],
-                followUp: "Run the sweep again. If it keeps failing, restart the app."
+                reasons: [String(localized: "The detector did not run on this sweep.")],
+                followUp: String(localized: "Run the sweep again. If it keeps failing, restart the app.")
             )
         }
 
@@ -83,12 +83,12 @@ struct PlaceholderSoilHealthEstimator: SoilHealthEstimating {
                 confidence: .low,
                 reasons: [
                     total == 0
-                        ? "Nothing was counted on the slide."
-                        : "Only \(total) organisms were counted, too few to go on."
+                        ? String(localized: "Nothing was counted on the slide.")
+                        : String(localized: "Only \(total) organisms were counted, too few to go on.")
                 ],
-                followUp:
-                    "An empty slide is usually a sampling problem. Make a fresh slide and sweep "
-                    + "again before drawing any conclusion."
+                followUp: String(
+                    localized: "An empty slide is usually a sampling problem. Make a fresh slide and sweep again before drawing any conclusion."
+                )
             )
         }
 
@@ -105,21 +105,24 @@ struct PlaceholderSoilHealthEstimator: SoilHealthEstimating {
         let level: SoilHealthEstimate.Level =
             score >= thresholds.goodFrom ? .good : score >= thresholds.fairFrom ? .fair : .poor
 
+        let about = perFrame.formatted(.number.precision(.fractionLength(0...1)))
         return SoilHealthEstimate(
             level: level,
             score: score,
             confidence: .low,
             reasons: [
-                "About \(perFrame.formatted(.number.precision(.fractionLength(0...1)))) organisms "
-                    + (result.isGuidedScan
-                        ? "per field of view across \(result.viewsLooked) fields of view."
-                        : "per frame across \(result.framesKept) frames."),
-                kinds == 1 ? "1 kind of organism found." : "\(kinds) kinds of organism found.",
-                "The limits used are guesses, not checked against lab tests.",
+                result.isGuidedScan
+                    ? String(
+                        localized: "About \(about) organisms per field of view across \(result.viewsLooked) fields of view.")
+                    : String(localized: "About \(about) organisms per frame across \(result.framesKept) frames."),
+                kinds == 1
+                    ? String(localized: "1 kind of organism found.")
+                    : String(localized: "\(kinds) kinds of organism found."),
+                String(localized: "The limits used are guesses, not checked against lab tests."),
             ],
             followUp: level == .good
-                ? "Test again next season, or sooner if the crop changes."
-                : "Test again in 2 to 4 weeks. If the result stays low, send a sample to a lab."
+                ? String(localized: "Test again next season, or sooner if the crop changes.")
+                : String(localized: "Test again in 2 to 4 weeks. If the result stays low, send a sample to a lab.")
         )
     }
 }

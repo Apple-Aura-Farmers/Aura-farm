@@ -19,9 +19,9 @@ struct FarmUploader {
         var errorDescription: String? {
             switch self {
             case .notConfigured:
-                return "This build is not set up to publish."
+                return String(localized: "This build is not set up to publish.")
             case .noLandMarked:
-                return "Mark at least one plot on the map before publishing this farm."
+                return String(localized: "Mark at least one plot on the map before publishing this farm.")
             }
         }
     }

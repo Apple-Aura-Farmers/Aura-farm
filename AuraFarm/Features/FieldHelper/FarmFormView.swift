@@ -49,9 +49,7 @@ struct FarmFormView: View {
                     } footer: {
                         if let firstPlot, let area = firstPlot.areaSquareMetres {
                             Text(
-                                "The land you marked, "
-                                    + LandGeometry.areaDescription(squareMetres: area)
-                                    + ", becomes this farm's first plot."
+                                "The land you marked, \(LandGeometry.areaDescription(squareMetres: area)), becomes this farm's first plot."
                             )
                         } else if editing == nil {
                             Text("Mark the plots on the farm's page once it is saved.")

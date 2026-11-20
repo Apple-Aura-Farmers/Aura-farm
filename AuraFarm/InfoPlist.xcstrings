@@ -1,0 +1,39 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "NSCameraUsageDescription" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kamera melihat melalui mikroskop untuk memeriksa kualitas gambar dan merekam sampel tanah."
+          }
+        }
+      }
+    },
+    "NSLocationWhenInUseUsageDescription" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lokasi Anda memusatkan peta dan memungkinkan Anda menaruh titik di tempat Anda berdiri, untuk menandai lahan petani."
+          }
+        }
+      }
+    },
+    "NSPhotoLibraryAddUsageDescription" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Menyimpan video mikroskop yang direkam ke Foto saat Anda memilih Simpan Video."
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

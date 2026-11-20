@@ -78,7 +78,7 @@ struct AdviceEducation: Equatable, Sendable {
             ].compactMap { $0 }
             return Fertilizer(
                 label: type.label, definition: type.definition,
-                education: type.education.map { $0 + " " + FertilizerType.sharedNote },
+                education: type.education.map { $0.translated + " " + FertilizerType.sharedNote.translated },
                 details: details.isEmpty ? nil : details.joined(separator: " · "),
                 tone: type.tone, verdict: type.verdict, effect: type.effect)
         }

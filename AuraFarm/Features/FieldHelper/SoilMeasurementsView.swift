@@ -95,7 +95,7 @@ struct SoilMeasurementsView: View {
         VStack(spacing: 0) {
             Text(
                 Calendar.current.isDateInToday(draft.measuredAt)
-                    ? "Today" : draft.measuredAt.formatted(.dateTime.weekday(.wide))
+                    ? String(localized: "Today") : draft.measuredAt.formatted(.dateTime.weekday(.wide))
             )
             .font(.headline)
             Text(draft.measuredAt, format: .dateTime.day().month(.abbreviated).year())
@@ -272,9 +272,9 @@ struct BiodiversityRow: View {
             .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(test.estimate.level.title)
+                Text(test.estimate.level.title.translated)
                     .font(.headline)
-                Text("Confidence: \(test.estimate.confidence.label)")
+                Text("Confidence: \(test.estimate.confidence.label.translated)")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }

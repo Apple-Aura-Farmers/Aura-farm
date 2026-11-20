@@ -12,9 +12,9 @@ struct SoilHealthCard: View {
                     .font(.largeTitle)
                     .foregroundStyle(estimate.level.tint)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(estimate.level.title)
+                    Text(estimate.level.title.translated)
                         .font(.title2.bold())
-                    Text("Confidence: \(estimate.confidence.label)")
+                    Text("Confidence: \(estimate.confidence.label.translated)")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
@@ -23,7 +23,7 @@ struct SoilHealthCard: View {
                     Gauge(value: Double(score), in: 0...100) {
                         Text("Score")
                     } currentValueLabel: {
-                        Text("\(score)")
+                        Text(verbatim: "\(score)")
                     }
                     .gaugeStyle(.accessoryCircularCapacity)
                     .tint(estimate.level.tint)

@@ -32,7 +32,7 @@ enum AdvicePDFExporter {
         var box = CGRect(origin: .zero, size: pageSize)
         let info =
             [
-                kCGPDFContextTitle as String: "Field report for \(report.farmName)",
+                kCGPDFContextTitle as String: String(localized: "Field report for \(report.farmName)"),
                 kCGPDFContextCreator as String: "Aura Farm",
             ] as CFDictionary
         guard let pdf = CGContext(url as CFURL, mediaBox: &box, info) else {

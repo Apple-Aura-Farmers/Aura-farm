@@ -56,10 +56,7 @@ struct FarmDetailView: View {
                             Task { await remove(plot, from: farm) }
                         }
                     } message: { _ in
-                        Text(
-                            "The plot's outline will be removed from this phone and the "
-                                + "records."
-                        )
+                        Text("The plot's outline will be removed from this phone and the records.")
                     }
             } else {
                 ContentUnavailableView("This farm is no longer here", systemImage: "leaf")

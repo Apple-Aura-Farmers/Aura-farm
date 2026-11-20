@@ -39,7 +39,7 @@ struct RecommendationCard: View {
             }
         case .ready(let recommendation):
             VStack(alignment: .leading, spacing: 12) {
-                Text(recommendation.summary)
+                Text(recommendation.summary.translated)
                     .font(.body.weight(.semibold))
                     .fixedSize(horizontal: false, vertical: true)
                 if !recommendation.noticed.isEmpty {
@@ -48,7 +48,7 @@ struct RecommendationCard: View {
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.secondary)
                         ForEach(recommendation.noticed, id: \.self) { point in
-                            Text(point)
+                            Text(point.translated)
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -179,7 +179,7 @@ extension RecommendationCard {
         }
         .confirmationDialog("What was wrong?", isPresented: $asksWhatWasWrong, titleVisibility: .visible) {
             ForEach(AdviceFeedback.Reason.allCases, id: \.self) { reason in
-                Button(reason.label) { onRate(.notUseful, [reason]) }
+                Button(reason.label.translated) { onRate(.notUseful, [reason]) }
             }
             Button("Cancel", role: .cancel) {}
         }
@@ -214,8 +214,8 @@ extension RecommendationCard {
         for (index, step) in steps.enumerated().prefix(limit) {
             let title: String? =
                 switch step.group {
-                case .microscope?: "FROM THE MICROSCOPE TEST"
-                case .soil?: "FROM YOUR SOIL MEASUREMENTS"
+                case .microscope?: String(localized: "FROM THE MICROSCOPE TEST")
+                case .soil?: String(localized: "FROM YOUR SOIL MEASUREMENTS")
                 case nil: nil
                 }
             if let last = runs.last, last.title == title {
@@ -229,17 +229,17 @@ extension RecommendationCard {
 
     func stepRow(_ step: Recommendation.Step, number: Int) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text("\(number). \(step.text)")
+            Text(verbatim: "\(number). \(step.text.translated)")
                 .font(.subheadline.weight(.semibold))
                 .fixedSize(horizontal: false, vertical: true)
             if let why = step.why {
-                Text(why)
+                Text(why.translated)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             if let timing = step.timing {
-                Label(timing, systemImage: "clock")
+                Label(timing.translated, systemImage: "clock")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -267,7 +267,7 @@ private struct SourceTag: View {
             .foregroundStyle(.secondary)
     }
 
-    private var text: String { source.label }
+    private var text: String { source.label.translated }
 
     private var image: String {
         switch source {

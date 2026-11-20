@@ -114,15 +114,17 @@ struct SoilMeasurements: Codable, Equatable, Identifiable {
     /// What is wrong with the numbers, in words, for the form to show. Empty when all is well.
     var problems: [String] {
         var found: [String] = []
-        if let ph, !(0...14).contains(ph) { found.append("pH is between 0 and 14.") }
+        if let ph, !(0...14).contains(ph) { found.append(String(localized: "pH is between 0 and 14.")) }
         if let organicCarbonPercent, !(0...100).contains(organicCarbonPercent) {
-            found.append("Organic carbon is a percentage, between 0 and 100.")
+            found.append(String(localized: "Organic carbon is a percentage, between 0 and 100."))
         }
-        for (name, value) in [
-            ("Nitrogen", nitrogen), ("Phosphorus", phosphorus), ("Potassium", potassium),
-            ("Fertilizer amount", fertilizerKilogramsPerHectare),
+        for (problem, value) in [
+            (String(localized: "Nitrogen cannot be negative."), nitrogen),
+            (String(localized: "Phosphorus cannot be negative."), phosphorus),
+            (String(localized: "Potassium cannot be negative."), potassium),
+            (String(localized: "Fertilizer amount cannot be negative."), fertilizerKilogramsPerHectare),
         ] {
-            if let value, value < 0 { found.append("\(name) cannot be negative.") }
+            if let value, value < 0 { found.append(problem) }
         }
         return found
     }
@@ -204,13 +206,14 @@ struct SoilMeasurements: Codable, Equatable, Identifiable {
         return rows
     }
 
-    /// "Drained when measured". nil when not recorded.
-    var phContext: String? { phFieldWater?.label }
+    /// "Drained when measured", in the phone's language. nil when not recorded. Only shown, never
+    /// given to the model.
+    var phContext: String? { phFieldWater?.label.translated }
 
     /// "Organic fertilizer · Compost · 50 kg/ha", from whatever was recorded. nil when nothing was.
     var fertilizerSummary: String? {
         var parts: [String] = []
-        if let fertilizerType { parts.append(fertilizerType.label) }
+        if let fertilizerType { parts.append(fertilizerType.label.translated) }
         if let fertilizerProduct { parts.append(fertilizerProduct) }
         if let amount = fertilizerKilogramsPerHectare {
             parts.append("\(amount.formatted(.number.precision(.fractionLength(0...2)))) kg/ha")

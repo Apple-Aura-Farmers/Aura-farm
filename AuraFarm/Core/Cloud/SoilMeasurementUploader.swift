@@ -19,7 +19,7 @@ struct SoilMeasurementUploader {
         var errorDescription: String? {
             switch self {
             case .notConfigured:
-                return "This build is not set up to publish."
+                return String(localized: "This build is not set up to publish.")
             case .noTable:
                 return
                     "The records have nowhere to keep soil measurements yet. Run "

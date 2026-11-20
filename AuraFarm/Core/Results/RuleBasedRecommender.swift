@@ -58,29 +58,29 @@ struct RuleBasedRecommender: RecommendationProviding {
     static func summary(for context: AdviceContext) -> String {
         if context.result.isSoilOnly {
             return context.actions.contains(where: \.fromSoil)
-                ? "This is from the soil measurements only. No microscope test has been taken yet."
+                ? String(localized: "This is from the soil measurements only. No microscope test has been taken yet.")
                 : AdviceComposer.soilAllGood
         }
         let base = labSummary(for: context)
         // One more sentence when the soil measurements call for steps of their own, so the summary
         // does not read as if only the microscope was looked at.
         guard context.actions.contains(where: \.fromSoil) else { return base }
-        return base + " The soil measurements point to a few changes too."
+        return base + " " + String(localized: "The soil measurements point to a few changes too.")
     }
 
     private static func labSummary(for context: AdviceContext) -> String {
         if context.patterns.contains(where: \.blocksImprovementActions) {
-            return "This sample is hard to read. Check it again before changing anything."
+            return String(localized: "This sample is hard to read. Check it again before changing anything.")
         }
         if context.patterns.contains(where: \.isConcern) {
-            return "Some of what was seen is worth a closer look."
+            return String(localized: "Some of what was seen is worth a closer look.")
         }
         switch context.estimate.level {
-        case .good: return "Plenty of soil life was seen. Keep doing what is working."
-        case .fair: return "Some soil life was seen. Small changes may help it grow."
-        case .poor: return "Little soil life was seen. It is worth checking before changing much."
-        case .tooFewToSay: return "Too little was seen to suggest anything about the soil."
-        case .notCounted: return "This sweep was not counted, so there is no advice yet."
+        case .good: return String(localized: "Plenty of soil life was seen. Keep doing what is working.")
+        case .fair: return String(localized: "Some soil life was seen. Small changes may help it grow.")
+        case .poor: return String(localized: "Little soil life was seen. It is worth checking before changing much.")
+        case .tooFewToSay: return String(localized: "Too little was seen to suggest anything about the soil.")
+        case .notCounted: return String(localized: "This sweep was not counted, so there is no advice yet.")
         }
     }
 }

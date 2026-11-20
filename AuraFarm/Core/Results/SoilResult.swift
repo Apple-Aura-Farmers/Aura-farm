@@ -50,7 +50,7 @@ struct SoilResult: Equatable {
         var errorDescription: String? {
             switch self {
             case .noSampleDetails:
-                return "This sweep has no sample details, so there is no result to show."
+                return String(localized: "This sweep has no sample details, so there is no result to show.")
             }
         }
     }

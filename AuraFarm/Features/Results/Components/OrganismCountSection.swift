@@ -17,7 +17,7 @@ struct OrganismCountSection: View {
                 DisclosureGroup(isExpanded: $isExpanded) {
                     Picker("Names", selection: $taxonomy) {
                         ForEach(OrganismTaxonomy.allCases) { taxonomy in
-                            Text(taxonomy.title).tag(taxonomy)
+                            Text(taxonomy.title.translated).tag(taxonomy)
                         }
                     }
                     .pickerStyle(.segmented)
@@ -32,7 +32,7 @@ struct OrganismCountSection: View {
                                 Text(row.count, format: .number)
                                     .font(.body.monospacedDigit().bold())
                             } label: {
-                                Text(row.name)
+                                Text(row.name.translated)
                                 if let label = row.label, label != row.name {
                                     Text(label).italic()
                                 }
@@ -57,10 +57,7 @@ struct OrganismCountSection: View {
             Text("Counted")
         } footer: {
             if taxonomy == .organismGroup, isExpanded {
-                Text(
-                    "Organism groups are matched to the model's classes provisionally, for the "
-                        + "team to confirm."
-                )
+                Text("Organism groups are matched to the model's classes provisionally, for the team to confirm.")
             }
         }
     }

@@ -13,24 +13,26 @@ import Foundation
 enum AdviceUpdateNote {
     /// `old` is what the earlier advice was written with, and `new` what the new advice was.
     static func text(from old: SoilInputs?, to new: SoilInputs?) -> String {
-        guard let new else { return "Updated after the soil measurements were removed." }
-        guard let old else { return "Updated with the new soil measurements." }
+        guard let new else { return String(localized: "Updated after the soil measurements were removed.") }
+        guard let old else { return String(localized: "Updated with the new soil measurements.") }
 
         let before = values(old)
         let after = values(new)
         let changed = order.filter { before[$0] != after[$0] }
         if changed.isEmpty, old.fertilizerType != new.fertilizerType {
-            return "Updated with the new fertilizer type."
+            return String(localized: "Updated with the new fertilizer type.")
         }
         if changed.isEmpty, old.phFieldWater != new.phFieldWater {
-            return "Updated with how the pH was measured."
+            return String(localized: "Updated with how the pH was measured.")
         }
-        guard changed.count == 1, let name = changed.first else {
-            return "Updated with the new soil measurements."
+        guard changed.count == 1, let changedName = changed.first else {
+            return String(localized: "Updated with the new soil measurements.")
         }
-        return after[name] == nil
-            ? "Updated after the \(name) reading was removed."
-            : "Updated with the new \(name) reading."
+        // The reading's name in the phone's language. The English names stay the keys above.
+        let name = changedName.translated
+        return after[changedName] == nil
+            ? String(localized: "Updated after the \(name) reading was removed.")
+            : String(localized: "Updated with the new \(name) reading.")
     }
 
     private static let order = ["nitrogen", "phosphorus", "potassium", "pH", "organic carbon"]

@@ -34,10 +34,10 @@ struct PlotDetailView: View {
             let soil = entries.first
             var tags: [String] = []
             if soil?.npkHealth != nil { tags.append("NPK") }
-            if test != nil { tags.append("Biodiversity") }
+            if test != nil { tags.append(String(localized: "Biodiversity")) }
             if soil?.ph != nil { tags.append("pH") }
-            if soil?.organicCarbonPercent != nil { tags.append("SOC") }
-            if soil?.fertilizerSummary != nil { tags.append("Fertilizer") }
+            if soil?.organicCarbonPercent != nil { tags.append(String(localized: "SOC")) }
+            if soil?.fertilizerSummary != nil { tags.append(String(localized: "Fertilizer")) }
             return tags
         }
     }
@@ -166,7 +166,7 @@ struct PlotDetailView: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(
                 Calendar.current.isDateInToday(day.date)
-                    ? "Today" : day.date.formatted(date: .abbreviated, time: .omitted)
+                    ? String(localized: "Today") : day.date.formatted(date: .abbreviated, time: .omitted)
             )
             .font(.headline)
             ChipFlow(spacing: 6) {
@@ -234,10 +234,11 @@ struct FarmAdvice: View {
             WhatToDoNextSection(
                 viewModel: viewModel,
                 footer: testedOn.map {
-                    "From the microscope test on "
-                        + "\($0.formatted(date: .abbreviated, time: .omitted))"
-                        + (usesSoil ? ", with the soil measurements above." : " only.")
-                } ?? "From the soil measurements above only. A microscope test will add to it."
+                    let day = $0.formatted(date: .abbreviated, time: .omitted)
+                    return usesSoil
+                        ? String(localized: "From the microscope test on \(day), with the soil measurements above.")
+                        : String(localized: "From the microscope test on \(day) only.")
+                } ?? String(localized: "From the soil measurements above only. A microscope test will add to it.")
             )
             .id(SoilMeasurementsView.adviceID)
             exportSection

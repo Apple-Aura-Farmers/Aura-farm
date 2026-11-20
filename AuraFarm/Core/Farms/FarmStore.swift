@@ -87,9 +87,9 @@ final class FarmStore {
             let aside = fileURL.deletingLastPathComponent()
                 .appending(path: "Farms-unreadable-\(stamp).json")
             try? FileManager.default.moveItem(at: fileURL, to: aside)
-            problem =
-                "The saved farms could not be read. The old file was kept aside and the list "
-                + "started empty."
+            problem = String(
+                localized: "The saved farms could not be read. The old file was kept aside and the list started empty."
+            )
         }
     }
 
@@ -103,7 +103,7 @@ final class FarmStore {
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             try encoder.encode(farms).write(to: fileURL, options: .atomic)
         } catch {
-            problem = "The farms could not be saved: \(error.localizedDescription)"
+            problem = String(localized: "The farms could not be saved: \(error.localizedDescription)")
         }
     }
 }

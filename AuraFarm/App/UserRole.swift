@@ -20,8 +20,8 @@ enum UserRole: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .fieldHelper: return "Field Helper"
-        case .microscopeOperator: return "Microscope Operator"
+        case .fieldHelper: return String(localized: "Field Helper")
+        case .microscopeOperator: return String(localized: "Microscope Operator")
         }
     }
 
@@ -29,11 +29,13 @@ enum UserRole: String, CaseIterable, Identifiable {
     var summary: String {
         switch self {
         case .fieldHelper:
-            return
-                "collect farm data, receive scientific test results and generate actionable recommendations through AI analysis."
+            return String(
+                localized: "collect farm data, receive scientific test results and generate actionable recommendations through AI analysis."
+            )
         case .microscopeOperator:
-            return
-                "observe soil biodiversity through your microscope, with AI-powered identification and analysis."
+            return String(
+                localized: "observe soil biodiversity through your microscope, with AI-powered identification and analysis."
+            )
         }
     }
 

@@ -21,7 +21,7 @@ struct LandOutlineEditorView: View {
     /// What the button that keeps the outline says. "Next" where a form for the farmer and
     /// the plot's name follows, which is marking a plot from the map with no farm picked yet;
     /// "Save" where the farm is already known and confirming is the last step.
-    var confirmTitle: String = "Next"
+    var confirmTitle: LocalizedStringKey = "Next"
     let onConfirm: ([GeoPoint]) -> Void
     /// Called when the helper leaves without confirming, so whoever opened the editor can put
     /// back whatever was on screen before it.
@@ -40,7 +40,7 @@ struct LandOutlineEditorView: View {
     private let startingCorners: [GeoPoint]
 
     init(
-        corners: [GeoPoint], neighbours: [Neighbour], confirmTitle: String = "Next",
+        corners: [GeoPoint], neighbours: [Neighbour], confirmTitle: LocalizedStringKey = "Next",
         onConfirm: @escaping ([GeoPoint]) -> Void,
         onCancel: (() -> Void)? = nil
     ) {
@@ -283,7 +283,7 @@ struct LandOutlineEditorView: View {
                 }
 
                 if location.isDenied {
-                    note("Location is off, so the map will not open where you are.", .secondary)
+                    note(String(localized: "Location is off, so the map will not open where you are."), .secondary)
                 }
 
                 Button("Clear All", role: .destructive) {
@@ -326,22 +326,23 @@ struct LandOutlineEditorView: View {
 
     private var overlapWarning: String {
         let names = overlapping.map(\.label).formatted(.list(type: .and))
-        return "This outline overlaps \(names)'s land. Move the dots so it stays on this "
-            + "farmer's own land, or confirm anyway if the overlap is only GPS error."
+        return String(
+            localized: "This outline overlaps \(names)'s land. Move the dots so it stays on this farmer's own land, or confirm anyway if the overlap is only GPS error."
+        )
     }
 
     private var status: String {
         if corners.isEmpty {
-            return "Tap the map to drop a dot on each corner, going round the edge in order."
+            return String(localized: "Tap the map to drop a dot on each corner, going round the edge in order.")
         }
         if corners.count < 3 {
-            return "\(corners.count) of at least 3 corners. Keep tapping the corners."
+            return String(localized: "\(corners.count) of at least 3 corners. Keep tapping the corners.")
         }
         if crossesItself {
-            return "The edges cross each other. Undo, then place the dots in order round the edge."
+            return String(localized: "The edges cross each other. Undo, then place the dots in order round the edge.")
         }
         let area = LandGeometry.areaSquareMetres(of: corners) ?? 0
-        return "\(corners.count) corners · \(LandGeometry.areaDescription(squareMetres: area))"
+        return String(localized: "\(corners.count) corners · \(LandGeometry.areaDescription(squareMetres: area))")
     }
 }
 

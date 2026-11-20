@@ -147,7 +147,8 @@ private struct SoilResultContent: View {
                 WhatToDoNextSection(
                     viewModel: viewModel,
                     footer: viewModel.result.soil == nil
-                        ? "Lab-only advice: from this microscope test, without the farm's soil measurements."
+                        ? String(
+                            localized: "Lab-only advice: from this microscope test, without the farm's soil measurements.")
                         : nil)
             } else {
                 Section {
@@ -178,7 +179,7 @@ private struct SampleSummarySection: View {
             LabeledContent("Recorded") {
                 Text(result.recordedAt, format: .dateTime.day().month().hour().minute())
             }
-            LabeledContent("Soil", value: result.moisture.label)
+            LabeledContent("Soil", value: result.moisture.label.translated)
             // A guided scan keeps no frames: it counts fields of view.
             if result.isGuidedScan {
                 LabeledContent("Fields of view scanned", value: "\(result.viewsLooked)")

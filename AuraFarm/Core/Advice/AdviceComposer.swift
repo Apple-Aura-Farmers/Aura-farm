@@ -12,8 +12,9 @@ enum AdviceComposer {
     static let maxSoilSteps = 5
 
     /// Said once in the summary when every recorded measurement is in its standard range.
-    static let soilAllGood =
-        "Your soil measurements are all in the standard range, so you can keep doing what you are doing now."
+    static let soilAllGood = String(
+        localized: "Your soil measurements are all in the standard range, so you can keep doing what you are doing now."
+    )
 
     static func combined(_ recommendation: Recommendation, context: AdviceContext) -> Recommendation {
         guard context.estimate.level != .notCounted else { return recommendation }

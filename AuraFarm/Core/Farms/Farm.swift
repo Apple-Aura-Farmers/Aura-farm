@@ -109,7 +109,7 @@ struct Farm: Codable, Identifiable, Equatable {
 
     /// What a plot is called on screen: its number, which is always there, and the name the
     /// helper gave it underneath.
-    func title(of plot: Plot) -> String { "Plot \(number(of: plot))" }
+    func title(of plot: Plot) -> String { String(localized: "Plot \(number(of: plot))") }
 
     /// Whether this farmer already has a plot by this name, ignoring case and surrounding
     /// spaces. Two farmers may both have a "Tabanan": a plot name only has to tell one
@@ -180,8 +180,8 @@ extension Farm {
     var locationLine: String {
         if let named = plots.first(where: { !$0.name.isEmpty }) { return named.name }
         if name.caseInsensitiveCompare(farmerName) != .orderedSame { return name }
-        guard let area = areaSquareMetres else { return "No land marked yet" }
-        let count = plots.count == 1 ? "1 plot" : "\(plots.count) plots"
+        guard let area = areaSquareMetres else { return String(localized: "No land marked yet") }
+        let count = plots.count == 1 ? String(localized: "1 plot") : String(localized: "\(plots.count) plots")
         return count + " · " + LandGeometry.hectaresDescription(squareMetres: area)
     }
 }

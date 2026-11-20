@@ -1,0 +1,5630 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "%@ (%@) in %@" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ (%2$@) dalam %3$@"
+          }
+        }
+      }
+    },
+    "%@ Icons show the kind of organism, not an image from this sample." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ Ikon menunjukkan jenis organisme, bukan gambar dari sampel ini."
+          }
+        }
+      }
+    },
+    "%@ already has a plot called that." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ sudah punya petak dengan nama itu."
+          }
+        }
+      }
+    },
+    "%@ confidence" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keyakinan %@"
+          }
+        }
+      }
+    },
+    "%@ in %@" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ di %2$@"
+          }
+        }
+      }
+    },
+    "%@ per frame" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ per bingkai"
+          }
+        }
+      }
+    },
+    "%lld corners · %@" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld sudut · %@"
+          }
+        }
+      }
+    },
+    "%lld earlier samples" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld sampel sebelumnya"
+          }
+        }
+      }
+    },
+    "%lld fields of view" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld bidang pandang"
+          }
+        }
+      }
+    },
+    "%lld found · %@ per frame" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld ditemukan · %2$@ per bingkai"
+          }
+        }
+      }
+    },
+    "%lld frames" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld bingkai"
+          }
+        }
+      }
+    },
+    "%lld kinds" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld jenis"
+          }
+        }
+      }
+    },
+    "%lld kinds of organism found." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld jenis organisme ditemukan."
+          }
+        }
+      }
+    },
+    "%lld more kinds" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld jenis lainnya"
+          }
+        }
+      }
+    },
+    "%lld more tests" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld uji lainnya"
+          }
+        }
+      }
+    },
+    "%lld of at least 3 corners. Keep tapping the corners." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld dari minimal 3 sudut. Terus ketuk sudut-sudutnya."
+          }
+        }
+      }
+    },
+    "%lld organisms" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld organisme"
+          }
+        }
+      }
+    },
+    "%lld organisms counted across %lld frames." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld organisme terhitung dari %2$lld bingkai."
+          }
+        }
+      }
+    },
+    "%lld others weren't used." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld lainnya tidak dipakai."
+          }
+        }
+      }
+    },
+    "%lld plots" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld petak"
+          }
+        }
+      }
+    },
+    "%lld tests" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld uji"
+          }
+        }
+      }
+    },
+    "1 earlier sample" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 sampel sebelumnya"
+          }
+        }
+      }
+    },
+    "1 field of view" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 bidang pandang"
+          }
+        }
+      }
+    },
+    "1 frame" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 bingkai"
+          }
+        }
+      }
+    },
+    "1 kind" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 jenis"
+          }
+        }
+      }
+    },
+    "1 kind of organism found." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 jenis organisme ditemukan."
+          }
+        }
+      }
+    },
+    "1 organism" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 organisme"
+          }
+        }
+      }
+    },
+    "1 organism counted across %lld frames." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 organisme terhitung dari %lld bingkai."
+          }
+        }
+      }
+    },
+    "1 other wasn't used." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 lainnya tidak dipakai."
+          }
+        }
+      }
+    },
+    "1 plot" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 petak"
+          }
+        }
+      }
+    },
+    "1 test" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 uji"
+          }
+        }
+      }
+    },
+    "2 to 4 weeks" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "2 sampai 4 minggu"
+          }
+        }
+      }
+    },
+    "A barrel-shaped cell that hunts Paramecium" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sel berbentuk tong yang memburu Paramecium"
+          }
+        }
+      }
+    },
+    "A bell-shaped cell on a spring-like stalk" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sel berbentuk lonceng di atas tangkai seperti pegas"
+          }
+        }
+      }
+    },
+    "A blend can combine gradual release from organic material with readily available nutrients. How it behaves depends on what is in it and how much is applied." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Campuran bisa menggabungkan pelepasan bertahap dari bahan organik dengan unsur hara yang cepat tersedia. Perilakunya bergantung pada isinya dan seberapa banyak yang diberikan."
+          }
+        }
+      }
+    },
+    "A branching golden alga living in little cups" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alga keemasan bercabang yang hidup di dalam cangkir kecil"
+          }
+        }
+      }
+    },
+    "A fast, slipper-shaped single cell covered in tiny hairs" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sel tunggal berbentuk sandal yang bergerak cepat dan berselimut rambut halus"
+          }
+        }
+      }
+    },
+    "A field report of the soil measurements, the microscope test if there is one, the fertilizer and the advice above, to share or print." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Laporan lapangan berisi pengukuran tanah, uji mikroskop jika ada, pupuk, dan saran di atas, untuk dibagikan atau dicetak."
+          }
+        }
+      }
+    },
+    "A flat, leaf-shaped relative of Euglena" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kerabat Euglena yang pipih berbentuk daun"
+          }
+        }
+      }
+    },
+    "A flat, star-shaped green alga" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alga hijau pipih berbentuk bintang"
+          }
+        }
+      }
+    },
+    "A pH a little above the target may make phosphorus and some micronutrients less available. Flooding often moves it back toward neutral, so it is worth watching." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "pH sedikit di atas target bisa membuat fosfor dan beberapa unsur hara mikro kurang tersedia. Penggenangan sering mengembalikannya ke arah netral, jadi sebaiknya dipantau."
+          }
+        }
+      }
+    },
+    "A provisional first draft for flooded rice paddies. No agronomist has reviewed it yet." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Draf awal sementara untuk padi sawah. Belum ada ahli agronomi yang meninjaunya."
+          }
+        }
+      }
+    },
+    "A provisional target range for flooded rice soils is around pH 6.0–7.0. The best range depends on soil type, flooding duration, rice variety, and how the pH was measured. Flooding can move acidic or alkaline soils toward near-neutral pH, and the pH of dry, air-dried soil may differ from the pH around rice roots after flooding. A pH reading should be read with how and when it was measured, and a low or high value does not by itself call for any particular amendment." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rentang target sementara untuk tanah padi sawah adalah sekitar pH 6,0–7,0. Rentang terbaik bergantung pada jenis tanah, lama penggenangan, varietas padi, dan cara pH diukur. Penggenangan bisa menggeser tanah asam atau basa mendekati pH netral, dan pH tanah kering atau kering angin bisa berbeda dengan pH di sekitar akar padi setelah penggenangan. Hasil pH sebaiknya dibaca bersama cara dan waktu pengukurannya, dan nilai rendah atau tinggi saja tidak serta-merta memerlukan bahan pembenah tertentu."
+          }
+        }
+      }
+    },
+    "A sample like this can mean more nutrients than the crop needs." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sampel seperti ini bisa berarti unsur hara lebih banyak dari kebutuhan tanaman."
+          }
+        }
+      }
+    },
+    "A sea organism" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Organisme laut"
+          }
+        }
+      }
+    },
+    "A shapeless, slow-crawling single cell" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sel tunggal tanpa bentuk tetap yang merayap lambat"
+          }
+        }
+      }
+    },
+    "A small barrel-shaped cell with a plated shell" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sel kecil berbentuk tong dengan cangkang berlempeng"
+          }
+        }
+      }
+    },
+    "A small green swimmer with a whip-like tail" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Perenang hijau kecil dengan ekor seperti cambuk"
+          }
+        }
+      }
+    },
+    "A spindle-shaped relative of Euglena" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kerabat Euglena yang berbentuk gelendong"
+          }
+        }
+      }
+    },
+    "A tiny animal with a crown of beating hairs" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hewan sangat kecil dengan mahkota rambut getar"
+          }
+        }
+      }
+    },
+    "A tiny worm" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cacing yang sangat kecil"
+          }
+        }
+      }
+    },
+    "About %@" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tentang %@"
+          }
+        }
+      }
+    },
+    "About %@ organisms per field of view across %lld fields of view." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sekitar %1$@ organisme per bidang pandang dari %2$lld bidang pandang."
+          }
+        }
+      }
+    },
+    "About %@ organisms per frame across %lld frames." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sekitar %1$@ organisme per bingkai dari %2$lld bingkai."
+          }
+        }
+      }
+    },
+    "About your soil measurements" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tentang pengukuran tanah Anda"
+          }
+        }
+      }
+    },
+    "Acidity" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keasaman"
+          }
+        }
+      }
+    },
+    "Acidity (pH)" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keasaman (pH)"
+          }
+        }
+      }
+    },
+    "Add" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tambah"
+          }
+        }
+      }
+    },
+    "Add a farm" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tambah lahan"
+          }
+        }
+      }
+    },
+    "Add a plot" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tambah petak"
+          }
+        }
+      }
+    },
+    "Add measurement" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tambah pengukuran"
+          }
+        }
+      }
+    },
+    "Add the farms you look after to see their land and soil details here." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tambahkan lahan yang Anda dampingi untuk melihat detail lahan dan tanahnya di sini."
+          }
+        }
+      }
+    },
+    "Add well-rotted compost or manure if you have it." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tambahkan kompos atau pupuk kandang yang sudah matang jika ada."
+          }
+        }
+      }
+    },
+    "Add well-rotted compost so the phosphorus already in the soil can be used by plants." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tambahkan kompos yang sudah matang agar fosfor yang sudah ada di tanah bisa dimanfaatkan tanaman."
+          }
+        }
+      }
+    },
+    "Added compost" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diberi kompos"
+          }
+        }
+      }
+    },
+    "Added straw" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diberi jerami"
+          }
+        }
+      }
+    },
+    "Advice for this test, combined with the farm's soil measurements, is under What to do next on the farm's page." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saran untuk uji ini, digabung dengan pengukuran tanah lahan, ada di bagian Langkah selanjutnya di halaman lahan."
+          }
+        }
+      }
+    },
+    "After a second poor result" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Setelah hasil buruk kedua"
+          }
+        }
+      }
+    },
+    "After harvest" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Setelah panen"
+          }
+        }
+      }
+    },
+    "Alerted" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sudah diberi tahu"
+          }
+        }
+      }
+    },
+    "All %lld steps are on page 3." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Semua %lld langkah ada di halaman 3."
+          }
+        }
+      }
+    },
+    "Also counted: %@." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Juga terhitung: %@."
+          }
+        }
+      }
+    },
+    "Also supported by your soil measurements" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Juga didukung oleh pengukuran tanah Anda"
+          }
+        }
+      }
+    },
+    "Amount" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jumlah"
+          }
+        }
+      }
+    },
+    "An amoeba living inside a small shell" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Amoeba yang hidup di dalam cangkang kecil"
+          }
+        }
+      }
+    },
+    "An empty slide is usually a sampling problem. Make a fresh slide and sweep again before drawing any conclusion." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Preparat kosong biasanya karena masalah pengambilan sampel. Buat preparat baru dan pindai lagi sebelum menarik kesimpulan."
+          }
+        }
+      }
+    },
+    "Any time" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kapan saja"
+          }
+        }
+      }
+    },
+    "Apple Intelligence couldn't finish this advice, so standard advice is shown." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Intelligence tidak bisa menyelesaikan saran ini, jadi saran standar yang ditampilkan."
+          }
+        }
+      }
+    },
+    "Apple Intelligence couldn't write advice for this sample, so standard advice is shown." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Intelligence tidak bisa menulis saran untuk sampel ini, jadi saran standar yang ditampilkan."
+          }
+        }
+      }
+    },
+    "Apple Intelligence doesn't support this phone's language yet, so standard advice is shown." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Intelligence belum mendukung bahasa ponsel ini, jadi saran standar yang ditampilkan."
+          }
+        }
+      }
+    },
+    "Apple Intelligence doesn't support this phone's language yet." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Intelligence belum mendukung bahasa ponsel ini."
+          }
+        }
+      }
+    },
+    "Apple Intelligence is busy. Try again in a moment." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Intelligence sedang sibuk. Coba lagi sebentar lagi."
+          }
+        }
+      }
+    },
+    "Apple Intelligence is not available right now." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Intelligence sedang tidak tersedia."
+          }
+        }
+      }
+    },
+    "Apple Intelligence is still downloading. Try again later." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Intelligence masih diunduh. Coba lagi nanti."
+          }
+        }
+      }
+    },
+    "Apple Intelligence is still getting ready. Try again in a moment." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Intelligence masih bersiap. Coba lagi sebentar lagi."
+          }
+        }
+      }
+    },
+    "Apple Intelligence is taking too long. Try again." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Intelligence terlalu lama. Coba lagi."
+          }
+        }
+      }
+    },
+    "Apple Intelligence is turned off in Settings." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Intelligence dimatikan di Pengaturan."
+          }
+        }
+      }
+    },
+    "Apple Intelligence on the phone only wrote the wording, which was checked first." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Intelligence di ponsel hanya menulis kata-katanya, yang sudah diperiksa terlebih dahulu."
+          }
+        }
+      }
+    },
+    "Apple Intelligence writes advice in English only, so standard advice is shown." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Intelligence hanya menulis saran dalam bahasa Inggris, jadi saran standar yang ditampilkan."
+          }
+        }
+      }
+    },
+    "Ask about draining the field briefly mid-season, then reflooding. It lets air into the soil." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tanyakan tentang mengeringkan sawah sebentar di pertengahan musim, lalu menggenanginya lagi. Ini membuat udara masuk ke tanah."
+          }
+        }
+      }
+    },
+    "Ask an extension officer whether this pH matters for your flooded field before changing anything. Flooding can move the pH toward neutral." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tanyakan kepada penyuluh pertanian apakah pH ini berpengaruh untuk sawah Anda yang tergenang sebelum mengubah apa pun. Penggenangan bisa menggeser pH ke arah netral."
+          }
+        }
+      }
+    },
+    "Ask an extension officer whether this pH needs action for flooded rice before changing anything." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tanyakan kepada penyuluh pertanian apakah pH ini perlu ditangani untuk padi sawah sebelum mengubah apa pun."
+          }
+        }
+      }
+    },
+    "Ask your extension officer to check the balance of nitrogen, phosphorus and potassium before adding more." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Minta penyuluh pertanian memeriksa keseimbangan nitrogen, fosfor, dan kalium sebelum menambah pupuk."
+          }
+        }
+      }
+    },
+    "Ask your extension officer whether this high pH needs any change for flooded rice." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tanyakan kepada penyuluh pertanian apakah pH tinggi ini perlu ditangani untuk padi sawah."
+          }
+        }
+      }
+    },
+    "Ask your extension officer whether this low pH needs any change for flooded rice." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tanyakan kepada penyuluh pertanian apakah pH rendah ini perlu ditangani untuk padi sawah."
+          }
+        }
+      }
+    },
+    "Asked %@" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diminta %@"
+          }
+        }
+      }
+    },
+    "Avoid adding more fresh organic material to wet soil, and ask an extension officer about drainage." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hindari menambah bahan organik segar ke tanah basah, dan tanyakan kepada penyuluh pertanian tentang drainase."
+          }
+        }
+      }
+    },
+    "Avoid burning straw. It removes food for soil life." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hindari membakar jerami. Pembakaran menghilangkan makanan bagi kehidupan tanah."
+          }
+        }
+      }
+    },
+    "Based on %@." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Berdasarkan %@."
+          }
+        }
+      }
+    },
+    "Bdelloid rotifers" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rotifera bdelloid"
+          }
+        }
+      }
+    },
+    "Before acting" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sebelum bertindak"
+          }
+        }
+      }
+    },
+    "Before next application" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sebelum pemupukan berikutnya"
+          }
+        }
+      }
+    },
+    "Before next planting" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sebelum tanam berikutnya"
+          }
+        }
+      }
+    },
+    "Before planting" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sebelum tanam"
+          }
+        }
+      }
+    },
+    "Between seasons" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Di antara musim tanam"
+          }
+        }
+      }
+    },
+    "Between seasons, grow a cover crop like beans and dig it in." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Di antara musim tanam, tanam tanaman penutup tanah seperti kacang-kacangan lalu benamkan ke tanah."
+          }
+        }
+      }
+    },
+    "Between seasons, grow beans as a cover crop to keep living roots in the soil and add nitrogen." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Di antara musim tanam, tanam kacang-kacangan sebagai tanaman penutup tanah agar ada akar hidup di tanah dan menambah nitrogen."
+          }
+        }
+      }
+    },
+    "Biodiversity" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keanekaragaman hayati"
+          }
+        }
+      }
+    },
+    "Cancel" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Batal"
+          }
+        }
+      }
+    },
+    "Check with your extension officer whether you're using more fertilizer than the crop needs." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tanyakan kepada penyuluh pertanian apakah pupuk yang Anda pakai lebih banyak dari kebutuhan tanaman."
+          }
+        }
+      }
+    },
+    "Choose…" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pilih…"
+          }
+        }
+      }
+    },
+    "Choosing steps (%lld of 3)…" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Memilih langkah (%lld dari 3)…"
+          }
+        }
+      }
+    },
+    "Choosing steps…" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Memilih langkah…"
+          }
+        }
+      }
+    },
+    "Clear" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hapus"
+          }
+        }
+      }
+    },
+    "Clear All" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hapus semua"
+          }
+        }
+      }
+    },
+    "Close" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tutup"
+          }
+        }
+      }
+    },
+    "Compared with the sample of %@, taken in the same water state. Small changes between samples are normal." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dibandingkan dengan sampel tanggal %@, yang diambil dalam kondisi air yang sama. Perubahan kecil antarsampel itu wajar."
+          }
+        }
+      }
+    },
+    "Confidence: %@" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tingkat keyakinan: %@"
+          }
+        }
+      }
+    },
+    "Contains both organic material and mineral or manufactured nutrients. Its effects depend on the composition and application." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mengandung bahan organik sekaligus unsur hara mineral atau buatan pabrik. Efeknya bergantung pada komposisi dan cara pemberiannya."
+          }
+        }
+      }
+    },
+    "Continue" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lanjutkan"
+          }
+        }
+      }
+    },
+    "Controls soil acidity and affects which nutrients plants can take up. In flooded rice soils, pH often moves toward near-neutral conditions after flooding." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mengatur keasaman tanah dan memengaruhi unsur hara mana yang bisa diserap tanaman. Pada tanah padi sawah, pH sering bergeser mendekati netral setelah penggenangan."
+          }
+        }
+      }
+    },
+    "Corner %lld" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sudut %lld"
+          }
+        }
+      }
+    },
+    "Could improve" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bisa ditingkatkan"
+          }
+        }
+      }
+    },
+    "Counted" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Terhitung"
+          }
+        }
+      }
+    },
+    "Counting didn't run on this sweep." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Penghitungan tidak berjalan pada pemindaian ini."
+          }
+        }
+      }
+    },
+    "Delete" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hapus"
+          }
+        }
+      }
+    },
+    "Delete %@" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hapus %@"
+          }
+        }
+      }
+    },
+    "Delete plot %lld" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hapus petak %lld"
+          }
+        }
+      }
+    },
+    "Delete this farm?" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hapus lahan ini?"
+          }
+        }
+      }
+    },
+    "Delete this plot?" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hapus petak ini?"
+          }
+        }
+      }
+    },
+    "Derived mainly from plant, animal, manure, compost, or other biological materials. Nutrients often need microbial breakdown before becoming available, and it may add organic carbon." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Berasal terutama dari tumbuhan, hewan, pupuk kandang, kompos, atau bahan hayati lain. Unsur haranya sering perlu diurai mikroba sebelum tersedia, dan pupuk ini bisa menambah karbon organik."
+          }
+        }
+      }
+    },
+    "Discard changes" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Buang perubahan"
+          }
+        }
+      }
+    },
+    "Discard your changes to the outline?" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Buang perubahan pada batas lahan?"
+          }
+        }
+      }
+    },
+    "Doesn't fit this field" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tidak cocok untuk sawah ini"
+          }
+        }
+      }
+    },
+    "Done" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Selesai"
+          }
+        }
+      }
+    },
+    "Done recently: %@" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Baru dilakukan: %@"
+          }
+        }
+      }
+    },
+    "Down" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Turun"
+          }
+        }
+      }
+    },
+    "Drag to move this corner" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Seret untuk memindahkan sudut ini"
+          }
+        }
+      }
+    },
+    "Drained" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dikeringkan"
+          }
+        }
+      }
+    },
+    "Drained or dry when measured" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dikeringkan atau kering saat diukur"
+          }
+        }
+      }
+    },
+    "Each point is one test. Counts from flooded and drained fields are not directly comparable, so the water state of each test is listed. A change over time is an association only: this chart does not show what caused it. Only the latest soil measurements are kept, so no soil trend can be shown." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Setiap titik adalah satu uji. Hitungan dari sawah tergenang dan sawah kering tidak bisa langsung dibandingkan, jadi kondisi air setiap uji dicantumkan. Perubahan dari waktu ke waktu hanya menunjukkan hubungan: grafik ini tidak menunjukkan penyebabnya. Hanya pengukuran tanah terbaru yang disimpan, jadi tren tanah tidak bisa ditampilkan."
+          }
+        }
+      }
+    },
+    "Edit" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ubah"
+          }
+        }
+      }
+    },
+    "Edit farm" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ubah lahan"
+          }
+        }
+      }
+    },
+    "Edit plot outline" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ubah batas petak"
+          }
+        }
+      }
+    },
+    "Enough is available for normal crop development." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cukup tersedia untuk perkembangan tanaman yang normal."
+          }
+        }
+      }
+    },
+    "Enough is available for normal plant functions." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cukup tersedia untuk fungsi tanaman yang normal."
+          }
+        }
+      }
+    },
+    "Enough nitrogen is available without a clear excess signal." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nitrogen cukup tersedia tanpa tanda kelebihan yang jelas."
+          }
+        }
+      }
+    },
+    "Euglenoids" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Euglenoid"
+          }
+        }
+      }
+    },
+    "Excessive" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Berlebihan"
+          }
+        }
+      }
+    },
+    "Export field report as PDF" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ekspor laporan lapangan sebagai PDF"
+          }
+        }
+      }
+    },
+    "Extra phosphorus may become less available to plants and may contribute to water-quality problems." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kelebihan fosfor bisa kurang tersedia bagi tanaman dan bisa ikut menyebabkan masalah kualitas air."
+          }
+        }
+      }
+    },
+    "FROM THE MICROSCOPE TEST" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "DARI UJI MIKROSKOP"
+          }
+        }
+      }
+    },
+    "FROM YOUR SOIL MEASUREMENTS" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "DARI PENGUKURAN TANAH ANDA"
+          }
+        }
+      }
+    },
+    "Farm" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lahan"
+          }
+        }
+      }
+    },
+    "Farm name" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nama lahan"
+          }
+        }
+      }
+    },
+    "Farmer" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Petani"
+          }
+        }
+      }
+    },
+    "Farmer %@" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Petani %@"
+          }
+        }
+      }
+    },
+    "Farmer's name" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nama petani"
+          }
+        }
+      }
+    },
+    "Farmers" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Petani"
+          }
+        }
+      }
+    },
+    "Farmers or Locations" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Petani atau lokasi"
+          }
+        }
+      }
+    },
+    "Feeds the crop quickly but adds no organic carbon. Used alone for many seasons, it can leave paddy soil lower in carbon and more acidic. Moving toward organic fertilizer generally suits paddies better." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Memberi makan tanaman dengan cepat tetapi tidak menambah karbon organik. Jika dipakai sendiri selama banyak musim, tanah sawah bisa makin rendah karbon dan makin asam. Beralih ke pupuk organik umumnya lebih cocok untuk sawah."
+          }
+        }
+      }
+    },
+    "Fertilized" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dipupuk"
+          }
+        }
+      }
+    },
+    "Fertilizer" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pupuk"
+          }
+        }
+      }
+    },
+    "Fertilizer amount cannot be negative." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jumlah pupuk tidak boleh negatif."
+          }
+        }
+      }
+    },
+    "Fertilizer · %@.  " : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pupuk · %@.  "
+          }
+        }
+      }
+    },
+    "Field Helper" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pendamping Lapangan"
+          }
+        }
+      }
+    },
+    "Field at the time" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kondisi sawah saat itu"
+          }
+        }
+      }
+    },
+    "Field probe or kit" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alat ukur lapangan atau kit"
+          }
+        }
+      }
+    },
+    "Field report for %@" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Laporan lapangan untuk %@"
+          }
+        }
+      }
+    },
+    "Field report for %@, %@" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Laporan lapangan untuk %1$@, %2$@"
+          }
+        }
+      }
+    },
+    "Field summary" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ringkasan lapangan"
+          }
+        }
+      }
+    },
+    "Fields of view scanned" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bidang pandang yang dipindai"
+          }
+        }
+      }
+    },
+    "Fill in a nutrient to see where this soil sits." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Isi salah satu unsur hara untuk melihat posisi tanah ini."
+          }
+        }
+      }
+    },
+    "Flooded" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tergenang"
+          }
+        }
+      }
+    },
+    "Flooded when measured" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tergenang saat diukur"
+          }
+        }
+      }
+    },
+    "Flowering" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fase berbunga"
+          }
+        }
+      }
+    },
+    "For monitoring and learning, not a diagnosis. Ask an extension officer before making a major change." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Untuk pemantauan dan pembelajaran, bukan diagnosis. Tanyakan penyuluh pertanian sebelum melakukan perubahan besar."
+          }
+        }
+      }
+    },
+    "For monitoring and learning, not a diagnosis. Standards are provisional and not yet reviewed by an agronomist. Ask an extension officer before making a major change." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Untuk pemantauan dan pembelajaran, bukan diagnosis. Standarnya masih sementara dan belum ditinjau ahli agronomi. Tanyakan penyuluh pertanian sebelum melakukan perubahan besar."
+          }
+        }
+      }
+    },
+    "Frames kept" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bingkai yang disimpan"
+          }
+        }
+      }
+    },
+    "From the microscope test" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dari uji mikroskop"
+          }
+        }
+      }
+    },
+    "From the microscope test on %@ only." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hanya dari uji mikroskop pada %@."
+          }
+        }
+      }
+    },
+    "From the microscope test on %@, with the soil measurements above." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dari uji mikroskop pada %@, bersama pengukuran tanah di atas."
+          }
+        }
+      }
+    },
+    "From the soil measurements above only. A microscope test will add to it." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hanya dari pengukuran tanah di atas. Uji mikroskop akan melengkapinya."
+          }
+        }
+      }
+    },
+    "From your soil measurements" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dari pengukuran tanah Anda"
+          }
+        }
+      }
+    },
+    "Group" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kelompok"
+          }
+        }
+      }
+    },
+    "Grow a cover crop such as beans between seasons to keep living roots in the soil and add nitrogen. Ask an extension officer before a major change." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tanam tanaman penutup tanah seperti kacang-kacangan di antara musim tanam agar ada akar hidup di tanah dan menambah nitrogen. Tanyakan kepada penyuluh pertanian sebelum perubahan besar."
+          }
+        }
+      }
+    },
+    "Hard to understand" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sulit dipahami"
+          }
+        }
+      }
+    },
+    "Helps regulate water movement, stomata, enzymes, carbohydrates, and stress tolerance." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Membantu mengatur pergerakan air, stomata, enzim, karbohidrat, dan ketahanan terhadap cekaman."
+          }
+        }
+      }
+    },
+    "Hide the breakdown" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sembunyikan rinciannya"
+          }
+        }
+      }
+    },
+    "High" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tinggi"
+          }
+        }
+      }
+    },
+    "Hold back on extra nitrogen fertilizer, and ask an extension officer before making a major change." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kurangi pupuk nitrogen tambahan, dan tanyakan kepada penyuluh pertanian sebelum melakukan perubahan besar."
+          }
+        }
+      }
+    },
+    "Hold back on nitrogen fertilizer, and keep straw on the surface to slow nitrogen release." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kurangi pupuk nitrogen, dan biarkan jerami di permukaan untuk memperlambat pelepasan nitrogen."
+          }
+        }
+      }
+    },
+    "Hold off adding more nitrogen until the next check." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tunda penambahan nitrogen sampai pemeriksaan berikutnya."
+          }
+        }
+      }
+    },
+    "How and when this farm's pH was measured was not recorded, so read it with care." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cara dan waktu pengukuran pH lahan ini tidak dicatat, jadi bacalah dengan hati-hati."
+          }
+        }
+      }
+    },
+    "How many small organisms of each group live in a drop of soil water, counted per frame, and whether that changes between samples taken in the same water state." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Berapa banyak organisme kecil dari tiap kelompok yang hidup dalam setetes air tanah, dihitung per bingkai, dan apakah jumlahnya berubah antarsampel yang diambil dalam kondisi air yang sama."
+          }
+        }
+      }
+    },
+    "How the advice was made" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cara saran ini dibuat"
+          }
+        }
+      }
+    },
+    "Hypotrich ciliates" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ciliata hipotrik"
+          }
+        }
+      }
+    },
+    "If counting keeps failing, restart the app." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jika penghitungan terus gagal, mulai ulang aplikasi."
+          }
+        }
+      }
+    },
+    "If plants look stunted or roots have swellings, ask your extension officer about root worms." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jika tanaman terlihat kerdil atau akarnya bengkak, tanyakan kepada penyuluh pertanian tentang cacing akar."
+          }
+        }
+      }
+    },
+    "If the result stays low, send a soil sample to a lab." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jika hasilnya tetap rendah, kirim sampel tanah ke lab."
+          }
+        }
+      }
+    },
+    "Inorganic fertilizer" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pupuk anorganik"
+          }
+        }
+      }
+    },
+    "Inorganic fertilizers can supply specific nutrients in predictable, readily available forms. Too much or poorly timed application can increase nutrient loss, soil acidification, salinity, or nutrient imbalance." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pupuk anorganik bisa menyediakan unsur hara tertentu dalam bentuk yang terukur dan cepat tersedia. Pemberian yang berlebihan atau tidak tepat waktu bisa meningkatkan kehilangan hara, pengasaman tanah, salinitas, atau ketidakseimbangan hara."
+          }
+        }
+      }
+    },
+    "Is part of soil organic matter and supports soil structure, microbial activity, nutrient retention, and water-holding capacity." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bagian dari bahan organik tanah yang mendukung struktur tanah, aktivitas mikroba, kemampuan menahan unsur hara, dan daya simpan air."
+          }
+        }
+      }
+    },
+    "K" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "K"
+          }
+        }
+      }
+    },
+    "Keep an eye on it and measure again in the same way. No change is needed yet." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pantau terus dan ukur lagi dengan cara yang sama. Belum perlu ada perubahan."
+          }
+        }
+      }
+    },
+    "Keep doing what you're doing in this field." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lanjutkan apa yang sudah Anda lakukan di sawah ini."
+          }
+        }
+      }
+    },
+    "Keep editing" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lanjutkan mengubah"
+          }
+        }
+      }
+    },
+    "Lab-only advice: from this microscope test, without the farm's soil measurements." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saran khusus lab: dari uji mikroskop ini, tanpa pengukuran tanah lahan."
+          }
+        }
+      }
+    },
+    "Laboratory test" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Uji laboratorium"
+          }
+        }
+      }
+    },
+    "Last measured on" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Terakhir diukur pada"
+          }
+        }
+      }
+    },
+    "Leave crop residues on the soil surface as mulch, and add well-matured compost." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Biarkan sisa tanaman di permukaan tanah sebagai mulsa, dan tambahkan kompos yang sudah matang."
+          }
+        }
+      }
+    },
+    "Leave crop residues on the soil surface as mulch, and return straw after harvest." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Biarkan sisa tanaman di permukaan tanah sebagai mulsa, dan kembalikan jerami setelah panen."
+          }
+        }
+      }
+    },
+    "Leave crop straw on the field after harvest to return potassium to the soil." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Biarkan jerami di sawah setelah panen untuk mengembalikan kalium ke tanah."
+          }
+        }
+      }
+    },
+    "Leave fresh straw on the surface as mulch instead of digging it into wet soil." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Biarkan jerami segar di permukaan sebagai mulsa, jangan dibenamkan ke tanah basah."
+          }
+        }
+      }
+    },
+    "Little soil life" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sedikit kehidupan tanah"
+          }
+        }
+      }
+    },
+    "Little soil life was seen, and a cover crop adds food for it." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sedikit kehidupan tanah yang terlihat, dan tanaman penutup tanah menambah makanannya."
+          }
+        }
+      }
+    },
+    "Little soil life was seen, and burning removes the food it needs." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sedikit kehidupan tanah yang terlihat, dan pembakaran menghilangkan makanan yang dibutuhkannya."
+          }
+        }
+      }
+    },
+    "Little soil life was seen, so an expert view helps before acting." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sedikit kehidupan tanah yang terlihat, jadi pendapat ahli membantu sebelum bertindak."
+          }
+        }
+      }
+    },
+    "Little soil life was seen. It is worth checking before changing much." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hanya sedikit kehidupan tanah yang terlihat. Sebaiknya diperiksa dulu sebelum banyak mengubah."
+          }
+        }
+      }
+    },
+    "Location is off, so the map will not open where you are." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lokasi dimatikan, jadi peta tidak akan terbuka di tempat Anda berada."
+          }
+        }
+      }
+    },
+    "Look through the frames" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lihat bingkai-bingkainya"
+          }
+        }
+      }
+    },
+    "Looking at the sample…" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Melihat sampel…"
+          }
+        }
+      }
+    },
+    "Lots of soil life" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Banyak kehidupan tanah"
+          }
+        }
+      }
+    },
+    "Low" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rendah"
+          }
+        }
+      }
+    },
+    "Low to Medium" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rendah sampai sedang"
+          }
+        }
+      }
+    },
+    "Make a fresh slide and sweep again before changing anything." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Buat preparat baru dan pindai lagi sebelum mengubah apa pun."
+          }
+        }
+      }
+    },
+    "Manufactured or mineral fertilizer supplying nutrients in more readily available forms. It may provide predictable nutrient amounts, but incorrect use can contribute to nutrient loss, acidification, salinity, or imbalance." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pupuk buatan pabrik atau mineral yang menyediakan unsur hara dalam bentuk yang lebih cepat tersedia. Jumlah haranya bisa lebih terukur, tetapi penggunaan yang salah bisa menyebabkan kehilangan hara, pengasaman, salinitas, atau ketidakseimbangan."
+          }
+        }
+      }
+    },
+    "Many Euglena-type organisms were seen, which often means still, nutrient-rich water." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Banyak organisme sejenis Euglena yang terlihat, yang sering berarti air diam yang kaya unsur hara."
+          }
+        }
+      }
+    },
+    "Many tiny worms were seen. Some kinds feed on rice roots, and the app can't tell which." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Banyak cacing kecil yang terlihat. Beberapa jenisnya memakan akar padi, dan aplikasi tidak bisa membedakannya."
+          }
+        }
+      }
+    },
+    "Map of %lld plots of land" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Peta %lld petak lahan"
+          }
+        }
+      }
+    },
+    "Map of the land with %lld corners marked" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Peta lahan dengan %lld sudut yang ditandai"
+          }
+        }
+      }
+    },
+    "Mark a farmer's land on the Plots tab to see them here." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tandai lahan petani di tab Petak agar muncul di sini."
+          }
+        }
+      }
+    },
+    "Mark a plot on the map" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tandai petak di peta"
+          }
+        }
+      }
+    },
+    "Mark at least one plot on the map before publishing this farm." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tandai minimal satu petak di peta sebelum menerbitkan lahan ini."
+          }
+        }
+      }
+    },
+    "Mark each piece of this farmer's land as its own plot." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tandai setiap bidang lahan petani ini sebagai petak tersendiri."
+          }
+        }
+      }
+    },
+    "Mark the plots on the farm's page once it is saved." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tandai petak-petaknya di halaman lahan setelah disimpan."
+          }
+        }
+      }
+    },
+    "Measured %@." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diukur %@."
+          }
+        }
+      }
+    },
+    "Measured on" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diukur pada"
+          }
+        }
+      }
+    },
+    "Measurements" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pengukuran"
+          }
+        }
+      }
+    },
+    "Medium" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sedang"
+          }
+        }
+      }
+    },
+    "Meet your soil" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kenali tanah Anda"
+          }
+        }
+      }
+    },
+    "Method not known" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Metode tidak diketahui"
+          }
+        }
+      }
+    },
+    "Microbes found" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mikroba yang ditemukan"
+          }
+        }
+      }
+    },
+    "Microscope Operator" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Operator Mikroskop"
+          }
+        }
+      }
+    },
+    "Microscope frame %lld of %lld from this sample, chosen by its place in the sweep, not by what it shows." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bingkai mikroskop %1$lld dari %2$lld dari sampel ini, dipilih berdasarkan posisinya dalam pemindaian, bukan berdasarkan isinya."
+          }
+        }
+      }
+    },
+    "Mid-season" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pertengahan musim"
+          }
+        }
+      }
+    },
+    "Milligrams per kilogram of soil. Standard: N %@, P %@, K %@. The standards are placeholders and have not been checked by an agronomist." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Miligram per kilogram tanah. Standar: N %1$@, P %2$@, K %3$@. Standar ini masih sementara dan belum diperiksa oleh ahli agronomi."
+          }
+        }
+      }
+    },
+    "Model classes" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kelas model"
+          }
+        }
+      }
+    },
+    "Monogonont rotifers" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rotifera monogononta"
+          }
+        }
+      }
+    },
+    "More nitrogen than the standard. It can support strong growth, but how it behaves depends on whether it is held in organic matter or is free in the soil, so it is worth watching." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nitrogen di atas standar. Ini bisa mendukung pertumbuhan yang kuat, tetapi perilakunya bergantung pada apakah nitrogen terikat dalam bahan organik atau bebas di tanah, jadi sebaiknya dipantau."
+          }
+        }
+      }
+    },
+    "More organic matter than the standard. This is often favorable, as long as the soil still gets enough air." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bahan organik di atas standar. Ini sering menguntungkan, selama tanah masih mendapat cukup udara."
+          }
+        }
+      }
+    },
+    "More samples are needed before a trend can be shown.  " : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Perlu lebih banyak sampel sebelum tren bisa ditampilkan.  "
+          }
+        }
+      }
+    },
+    "More than the standard, which is often favorable for strong stems and water regulation." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Di atas standar, yang sering menguntungkan untuk batang yang kuat dan pengaturan air."
+          }
+        }
+      }
+    },
+    "More than the standard. Flooding often frees phosphorus already in the soil, so adding more is rarely needed." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Di atas standar. Penggenangan sering melepaskan fosfor yang sudah ada di tanah, jadi jarang perlu ditambah."
+          }
+        }
+      }
+    },
+    "Move toward organic fertilizer, such as compost, by replacing part of your mineral fertilizer over the next seasons. Ask your extension officer how much to change." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Beralihlah ke pupuk organik, seperti kompos, dengan mengganti sebagian pupuk mineral Anda pada musim-musim berikutnya. Tanyakan kepada penyuluh pertanian seberapa banyak yang perlu diganti."
+          }
+        }
+      }
+    },
+    "N" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "N"
+          }
+        }
+      }
+    },
+    "Naked amoebae" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Amoeba telanjang"
+          }
+        }
+      }
+    },
+    "Name" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nama"
+          }
+        }
+      }
+    },
+    "Names" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nama"
+          }
+        }
+      }
+    },
+    "Nematodes" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nematoda"
+          }
+        }
+      }
+    },
+    "New Plot" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Petak baru"
+          }
+        }
+      }
+    },
+    "New advice couldn't be written, so the saved advice is shown." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saran baru tidak bisa ditulis, jadi saran yang tersimpan yang ditampilkan."
+          }
+        }
+      }
+    },
+    "New farmer" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Petani baru"
+          }
+        }
+      }
+    },
+    "Next" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lanjut"
+          }
+        }
+      }
+    },
+    "Next fallow" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Masa bera berikutnya"
+          }
+        }
+      }
+    },
+    "Next flooding" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saat penggenangan berikutnya"
+          }
+        }
+      }
+    },
+    "Nitrogen" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nitrogen"
+          }
+        }
+      }
+    },
+    "Nitrogen (N)" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nitrogen (N)"
+          }
+        }
+      }
+    },
+    "Nitrogen cannot be negative." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nitrogen tidak boleh negatif."
+          }
+        }
+      }
+    },
+    "Nitrogen in the soil is low, and plants need it for leaves and stems." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nitrogen di tanah rendah, dan tanaman membutuhkannya untuk daun dan batang."
+          }
+        }
+      }
+    },
+    "Nitrogen, phosphorus and potassium need to be in balance, and these readings are not." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nitrogen, fosfor, dan kalium perlu seimbang, dan hasil ini tidak seimbang."
+          }
+        }
+      }
+    },
+    "No change needed. Measure the same way next time so readings can be compared." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tidak perlu perubahan. Ukur dengan cara yang sama lain kali agar hasilnya bisa dibandingkan."
+          }
+        }
+      }
+    },
+    "No farmers yet" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Belum ada petani"
+          }
+        }
+      }
+    },
+    "No farms yet" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Belum ada lahan"
+          }
+        }
+      }
+    },
+    "No fertilizer information has been entered. This is not proof that no fertilizer was used." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Belum ada informasi pupuk yang dimasukkan. Ini bukan bukti bahwa tidak ada pupuk yang dipakai."
+          }
+        }
+      }
+    },
+    "No fertilizer recorded" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tidak ada pupuk yang dicatat"
+          }
+        }
+      }
+    },
+    "No fertilizer type was chosen. Nothing is assumed about what was used." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jenis pupuk tidak dipilih. Tidak ada asumsi tentang apa yang dipakai."
+          }
+        }
+      }
+    },
+    "No land marked yet" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Belum ada lahan yang ditandai"
+          }
+        }
+      }
+    },
+    "No need to add more phosphorus for now." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tidak perlu menambah fosfor untuk saat ini."
+          }
+        }
+      }
+    },
+    "No pH was recorded for this farm." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tidak ada pH yang dicatat untuk lahan ini."
+          }
+        }
+      }
+    },
+    "No reading was entered for this farm, so nothing is shown or assumed." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tidak ada hasil yang dimasukkan untuk lahan ini, jadi tidak ada yang ditampilkan atau diasumsikan."
+          }
+        }
+      }
+    },
+    "No result to show" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tidak ada hasil untuk ditampilkan"
+          }
+        }
+      }
+    },
+    "No soil measurements or fertilizer information have been recorded for this farm. Adding nitrogen, phosphorus, potassium, pH, organic carbon and the fertilizer type on the farm's page shows where each sits against its standard, and adds soil steps to the advice." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Belum ada pengukuran tanah atau informasi pupuk yang dicatat untuk lahan ini. Menambahkan nitrogen, fosfor, kalium, pH, karbon organik, dan jenis pupuk di halaman lahan akan menunjukkan posisi masing-masing terhadap standarnya, dan menambah langkah tanah ke dalam saran."
+          }
+        }
+      }
+    },
+    "No." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No."
+          }
+        }
+      }
+    },
+    "None" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tidak ada"
+          }
+        }
+      }
+    },
+    "Not counted" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tidak dihitung"
+          }
+        }
+      }
+    },
+    "Not in any group" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tidak masuk kelompok mana pun"
+          }
+        }
+      }
+    },
+    "Not much soil life was seen, and compost feeds it." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tidak banyak kehidupan tanah yang terlihat, dan kompos memberinya makan."
+          }
+        }
+      }
+    },
+    "Not much soil life was seen, and straw is food for it." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tidak banyak kehidupan tanah yang terlihat, dan jerami adalah makanannya."
+          }
+        }
+      }
+    },
+    "Not recorded" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tidak dicatat"
+          }
+        }
+      }
+    },
+    "Not sure" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tidak yakin"
+          }
+        }
+      }
+    },
+    "Not useful" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tidak bermanfaat"
+          }
+        }
+      }
+    },
+    "Notes and limitations" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Catatan dan keterbatasan"
+          }
+        }
+      }
+    },
+    "Notes make the next sample easier to compare." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Catatan membuat sampel berikutnya lebih mudah dibandingkan."
+          }
+        }
+      }
+    },
+    "Nothing in this sample could be read yet. %lld organisms weren't used." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Belum ada yang bisa dibaca dari sampel ini. %lld organisme tidak dipakai."
+          }
+        }
+      }
+    },
+    "Nothing in this sample could be read yet. 1 organism wasn't used." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Belum ada yang bisa dibaca dari sampel ini. 1 organisme tidak dipakai."
+          }
+        }
+      }
+    },
+    "Nothing measured yet. Tap + to add a measurement." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Belum ada pengukuran. Ketuk + untuk menambah pengukuran."
+          }
+        }
+      }
+    },
+    "Nothing was counted in this sample." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tidak ada yang terhitung di sampel ini."
+          }
+        }
+      }
+    },
+    "Nothing was counted on the slide." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tidak ada yang terhitung pada preparat."
+          }
+        }
+      }
+    },
+    "Nothing was counted." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tidak ada yang terhitung."
+          }
+        }
+      }
+    },
+    "Now" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sekarang"
+          }
+        }
+      }
+    },
+    "Nutrient availability is generally more balanced for rice, subject to soil type and flooding conditions." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ketersediaan unsur hara umumnya lebih seimbang untuk padi, tergantung jenis tanah dan kondisi penggenangan."
+          }
+        }
+      }
+    },
+    "Nutrient levels, pH, organic carbon, or which nematodes are pests. Those need the field helper's soil measurements or a laboratory test. It is not a laboratory soil test." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kadar unsur hara, pH, karbon organik, atau nematoda mana yang merupakan hama. Semua itu memerlukan pengukuran tanah oleh pendamping lapangan atau uji laboratorium. Ini bukan uji tanah laboratorium."
+          }
+        }
+      }
+    },
+    "On paddy soil" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pada tanah sawah"
+          }
+        }
+      }
+    },
+    "One sample can vary, so a second one shows whether this holds." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Satu sampel bisa bervariasi, jadi sampel kedua menunjukkan apakah hasil ini konsisten."
+          }
+        }
+      }
+    },
+    "Only %lld organisms were counted, too few to go on." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hanya %lld organisme yang terhitung, terlalu sedikit untuk dijadikan dasar."
+          }
+        }
+      }
+    },
+    "Only a few kinds of organism were seen, and a cover crop adds food for more." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hanya sedikit jenis organisme yang terlihat, dan tanaman penutup tanah menambah makanan untuk lebih banyak jenis."
+          }
+        }
+      }
+    },
+    "Only a few kinds of organism were seen, and straw feeds a wider range." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hanya sedikit jenis organisme yang terlihat, dan jerami memberi makan lebih banyak jenis."
+          }
+        }
+      }
+    },
+    "Only a small part of the slide was looked at." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hanya sebagian kecil preparat yang diamati."
+          }
+        }
+      }
+    },
+    "Only one kind of organism was seen, which is too narrow to judge." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hanya satu jenis organisme yang terlihat, terlalu sempit untuk menilai."
+          }
+        }
+      }
+    },
+    "Only the latest soil measurements are kept, so no soil trend can be shown." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hanya pengukuran tanah terbaru yang disimpan, jadi tren tanah tidak bisa ditampilkan."
+          }
+        }
+      }
+    },
+    "Organic carbon" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Karbon organik"
+          }
+        }
+      }
+    },
+    "Organic carbon is a percentage, between 0 and 100." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Karbon organik dalam persen, antara 0 dan 100."
+          }
+        }
+      }
+    },
+    "Organic carbon is low, and compost builds it up." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Karbon organik rendah, dan kompos menambahnya."
+          }
+        }
+      }
+    },
+    "Organic carbon is low, and returned straw feeds the soil life that builds it up." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Karbon organik rendah, dan jerami yang dikembalikan memberi makan kehidupan tanah yang membentuknya."
+          }
+        }
+      }
+    },
+    "Organic carbon is very high, so fresh straw is better left on the surface." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Karbon organik sangat tinggi, jadi jerami segar lebih baik dibiarkan di permukaan."
+          }
+        }
+      }
+    },
+    "Organic carbon is very high, which can leave wet soil short of air." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Karbon organik sangat tinggi, yang bisa membuat tanah basah kekurangan udara."
+          }
+        }
+      }
+    },
+    "Organic fertilizer" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pupuk organik"
+          }
+        }
+      }
+    },
+    "Organic fertilizers can release nutrients gradually and may add carbon that supports soil structure and soil organisms. Their nutrient content can vary, and poorly matured or excessive material may create nutrient, salt, oxygen, or disease risks." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pupuk organik bisa melepaskan unsur hara secara bertahap dan menambah karbon yang mendukung struktur tanah dan organisme tanah. Kandungan haranya bisa bervariasi, dan bahan yang belum matang atau berlebihan bisa menimbulkan risiko hara, garam, oksigen, atau penyakit."
+          }
+        }
+      }
+    },
+    "Organic–inorganic blend" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Campuran organik–anorganik"
+          }
+        }
+      }
+    },
+    "Organism groups" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kelompok organisme"
+          }
+        }
+      }
+    },
+    "Organism groups are matched to the model's classes provisionally, for the team to confirm." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kelompok organisme dicocokkan dengan kelas model untuk sementara, menunggu konfirmasi tim."
+          }
+        }
+      }
+    },
+    "Organisms counted per microscope frame. Counts from flooded and drained fields are not directly comparable." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Organisme yang terhitung per bingkai mikroskop. Hitungan dari sawah tergenang dan sawah kering tidak bisa langsung dibandingkan."
+          }
+        }
+      }
+    },
+    "Organisms per frame" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Organisme per bingkai"
+          }
+        }
+      }
+    },
+    "Other" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lainnya"
+          }
+        }
+      }
+    },
+    "P" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "P"
+          }
+        }
+      }
+    },
+    "Paddy research generally finds organic fertilizer, even replacing part of the mineral kind, keeps soil carbon and yields steadier." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Penelitian di sawah umumnya menemukan bahwa pupuk organik, bahkan jika hanya menggantikan sebagian pupuk mineral, membuat karbon tanah dan hasil panen lebih stabil."
+          }
+        }
+      }
+    },
+    "Pause phosphorus-rich inputs such as manure, keep the ground covered, and ask an extension officer." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hentikan sementara bahan yang kaya fosfor seperti pupuk kandang, jaga tanah tetap tertutup, dan tanyakan kepada penyuluh pertanian."
+          }
+        }
+      }
+    },
+    "Pause potassium-rich inputs such as ash for a while, and ask an extension officer before a major change." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hentikan sementara bahan yang kaya kalium seperti abu, dan tanyakan kepada penyuluh pertanian sebelum perubahan besar."
+          }
+        }
+      }
+    },
+    "Pause potassium-rich inputs, such as wood ash, for a while." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hentikan sementara bahan yang kaya kalium, seperti abu kayu."
+          }
+        }
+      }
+    },
+    "Phosphorous (P)" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fosfor (P)"
+          }
+        }
+      }
+    },
+    "Phosphorus" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fosfor"
+          }
+        }
+      }
+    },
+    "Phosphorus (P)" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fosfor (P)"
+          }
+        }
+      }
+    },
+    "Phosphorus and some micronutrients may become less available." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fosfor dan beberapa unsur hara mikro bisa kurang tersedia."
+          }
+        }
+      }
+    },
+    "Phosphorus cannot be negative." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fosfor tidak boleh negatif."
+          }
+        }
+      }
+    },
+    "Phosphorus is low, and roots need it to grow strong." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fosfor rendah, dan akar membutuhkannya untuk tumbuh kuat."
+          }
+        }
+      }
+    },
+    "Plants may become overly lush or soft, with greater lodging, disease, or nutrient-imbalance risk." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tanaman bisa tumbuh terlalu rimbun atau lunak, dengan risiko rebah, penyakit, atau ketidakseimbangan hara yang lebih besar."
+          }
+        }
+      }
+    },
+    "Plants may have weaker stems and poorer water regulation." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Batang tanaman bisa lebih lemah dan pengaturan airnya kurang baik."
+          }
+        }
+      }
+    },
+    "Plants may show pale leaves, weak growth, or poor tillering." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tanaman bisa menunjukkan daun pucat, pertumbuhan lemah, atau anakan yang sedikit."
+          }
+        }
+      }
+    },
+    "Plenty of soil life was seen, of several kinds." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Banyak kehidupan tanah yang terlihat, dari beberapa jenis."
+          }
+        }
+      }
+    },
+    "Plenty of soil life was seen. Keep doing what is working." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Banyak kehidupan tanah yang terlihat. Lanjutkan cara yang sudah berhasil."
+          }
+        }
+      }
+    },
+    "Plot" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Petak"
+          }
+        }
+      }
+    },
+    "Plot %@" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Petak %@"
+          }
+        }
+      }
+    },
+    "Plot %lld" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Petak %lld"
+          }
+        }
+      }
+    },
+    "Plot is Created" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Petak berhasil dibuat"
+          }
+        }
+      }
+    },
+    "Plot's name" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nama petak"
+          }
+        }
+      }
+    },
+    "Plots" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Petak"
+          }
+        }
+      }
+    },
+    "Potassium" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kalium"
+          }
+        }
+      }
+    },
+    "Potassium (K)" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kalium (K)"
+          }
+        }
+      }
+    },
+    "Potassium cannot be negative." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kalium tidak boleh negatif."
+          }
+        }
+      }
+    },
+    "Potassium is low, and plants use it for strong stems and to save water." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kalium rendah, dan tanaman memakainya untuk batang yang kuat dan menghemat air."
+          }
+        }
+      }
+    },
+    "Probe and laboratory readings can differ, and a reading depends on where, how deep and when the soil was sampled. Only the latest measurements are kept." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hasil alat ukur lapangan dan laboratorium bisa berbeda, dan hasilnya bergantung pada di mana, seberapa dalam, dan kapan tanah diambil sampelnya. Hanya pengukuran terbaru yang disimpan."
+          }
+        }
+      }
+    },
+    "Product" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Produk"
+          }
+        }
+      }
+    },
+    "Product name (optional)" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nama produk (opsional)"
+          }
+        }
+      }
+    },
+    "Provisional target for flooded rice: about pH %@. Flooding often moves pH toward neutral, so a reading from dry soil may differ from the pH around the roots once the field is flooded." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Target sementara untuk padi sawah: sekitar pH %@. Penggenangan sering menggeser pH ke arah netral, jadi hasil dari tanah kering bisa berbeda dengan pH di sekitar akar setelah sawah digenangi."
+          }
+        }
+      }
+    },
+    "Recommendation" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rekomendasi"
+          }
+        }
+      }
+    },
+    "Recorded" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dicatat"
+          }
+        }
+      }
+    },
+    "Recorded by the field helper, separately from the microscope. Each reading is placed against provisional standards for flooded rice, not graded." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dicatat oleh pendamping lapangan, terpisah dari mikroskop. Setiap hasil dibandingkan dengan standar sementara untuk padi sawah, bukan dinilai."
+          }
+        }
+      }
+    },
+    "Releases nutrients slowly and adds carbon that feeds soil life, which generally suits paddies. Use composted material, as fresh manure under flooding can raise methane." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Melepaskan unsur hara perlahan dan menambah karbon yang memberi makan kehidupan tanah, yang umumnya cocok untuk sawah. Gunakan bahan yang sudah dikomposkan, karena pupuk kandang segar dalam kondisi tergenang bisa meningkatkan metana."
+          }
+        }
+      }
+    },
+    "Result" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hasil"
+          }
+        }
+      }
+    },
+    "Results" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hasil"
+          }
+        }
+      }
+    },
+    "Ripening" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fase pematangan"
+          }
+        }
+      }
+    },
+    "Root development and early plant growth may suffer." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Perkembangan akar dan pertumbuhan awal tanaman bisa terganggu."
+          }
+        }
+      }
+    },
+    "Run map" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Peta pemindaian"
+          }
+        }
+      }
+    },
+    "Run the sweep again." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ulangi pemindaian."
+          }
+        }
+      }
+    },
+    "Run the sweep again. If it keeps failing, restart the app." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ulangi pemindaian. Jika terus gagal, mulai ulang aplikasi."
+          }
+        }
+      }
+    },
+    "SOC" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "C-organik"
+          }
+        }
+      }
+    },
+    "Sample" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sampel"
+          }
+        }
+      }
+    },
+    "Sample again once the field is flooded. Dry soil hides many organisms." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ambil sampel lagi setelah sawah digenangi. Tanah kering menyembunyikan banyak organisme."
+          }
+        }
+      }
+    },
+    "Sample again; some organisms may have been misidentified." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ambil sampel lagi; beberapa organisme mungkin salah dikenali."
+          }
+        }
+      }
+    },
+    "Sample date" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tanggal sampel"
+          }
+        }
+      }
+    },
+    "Sample this field again in 2 to 4 weeks, the same way, to see if it changes." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ambil sampel sawah ini lagi dalam 2 sampai 4 minggu, dengan cara yang sama, untuk melihat apakah ada perubahan."
+          }
+        }
+      }
+    },
+    "Sampled %@" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diambil sampel %@"
+          }
+        }
+      }
+    },
+    "Save" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Simpan"
+          }
+        }
+      }
+    },
+    "Saves money" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Menghemat biaya"
+          }
+        }
+      }
+    },
+    "Score" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skor"
+          }
+        }
+      }
+    },
+    "Search" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cari"
+          }
+        }
+      }
+    },
+    "Search Map" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cari di peta"
+          }
+        }
+      }
+    },
+    "See Less" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lihat lebih sedikit"
+          }
+        }
+      }
+    },
+    "See More" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lihat lebih banyak"
+          }
+        }
+      }
+    },
+    "Seedling" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Persemaian"
+          }
+        }
+      }
+    },
+    "Seems wrong" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sepertinya salah"
+          }
+        }
+      }
+    },
+    "Seen soon after fertilizing, this can mean more nutrients than the crop needs." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jika terlihat tak lama setelah pemupukan, ini bisa berarti unsur hara lebih banyak dari kebutuhan tanaman."
+          }
+        }
+      }
+    },
+    "Select role" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pilih peran"
+          }
+        }
+      }
+    },
+    "Send alert" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kirim pemberitahuan"
+          }
+        }
+      }
+    },
+    "Share microscope video" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bagikan video mikroskop"
+          }
+        }
+      }
+    },
+    "Slow organic nutrients with ready mineral ones. Paddy trials often find steadier yields and more soil carbon than mineral fertilizer alone." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unsur hara organik yang lambat dengan unsur hara mineral yang cepat tersedia. Uji coba di sawah sering menemukan hasil panen lebih stabil dan karbon tanah lebih banyak dibanding pupuk mineral saja."
+          }
+        }
+      }
+    },
+    "Soil" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tanah"
+          }
+        }
+      }
+    },
+    "Soil Organic Carbon" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Karbon organik tanah"
+          }
+        }
+      }
+    },
+    "Soil life estimate" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Perkiraan kehidupan tanah"
+          }
+        }
+      }
+    },
+    "Soil life over time" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kehidupan tanah dari waktu ke waktu"
+          }
+        }
+      }
+    },
+    "Soil life per frame, by test" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kehidupan tanah per bingkai, per uji"
+          }
+        }
+      }
+    },
+    "Soil may hold less water and nutrients and may have weaker structure." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tanah bisa menahan lebih sedikit air dan unsur hara serta strukturnya lebih lemah."
+          }
+        }
+      }
+    },
+    "Soil measurements" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pengukuran tanah"
+          }
+        }
+      }
+    },
+    "Some nutrients may become harder for plants to use, while iron, aluminium, or manganese may become more available." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Beberapa unsur hara bisa lebih sulit dimanfaatkan tanaman, sementara besi, aluminium, atau mangan bisa lebih tersedia."
+          }
+        }
+      }
+    },
+    "Some of these steps are bigger changes, so it's worth asking first." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Beberapa langkah ini adalah perubahan yang lebih besar, jadi sebaiknya bertanya dulu."
+          }
+        }
+      }
+    },
+    "Some of what was seen is worth a closer look." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sebagian yang terlihat perlu diperhatikan lebih dekat."
+          }
+        }
+      }
+    },
+    "Some organisms in this sample may have been misidentified." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Beberapa organisme di sampel ini mungkin salah dikenali."
+          }
+        }
+      }
+    },
+    "Some soil life" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ada kehidupan tanah"
+          }
+        }
+      }
+    },
+    "Some soil life was seen. Small changes may help it grow." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ada sedikit kehidupan tanah yang terlihat. Perubahan kecil bisa membantunya berkembang."
+          }
+        }
+      }
+    },
+    "Standard" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Standar"
+          }
+        }
+      }
+    },
+    "Standard advice" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saran standar"
+          }
+        }
+      }
+    },
+    "Standard: %@ percent by weight." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Standar: %@ persen berat."
+          }
+        }
+      }
+    },
+    "Standards" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Standar"
+          }
+        }
+      }
+    },
+    "Start with" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mulai dengan"
+          }
+        }
+      }
+    },
+    "Steady" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stabil"
+          }
+        }
+      }
+    },
+    "Step" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Langkah"
+          }
+        }
+      }
+    },
+    "Still, nutrient-rich water can be short of air, and a short drain lets air in." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Air diam yang kaya unsur hara bisa kekurangan udara, dan pengeringan singkat membuat udara masuk."
+          }
+        }
+      }
+    },
+    "Stop adding manure and other phosphorus-rich inputs for now, and keep the ground covered." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hentikan dulu pemberian pupuk kandang dan bahan lain yang kaya fosfor, dan jaga agar tanah tetap tertutup."
+          }
+        }
+      }
+    },
+    "Suits paddies" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cocok untuk sawah"
+          }
+        }
+      }
+    },
+    "Supports chlorophyll, leaves, stems, proteins, and plant growth." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mendukung klorofil, daun, batang, protein, dan pertumbuhan tanaman."
+          }
+        }
+      }
+    },
+    "Supports energy transfer, roots, cell membranes, flowering, seed formation, and maturity." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mendukung perpindahan energi, akar, membran sel, pembungaan, pembentukan biji, dan pematangan."
+          }
+        }
+      }
+    },
+    "Switch role" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ganti peran"
+          }
+        }
+      }
+    },
+    "Talk to your local extension officer before making big changes." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bicarakan dengan penyuluh pertanian setempat sebelum melakukan perubahan besar."
+          }
+        }
+      }
+    },
+    "Tap Anywhere" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ketuk di mana saja"
+          }
+        }
+      }
+    },
+    "Tap the map to drop a dot on each corner, going round the edge in order." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ketuk peta untuk menaruh titik di setiap sudut, berurutan mengelilingi tepinya."
+          }
+        }
+      }
+    },
+    "Tap to see each kind" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ketuk untuk melihat tiap jenis"
+          }
+        }
+      }
+    },
+    "Test again in 2 to 4 weeks. If the result stays low, send a sample to a lab." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Uji lagi dalam 2 sampai 4 minggu. Jika hasilnya tetap rendah, kirim sampel ke lab."
+          }
+        }
+      }
+    },
+    "Test again next season, or sooner if the crop changes." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Uji lagi musim depan, atau lebih cepat jika tanamannya berubah."
+          }
+        }
+      }
+    },
+    "Testate amoebae" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Amoeba bercangkang"
+          }
+        }
+      }
+    },
+    "Tests" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Uji"
+          }
+        }
+      }
+    },
+    "Thanks, saved." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Terima kasih, sudah disimpan."
+          }
+        }
+      }
+    },
+    "The advice could not be written. Try again." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saran tidak bisa ditulis. Coba lagi."
+          }
+        }
+      }
+    },
+    "The app's fixed rules chose every step from the microscope test and the soil measurements." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aturan tetap aplikasi memilih setiap langkah dari uji mikroskop dan pengukuran tanah."
+          }
+        }
+      }
+    },
+    "The detector did not run on this sweep." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Detektor tidak berjalan pada pemindaian ini."
+          }
+        }
+      }
+    },
+    "The edges cross each other. Undo, then place the dots in order round the edge." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sisi-sisinya saling bersilangan. Urungkan, lalu taruh titik berurutan mengelilingi tepinya."
+          }
+        }
+      }
+    },
+    "The effect depends on the product, amount, timing, soil test, and field conditions." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Efeknya bergantung pada produk, jumlah, waktu pemberian, uji tanah, dan kondisi lahan."
+          }
+        }
+      }
+    },
+    "The farm and its plots will be removed from this phone and the records." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lahan dan petak-petaknya akan dihapus dari ponsel ini dan dari catatan."
+          }
+        }
+      }
+    },
+    "The farm manager reads published tests in the farm's records." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pengelola lahan membaca uji yang diterbitkan di catatan lahan."
+          }
+        }
+      }
+    },
+    "The farms could not be saved: %@" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lahan tidak bisa disimpan: %@"
+          }
+        }
+      }
+    },
+    "The field helper does not know the fertilizer category. Nothing is inferred from this." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pendamping lapangan tidak tahu kategori pupuknya. Tidak ada kesimpulan yang diambil dari sini."
+          }
+        }
+      }
+    },
+    "The field was drained, and dry soil hides many organisms." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sawah sedang dikeringkan, dan tanah kering menyembunyikan banyak organisme."
+          }
+        }
+      }
+    },
+    "The land" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lahan"
+          }
+        }
+      }
+    },
+    "The land you marked, %@, becomes this farm's first plot." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lahan yang Anda tandai, %@, menjadi petak pertama lahan ini."
+          }
+        }
+      }
+    },
+    "The limits used are guesses, not checked against lab tests." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Batas yang dipakai masih perkiraan, belum dicek dengan uji lab."
+          }
+        }
+      }
+    },
+    "The pH is below the provisional range for flooded rice, which can make some nutrients harder to use." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "pH di bawah rentang sementara untuk padi sawah, yang bisa membuat beberapa unsur hara lebih sulit dimanfaatkan."
+          }
+        }
+      }
+    },
+    "The pH is well above the provisional range for flooded rice, which can make some nutrients less available." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "pH jauh di atas rentang sementara untuk padi sawah, yang bisa membuat beberapa unsur hara kurang tersedia."
+          }
+        }
+      }
+    },
+    "The plot's outline will be removed from this phone and the records." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Batas petak akan dihapus dari ponsel ini dan dari catatan."
+          }
+        }
+      }
+    },
+    "The saved farms could not be read. The old file was kept aside and the list started empty." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lahan yang tersimpan tidak bisa dibaca. Berkas lama disimpan terpisah dan daftar dimulai dari kosong."
+          }
+        }
+      }
+    },
+    "The signs in this sample point different ways." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tanda-tanda di sampel ini menunjukkan arah yang berbeda-beda."
+          }
+        }
+      }
+    },
+    "The soil has a useful level of organic matter for its conditions." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tanah memiliki kadar bahan organik yang bermanfaat untuk kondisinya."
+          }
+        }
+      }
+    },
+    "The soil measurements changed and Apple Intelligence couldn't write new wording, so standard advice for the new measurements is shown." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pengukuran tanah berubah dan Apple Intelligence tidak bisa menulis kata-kata baru, jadi saran standar untuk pengukuran baru yang ditampilkan."
+          }
+        }
+      }
+    },
+    "The soil measurements point to a few changes too." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pengukuran tanah juga menunjukkan beberapa perubahan yang perlu dilakukan."
+          }
+        }
+      }
+    },
+    "The sweep stopped before it finished." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pemindaian berhenti sebelum selesai."
+          }
+        }
+      }
+    },
+    "The type is what the field helper chose from a list. “No fertilizer recorded” does not mean none was used, and “Not sure” is never guessed at. No step gives a product, an amount or a rate." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jenisnya adalah pilihan pendamping lapangan dari daftar. “Tidak ada pupuk yang dicatat” tidak berarti tidak ada pupuk yang dipakai, dan “Tidak yakin” tidak pernah ditebak. Tidak ada langkah yang menyebutkan produk, jumlah, atau takaran."
+          }
+        }
+      }
+    },
+    "The wording is the app's standard advice." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kata-katanya adalah saran standar aplikasi."
+          }
+        }
+      }
+    },
+    "The written advice didn't pass the app's checks, so standard advice is shown." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saran yang ditulis tidak lolos pemeriksaan aplikasi, jadi saran standar yang ditampilkan."
+          }
+        }
+      }
+    },
+    "There is more nitrogen than plants need, which can weaken stems and attract pests." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nitrogen lebih banyak dari kebutuhan tanaman, yang bisa melemahkan batang dan mengundang hama."
+          }
+        }
+      }
+    },
+    "There is more phosphorus than plants need, and the extra can wash into waterways." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fosfor lebih banyak dari kebutuhan tanaman, dan kelebihannya bisa terbawa ke saluran air."
+          }
+        }
+      }
+    },
+    "There is more potassium than plants need, and it can crowd out other nutrients." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kalium lebih banyak dari kebutuhan tanaman, dan bisa menghambat unsur hara lain."
+          }
+        }
+      }
+    },
+    "This build is not set up to publish." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Versi aplikasi ini belum diatur untuk menerbitkan."
+          }
+        }
+      }
+    },
+    "This farm is no longer here" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lahan ini sudah tidak ada"
+          }
+        }
+      }
+    },
+    "This farm's pH reading: %@." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hasil pH lahan ini: %@."
+          }
+        }
+      }
+    },
+    "This iPhone cannot run Apple Intelligence." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iPhone ini tidak bisa menjalankan Apple Intelligence."
+          }
+        }
+      }
+    },
+    "This is an early prototype. The estimate and advice are not scientifically tested. Use your own judgement before acting on them." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ini masih purwarupa awal. Perkiraan dan saran ini belum diuji secara ilmiah. Gunakan pertimbangan Anda sendiri sebelum menjalankannya."
+          }
+        }
+      }
+    },
+    "This is from the soil measurements only. No microscope test has been taken yet." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ini hanya dari pengukuran tanah. Belum ada uji mikroskop."
+          }
+        }
+      }
+    },
+    "This is the first comparable sample for this farm. The next one, taken in the same water state, will show what changed." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ini sampel pertama yang bisa dibandingkan untuk lahan ini. Sampel berikutnya, yang diambil dalam kondisi air yang sama, akan menunjukkan apa yang berubah."
+          }
+        }
+      }
+    },
+    "This outline overlaps %@'s land. Move the dots so it stays on this farmer's own land, or confirm anyway if the overlap is only GPS error." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Batas ini tumpang tindih dengan lahan %@. Geser titik-titiknya agar tetap di lahan petani ini sendiri, atau tetap konfirmasi jika tumpang tindihnya hanya karena kesalahan GPS."
+          }
+        }
+      }
+    },
+    "This pH was measured on drained soil, and flooding often moves pH toward neutral, so it is worth checking first." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "pH ini diukur pada tanah yang dikeringkan, dan penggenangan sering menggeser pH ke arah netral, jadi sebaiknya diperiksa dulu."
+          }
+        }
+      }
+    },
+    "This plot is no longer here" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Petak ini sudah tidak ada"
+          }
+        }
+      }
+    },
+    "This plot looked low twice in a row." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Petak ini terlihat rendah dua kali berturut-turut."
+          }
+        }
+      }
+    },
+    "This reading" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hasil ini"
+          }
+        }
+      }
+    },
+    "This report shows the advice the app showed on %@." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Laporan ini menampilkan saran yang ditunjukkan aplikasi pada %@."
+          }
+        }
+      }
+    },
+    "This sample is hard to read. Check it again before changing anything." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sampel ini sulit dibaca. Periksa lagi sebelum mengubah apa pun."
+          }
+        }
+      }
+    },
+    "This sweep has no sample details, so there is no result to show." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pemindaian ini tidak punya detail sampel, jadi tidak ada hasil untuk ditampilkan."
+          }
+        }
+      }
+    },
+    "This sweep was not counted, so there is no advice yet." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pemindaian ini tidak dihitung, jadi belum ada saran."
+          }
+        }
+      }
+    },
+    "This sweep was not counted: the detector could not open." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pemindaian ini tidak dihitung: detektor tidak bisa dibuka."
+          }
+        }
+      }
+    },
+    "This week" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Minggu ini"
+          }
+        }
+      }
+    },
+    "Tilled" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diolah"
+          }
+        }
+      }
+    },
+    "Tillering" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fase anakan"
+          }
+        }
+      }
+    },
+    "Today" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hari ini"
+          }
+        }
+      }
+    },
+    "Too few to say" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Terlalu sedikit untuk dinilai"
+          }
+        }
+      }
+    },
+    "Too little was seen to judge the soil." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Terlalu sedikit yang terlihat untuk menilai tanah."
+          }
+        }
+      }
+    },
+    "Too little was seen to suggest anything about the soil." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Terlalu sedikit yang terlihat untuk menyarankan apa pun tentang tanah ini."
+          }
+        }
+      }
+    },
+    "Too much potassium may interfere with calcium or magnesium uptake." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kalium yang terlalu banyak bisa mengganggu penyerapan kalsium atau magnesium."
+          }
+        }
+      }
+    },
+    "Trends and notes" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tren dan catatan"
+          }
+        }
+      }
+    },
+    "Try again" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Coba lagi"
+          }
+        }
+      }
+    },
+    "Try not to let water sit still for long. Let fresh water flow in where you can." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Usahakan air tidak menggenang diam terlalu lama. Alirkan air segar masuk jika memungkinkan."
+          }
+        }
+      }
+    },
+    "Try tapping to start plotting the boundary points of the farm" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ketuk untuk mulai menandai titik-titik batas lahan"
+          }
+        }
+      }
+    },
+    "Type" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jenis"
+          }
+        }
+      }
+    },
+    "Unsafe or risky" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tidak aman atau berisiko"
+          }
+        }
+      }
+    },
+    "Up" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Naik"
+          }
+        }
+      }
+    },
+    "Updated after the %@ reading was removed." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diperbarui setelah hasil %@ dihapus."
+          }
+        }
+      }
+    },
+    "Updated after the soil measurements were removed." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diperbarui setelah pengukuran tanah dihapus."
+          }
+        }
+      }
+    },
+    "Updated with how the pH was measured." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diperbarui dengan cara pH diukur."
+          }
+        }
+      }
+    },
+    "Updated with the new %@ reading." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diperbarui dengan hasil %@ yang baru."
+          }
+        }
+      }
+    },
+    "Updated with the new fertilizer type." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diperbarui dengan jenis pupuk yang baru."
+          }
+        }
+      }
+    },
+    "Updated with the new soil measurements." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diperbarui dengan pengukuran tanah yang baru."
+          }
+        }
+      }
+    },
+    "Useful" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bermanfaat"
+          }
+        }
+      }
+    },
+    "Using this report" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Menggunakan laporan ini"
+          }
+        }
+      }
+    },
+    "Very high organic material may create oxygen or decomposition problems in wet soil, depending on the material, moisture, and drainage." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bahan organik yang sangat tinggi bisa menimbulkan masalah oksigen atau pembusukan di tanah basah, tergantung bahan, kelembapan, dan drainasenya."
+          }
+        }
+      }
+    },
+    "View Test Results" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lihat hasil uji"
+          }
+        }
+      }
+    },
+    "Volvox colonies" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Koloni Volvox"
+          }
+        }
+      }
+    },
+    "Wait for the scientist to send you the result." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tunggu ilmuwan mengirimkan hasilnya kepada Anda."
+          }
+        }
+      }
+    },
+    "Was this useful?" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apakah ini bermanfaat?"
+          }
+        }
+      }
+    },
+    "Water not known" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kondisi air tidak diketahui"
+          }
+        }
+      }
+    },
+    "Well-matured compost may help release the phosphorus already in the soil. Ask an extension officer before a major change." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kompos yang sudah matang bisa membantu melepaskan fosfor yang sudah ada di tanah. Tanyakan kepada penyuluh pertanian sebelum perubahan besar."
+          }
+        }
+      }
+    },
+    "What changed since the last sample" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apa yang berubah sejak sampel terakhir"
+          }
+        }
+      }
+    },
+    "What has been put on this land, and how much per hectare." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apa yang sudah diberikan ke lahan ini, dan berapa banyak per hektare."
+          }
+        }
+      }
+    },
+    "What it can't show" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yang tidak bisa ditunjukkannya"
+          }
+        }
+      }
+    },
+    "What it does" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fungsinya"
+          }
+        }
+      }
+    },
+    "What stood out" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yang menonjol"
+          }
+        }
+      }
+    },
+    "What the microscope can show" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yang bisa ditunjukkan mikroskop"
+          }
+        }
+      }
+    },
+    "What to do" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yang perlu dilakukan"
+          }
+        }
+      }
+    },
+    "What to do next" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Langkah selanjutnya"
+          }
+        }
+      }
+    },
+    "What was seen can't be read yet." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yang terlihat belum bisa dibaca."
+          }
+        }
+      }
+    },
+    "What was wrong?" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apa yang kurang tepat?"
+          }
+        }
+      }
+    },
+    "When" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kapan"
+          }
+        }
+      }
+    },
+    "Who are you?" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Siapa Anda?"
+          }
+        }
+      }
+    },
+    "Why" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alasan"
+          }
+        }
+      }
+    },
+    "Work leftover rice straw back into the soil instead of burning it." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kembalikan sisa jerami padi ke dalam tanah, jangan dibakar."
+          }
+        }
+      }
+    },
+    "Write again" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tulis ulang"
+          }
+        }
+      }
+    },
+    "Write down what you did in this field, so the next sample can be compared fairly." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Catat apa yang Anda lakukan di sawah ini, agar sampel berikutnya bisa dibandingkan dengan adil."
+          }
+        }
+      }
+    },
+    "Writing a summary…" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Menulis ringkasan…"
+          }
+        }
+      }
+    },
+    "Writing advice for this sample…" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Menulis saran untuk sampel ini…"
+          }
+        }
+      }
+    },
+    "Written %@." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ditulis %@."
+          }
+        }
+      }
+    },
+    "Written by Apple Intelligence" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ditulis oleh Apple Intelligence"
+          }
+        }
+      }
+    },
+    "Written with older advice rules. Tap Write again for advice with the current rules." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ditulis dengan aturan saran yang lama. Ketuk Tulis ulang untuk saran dengan aturan terbaru."
+          }
+        }
+      }
+    },
+    "You can change this later if your goals change" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Anda bisa mengubahnya nanti jika tujuan Anda berubah"
+          }
+        }
+      }
+    },
+    "You haven't assigned the scientist yet" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Anda belum menugaskan ilmuwan"
+          }
+        }
+      }
+    },
+    "Your name goes on every test and every farm you record." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nama Anda dicantumkan pada setiap uji dan setiap lahan yang Anda catat."
+          }
+        }
+      }
+    },
+    "Your soil measurements" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pengukuran tanah Anda"
+          }
+        }
+      }
+    },
+    "Your soil measurements are all in the standard range, so you can keep doing what you are doing now." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Semua pengukuran tanah Anda dalam rentang standar, jadi Anda bisa melanjutkan apa yang sedang Anda lakukan sekarang."
+          }
+        }
+      }
+    },
+    "acidic" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "asam"
+          }
+        }
+      }
+    },
+    "alkaline" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "basa"
+          }
+        }
+      }
+    },
+    "and %@" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "dan %@"
+          }
+        }
+      }
+    },
+    "and %@ of %@" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "dan %1$@ dari %2$@"
+          }
+        }
+      }
+    },
+    "collect farm data, receive scientific test results and generate actionable recommendations through AI analysis." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "kumpulkan data lahan, terima hasil uji ilmiah, dan buat rekomendasi yang bisa langsung dijalankan lewat analisis AI."
+          }
+        }
+      }
+    },
+    "drained" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "dikeringkan"
+          }
+        }
+      }
+    },
+    "flooded" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "tergenang"
+          }
+        }
+      }
+    },
+    "neutral" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "netral"
+          }
+        }
+      }
+    },
+    "nitrogen" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "nitrogen"
+          }
+        }
+      }
+    },
+    "observe soil biodiversity through your microscope, with AI-powered identification and analysis." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "amati keanekaragaman hayati tanah lewat mikroskop, dengan identifikasi dan analisis berbasis AI."
+          }
+        }
+      }
+    },
+    "organic carbon" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "karbon organik"
+          }
+        }
+      }
+    },
+    "pH" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "pH"
+          }
+        }
+      }
+    },
+    "pH in flooded rice" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "pH pada padi sawah"
+          }
+        }
+      }
+    },
+    "pH is between 0 and 14." : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "pH harus antara 0 dan 14."
+          }
+        }
+      }
+    },
+    "phosphorus" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "fosfor"
+          }
+        }
+      }
+    },
+    "potassium" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "kalium"
+          }
+        }
+      }
+    },
+    "soil measurements (%@)" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "pengukuran tanah (%@)"
+          }
+        }
+      }
+    },
+    "was %@" : {
+      "localizations" : {
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "sebelumnya %@"
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

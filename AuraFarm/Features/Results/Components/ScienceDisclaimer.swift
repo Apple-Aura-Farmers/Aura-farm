@@ -6,8 +6,7 @@ struct ScienceDisclaimer: View {
     var body: some View {
         Label {
             Text(
-                "This is an early prototype. The estimate and advice are not scientifically "
-                    + "tested. Use your own judgement before acting on them."
+                "This is an early prototype. The estimate and advice are not scientifically tested. Use your own judgement before acting on them."
             )
         } icon: {
             Image(systemName: "info.circle")

@@ -62,9 +62,9 @@ struct LandMapView: View {
 
     private var label: String {
         if let singleOutline {
-            return "Map of the land with \(singleOutline.count) corners marked"
+            return String(localized: "Map of the land with \(singleOutline.count) corners marked")
         }
-        return "Map of \(outlines.count) plots of land"
+        return String(localized: "Map of \(outlines.count) plots of land")
     }
 
     private var initialPosition: MapCameraPosition {

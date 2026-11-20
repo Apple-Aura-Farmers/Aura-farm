@@ -58,11 +58,13 @@ struct SoilMeasurementSections: View {
                     numberRow("Potassium (K)", value: $draft.potassium, unit: "mg/kg")
                 }
             } header: {
-                InfoHeader("NPK") {
-                    "Milligrams per kilogram of soil. Standard: N \(SoilStandards.nitrogen.description), "
-                        + "P \(SoilStandards.phosphorus.description), "
-                        + "K \(SoilStandards.potassium.description). The standards are placeholders "
-                        + "and have not been checked by an agronomist."
+                InfoHeader(String(localized: "NPK")) {
+                    let n = SoilStandards.nitrogen.description
+                    let p = SoilStandards.phosphorus.description
+                    let k = SoilStandards.potassium.description
+                    return String(
+                        localized: "Milligrams per kilogram of soil. Standard: N \(n), P \(p), K \(k). The standards are placeholders and have not been checked by an agronomist."
+                    )
                 }
             }
         }
@@ -97,16 +99,17 @@ struct SoilMeasurementSections: View {
                 if isEditable {
                     Picker("Field at the time", selection: $draft.phFieldWater) {
                         Text("Not recorded").tag(PHFieldWater?.none)
-                        ForEach(PHFieldWater.allCases) { Text($0.label).tag(PHFieldWater?.some($0)) }
+                        ForEach(PHFieldWater.allCases) { Text($0.label.translated).tag(PHFieldWater?.some($0)) }
                     }
                 } else if let water = draft.phFieldWater {
-                    LabeledContent("Field at the time", value: water.label)
+                    LabeledContent("Field at the time", value: water.label.translated)
                 }
             } header: {
-                InfoHeader("Acidity (pH)") {
-                    "Provisional target for flooded rice: about pH \(SoilStandards.ph.description). "
-                        + "Flooding often moves pH toward neutral, so a reading from dry soil may "
-                        + "differ from the pH around the roots once the field is flooded."
+                InfoHeader(String(localized: "Acidity (pH)")) {
+                    let target = SoilStandards.ph.description
+                    return String(
+                        localized: "Provisional target for flooded rice: about pH \(target). Flooding often moves pH toward neutral, so a reading from dry soil may differ from the pH around the roots once the field is flooded."
+                    )
                 }
             }
         }
@@ -118,8 +121,9 @@ struct SoilMeasurementSections: View {
             Section {
                 numberRow("SOC", value: $draft.organicCarbonPercent, unit: "%")
             } header: {
-                InfoHeader("Soil Organic Carbon") {
-                    "Standard: \(SoilStandards.organicCarbon.description) percent by weight."
+                InfoHeader(String(localized: "Soil Organic Carbon")) {
+                    let standard = SoilStandards.organicCarbon.description
+                    return String(localized: "Standard: \(standard) percent by weight.")
                 }
             }
         }
@@ -135,10 +139,10 @@ struct SoilMeasurementSections: View {
                 if isEditable {
                     Picker("Type", selection: $draft.fertilizerType) {
                         Text("Choose…").tag(FertilizerType?.none)
-                        ForEach(FertilizerType.allCases) { Text($0.label).tag(FertilizerType?.some($0)) }
+                        ForEach(FertilizerType.allCases) { Text($0.label.translated).tag(FertilizerType?.some($0)) }
                     }
                 } else if let type = draft.fertilizerType {
-                    LabeledContent("Type", value: type.label)
+                    LabeledContent("Type", value: type.label.translated)
                 }
                 if isEditable {
                     TextField(
@@ -155,9 +159,11 @@ struct SoilMeasurementSections: View {
                     numberRow("Amount", value: $draft.fertilizerKilogramsPerHectare, unit: "kg/ha")
                 }
             } header: {
-                InfoHeader("Fertilizer") {
-                    let about = "What has been put on this land, and how much per hectare."
-                    return draft.fertilizerType.map { "\(about)\n\n\($0.label): \($0.definition)" } ?? about
+                InfoHeader(String(localized: "Fertilizer")) {
+                    let about = String(localized: "What has been put on this land, and how much per hectare.")
+                    return draft.fertilizerType.map {
+                        "\(about)\n\n\($0.label.translated): \($0.definition.translated)"
+                    } ?? about
                 }
             }
         }
@@ -166,7 +172,7 @@ struct SoilMeasurementSections: View {
     // MARK: Pieces
 
     /// One optional number: a label, a box that takes a decimal, and its unit.
-    func numberRow(_ label: String, value: Binding<Double?>, unit: String) -> some View {
+    func numberRow(_ label: LocalizedStringKey, value: Binding<Double?>, unit: String) -> some View {
         LabeledContent(label) {
             if isEditable {
                 HStack(spacing: 6) {
@@ -184,7 +190,7 @@ struct SoilMeasurementSections: View {
     }
 
     func reading(_ value: Double?) -> String {
-        guard let value else { return "Not recorded" }
+        guard let value else { return String(localized: "Not recorded") }
         return value.formatted(.number.precision(.fractionLength(0...1)))
     }
 }

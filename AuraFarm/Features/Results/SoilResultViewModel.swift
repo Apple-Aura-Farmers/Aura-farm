@@ -233,8 +233,9 @@ final class SoilResultViewModel {
     }
 
     /// Said when the soil measurements changed and Apple Intelligence could not write new wording.
-    static let measurementsChangedNote =
-        "The soil measurements changed and Apple Intelligence couldn't write new wording, so standard advice for the new measurements is shown."
+    static let measurementsChangedNote = String(
+        localized: "The soil measurements changed and Apple Intelligence couldn't write new wording, so standard advice for the new measurements is shown."
+    )
 
     /// After a failed Write again the saved advice stays on screen, with a note. The file is not
     /// touched. False when this sample has no saved advice. Never used when the measurements
@@ -242,7 +243,7 @@ final class SoilResultViewModel {
     private func showSavedAdviceAfterFailure(_ error: Error) async -> Bool {
         guard let saved = await savedAdvice() else { return false }
         guard !Task.isCancelled else { return true }
-        var note = "New advice couldn't be written, so the saved advice is shown."
+        var note = String(localized: "New advice couldn't be written, so the saved advice is shown.")
         #if DEBUG
             let detail: String
             switch error as? AdviceFailure {

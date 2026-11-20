@@ -11,10 +11,10 @@ enum AdviceProgress: Equatable {
     /// The words on the card while the model writes.
     var message: String {
         switch self {
-        case .noticing: return "Looking at the sample…"
+        case .noticing: return String(localized: "Looking at the sample…")
         case .choosingSteps(let chosen):
-            return chosen == 0 ? "Choosing steps…" : "Choosing steps (\(chosen) of 3)…"
-        case .summarizing: return "Writing a summary…"
+            return chosen == 0 ? String(localized: "Choosing steps…") : String(localized: "Choosing steps (\(chosen) of 3)…")
+        case .summarizing: return String(localized: "Writing a summary…")
         }
     }
 

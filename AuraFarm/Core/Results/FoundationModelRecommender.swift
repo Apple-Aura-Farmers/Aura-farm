@@ -23,19 +23,27 @@ final class FoundationModelRecommender: RecommendationProviding {
     }
 
     var availability: RecommenderAvailability {
+        // The advice checks (banned words and phrases, length limits) read English only, so the
+        // model writes advice only when the app is in English. In any other language the
+        // standard advice is shown, which is checked and translated.
+        guard Bundle.main.preferredLocalizations.first == "en" else {
+            return .unavailable(
+                reason: String(
+                    localized: "Apple Intelligence writes advice in English only, so standard advice is shown."))
+        }
         switch model.availability {
         case .available:
             return model.supportsLocale()
                 ? .available
-                : .unavailable(reason: "Apple Intelligence doesn't support this phone's language yet.")
+                : .unavailable(reason: String(localized: "Apple Intelligence doesn't support this phone's language yet."))
         case .unavailable(.deviceNotEligible):
-            return .unavailable(reason: "This iPhone cannot run Apple Intelligence.")
+            return .unavailable(reason: String(localized: "This iPhone cannot run Apple Intelligence."))
         case .unavailable(.appleIntelligenceNotEnabled):
-            return .unavailable(reason: "Apple Intelligence is turned off in Settings.")
+            return .unavailable(reason: String(localized: "Apple Intelligence is turned off in Settings."))
         case .unavailable(.modelNotReady):
-            return .unavailable(reason: "Apple Intelligence is still downloading. Try again later.")
+            return .unavailable(reason: String(localized: "Apple Intelligence is still downloading. Try again later."))
         case .unavailable:
-            return .unavailable(reason: "Apple Intelligence is not available right now.")
+            return .unavailable(reason: String(localized: "Apple Intelligence is not available right now."))
         }
     }
 
