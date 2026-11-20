@@ -7,6 +7,14 @@ import XCTest
 /// Phase 2s-D part B: decoding reads the arrays' memory with their strides and type, and gives
 /// exactly what the old `NSNumber` subscripts gave.
 final class DecodeSpeedTests: XCTestCase {
+
+    /// A six-slot list standing in for a model whose scores are logits. No shipped model has
+    /// that shape any more — V3's graph ends in a sigmoid — but the decode still takes the
+    /// logit path as a parameter, so it is still worth exercising. The names are V1's, which
+    /// is what these expectations were written against.
+    static let logitClassNames = [
+        "no-object", "Arcellinida", "Digononta", "Euglenoid", "Nematode", "Volvox",
+    ]
     /// The decode as it was before: one `NSNumber` subscript at a time. Kept here as the reference.
     private func referenceDecode(
         scores: MLMultiArray, boxes: MLMultiArray, classNames: [String],
@@ -89,11 +97,11 @@ final class DecodeSpeedTests: XCTestCase {
     }
 
     func testTheNewDecodeGivesTheOldDecodesDetectionsForV1AndV2InEveryDataType() throws {
-        let names = DetectorModel.v2ClassNames
+        let names = DetectorModel.v3ClassNames
         for type in [MLMultiArrayDataType.float32, .float16, .double] {
             for (classes, probabilities, classNames) in [
-                (23 + 1, true, names),
-                (OrganismDetector.classNames.count, false, OrganismDetector.classNames),
+                (22 + 1, true, names),
+                (Self.logitClassNames.count, false, Self.logitClassNames),
             ] {
                 let (scores, boxes) = try answer(classes: classes, type: type, probabilities: probabilities)
                 let old = referenceDecode(
@@ -109,7 +117,7 @@ final class DecodeSpeedTests: XCTestCase {
     }
 
     func testTheNewDecodeGivesTheOldDecodesDetectionsOnTheRealV2Fixtures() throws {
-        let detector = try OrganismDetector(model: .v2, computeUnits: .cpuAndGPU)
+        let detector = try OrganismDetector(model: .v3, computeUnits: .cpuAndGPU)
         for name in ["eyepiece-disc-030", "sample-band-140"] {
             let url = try XCTUnwrap(Bundle(for: Self.self).url(forResource: name, withExtension: "png"))
             let source = try XCTUnwrap(CGImageSourceCreateWithURL(url as CFURL, nil))
@@ -118,7 +126,7 @@ final class DecodeSpeedTests: XCTestCase {
             XCTAssertNotNil(fixture)
         }
         // The real model's arrays through both decodes: run the model once on a blank frame.
-        let (scores, boxes) = try answer(classes: 24, type: .float16, probabilities: true)
+        let (scores, boxes) = try answer(classes: 23, type: .float16, probabilities: true)
         assertSame(
             referenceDecode(
                 scores: scores, boxes: boxes, classNames: detector.classNames,
@@ -150,8 +158,8 @@ final class DecodeSpeedTests: XCTestCase {
 
     /// Timing, printed for the report: the old and the new decode over the V2 shape.
     func testDecodeTimeBeforeAndAfter() throws {
-        let (scores, boxes) = try answer(classes: 24, type: .float16, probabilities: true)
-        let names = DetectorModel.v2ClassNames
+        let (scores, boxes) = try answer(classes: 23, type: .float16, probabilities: true)
+        let names = DetectorModel.v3ClassNames
         func time(_ body: () -> Void) -> Double {
             body()
             let started = CFAbsoluteTimeGetCurrent()
@@ -205,8 +213,8 @@ final class DecodeSpeedTests: XCTestCase {
     func testTheRowDecodeGivesTheReferenceDetectionsInEveryLayout() throws {
         for type in [MLMultiArrayDataType.float32, .float16, .double] {
             for (classes, probabilities, padded, classNames) in [
-                (24, true, 32, DetectorModel.v2ClassNames),
-                (6, false, 8, OrganismDetector.classNames),
+                (23, true, 32, DetectorModel.v3ClassNames),
+                (6, false, 8, Self.logitClassNames),
             ] {
                 let (scores, boxes) = try answer(classes: classes, type: type, probabilities: probabilities)
                 for ((name, s), (_, b)) in zip(
@@ -226,10 +234,10 @@ final class DecodeSpeedTests: XCTestCase {
     }
 
     func testPaddedRowsDecodeInUnderHalfTheGeneralPathsTime() throws {
-        let (scores, boxes) = try answer(classes: 24, type: .float16, probabilities: true)
+        let (scores, boxes) = try answer(classes: 23, type: .float16, probabilities: true)
         let paddedScores = try relaid(scores, strides: [300 * 32, 32, 1])
         let paddedBoxes = try relaid(boxes, strides: [300 * 8, 8, 1])
-        let names = DetectorModel.v2ClassNames
+        let names = DetectorModel.v3ClassNames
         func time(_ body: () -> Void) -> Double {
             body()
             let started = CFAbsoluteTimeGetCurrent()

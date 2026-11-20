@@ -75,7 +75,7 @@ final class LiveCountSession {
     var cropsToEyepiece = true
     var minimumConfidence = OrganismDetector.leastConfidence
     /// Which model counts. Change it with `setModel` only.
-    private(set) var model = DetectorModel.v2
+    private(set) var model = DetectorModel.v3
     /// The hardware it runs on (`defaultUnits` until changed). Change it with `setUnits` only.
     private(set) var units = LiveCountSession.defaultUnits
     /// The Neural Engine in Release, for power per inference. Debug builds use the graphics chip,
@@ -97,7 +97,7 @@ final class LiveCountSession {
     private var loaded: OrganismDetector?
     private var loadingGeneration: Int?
     private var generation = 0
-    private var wanted = (model: DetectorModel.v2, units: LiveCountSession.defaultUnits)
+    private var wanted = (model: DetectorModel.v3, units: LiveCountSession.defaultUnits)
     private var loadFailure: String?
     private var loadMilliseconds: Double?
     /// When the detector last ran, on the run's clock.
@@ -185,7 +185,7 @@ final class LiveCountSession {
         lock.lock()
         let names = loaded?.classNames
         lock.unlock()
-        let all = names ?? (model == .v1 ? OrganismDetector.classNames : DetectorModel.v2ClassNames)
+        let all = names ?? model.builtInClassNames
         return (minimumConfidence, cropsToEyepiece, Array(all.dropFirst()))
     }
 

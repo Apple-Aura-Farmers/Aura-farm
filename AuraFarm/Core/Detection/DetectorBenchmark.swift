@@ -53,7 +53,7 @@ enum DetectorBenchmark {
     }
 
     static func run(
-        model: DetectorModel = .v1, hardware: Hardware, runs: Int
+        model: DetectorModel = .v3, hardware: Hardware, runs: Int
     ) throws -> Outcome {
         let image = try sampleImage()
         let opened = CFAbsoluteTimeGetCurrent()
@@ -85,7 +85,7 @@ enum DetectorBenchmark {
         // V1's rows first, as they always were; V2's after.
         for model in DetectorModel.allCases {
             for hardware in Hardware.allCases {
-                let name = model == .v1 ? hardware.rawValue : "\(model.displayName) \(hardware.rawValue)"
+                let name = "\(model.displayName) \(hardware.rawValue)"
                 do {
                     let outcome = try run(model: model, hardware: hardware, runs: runs)
                     print(

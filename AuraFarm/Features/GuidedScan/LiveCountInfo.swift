@@ -43,7 +43,7 @@ struct LiveCountInfo: Equatable {
     var problem: String?
     /// The model counting ("v1" or "v2"), the boxes the guards dropped, how long the model took
     /// to open, and whether it is still opening.
-    var detectorModel = DetectorModel.v2.rawValue
+    var detectorModel = DetectorModel.v3.rawValue
     var detectorUnits = DetectorUnits.neuralEngine.rawValue
     var discDrops = 0
     var bigDrops = 0

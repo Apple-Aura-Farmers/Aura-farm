@@ -25,7 +25,7 @@ struct LabSettings: Equatable {
     var showsDetections = false
     var cropsToEyepiece = true
     var confidence = 0.3
-    var detectorModelName = DetectorModel.v2.rawValue
+    var detectorModelName = DetectorModel.v3.rawValue
     var detectorUnitsName = DetectorUnits.neuralEngine.rawValue
     var cameraRateName = CameraRate.fps20.rawValue
     /// Heat-adaptive mode (see `HeatPolicy`): on by default; the lab can turn it off to compare.
@@ -80,7 +80,7 @@ struct LabSettings: Equatable {
         model.setShowsDetections(showsDetections)
         model.setCropsToEyepiece(cropsToEyepiece)
         model.setMinimumConfidence(Float(confidence))
-        model.setDetectorModel(DetectorModel(rawValue: detectorModelName) ?? .v2)
+        model.setDetectorModel(DetectorModel(rawValue: detectorModelName) ?? .v3)
         model.setDetectorUnits(DetectorUnits(rawValue: detectorUnitsName) ?? .neuralEngine)
         model.setCameraRate(CameraRate(rawValue: cameraRateName) ?? .fps20)
         model.setGuideDryRun(guideDryRun)
@@ -115,7 +115,7 @@ struct LabSettings: Equatable {
         if cropsToEyepiece != old.cropsToEyepiece { model.setCropsToEyepiece(cropsToEyepiece) }
         if confidence != old.confidence { model.setMinimumConfidence(Float(confidence)) }
         if detectorModelName != old.detectorModelName {
-            model.setDetectorModel(DetectorModel(rawValue: detectorModelName) ?? .v2)
+            model.setDetectorModel(DetectorModel(rawValue: detectorModelName) ?? .v3)
         }
         if detectorUnitsName != old.detectorUnitsName {
             model.setDetectorUnits(DetectorUnits(rawValue: detectorUnitsName) ?? .neuralEngine)
@@ -161,7 +161,7 @@ struct LabSettingsSync: ViewModifier {
         @AppStorage("slideLab.showDetections") private var showsDetections = false
         @AppStorage("slideLab.cropEyepiece") private var cropsToEyepiece = true
         @AppStorage("slideLab.confidence") private var confidence = 0.3
-        @AppStorage("slideLab.detectorModel") private var detectorModelName = DetectorModel.v2.rawValue
+        @AppStorage("slideLab.detectorModel") private var detectorModelName = DetectorModel.v3.rawValue
         @AppStorage("slideLab.detectorUnits") private var detectorUnitsName = DetectorUnits
             .neuralEngine.rawValue
         @AppStorage("slideLab.cameraRate") private var cameraRateName = CameraRate.fps20.rawValue

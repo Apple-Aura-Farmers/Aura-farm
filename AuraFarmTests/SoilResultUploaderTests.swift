@@ -46,7 +46,7 @@ final class SoilResultUploaderTests: XCTestCase {
     }
 
     func testEveryLabelTheShippingDetectorEmitsHasAnEnumValue() {
-        // OrganismDetector.classNames, less the no-object slot. A label with no value here
+        // the detector's class list, less the background slot. A label with no value here
         // would be dropped from the counts table without anyone noticing.
         for label in ["Arcellinida", "Digononta", "Euglenoid", "Nematode", "Volvox"] {
             XCTAssertNotNil(MicroorganismRow.storedTaxa[label], label)

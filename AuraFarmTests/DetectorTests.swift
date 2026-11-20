@@ -5,6 +5,14 @@ import XCTest
 @testable import AuraFarm
 
 final class DetectorTests: XCTestCase {
+
+    /// A six-slot list standing in for a model whose scores are logits. No shipped model has
+    /// that shape any more — V3's graph ends in a sigmoid — but the decode still takes the
+    /// logit path as a parameter, so it is still worth exercising. The names are V1's, which
+    /// is what these expectations were written against.
+    static let logitClassNames = [
+        "no-object", "Arcellinida", "Digononta", "Euglenoid", "Nematode", "Volvox",
+    ]
     func testAQueryIsReadAsTheBestClassThatIsNotNoObject() throws {
         // Three queries: one a nematode, one the model saying it found nothing, one a
         // volvox so small the guard leaves it alone.
@@ -14,7 +22,7 @@ final class DetectorTests: XCTestCase {
             (slot: 5, logit: 2.0, box: (0.25, 0.25, 0.1, 0.1)),
         ])
 
-        let found = OrganismDetector.decode(logits: logits, boxes: boxes)
+        let found = OrganismDetector.decode(logits: logits, boxes: boxes, classNames: Self.logitClassNames)
 
         XCTAssertEqual(found.map(\.label), ["Nematode", "Volvox"])
         // Boxes come in as the middle and the size counted from the top left; everything
@@ -28,20 +36,26 @@ final class DetectorTests: XCTestCase {
     func testAQuietQueryIsNotAFind() throws {
         // Well under leastConfidence once it has been through a sigmoid.
         let (logits, boxes) = try queries([(slot: 4, logit: -3.0, box: (0.5, 0.5, 0.1, 0.1))])
-        XCTAssertTrue(OrganismDetector.decode(logits: logits, boxes: boxes).isEmpty)
+        XCTAssertTrue(
+            OrganismDetector.decode(logits: logits, boxes: boxes, classNames: Self.logitClassNames).isEmpty)
     }
 
     func testAQueryBoxingTheWholeFrameIsStillThrownAway() throws {
         let (logits, boxes) = try queries([(slot: 4, logit: 5.0, box: (0.5, 0.5, 1.0, 1.0))])
-        XCTAssertTrue(OrganismDetector.decode(logits: logits, boxes: boxes).isEmpty)
+        XCTAssertTrue(
+            OrganismDetector.decode(logits: logits, boxes: boxes, classNames: Self.logitClassNames).isEmpty)
     }
 
     func testALowerMinimumConfidenceKeepsAQuietQueryAndTheDefaultStillDropsIt() throws {
         // sigmoid(-1) is about 0.27: under 0.3, over 0.2.
         let (logits, boxes) = try queries([(slot: 4, logit: -1.0, box: (0.5, 0.5, 0.1, 0.1))])
-        XCTAssertTrue(OrganismDetector.decode(logits: logits, boxes: boxes).isEmpty)
+        XCTAssertTrue(
+            OrganismDetector.decode(logits: logits, boxes: boxes, classNames: Self.logitClassNames).isEmpty)
         XCTAssertEqual(
-            OrganismDetector.decode(logits: logits, boxes: boxes, minimumConfidence: 0.2).count, 1)
+            OrganismDetector.decode(
+                logits: logits, boxes: boxes, classNames: Self.logitClassNames,
+                minimumConfidence: 0.2
+            ).count, 1)
     }
 
     func testABoxFoundInACropMapsBackToTheRightPlaceInTheWholeFrame() {
@@ -65,7 +79,7 @@ final class DetectorTests: XCTestCase {
     private func queries(
         _ rows: [(slot: Int, logit: Float, box: (Double, Double, Double, Double))]
     ) throws -> (MLMultiArray, MLMultiArray) {
-        let classes = OrganismDetector.classNames.count
+        let classes = Self.logitClassNames.count
         let logits = try MLMultiArray(
             shape: [1, NSNumber(value: rows.count), NSNumber(value: classes)], dataType: .float32)
         let boxes = try MLMultiArray(shape: [1, NSNumber(value: rows.count), 4], dataType: .float32)

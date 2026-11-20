@@ -85,7 +85,7 @@
 
     /// What the lab opens on, every time.
     enum ModelTestLabDefaults {
-        static let model = DetectorModel.v2
+        static let model = DetectorModel.v3
         static let cropsToCentre = true
     }
 

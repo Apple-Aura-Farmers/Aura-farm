@@ -111,7 +111,7 @@ final class GuidedScanSetupTests: XCTestCase {
             XCTAssertEqual(lab.mappingName, "rotateRight")
             XCTAssertEqual(lab.coverageStep, 0.8)
             XCTAssertEqual(lab.spotMode, .briefTouch)
-            XCTAssertEqual(lab.detectorModelName, DetectorModel.v2.rawValue)
+            XCTAssertEqual(lab.detectorModelName, DetectorModel.v3.rawValue)
             XCTAssertEqual(lab.cameraRateName, CameraRate.fps20.rawValue)
             XCTAssertFalse(lab.guideDryRun)
         }

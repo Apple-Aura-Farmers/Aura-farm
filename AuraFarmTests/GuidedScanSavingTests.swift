@@ -26,7 +26,7 @@ final class GuidedScanSavingTests: XCTestCase {
         var record = GuideRunRecord.previewForTests
         record.countsByLabel = ["Volvox": 3, "Nematode": 2]
         record.totalCount = 5
-        record.detectorModel = DetectorModel.v2.rawValue
+        record.detectorModel = DetectorModel.v3.rawValue
         return record
     }
 
@@ -105,7 +105,7 @@ final class GuidedScanSavingTests: XCTestCase {
         let sweep = try savedSweep()
         let report = try SoilReportExporter.report(for: sweep)
         XCTAssertEqual(report.capture.frameCount, 0)
-        XCTAssertEqual(report.capture.detectorModel, "SoilDetectorV2")
+        XCTAssertEqual(report.capture.detectorModel, "SoilDetectorV3")
         XCTAssertNil(report.panoramaJPEG)
         XCTAssertEqual(report.organisms.map(\.taxon), ["Volvox", "Nematode"])
         XCTAssertEqual(report.organisms.map(\.count), [3, 2])
