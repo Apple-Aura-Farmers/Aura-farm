@@ -161,7 +161,8 @@ struct SoilMeasurementsView: View {
     private func waitingCard(for farm: Farm) -> some View {
         VStack(spacing: 14) {
             // An alert is answered once a test newer than it exists, so a later visit asks afresh.
-            if let asked = plot?.scientistAlertedAt, asked > (tests?.first?.sweep.recordedAt ?? .distantPast) {
+            if let asked = plot?.scientistAlertedAt, asked > (tests?.first?.sweep.recordedAt ?? .distantPast)
+            {
                 Text("Wait for the scientist to send you the result.")
                     .multilineTextAlignment(.center)
                     .foregroundStyle(.secondary)
@@ -216,7 +217,6 @@ struct SoilMeasurementsView: View {
             }
         }
     }
-
 
     /// Drops the changes and shows the kept reading again; a new reading has none, so it closes.
     private func cancelEditing() {

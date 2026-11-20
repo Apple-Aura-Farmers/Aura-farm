@@ -119,8 +119,8 @@ struct PlotDetailView: View {
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
-                        .listRowBackground(Color.clear)
-                        .listRowInsets(EdgeInsets(top: 12, leading: 4, bottom: 8, trailing: 4))
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets(top: 12, leading: 4, bottom: 8, trailing: 4))
                 }
                 if tests == nil {
                     ProgressView()
@@ -312,7 +312,10 @@ private struct ChipFlow: Layout {
 
     private func arrange(in width: CGFloat, _ subviews: Subviews) -> (origins: [CGPoint], size: CGSize) {
         var origins: [CGPoint] = []
-        var x: CGFloat = 0, y: CGFloat = 0, rowHeight: CGFloat = 0, widest: CGFloat = 0
+        var x: CGFloat = 0
+        var y: CGFloat = 0
+        var rowHeight: CGFloat = 0
+        var widest: CGFloat = 0
         for subview in subviews {
             let size = subview.sizeThatFits(.unspecified)
             if x > 0, x + size.width > width {

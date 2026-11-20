@@ -55,7 +55,9 @@ struct RecommendationCard: View {
                         }
                     }
                 }
-                ForEach(groups(of: recommendation.steps, showing: visibleCount(of: recommendation)), id: \.title) { group in
+                ForEach(
+                    groups(of: recommendation.steps, showing: visibleCount(of: recommendation)), id: \.title
+                ) { group in
                     VStack(alignment: .leading, spacing: 8) {
                         if let title = group.title {
                             Text(title)
