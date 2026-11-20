@@ -49,13 +49,13 @@ final class MovementLogTests: XCTestCase {
         XCTAssertEqual(fields[index("position_x_frames")], "0.014")
         XCTAssertEqual(fields[index("frame_width")], "1280")
         XCTAssertEqual(
-            MovementLog.header.suffix(119).prefix(7),
+            MovementLog.header.suffix(121).prefix(7),
             [
                 "box_brightness", "box_sharpness", "box_contrast", "reading", "predicted_streak",
                 "no_detail", "blind_stretches",
             ])
         XCTAssertEqual(
-            MovementLog.header.suffix(112).prefix(27),
+            MovementLog.header.suffix(114).prefix(27),
             [
                 "start_match_x_px", "start_match_y_px", "true_off_start_fields",
                 "tracker_error_fields", "blank_returns_matched", "blank_returns_unmatched",
@@ -89,7 +89,7 @@ final class MovementLogTests: XCTestCase {
         XCTAssertEqual(fields[index("focus_top")], "1.200")
         XCTAssertEqual(fields[index("focus_bottom")], "", "a half with no ratio is empty")
         XCTAssertEqual(
-            MovementLog.header.suffix(84).prefix(5),
+            MovementLog.header.suffix(86).prefix(5),
             ["focus_index", "focus_baseline", "circle_shift_r", "circle_radius_change", "focus_low"],
             "the run monitor's columns are appended after every column")
         XCTAssertEqual(fields[index("monitor_state")], "")
@@ -186,9 +186,9 @@ final class MovementLogTests: XCTestCase {
 
     func testTheSpotAndCountingColumnsAreAppendedLast() {
         XCTAssertEqual(
-            MovementLog.header.suffix(46).prefix(3), ["spot_mode", "spot_window", "touch_seconds"])
+            MovementLog.header.suffix(48).prefix(3), ["spot_mode", "spot_window", "touch_seconds"])
         XCTAssertEqual(
-            MovementLog.header.suffix(30).prefix(18),
+            MovementLog.header.suffix(32).prefix(18),
             [
                 "event_detail", "detector_model", "det_drop_disc", "det_drop_big", "det_units",
                 "frame_dt", "camera_fps", "exposure_ms", "iso", "thermal_state", "battery_level",
@@ -265,7 +265,7 @@ final class MovementLogTests: XCTestCase {
         // `knob_words` came after these, in Phase 3c, then the two heat columns (performance
         // step 3) and the two lens video columns.
         XCTAssertEqual(
-            Array(MovementLog.header.suffix(12).prefix(5)),
+            Array(MovementLog.header.suffix(14).prefix(5)),
             ["line_accept", "area_ahead_share", "predicted_edge_along", "expected_edge_ask", "camera_drops"])
         var logged = row()
         logged.lineState = "attached"
@@ -278,7 +278,7 @@ final class MovementLogTests: XCTestCase {
             separator: ",", omittingEmptySubsequences: false
         ).map(String.init)
         XCTAssertEqual(fields.count, MovementLog.header.count)
-        XCTAssertEqual(Array(fields.suffix(12).prefix(5)), ["area", "0.051", "-9.123", "1", "7"])
+        XCTAssertEqual(Array(fields.suffix(14).prefix(5)), ["area", "0.051", "-9.123", "1", "7"])
     }
 
     /// Performance step 3: the heat mode and the screen brightness come before the lens video's
@@ -290,7 +290,7 @@ final class MovementLogTests: XCTestCase {
         let lines = MovementLog.csv([logged]).split(separator: "\n")
         let fields = lines[1].split(separator: ",", omittingEmptySubsequences: false)
         XCTAssertEqual(fields.count, MovementLog.header.count)
-        XCTAssertEqual(fields.suffix(6).prefix(2).map(String.init), ["cool_down", "0.35"])
+        XCTAssertEqual(fields.suffix(8).prefix(2).map(String.init), ["cool_down", "0.35"])
     }
 
     func testTheLensVideoColumnsAreAppendedLast() {
@@ -301,11 +301,11 @@ final class MovementLogTests: XCTestCase {
             separator: ",", omittingEmptySubsequences: false
         ).map(String.init)
         XCTAssertEqual(fields.count, MovementLog.header.count)
-        XCTAssertEqual(Array(fields.suffix(4).prefix(2)), ["1", "4"])
+        XCTAssertEqual(Array(fields.suffix(6).prefix(2)), ["1", "4"])
         XCTAssertEqual(
             Array(
                 MovementLog.csv([row()]).split(separator: "\n")[1].split(
                     separator: ",", omittingEmptySubsequences: false
-                ).suffix(4).prefix(2)), ["0", ""])
+                ).suffix(6).prefix(2)), ["0", ""])
     }
 }

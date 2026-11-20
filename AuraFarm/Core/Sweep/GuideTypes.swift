@@ -65,6 +65,9 @@ struct GuideReading: Equatable {
     /// The heading the edge line was measured along (screen unit vector); nil when not known. A
     /// line measured along another heading than the route's current one is ignored.
     var edgeLineHeading: CGPoint?
+    /// +1 when the frame's axes map to the guide's screen axes without a mirror, -1 with one: the
+    /// edge line's angle is measured in frame axes, so a mirror turns its sign round.
+    var frameHandedness: Double = 1
 
     /// The detail in the two quarters of the box ahead along the heading over the detail in the two
     /// behind (the `quad_*` columns): near 0 when the area ahead is empty. nil when any quarter or
@@ -131,6 +134,10 @@ struct EdgeDiagnostics: Equatable {
     /// along the leg; nil without a line being counted.
     var lineCrossings = 0
     var lineAlong: Double?
+    /// Why the current leg target is limited (`spot_limit_reason`); empty when it is not.
+    var spotLimitReason = ""
+    /// The angle the columns follow (the left edge's tilt, guide axes); nil for straight columns.
+    var slipTiltDegrees: Double?
 }
 
 /// The helper's answer about an edge, in full-cover-slip mode.

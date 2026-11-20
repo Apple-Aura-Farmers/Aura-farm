@@ -243,6 +243,11 @@ struct MovementLogRow: Equatable {
     /// position along the leg (empty without one).
     var lineCrossings = 0
     var lineAlong: Double?
+    /// Why the current leg target is limited: line, loop_location, tilted_prediction,
+    /// flat_prediction, fitted_prediction or empty_ahead; empty when it is not.
+    var spotLimitReason = ""
+    /// The tilt the columns follow, in degrees; nil (empty) for straight columns.
+    var slipTiltDegrees: Double?
 }
 
 enum MovementLog {
@@ -284,7 +289,8 @@ enum MovementLog {
         "det_infer_ms", "det_decode_ms",
         "line_accept", "area_ahead_share", "predicted_edge_along", "expected_edge_ask",
         "camera_drops", "knob_words", "heat_mode", "screen_brightness", "lens_recording",
-        "video_drops", "line_crossings", "line_along",
+        "video_drops", "line_crossings", "line_along", "spot_limit_reason",
+        "slip_tilt_deg",
     ]
 
     static func csv(_ rows: [MovementLogRow]) -> String {
@@ -367,6 +373,7 @@ enum MovementLog {
             number(row.screenBrightness, 2),
             row.lensRecording ? "1" : "0", row.videoDrops.map(String.init) ?? "",
             row.lineAlong == nil ? "" : String(row.lineCrossings), number(row.lineAlong, 3),
+            row.spotLimitReason, number(row.slipTiltDegrees, 2),
         ]
     }
 

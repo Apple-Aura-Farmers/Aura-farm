@@ -178,9 +178,84 @@ final class RepeatLineTests: XCTestCase {
         XCTAssertNotNil(route.guide.edgeQuestionSnapshot)
     }
 
+    // MARK: Spots stop short of a line the route can see
+
+    /// Chases the current target 0.1 field a reading, holding still on it, `line` showing the
+    /// line at slide y `lineY` (or nothing). Returns the captures' y positions.
+    @discardableResult
+    private func chase(
+        _ route: ScriptedRoute, lineY: Double? = nil, readings: Int = 160
+    ) -> [Double] {
+        let before = route.guide.placements.count
+        for _ in 0..<readings {
+            guard let target = route.last.target else { break }
+            let y = Double(route.position.y)
+            let dy = Double(target.y) - y
+            let moving = abs(dy) > 0.05
+            let step = moving ? max(-0.1, min(0.1, dy)) : 0
+            route.feed(
+                ScriptedRoute.Frame(still: !moving, line: lineY.map { line(from: y + step, lineY: $0) }),
+                move: CGPoint(x: 0, y: step))
+        }
+        return route.guide.placements.dropFirst(before).map { Double($0.position.y) }
+    }
+
+    func testNoSpotIsPlacedBeyondAnAcceptedLineLessTheMarginThenTheLegSeeksTheEdge() {
+        let route = columnOne()
+        // The line is at slide position 2.5 (y = -2.5); the margin is 0.6 without a known circle.
+        let spots = chase(route, lineY: -2.5)
+        XCTAssertFalse(spots.isEmpty)
+        XCTAssertGreaterThanOrEqual(spots.min() ?? 0, -2.5 + 0.6 - 0.1, "\(spots)")
+        XCTAssertEqual(route.last.edge.spotLimitReason, "line")
+        XCTAssertFalse(route.guide.isFinished)
+        // Seeking: more readings place nothing and the card says travel.
+        let more = chase(route, lineY: -2.5, readings: 40)
+        XCTAssertTrue(more.isEmpty, "\(more)")
+    }
+
+    func testAnEdgeLoopLocationCapsSpotsTheSameWay() {
+        let route = columnOne()
+        episode(route, at: first)  // 2.15 along, one episode: recorded, no question yet
+        XCTAssertFalse(route.last.edge.expectedEdgeAsk)
+        route.feed(ScriptedRoute.Frame(still: true), times: 30)  // the line is forgotten, the location is not
+        let spots = chase(route)
+        XCTAssertGreaterThanOrEqual(spots.min() ?? 0, first + 0.6 - 0.1, "\(spots)")
+        XCTAssertEqual(route.last.edge.spotLimitReason, "loop_location")
+    }
+
+    // MARK: No spots into empty glass
+
+    private func emptyFrame() -> ScriptedRoute.Frame {
+        ScriptedRoute.Frame(
+            aheadAway: 4, aheadToward: 4, behindAway: 50, behindToward: 50)  // 0.08 ahead over behind
+    }
+
+    func testAnEmptyAreaAheadForHalfASecondStopsSpotsButNeverConfirmsAnEdge() {
+        let route = columnOne()
+        let edges = route.guide.edgesReached
+        route.feed(emptyFrame(), move: up, times: 7)
+        XCTAssertEqual(route.last.edge.spotLimitReason, "empty_ahead")
+        let placed = route.guide.placements.count
+        route.feed(emptyFrame(), move: up, times: 30)
+        XCTAssertEqual(route.guide.placements.count, placed, "no further spot")
+        XCTAssertEqual(route.guide.edgesReached, edges, "empty alone confirms nothing")
+        XCTAssertFalse(route.guide.isFinished)
+    }
+
+    func testABriefEmptyPatchDoesNotStopPlacement() {
+        let route = columnOne()
+        route.feed(emptyFrame(), move: up, times: 3)
+        route.feed(move: up, times: 3)
+        XCTAssertEqual(route.last.edge.spotLimitReason, "")
+        route.feed(emptyFrame(), move: up, times: 3)
+        XCTAssertEqual(route.last.edge.spotLimitReason, "")
+        XCTAssertFalse(chase(route).isEmpty, "spots are still placed")
+    }
+
     func testTheCsvColumnsAreAppendedAndTheBackWordsSayTheLine() {
         XCTAssertEqual(
-            Array(MovementLog.header.suffix(2)), ["line_crossings", "line_along"])
+            Array(MovementLog.header.suffix(4)),
+            ["line_crossings", "line_along", "spot_limit_reason", "slip_tilt_deg"])
         XCTAssertEqual(
             HelperInstruction.make(
                 for: .edgeBehind(toward: CGPoint(x: 0, y: 1)), arrow: CGPoint(x: 0, y: 1),
