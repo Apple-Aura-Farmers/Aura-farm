@@ -19,6 +19,8 @@ struct RecommendationCard: View {
     var rating: AdviceFeedback.Rating?
     /// Called with a rating, and the reasons when it is not useful. nil hides the question.
     var onRate: ((AdviceFeedback.Rating, [AdviceFeedback.Reason]) -> Void)?
+    /// Writes the advice again with fresh wording. nil hides the button.
+    var onWriteAgain: (() -> Void)?
     let onRetry: () -> Void
 
     @State private var asksWhatWasWrong = false
@@ -114,6 +116,14 @@ struct RecommendationCard: View {
                 }
                 if let onRate {
                     feedbackRow(onRate)
+                }
+                if let onWriteAgain {
+                    Button("Write again", systemImage: "arrow.clockwise", action: onWriteAgain)
+                        .font(.footnote.weight(.medium))
+                        .buttonStyle(.bordered)
+                        .buttonBorderShape(.capsule)
+                        .controlSize(.small)
+                        .frame(maxWidth: .infinity)
                 }
             }
             .padding(16)

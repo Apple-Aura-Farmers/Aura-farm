@@ -16,7 +16,7 @@ struct SplashScreen: View {
                 .resizable()
                 .scaledToFill()
                 .ignoresSafeArea()
-            Image("Icon")
+            Image(scheme == .dark ? "Icon" : "Icon_Light")
                 .resizable()
                 .scaledToFit()
                 .frame(width: 132)
