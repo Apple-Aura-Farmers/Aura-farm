@@ -47,6 +47,8 @@ struct GuideRowFields: Equatable {
     var areaAheadShare: Double?
     var predictedEdgeAlong: Double?
     var expectedEdgeAsk = false
+    var lineCrossings = 0
+    var lineAlong: Double?
 }
 
 /// How the preview shows the box, measured from the live preview layer on the main thread.
@@ -415,7 +417,8 @@ final class GuideDryRun {
                 countingActive: guide.countingActive, column: guide.columnNumber,
                 lineAccept: result.edge.lineAccept, areaAheadShare: result.edge.areaAheadShare,
                 predictedEdgeAlong: result.edge.predictedEdgeAlong,
-                expectedEdgeAsk: result.edge.expectedEdgeAsk),
+                expectedEdgeAsk: result.edge.expectedEdgeAsk,
+                lineCrossings: result.edge.lineCrossings, lineAlong: result.edge.lineAlong),
             info: SlideMovementInfo.Guide(
                 isOn: true, instruction: result.instruction.debugText, state: result.stateName,
                 targetDx: dx, targetDy: dy, viewClass: viewClass.rawValue, captures: captures,

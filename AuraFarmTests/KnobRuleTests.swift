@@ -119,9 +119,9 @@ final class KnobRuleTests: XCTestCase {
     }
 
     func testTheKnobWordsColumnIsFollowedOnlyByTheHeatAndLensVideoColumns() {
-        // `heat_mode` and `screen_brightness` (performance step 3), then the lens video's two.
+        // `heat_mode` and `screen_brightness` (performance step 3), then the lens video's two, then the line crossing columns.
         XCTAssertEqual(
-            Array(MovementLog.header.suffix(5)),
+            Array(MovementLog.header.suffix(7).prefix(5)),
             ["knob_words", "heat_mode", "screen_brightness", "lens_recording", "video_drops"])
     }
 }

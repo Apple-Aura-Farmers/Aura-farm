@@ -127,6 +127,10 @@ struct EdgeDiagnostics: Equatable {
     var predictedEdgeAlong: Double?
     /// "Edge should be here. Confirm?" is showing.
     var expectedEdgeAsk = false
+    /// How many times the current edge line was passed without confirming, and its slide position
+    /// along the leg; nil without a line being counted.
+    var lineCrossings = 0
+    var lineAlong: Double?
 }
 
 /// The helper's answer about an edge, in full-cover-slip mode.

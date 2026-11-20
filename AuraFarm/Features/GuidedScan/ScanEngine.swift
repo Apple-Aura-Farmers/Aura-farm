@@ -1116,6 +1116,8 @@ class ScanEngine: NSObject {
         logged.areaAheadShare = guide?.areaAheadShare
         logged.predictedEdgeAlong = guide?.predictedEdgeAlong
         logged.expectedEdgeAsk = guide?.expectedEdgeAsk ?? false
+        logged.lineCrossings = guide?.lineCrossings ?? 0
+        logged.lineAlong = guide?.lineAlong
         logged.sparseSkips = step.tracking.sparseSkips
         logged.edgeFeedback = guide?.edgeFeedback ?? ""
         logged.spotMode = guide?.spotMode ?? ""

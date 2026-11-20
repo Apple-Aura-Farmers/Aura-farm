@@ -190,6 +190,6 @@ final class HeatModeBehaviourTests: XCTestCase {
     }
 
     func testTheCSVAppendsHeatModeAndScreenBrightnessLast() {
-        XCTAssertEqual(Array(MovementLog.header.suffix(4).prefix(2)), ["heat_mode", "screen_brightness"])
+        XCTAssertEqual(Array(MovementLog.header.suffix(6).prefix(2)), ["heat_mode", "screen_brightness"])
     }
 }

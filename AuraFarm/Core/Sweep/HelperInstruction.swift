@@ -10,6 +10,8 @@ enum HelperInstruction: Equatable {
     case stop(progress: Double?, note: String?)
     /// "Back a little: bottom knob away from you".
     case backALittle(KnobRule.Words)
+    /// "Back to the line: bottom knob away from you": an edge line was passed and is behind.
+    case backToLine(KnobRule.Words)
     case refocus
     case phoneMoved
     case edgeFound
@@ -28,6 +30,7 @@ enum HelperInstruction: Equatable {
         case .turn(let words): words.text
         case .stop(_, let note): note ?? "Hold still"
         case .backALittle(let words): "Back a little: \(words.phrase)"
+        case .backToLine(let words): "Back to the line: \(words.phrase)"
         case .refocus: "Turn the fine focus slowly until it's sharp"
         case .phoneMoved: "The phone moved. Line it back up"
         case .edgeFound: "Edge found"
@@ -42,7 +45,7 @@ enum HelperInstruction: Equatable {
     /// The knob the drawing highlights, and the way; nil for a card with no knob.
     var knob: KnobRule.Words? {
         switch self {
-        case .turn(let words), .backALittle(let words): words
+        case .turn(let words), .backALittle(let words), .backToLine(let words): words
         default: nil
         }
     }
@@ -59,6 +62,7 @@ enum HelperInstruction: Equatable {
         switch self {
         case .turn(let words): "turn \(words.text)"
         case .backALittle(let words): "back \(words.text)"
+        case .backToLine(let words): "line \(words.text)"
         case .stop(_, let note): "stop \(note ?? "")"
         case .refocus: "refocus"
         case .phoneMoved: "phoneMoved"
@@ -76,7 +80,7 @@ enum HelperInstruction: Equatable {
     var isImmediate: Bool {
         switch self {
         case .stop, .question, .phoneMoved, .finished, .tooHot: true
-        case .turn, .backALittle, .refocus, .edgeFound, .lastColumn, .waiting: false
+        case .turn, .backALittle, .backToLine, .refocus, .edgeFound, .lastColumn, .waiting: false
         }
     }
 
@@ -92,7 +96,7 @@ enum HelperInstruction: Equatable {
     var haptic: HelperHaptic {
         switch self {
         case .stop, .question: .firm
-        case .backALittle: .threeLight
+        case .backALittle, .backToLine: .threeLight
         case .edgeFound: .success
         case .finished: .longSuccess
         case .turn, .refocus, .phoneMoved, .lastColumn, .waiting, .tooHot: .none
@@ -130,7 +134,9 @@ enum HelperInstruction: Equatable {
             return .stop(progress: nil, note: nil)
         case .edgeReached:
             return .edgeFound
-        case .tooFar, .otherWay, .edgeBehind, .missedSpot, .edgeGoBack, .checkEdge:
+        case .edgeBehind:
+            return words.map { .backToLine($0) }
+        case .tooFar, .otherWay, .missedSpot, .edgeGoBack, .checkEdge:
             return words.map { .backALittle($0) }
         case .refocus, .stillNoDetail:
             return .refocus

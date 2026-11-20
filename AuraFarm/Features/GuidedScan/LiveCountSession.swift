@@ -91,7 +91,12 @@ final class LiveCountSession {
     private var loaded: OrganismDetector?
     private var loadingGeneration: Int?
     private var generation = 0
+    // ponytail: debug skips ANE specialization (minutes per reinstall); release keeps the ANE.
+    #if DEBUG
+    private var wanted = (model: DetectorModel.v2, units: DetectorUnits.graphics)
+    #else
     private var wanted = (model: DetectorModel.v2, units: DetectorUnits.neuralEngine)
+    #endif
     private var loadFailure: String?
     private var loadMilliseconds: Double?
     /// When the detector last ran, on the run's clock.

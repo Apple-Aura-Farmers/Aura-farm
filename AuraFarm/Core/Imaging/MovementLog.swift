@@ -239,6 +239,10 @@ struct MovementLogRow: Equatable {
     /// video left out because the writer was busy (the scan analysed them all the same).
     var lensRecording = false
     var videoDrops: Int?
+    /// How many times the edge line being followed was passed without confirming, and its slide
+    /// position along the leg (empty without one).
+    var lineCrossings = 0
+    var lineAlong: Double?
 }
 
 enum MovementLog {
@@ -280,7 +284,7 @@ enum MovementLog {
         "det_infer_ms", "det_decode_ms",
         "line_accept", "area_ahead_share", "predicted_edge_along", "expected_edge_ask",
         "camera_drops", "knob_words", "heat_mode", "screen_brightness", "lens_recording",
-        "video_drops",
+        "video_drops", "line_crossings", "line_along",
     ]
 
     static func csv(_ rows: [MovementLogRow]) -> String {
@@ -362,6 +366,7 @@ enum MovementLog {
             row.cameraDrops.map(String.init) ?? "", row.knobWords, row.heatMode,
             number(row.screenBrightness, 2),
             row.lensRecording ? "1" : "0", row.videoDrops.map(String.init) ?? "",
+            row.lineAlong == nil ? "" : String(row.lineCrossings), number(row.lineAlong, 3),
         ]
     }
 

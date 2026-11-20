@@ -38,7 +38,7 @@ final class HelperInstructionTests: XCTestCase {
             (.paused(.focus), "Turn the fine focus slowly until it's sharp"),
             (.lineAhead, "Bottom knob towards you"),
             (.edgeDetected, "Hold still"),
-            (.edgeBehind(toward: v), "Back a little: bottom knob towards you"),
+            (.edgeBehind(toward: v), "Back to the line: bottom knob towards you"),
             (.lineLead(direction: left, nudge: false), "Bottom knob towards you"),
             (.expectedEdge, "Is this the edge of the sample?"),
             (.notAnEdge, "Bottom knob towards you"),
