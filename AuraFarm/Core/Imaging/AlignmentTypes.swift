@@ -41,6 +41,14 @@ struct AlignmentThresholds {
     var lostCentreShiftShareOfRadius: Double = 0.10
     /// A frame with no circle counts as failing. Failing this long without a break is lost.
     var lostSeconds: Double = 2.0
+
+    // Once the field circle is confirmed (focus step), a loss is judged on GEOMETRY ONLY:
+    // evenness and glare move by themselves while the focus knob turns. PLACEHOLDER; source:
+    // the user's report that the check was far too sensitive.
+    var confirmedLostMinRoundness: Double = 0.70
+    var confirmedLostCentreShiftShareOfRadius: Double = 0.18
+    var confirmedLostRadiusChange: Double = 0.15
+    var confirmedLostSeconds: Double = 3.0
 }
 
 /// A side of the camera frame, in FRAME axes (top-down pixels).

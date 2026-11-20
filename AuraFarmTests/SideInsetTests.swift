@@ -4,8 +4,8 @@ import XCTest
 @testable import AuraFarm
 
 /// Phase 4a-fix 2 part C: the first and last columns sit the eyepiece circle's radius plus a
-/// margin inside the left and right edges, so only sample is in view; the top and bottom edges
-/// keep the old inset.
+/// margin inside the left and right edges, so only sample is in view. Since the movement-guide
+/// spot-placement step, the next column also starts this inset inside after a top or bottom edge.
 final class SideInsetTests: XCTestCase {
     private func run(
         width: Double, height: Double, radius: Double?, square: Bool = true, spacing: Double = 1.6
@@ -64,10 +64,10 @@ final class SideInsetTests: XCTestCase {
         XCTAssertEqual(last, 7.5 - 1.55, accuracy: 0.4)
     }
 
-    func testTheInwardStartAfterABottomEdgeIsStillSixTenths() {
+    func testTheInwardStartAfterABottomEdgeIsTheSideInset() {
         let (_, result) = run(width: 7, height: 2.4, radius: 1.4)
         let two = column(2, in: result)
-        XCTAssertEqual(Double(two.first?.position.y ?? 0), 2.4 - 0.6, accuracy: 0.3, "\(two)")
+        XCTAssertEqual(Double(two.first?.position.y ?? 0), 2.4 - 1.55, accuracy: 0.3, "\(two)")
     }
 
     func testTheLeftEdgeThePredictionDrawsIsTheInsetOutFromColumnOne() {

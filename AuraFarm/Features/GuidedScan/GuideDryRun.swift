@@ -47,6 +47,10 @@ struct GuideRowFields: Equatable {
     var areaAheadShare: Double?
     var predictedEdgeAlong: Double?
     var expectedEdgeAsk = false
+    var lineCrossings = 0
+    var lineAlong: Double?
+    var spotLimitReason = ""
+    var slipTiltDegrees: Double?
 }
 
 /// How the preview shows the box, measured from the live preview layer on the main thread.
@@ -149,6 +153,11 @@ final class GuideDryRun {
     /// Full-cover-slip mode: the rule waits for the helper's tap instead of confirming itself.
     var asksEdges = true {
         didSet { if asksEdges != oldValue { reset() } }
+    }
+    /// The columns follow the cover slip's tilt ("Columns follow the slip's tilt"); changing it
+    /// starts the guide afresh.
+    var followsSlipTilt = true {
+        didSet { if followsSlipTilt != oldValue { reset() } }
     }
     /// The cover slip's shape ("Cover slip"); changing it starts the guide afresh.
     var coverSlip = CoverSlipShape.square {
@@ -305,7 +314,8 @@ final class GuideDryRun {
             boxSharpness: step.boxStats.sharpness, quadAheadAway: quads?.aheadAway,
             quadAheadToward: quads?.aheadToward, quadBehindAway: quads?.behindAway,
             quadBehindToward: quads?.behindToward, stillSeconds: indicators.stillSeconds,
-            edgeLine: edgeLine, edgeLineHeading: lastEdgeHeading)
+            edgeLine: edgeLine, edgeLineHeading: lastEdgeHeading,
+            frameHandedness: axes.determinant < 0 ? -1 : 1)
         lastReading = guideReading
         lastGuidePosition = position
         let result: GuideStep
@@ -415,7 +425,10 @@ final class GuideDryRun {
                 countingActive: guide.countingActive, column: guide.columnNumber,
                 lineAccept: result.edge.lineAccept, areaAheadShare: result.edge.areaAheadShare,
                 predictedEdgeAlong: result.edge.predictedEdgeAlong,
-                expectedEdgeAsk: result.edge.expectedEdgeAsk),
+                expectedEdgeAsk: result.edge.expectedEdgeAsk,
+                lineCrossings: result.edge.lineCrossings, lineAlong: result.edge.lineAlong,
+                spotLimitReason: result.edge.spotLimitReason,
+                slipTiltDegrees: result.edge.slipTiltDegrees),
             info: SlideMovementInfo.Guide(
                 isOn: true, instruction: result.instruction.debugText, state: result.stateName,
                 targetDx: dx, targetDy: dy, viewClass: viewClass.rawValue, captures: captures,
@@ -523,6 +536,7 @@ final class GuideDryRun {
         var thresholds = GuidedSweepThresholds()
         thresholds.fullCoverSlip = fullCoverSlip
         thresholds.asksEdges = asksEdges
+        thresholds.followsSlipTilt = followsSlipTilt
         thresholds.squareCoverSlip = coverSlip == .square
         thresholds.alignment.spotMode = spotMode
         thresholds.columnSpacingFields = coverageStep

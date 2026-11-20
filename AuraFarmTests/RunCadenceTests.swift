@@ -74,13 +74,13 @@ final class RunCadenceTests: XCTestCase {
         XCTAssertEqual(result.state, .ok, "a second of good readings")
     }
 
-    func testARealPhoneMoveStillPausesAfterTwoSecondsAndResumesAfterOne() {
+    func testARealPhoneMoveStillPausesAfterThreeSecondsAndResumesAfterOne() {
         var monitor = RunMonitor()
         var result = run(&monitor, from: 0, for: 3)
         XCTAssertEqual(result.state, .ok)
-        result = run(&monitor, from: result.end, for: 1.8, shift: 0.15)
-        XCTAssertEqual(result.state, .ok, "1.8 s is not enough")
-        result = run(&monitor, from: result.end, for: 1.5, shift: 0.15)
+        result = run(&monitor, from: result.end, for: 2.5, shift: 0.25)
+        XCTAssertEqual(result.state, .ok, "2.5 s is not enough")
+        result = run(&monitor, from: result.end, for: 1.5, shift: 0.25)
         XCTAssertEqual(result.state, .pausedAlignment)
         result = run(&monitor, from: result.end, for: 0.6, shift: 0)
         XCTAssertEqual(result.state, .pausedAlignment, "under a second back")

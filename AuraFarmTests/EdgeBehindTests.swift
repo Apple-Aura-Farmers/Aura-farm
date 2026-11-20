@@ -43,8 +43,9 @@ final class EdgeBehindTests: XCTestCase {
 
     func testTheReplayOfTheOvershotTopEdgeSaysEdgeBehindNotRefocus() {
         let route = columnOne()
-        // Still, on clear glass (blurry box), the line 0.23 to 0.36 behind the cross.
-        let offsets = [-0.23, -0.30, -0.36, -0.33, -0.28]
+        // Still, on clear glass (blurry box), the line 0.27 to 0.36 behind the cross. (At 0.23 the
+        // line is inside the at-cross band for a reading, which ends an episode and starts another.)
+        let offsets = [-0.27, -0.30, -0.36, -0.33, -0.28]
         for index in 0..<30 {
             route.feed(
                 ScriptedRoute.Frame(

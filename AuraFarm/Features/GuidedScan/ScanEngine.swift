@@ -631,6 +631,15 @@ class ScanEngine: NSObject {
         }
     }
 
+    /// Whether the columns follow the cover slip's tilt ("Columns follow the slip's tilt").
+    func setFollowsSlipTilt(_ follows: Bool) {
+        analysisQueue.async { [weak self] in
+            guard let self, self.dryRun.followsSlipTilt != follows else { return }
+            self.dryRun.followsSlipTilt = follows
+            self.resetGuide()
+        }
+    }
+
     /// "Show life on map": dots for the organisms counted, on the mini-map.
     func setShowsLifeOnMap(_ shows: Bool) {
         analysisQueue.async { [weak self] in self?.showsLifeOnMap = shows }
@@ -1116,6 +1125,10 @@ class ScanEngine: NSObject {
         logged.areaAheadShare = guide?.areaAheadShare
         logged.predictedEdgeAlong = guide?.predictedEdgeAlong
         logged.expectedEdgeAsk = guide?.expectedEdgeAsk ?? false
+        logged.lineCrossings = guide?.lineCrossings ?? 0
+        logged.lineAlong = guide?.lineAlong
+        logged.spotLimitReason = guide?.spotLimitReason ?? ""
+        logged.slipTiltDegrees = guide?.slipTiltDegrees
         logged.sparseSkips = step.tracking.sparseSkips
         logged.edgeFeedback = guide?.edgeFeedback ?? ""
         logged.spotMode = guide?.spotMode ?? ""

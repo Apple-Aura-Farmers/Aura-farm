@@ -14,22 +14,24 @@ final class HeatSettingsTests: XCTestCase {
         XCTAssertEqual(try OrganismDetector().computeUnits, .all, "no arguments is today's V3")
     }
 
-    func testTheLiveCountSessionOpensOnTheNeuralEngineUnlessToldOtherwise() throws {
+    func testTheLiveCountSessionOpensOnItsDefaultUnitsUnlessToldOtherwise() throws {
         let session = LiveCountSession()
-        XCTAssertEqual(session.units, .neuralEngine)
+        let opening = LiveCountSession.defaultUnits
+        let other: DetectorUnits = opening == .graphics ? .neuralEngine : .graphics
+        XCTAssertEqual(session.units, opening)
         session.prepare()
         let started = Date()
         while session.loadedUnits == nil, Date().timeIntervalSince(started) < 10 {
             Thread.sleep(forTimeInterval: 0.05)
         }
-        XCTAssertEqual(session.loadedUnits, .cpuAndNeuralEngine)
-        session.setUnits(.graphics)
+        XCTAssertEqual(session.loadedUnits, opening.computeUnits)
+        session.setUnits(other)
         XCTAssertNil(session.loadedUnits, "reopening")
         let reopened = Date()
         while session.loadedUnits == nil, Date().timeIntervalSince(reopened) < 10 {
             Thread.sleep(forTimeInterval: 0.05)
         }
-        XCTAssertEqual(session.loadedUnits, .cpuAndGPU)
+        XCTAssertEqual(session.loadedUnits, other.computeUnits)
     }
 
     func testTheCameraRatesAnalyseTheSameNominalTenFramesASecond() {

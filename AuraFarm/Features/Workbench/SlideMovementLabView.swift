@@ -31,6 +31,7 @@
         @AppStorage("slideLab.trackSparse") private var tracksSparse = true
         @AppStorage("slideLab.fullCoverSlip") private var fullCoverSlip = true
         @AppStorage("slideLab.askEdges") private var asksEdges = true
+        @AppStorage("slideLab.followSlipTilt") private var followsSlipTilt = true
         @AppStorage("slideLab.showLifeOnMap") private var showsLifeOnMap = true
         // The guided scan page's knob rule, for other microscopes. See `KnobRule`.
         @AppStorage("slideLab.knobSwap") private var swapsKnobs = false
@@ -374,6 +375,7 @@
                 Toggle("Track sparse sample", isOn: $tracksSparse)
                 Toggle("Full cover slip (line edges)", isOn: $fullCoverSlip)
                 Toggle("Ask me to confirm edges", isOn: $asksEdges)
+                Toggle("Columns follow the slip's tilt", isOn: $followsSlipTilt)
                 Toggle("Show life on map", isOn: $showsLifeOnMap)
                 Toggle("Record lens video", isOn: $recordsLensVideo)
                 Toggle("Swap knobs", isOn: $swapsKnobs)

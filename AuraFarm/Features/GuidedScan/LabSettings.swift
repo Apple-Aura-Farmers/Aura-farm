@@ -14,6 +14,8 @@ struct LabSettings: Equatable {
     var tracksSparse = true
     var fullCoverSlip = true
     var asksEdges = true
+    /// Columns follow the cover slip's tilt once the left edge is confirmed with a known angle.
+    var followsSlipTilt = true
     var showsLifeOnMap = true
     var coverSlipName = CoverSlipShape.square.rawValue
     var skipsAlignFocus = false
@@ -66,6 +68,7 @@ struct LabSettings: Equatable {
         model.setTracksSparse(tracksSparse)
         model.setFullCoverSlip(fullCoverSlip)
         model.setAsksEdges(asksEdges)
+        model.setFollowsSlipTilt(followsSlipTilt)
         model.setShowsLifeOnMap(showsLifeOnMap)
         model.setCoverSlip(CoverSlipShape(rawValue: coverSlipName) ?? .square)
         model.setFieldRegion(FieldRegionMode(rawValue: fieldRegionName) ?? .auto)
@@ -100,6 +103,7 @@ struct LabSettings: Equatable {
         if tracksSparse != old.tracksSparse { model.setTracksSparse(tracksSparse) }
         if fullCoverSlip != old.fullCoverSlip { model.setFullCoverSlip(fullCoverSlip) }
         if asksEdges != old.asksEdges { model.setAsksEdges(asksEdges) }
+        if followsSlipTilt != old.followsSlipTilt { model.setFollowsSlipTilt(followsSlipTilt) }
         if showsLifeOnMap != old.showsLifeOnMap { model.setShowsLifeOnMap(showsLifeOnMap) }
         if coverSlipName != old.coverSlipName {
             model.setCoverSlip(CoverSlipShape(rawValue: coverSlipName) ?? .square)
@@ -147,6 +151,7 @@ struct LabSettingsSync: ViewModifier {
         @AppStorage("slideLab.trackSparse") private var tracksSparse = true
         @AppStorage("slideLab.fullCoverSlip") private var fullCoverSlip = true
         @AppStorage("slideLab.askEdges") private var asksEdges = true
+        @AppStorage("slideLab.followSlipTilt") private var followsSlipTilt = true
         @AppStorage("slideLab.showLifeOnMap") private var showsLifeOnMap = true
         @AppStorage("slideLab.coverSlipShape") private var coverSlipName = CoverSlipShape.square.rawValue
         @AppStorage("slideLab.skipAlignFocus") private var skipsAlignFocus = false
@@ -172,7 +177,7 @@ struct LabSettingsSync: ViewModifier {
                     mappingName: mappingName, mirrored: mirrored, fieldRegionName: fieldRegionName,
                     hopAgreement: hopAgreement, showsSees: showsSees, guideDryRun: guideDryRun,
                     pausesOnMonitor: pausesOnMonitor, tracksSparse: tracksSparse,
-                    fullCoverSlip: fullCoverSlip, asksEdges: asksEdges,
+                    fullCoverSlip: fullCoverSlip, asksEdges: asksEdges, followsSlipTilt: followsSlipTilt,
                     showsLifeOnMap: showsLifeOnMap, coverSlipName: coverSlipName,
                     skipsAlignFocus: skipsAlignFocus, spotModeName: spotModeName,
                     coverageStep: coverageStep, countsOrganisms: countsOrganisms,
