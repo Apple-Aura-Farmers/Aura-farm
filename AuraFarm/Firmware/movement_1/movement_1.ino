@@ -1,55 +1,86 @@
-// Phase 1b: calibrate how far X and Y can travel on the linear actuator (X GPIO3, Y GPIO4),
-// and record a home position each axis returns to.
-// Board: ESP32-C3 Super Mini, Arduino-ESP32 core 3.x, USB CDC On Boot: Enabled.
+// Phase 2 (lab version): Bluetooth Low Energy control of the X/Y stage, ESP32-C3 Super Mini.
+// X servo GPIO3, Y servo GPIO4. Board: ESP32-C3 Super Mini, core 3.x, USB CDC On Boot: Enabled.
 // C3 runs from the Mac's USB. Servos run from the HW-131 rail (separate power, shared ground).
-// PWM: built-in LEDC API (ledcAttach / ledcWrite / ledcDetach). No Bluetooth, no Wi-Fi.
-// Nothing moves at startup. Servos only move on commands typed in the Serial Monitor
-// (line ending: Newline). Only the selected servo ever moves, one move at a time,
-// signal off after every move, then a rest before the next command is handled.
+//
+// BLE: advertises as "terraloka_stage" using the Nordic UART Service (BLE only, no classic
+// Bluetooth). The phone WRITES text commands to the RX characteristic and receives text replies
+// as NOTIFY on the TX characteristic. The same commands also work from the Serial Monitor.
+//
+// Modes: AUTO (runs a path sent by the phone, or the standard traverse) and MANUAL (jog/goto).
+// Motion rules from Phase 1: one servo at a time, 2 deg every 20 ms, signal off after every move,
+// 500 ms rest between moves. Moves run in small slices so STOP or a BLE disconnect stops a
+// servo immediately (signal off). AUTO resumes on reconnect.
 
 #include <Preferences.h>
+#include <BLEDevice.h>
+#include <BLEServer.h>
+#include <BLEUtils.h>
 #include "esp_system.h"
 
 // ---------------- Settings ----------------
+const char* BLE_NAME = "terraloka_stage";
+#define SERVICE_UUID "6E400001-B5A3-F393-E0A9-E50E24DCCA9E"  // Nordic UART Service
+#define RX_UUID      "6E400002-B5A3-F393-E0A9-E50E24DCCA9E"  // phone -> C3 (write)
+#define TX_UUID      "6E400003-B5A3-F393-E0A9-E50E24DCCA9E"  // C3 -> phone (notify)
+
 const int  NUM_SERVOS = 2;
 const int  SERVO_PINS[NUM_SERVOS]  = {3, 4};
 const char SERVO_NAMES[NUM_SERVOS] = {'X', 'Y'};
 
-const int CENTER_ANGLE = 90;    // middle of the servo range
-const int SAFE_MIN     = 0;     // absolute limits: no command can go outside these
-const int SAFE_MAX     = 180;   // (0-180 checked clean on these two servos with 'sweep')
-const int SMALL_NUDGE  = 1;     // '+' / '-'
-const int BIG_NUDGE    = 5;     // '>' / '<'
-const int STEP_DEG     = 2;     // longer moves: 2 deg ...
+const int DEFAULT_MIN  = 0;     // used when no calibration is saved
+const int DEFAULT_MAX  = 180;   // (0-180 checked clean on these servos with 'sweep')
+const int DEFAULT_HOME = 90;
+
+const int STEP_DEG     = 2;     // move 2 deg ...
 const int STEP_MS      = 20;    // ... every 20 ms
 const int SETTLE_MS    = 300;   // hold after reaching target, before signal off
-const int GAP_MS       = 500;   // rest with signal off after every move
+const int GAP_MS       = 500;   // rest with signal off after every move (also between servos)
+const int BOOT_WAIT_MS = 500;   // pause after boot before first attach
 
 const int PULSE_MIN_US = 500;   // pulse width at 0 deg (typical SG90)
 const int PULSE_MAX_US = 2400;  // pulse width at 180 deg
+const int PWM_FREQ_HZ  = 50;
+const int PWM_BITS     = 14;
 
-const int PWM_FREQ_HZ = 50;
-const int PWM_BITS    = 14;
+const int MAX_POINTS = 50;                    // path points accepted by PATH
+const int QUEUE_SIZE = MAX_POINTS * 2 + 4;    // queued single-servo moves
+const int MAX_JOG_QUEUE = 10;                 // MANUAL: moves allowed to wait in line
 
-const unsigned long SERIAL_WAIT_MS = 5000;  // wait this long for Serial Monitor at boot
-
-// 'sweep' test: slowly checks a servo's full 0-180 deg range (run it on any new servo before
-// trusting 0-180). Any key typed during the sweep stops it immediately (signal off).
-const int SWEEP_MIN     = 0;
-const int SWEEP_MAX     = 180;
-const int SWEEP_STEP_MS = 50;   // 1 deg every 50 ms (about 9 s for 0 -> 180)
+const unsigned long SERIAL_WAIT_MS = 5000;    // wait this long for Serial Monitor at boot
 
 // ---------------- State ----------------
-int  selected = -1;                          // -1 = no servo selected yet
-int  currentAngle[NUM_SERVOS] = {CENTER_ANGLE, CENTER_ANGLE};
-bool known[NUM_SERVOS]        = {false, false};  // position unknown until 'center'
-int  minAngle[NUM_SERVOS]     = {-1, -1};        // -1 = not recorded
-int  maxAngle[NUM_SERVOS]     = {-1, -1};
-int  homeAngle[NUM_SERVOS]    = {-1, -1};        // -1 = not set (home defaults to CENTER_ANGLE)
-Preferences prefs;
-String line;
+enum Mode { MODE_AUTO, MODE_MANUAL };
+enum Phase { PH_IDLE, PH_STEP, PH_SETTLE };
 
-// ---------------- Reset reason ----------------
+struct Move { uint8_t servo; int16_t target; };
+
+Mode  mode = MODE_MANUAL;
+Phase phase = PH_IDLE;
+Move  queue[QUEUE_SIZE];
+int   qHead = 0, qCount = 0;
+bool  paused = false;              // STOP or BLE disconnect (AUTO)
+bool  pausedByDisconnect = false;
+bool  jobActive = false;           // a TRAVERSE / START / HOME / END is running
+unsigned long phaseMs = 0;         // when the current phase started / last step
+unsigned long lastOffMs = 0;       // when the last move switched its signal off
+
+int minAngle[NUM_SERVOS], maxAngle[NUM_SERVOS], homeAngle[NUM_SERVOS];
+int currentAngle[NUM_SERVOS];      // last commanded angle per servo
+int projected[NUM_SERVOS];         // angle each servo will have after the queued moves
+
+int pathX[MAX_POINTS], pathY[MAX_POINTS];
+int pathLen = 0;
+
+BLEServer* bleServer = nullptr;
+BLECharacteristic* txChar = nullptr;
+volatile bool bleConnected = false;
+volatile bool connectEvent = false;
+volatile bool disconnectEvent = false;
+QueueHandle_t cmdQueue;            // commands from the BLE task, handled in loop()
+const int CMD_LEN = 256;
+String serialLine;
+
+// ---------------- Helpers ----------------
 const char* resetName(int r) {
   switch (r) {
     case ESP_RST_POWERON:   return "ESP_RST_POWERON";
@@ -69,9 +100,19 @@ const char* resetName(int r) {
   }
 }
 
-// ---------------- Helpers ----------------
 void stamp() {
   Serial.printf("[%9.3f s] ", millis() / 1000.0);
+}
+
+// Reply to the phone (BLE notify) and the Serial Monitor.
+void reply(const String& msg) {
+  stamp();
+  Serial.print("> ");
+  Serial.println(msg);
+  if (bleConnected && txChar) {
+    txChar->setValue(msg.c_str());
+    txChar->notify();
+  }
 }
 
 uint32_t angleToDuty(int angle) {
@@ -80,38 +121,39 @@ uint32_t angleToDuty(int angle) {
   return us * ((1UL << PWM_BITS) - 1) / periodUs;
 }
 
-void printStatus() {
-  Serial.println("---- status ----");
-  for (int i = 0; i < NUM_SERVOS; i++) {
-    Serial.printf("servo %c (GPIO%d) | angle: ", SERVO_NAMES[i], SERVO_PINS[i]);
-    if (known[i]) Serial.printf("%d deg", currentAngle[i]);
-    else          Serial.print("unknown (use 'center')");
-    Serial.print(" | min: ");
-    if (minAngle[i] >= 0) Serial.printf("%d", minAngle[i]); else Serial.print("-");
-    Serial.print(" | max: ");
-    if (maxAngle[i] >= 0) Serial.printf("%d", maxAngle[i]); else Serial.print("-");
-    Serial.print(" | home: ");
-    if (homeAngle[i] >= 0) Serial.printf("%d", homeAngle[i]); else Serial.printf("- (default %d)", CENTER_ANGLE);
-    Serial.println(selected == i ? "  <- selected" : "");
-  }
-  Serial.println("----------------");
+const char* modeName() { return mode == MODE_AUTO ? "AUTO" : "MANUAL"; }
+
+const char* stateName() {
+  if (paused) return "PAUSED";
+  if (phase != PH_IDLE || qCount > 0) return "MOVING";
+  return "IDLE";
 }
 
-void printHelp() {
-  Serial.println("Commands (one per line):");
-  Serial.println("  x / y      select servo X or Y");
-  Serial.println("  center     selected servo jumps to 90 deg (do this first after every power-up)");
-  Serial.println("  + / -      move selected servo 1 deg");
-  Serial.println("  > / <      move selected servo 5 deg");
-  Serial.println("  g 120      go to 120 deg in small steps");
-  Serial.println("  min / max  record current angle as this servo's limit");
-  Serial.println("  home       record current angle as this servo's home (must be between min and max)");
-  Serial.println("  gohome     X returns to its home, then Y (one at a time)");
-  Serial.println("  sweep      slow full-range test: to 0, then 0 -> 180, then back to 90 (horn free!)");
-  Serial.println("             press any key + Enter during the sweep to stop it immediately");
-  Serial.println("  p          print angles, limits and home");
-  Serial.println("  save       store limits and home in flash");
-  Serial.println("  help       show this list");
+String posText() {
+  return String("X=") + currentAngle[0] + " Y=" + currentAngle[1];
+}
+
+// ---------------- Limits and home (from calibration) ----------------
+void loadLimits() {
+  Preferences cal;
+  cal.begin("calib", true);  // read-only; missing values fall back to defaults
+  const char* minKeys[NUM_SERVOS]  = {"xmin", "ymin"};
+  const char* maxKeys[NUM_SERVOS]  = {"xmax", "ymax"};
+  const char* homeKeys[NUM_SERVOS] = {"xhome", "yhome"};
+  for (int i = 0; i < NUM_SERVOS; i++) {
+    int mn = cal.getInt(minKeys[i], -1);
+    int mx = cal.getInt(maxKeys[i], -1);
+    int hm = cal.getInt(homeKeys[i], -1);
+    bool limitsOk = mn >= DEFAULT_MIN && mx <= DEFAULT_MAX && mn < mx;
+    minAngle[i] = limitsOk ? mn : DEFAULT_MIN;
+    maxAngle[i] = limitsOk ? mx : DEFAULT_MAX;
+    bool homeOk = hm >= minAngle[i] && hm <= maxAngle[i];
+    homeAngle[i] = homeOk ? hm : DEFAULT_HOME;
+    Serial.printf("servo %c (GPIO%d) | min %d, max %d (%s) | home %d (%s)\n",
+                  SERVO_NAMES[i], SERVO_PINS[i], minAngle[i], maxAngle[i],
+                  limitsOk ? "saved" : "default", homeAngle[i], homeOk ? "saved" : "default");
+  }
+  cal.end();
 }
 
 // ---------------- Servo ----------------
@@ -128,208 +170,311 @@ void servoOff(int i) {
   digitalWrite(SERVO_PINS[i], LOW);
 }
 
-// One move of one servo: signal on at the current angle, small steps to target,
-// settle, signal off, rest.
-void moveTo(int i, int target) {
-  target = constrain(target, SAFE_MIN, SAFE_MAX);
-  stamp();
-  Serial.printf("servo %c (GPIO%d) | %d -> %d deg | start\n", SERVO_NAMES[i], SERVO_PINS[i], currentAngle[i], target);
-  servoOn(i);
-  while (currentAngle[i] != target) {
-    delay(STEP_MS);
-    currentAngle[i] += constrain(target - currentAngle[i], -STEP_DEG, STEP_DEG);
-    ledcWrite(SERVO_PINS[i], angleToDuty(currentAngle[i]));
-  }
-  delay(SETTLE_MS);
-  servoOff(i);
-  stamp();
-  Serial.printf("servo %c (GPIO%d) | at %d deg | end\n", SERVO_NAMES[i], SERVO_PINS[i], currentAngle[i]);
-  delay(GAP_MS);
-}
-
-// First move after power-up: position is unknown, so this is one direct jump to 90 deg.
-void center(int i) {
-  stamp();
-  Serial.printf("servo %c (GPIO%d) | center: direct jump to %d deg (position was unknown)\n",
-                SERVO_NAMES[i], SERVO_PINS[i], CENTER_ANGLE);
-  currentAngle[i] = CENTER_ANGLE;
-  servoOn(i);
-  delay(SETTLE_MS);
-  servoOff(i);
-  known[i] = true;
-  delay(GAP_MS);
-}
-
-// Slow move, 1 deg every SWEEP_STEP_MS, printing every 10 deg. Any key typed stops it at once
-// (signal off). Returns false if stopped early.
-bool slowMove(int i, int target) {
-  stamp();
-  Serial.printf("servo %c (GPIO%d) | sweep %d -> %d deg | start\n", SERVO_NAMES[i], SERVO_PINS[i], currentAngle[i], target);
-  servoOn(i);
-  while (currentAngle[i] != target) {
-    delay(SWEEP_STEP_MS);
-    if (Serial.available()) {
-      servoOff(i);
-      while (Serial.available()) Serial.read();
-      line = "";
-      stamp();
-      Serial.printf("servo %c (GPIO%d) | STOPPED by key at %d deg (signal off)\n", SERVO_NAMES[i], SERVO_PINS[i], currentAngle[i]);
-      delay(GAP_MS);
-      return false;
-    }
-    currentAngle[i] += (target > currentAngle[i]) ? 1 : -1;
-    ledcWrite(SERVO_PINS[i], angleToDuty(currentAngle[i]));
-    if (currentAngle[i] % 10 == 0) {
-      stamp();
-      Serial.printf("servo %c (GPIO%d) | %d deg\n", SERVO_NAMES[i], SERVO_PINS[i], currentAngle[i]);
-    }
-  }
-  delay(SETTLE_MS);
-  servoOff(i);
-  stamp();
-  Serial.printf("servo %c (GPIO%d) | at %d deg | end\n", SERVO_NAMES[i], SERVO_PINS[i], currentAngle[i]);
-  delay(GAP_MS);
+// ---------------- Move queue ----------------
+bool enqueue(int servo, int target) {
+  if (qCount >= QUEUE_SIZE) return false;
+  queue[(qHead + qCount) % QUEUE_SIZE] = {(uint8_t)servo, (int16_t)target};
+  qCount++;
+  projected[servo] = target;
   return true;
 }
 
-// Full-range test: to 0, then 0 -> 180, then back to 90. Each part is its own move
-// (signal off and a rest between parts).
-void sweepTest(int i) {
-  if (!slowMove(i, SWEEP_MIN)) return;
-  if (!slowMove(i, SWEEP_MAX)) return;
-  if (!slowMove(i, CENTER_ANGLE)) return;
-  Serial.println("Sweep done. Did the servo buzz or strain near 0 or 180 deg?");
+void popMove() {
+  qHead = (qHead + 1) % QUEUE_SIZE;
+  qCount--;
 }
 
-int homeOf(int i) {
-  return homeAngle[i] >= 0 ? homeAngle[i] : CENTER_ANGLE;
+// Stop the move in progress at once (signal off). The move stays at the front of the queue,
+// so RESUME continues it from where it stopped.
+void haltCurrentMove() {
+  if (phase == PH_STEP || phase == PH_SETTLE) {
+    int s = queue[qHead].servo;
+    servoOff(s);
+    lastOffMs = millis();
+    stamp();
+    Serial.printf("servo %c (GPIO%d) | stopped at %d deg (signal off)\n", SERVO_NAMES[s], SERVO_PINS[s], currentAngle[s]);
+  }
+  phase = PH_IDLE;
 }
 
-// Return X, then Y, to home. A servo whose position is unknown (after power-up) makes
-// one direct jump to home, which is always inside its calibrated travel.
-void goHome() {
-  for (int i = 0; i < NUM_SERVOS; i++) {
-    if (known[i]) {
-      if (currentAngle[i] != homeOf(i)) moveTo(i, homeOf(i));
+void clearQueue() {
+  haltCurrentMove();
+  qHead = 0;
+  qCount = 0;
+  paused = false;
+  pausedByDisconnect = false;
+  jobActive = false;
+  for (int i = 0; i < NUM_SERVOS; i++) projected[i] = currentAngle[i];
+}
+
+void enqueueHome() {
+  enqueue(0, homeAngle[0]);
+  enqueue(1, homeAngle[1]);
+}
+
+// Runs a little of the current move every loop() pass, so commands and disconnects are seen
+// between every 2 deg step.
+void runEngine() {
+  if (paused) return;
+  unsigned long now = millis();
+
+  if (phase == PH_IDLE) {
+    if (qCount == 0) return;
+    if (now - lastOffMs < (unsigned long)GAP_MS) return;  // rest between moves
+    Move& m = queue[qHead];
+    if (currentAngle[m.servo] == m.target) {  // already there: nothing to do
+      popMove();
     } else {
       stamp();
-      Serial.printf("servo %c (GPIO%d) | gohome: direct jump to home %d deg (position was unknown)\n",
-                    SERVO_NAMES[i], SERVO_PINS[i], homeOf(i));
-      currentAngle[i] = homeOf(i);
-      servoOn(i);
-      delay(SETTLE_MS);
-      servoOff(i);
-      known[i] = true;
-      delay(GAP_MS);
+      Serial.printf("servo %c (GPIO%d) | %d -> %d deg | start\n", SERVO_NAMES[m.servo], SERVO_PINS[m.servo],
+                    currentAngle[m.servo], m.target);
+      servoOn(m.servo);
+      phase = PH_STEP;
+      phaseMs = now;
+      return;
     }
+  } else if (phase == PH_STEP) {
+    if (now - phaseMs < (unsigned long)STEP_MS) return;
+    phaseMs = now;
+    Move& m = queue[qHead];
+    currentAngle[m.servo] += constrain(m.target - currentAngle[m.servo], -STEP_DEG, STEP_DEG);
+    ledcWrite(SERVO_PINS[m.servo], angleToDuty(currentAngle[m.servo]));
+    if (currentAngle[m.servo] == m.target) {
+      phase = PH_SETTLE;
+      phaseMs = now;
+    }
+    return;
+  } else if (phase == PH_SETTLE) {
+    if (now - phaseMs < (unsigned long)SETTLE_MS) return;
+    Move& m = queue[qHead];
+    servoOff(m.servo);
+    lastOffMs = now;
+    stamp();
+    Serial.printf("servo %c (GPIO%d) | at %d deg | end\n", SERVO_NAMES[m.servo], SERVO_PINS[m.servo], currentAngle[m.servo]);
+    popMove();
+    phase = PH_IDLE;
+    reply("POS " + posText());
   }
-  Serial.println("Both servos at home.");
-}
 
-// A home angle is only valid between that servo's recorded min and max.
-bool homeInsideLimits(int i) {
-  if (homeAngle[i] < 0) return true;
-  if (minAngle[i] < 0 || maxAngle[i] < 0) return false;
-  return homeAngle[i] >= minAngle[i] && homeAngle[i] <= maxAngle[i];
+  if (qCount == 0 && phase == PH_IDLE && jobActive) {
+    jobActive = false;
+    reply("DONE " + posText());
+  }
 }
 
 // ---------------- Commands ----------------
-bool needServo() {
-  if (selected < 0) { Serial.println("Select a servo first: x or y"); return false; }
+int axisIndex(const String& a) {
+  if (a == "X") return 0;
+  if (a == "Y") return 1;
+  return -1;
+}
+
+// Whole number with optional sign; false for anything else (so a typo never becomes 0 deg).
+bool parseInt(const String& s, int& out) {
+  if (s.length() == 0) return false;
+  int start = (s[0] == '-' || s[0] == '+') ? 1 : 0;
+  if (start == (int)s.length()) return false;
+  for (unsigned int k = start; k < s.length(); k++) if (!isDigit(s[k])) return false;
+  out = s.toInt();
   return true;
 }
 
-bool needKnown() {
-  if (!needServo()) return false;
-  if (!known[selected]) { Serial.println("Position unknown: type 'center' first"); return false; }
-  return true;
+bool inLimits(int servo, int a) {
+  return a >= minAngle[servo] && a <= maxAngle[servo];
 }
 
-void handle(String cmd) {
+void handleCommand(String cmd) {
   cmd.trim();
-  cmd.toLowerCase();
+  cmd.toUpperCase();
   if (cmd.length() == 0) return;
+  stamp();
+  Serial.printf("< %s\n", cmd.c_str());
 
-  if (cmd == "x" || cmd == "y") {
-    selected = (cmd == "x") ? 0 : 1;
-    Serial.printf("Selected servo %c (GPIO%d)\n", SERVO_NAMES[selected], SERVO_PINS[selected]);
-  } else if (cmd == "center") {
-    if (needServo()) center(selected);
-  } else if (cmd == "+" || cmd == "-" || cmd == ">" || cmd == "<") {
-    if (!needKnown()) return;
-    int delta = (cmd == "+") ? SMALL_NUDGE : (cmd == "-") ? -SMALL_NUDGE
-              : (cmd == ">") ? BIG_NUDGE : -BIG_NUDGE;
-    int target = currentAngle[selected] + delta;
-    if (target < SAFE_MIN || target > SAFE_MAX) {
-      Serial.printf("Refused: %d deg is outside the safe range %d-%d\n", target, SAFE_MIN, SAFE_MAX);
+  int sp1 = cmd.indexOf(' ');
+  String word = sp1 < 0 ? cmd : cmd.substring(0, sp1);
+  String rest = sp1 < 0 ? "" : cmd.substring(sp1 + 1);
+  rest.trim();
+
+  if (word == "STATUS") {
+    reply(String(modeName()) + " " + stateName() + " " + posText() + " Q=" + qCount);
+
+  } else if (word == "MODE") {
+    if (qCount > 0 || phase != PH_IDLE) { reply("ERR BUSY (STOP or wait)"); return; }
+    if (rest == "AUTO")        mode = MODE_AUTO;
+    else if (rest == "MANUAL") mode = MODE_MANUAL;
+    else { reply("ERR MODE AUTO|MANUAL"); return; }
+    clearQueue();
+    reply(String("OK MODE ") + modeName());
+
+  } else if (word == "JOG" || word == "GOTO") {
+    if (mode != MODE_MANUAL) { reply("ERR NOT MANUAL"); return; }
+    if (paused) { reply("ERR PAUSED"); return; }
+    int sp2 = rest.indexOf(' ');
+    int servo = axisIndex(sp2 < 0 ? rest : rest.substring(0, sp2));
+    int value;
+    if (servo < 0 || sp2 < 0 || !parseInt(rest.substring(sp2 + 1), value)) {
+      reply(String("ERR ") + word + " X|Y <deg>");
       return;
     }
-    moveTo(selected, target);
-  } else if (cmd.startsWith("g ")) {
-    if (!needKnown()) return;
-    String arg = cmd.substring(2);
-    arg.trim();
-    bool digitsOnly = arg.length() > 0;
-    for (unsigned int k = 0; k < arg.length(); k++) {
-      if (!isDigit(arg[k])) digitsOnly = false;
-    }
-    if (!digitsOnly) {  // a typo like 'g x' must not become 0 deg
-      Serial.printf("Refused: '%s' is not a whole number of degrees\n", arg.c_str());
+    int target = (word == "JOG") ? projected[servo] + value : value;
+    if (!inLimits(servo, target)) {
+      reply(String("ERR LIMIT ") + minAngle[servo] + "-" + maxAngle[servo]);
       return;
     }
-    int target = arg.toInt();
-    if (target < SAFE_MIN || target > SAFE_MAX) {
-      Serial.printf("Refused: %d deg is outside the safe range %d-%d\n", target, SAFE_MIN, SAFE_MAX);
-      return;
-    }
-    moveTo(selected, target);
-  } else if (cmd == "min" || cmd == "max") {
-    if (!needKnown()) return;
-    if (cmd == "min") minAngle[selected] = currentAngle[selected];
-    else              maxAngle[selected] = currentAngle[selected];
-    Serial.printf("Recorded servo %c %s = %d deg\n", SERVO_NAMES[selected], cmd.c_str(), currentAngle[selected]);
-    if (minAngle[selected] >= 0 && maxAngle[selected] >= 0 && minAngle[selected] >= maxAngle[selected]) {
-      Serial.println("Warning: min is not below max for this servo");
-    }
-  } else if (cmd == "home") {
-    if (!needKnown()) return;
-    if (minAngle[selected] < 0 || maxAngle[selected] < 0) {
-      Serial.println("Refused: record this servo's min and max first");
-      return;
-    }
-    int a = currentAngle[selected];
-    if (a < minAngle[selected] || a > maxAngle[selected]) {
-      Serial.printf("Refused: %d deg is outside this servo's limits %d-%d\n", a, minAngle[selected], maxAngle[selected]);
-      return;
-    }
-    homeAngle[selected] = a;
-    Serial.printf("Recorded servo %c home = %d deg\n", SERVO_NAMES[selected], a);
-  } else if (cmd == "gohome") {
-    goHome();
-  } else if (cmd == "sweep") {
-    if (needKnown()) sweepTest(selected);
-  } else if (cmd == "p") {
-    printStatus();
-  } else if (cmd == "save") {
-    for (int i = 0; i < NUM_SERVOS; i++) {
-      if (!homeInsideLimits(i)) {
-        Serial.printf("Not saved: servo %c home %d deg is outside its limits. Set home again.\n",
-                      SERVO_NAMES[i], homeAngle[i]);
+    if (qCount >= MAX_JOG_QUEUE) { reply("ERR BUSY"); return; }
+    enqueue(servo, target);
+    reply(String("OK ") + SERVO_NAMES[servo] + "->" + target);
+
+  } else if (word == "PATH") {
+    if (mode != MODE_AUTO) { reply("ERR NOT AUTO"); return; }
+    if (qCount > 0 || paused) { reply("ERR BUSY (STOP/END first)"); return; }
+    int n = 0;
+    int pos = 0;
+    while (pos < (int)rest.length()) {
+      int semi = rest.indexOf(';', pos);
+      String pt = rest.substring(pos, semi < 0 ? rest.length() : semi);
+      pt.trim();
+      pos = semi < 0 ? rest.length() : semi + 1;
+      if (pt.length() == 0) continue;
+      int comma = pt.indexOf(',');
+      int x, y;
+      if (comma < 0 || !parseInt(pt.substring(0, comma), x) || !parseInt(pt.substring(comma + 1), y)) {
+        reply(String("ERR PATH point ") + (n + 1));
         return;
       }
+      if (!inLimits(0, x) || !inLimits(1, y)) {
+        reply(String("ERR PATH point ") + (n + 1) + " outside limits");
+        return;
+      }
+      if (n >= MAX_POINTS) { reply(String("ERR PATH max ") + MAX_POINTS); return; }
+      pathX[n] = x;
+      pathY[n] = y;
+      n++;
     }
-    prefs.putInt("xmin", minAngle[0]);
-    prefs.putInt("xmax", maxAngle[0]);
-    prefs.putInt("ymin", minAngle[1]);
-    prefs.putInt("ymax", maxAngle[1]);
-    prefs.putInt("xhome", homeAngle[0]);
-    prefs.putInt("yhome", homeAngle[1]);
-    Serial.println("Limits and home saved to flash.");
-    printStatus();
-  } else if (cmd == "help") {
-    printHelp();
+    if (n == 0) { reply("ERR PATH x,y;x,y;..."); return; }
+    pathLen = n;
+    reply(String("OK PATH ") + n + " points");
+
+  } else if (word == "START") {
+    if (mode != MODE_AUTO) { reply("ERR NOT AUTO"); return; }
+    if (pathLen == 0) { reply("ERR NO PATH"); return; }
+    if (qCount > 0 || paused) { reply("ERR BUSY (STOP/END first)"); return; }
+    for (int k = 0; k < pathLen; k++) {
+      enqueue(0, pathX[k]);  // X first, then Y, never together
+      enqueue(1, pathY[k]);
+    }
+    enqueueHome();
+    jobActive = true;
+    reply(String("OK START ") + pathLen + " points");
+
+  } else if (word == "TRAVERSE") {
+    if (mode != MODE_AUTO) { reply("ERR NOT AUTO"); return; }
+    if (qCount > 0 || paused) { reply("ERR BUSY (STOP/END first)"); return; }
+    enqueue(0, minAngle[0]);  // full X
+    enqueue(0, maxAngle[0]);
+    enqueue(1, minAngle[1]);  // full Y
+    enqueue(1, maxAngle[1]);
+    enqueueHome();            // back home, X then Y
+    jobActive = true;
+    reply("OK TRAVERSE");
+
+  } else if (word == "STOP") {
+    if (mode == MODE_MANUAL) {
+      clearQueue();           // MANUAL: stop and drop any waiting jogs
+    } else {
+      haltCurrentMove();      // AUTO: keep the rest of the path for RESUME
+      if (qCount > 0) paused = true;
+    }
+    reply("OK STOP " + posText());
+
+  } else if (word == "RESUME") {
+    if (!paused) { reply("ERR NOT PAUSED"); return; }
+    paused = false;
+    pausedByDisconnect = false;
+    reply("OK RESUME");
+
+  } else if (word == "HOME" || word == "END") {
+    clearQueue();
+    enqueueHome();
+    jobActive = true;
+    reply(String("OK ") + word);
+
   } else {
-    Serial.printf("Unknown command: '%s' (type help)\n", cmd.c_str());
+    reply("ERR UNKNOWN " + word);
+  }
+}
+
+// ---------------- BLE ----------------
+class ServerCallbacks : public BLEServerCallbacks {
+  void onConnect(BLEServer*) override {
+    bleConnected = true;
+    connectEvent = true;
+  }
+  void onDisconnect(BLEServer*) override {
+    bleConnected = false;
+    disconnectEvent = true;
+  }
+};
+
+class RxCallbacks : public BLECharacteristicCallbacks {
+  void onWrite(BLECharacteristic* c) override {
+    String v = c->getValue();
+    char buf[CMD_LEN];
+    strncpy(buf, v.c_str(), CMD_LEN - 1);
+    buf[CMD_LEN - 1] = '\0';
+    xQueueSend(cmdQueue, buf, 0);  // handled in loop(), not in the BLE task
+  }
+};
+
+void setupBle() {
+  BLEDevice::init(BLE_NAME);
+  bleServer = BLEDevice::createServer();
+  bleServer->setCallbacks(new ServerCallbacks());
+  BLEService* service = bleServer->createService(SERVICE_UUID);
+  // The C3 build uses NimBLE, which adds the notify descriptor (0x2902) automatically.
+  txChar = service->createCharacteristic(TX_UUID, BLECharacteristic::PROPERTY_NOTIFY);
+  BLECharacteristic* rxChar = service->createCharacteristic(
+      RX_UUID, BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_WRITE_NR);
+  rxChar->setCallbacks(new RxCallbacks());
+  service->start();
+  bleServer->getAdvertising()->start();
+  Serial.printf("BLE advertising as \"%s\" (Nordic UART Service)\n", BLE_NAME);
+}
+
+void handleBleEvents() {
+  if (disconnectEvent) {
+    disconnectEvent = false;
+    stamp();
+    Serial.println("BLE disconnected");
+    if (mode == MODE_AUTO) {
+      if (phase != PH_IDLE || qCount > 0) {
+        haltCurrentMove();   // stop immediately, keep position and remaining path
+        paused = true;
+        pausedByDisconnect = true;
+        stamp();
+        Serial.printf("paused by disconnect at %s, %d moves left\n", posText().c_str(), qCount);
+      }
+    } else {
+      clearQueue();          // MANUAL: stop and wait
+    }
+    delay(500);              // give the BLE stack a moment, then advertise again
+    bleServer->startAdvertising();
+    Serial.println("BLE advertising again");
+  }
+  if (connectEvent) {
+    connectEvent = false;
+    stamp();
+    Serial.println("BLE connected");
+    delay(300);              // let the phone subscribe before the first message
+    if (pausedByDisconnect) {
+      // Position was kept while paused; the next move re-attaches at the saved angle
+      // (pulling the servo back there if it was nudged) and the path carries on.
+      paused = false;
+      pausedByDisconnect = false;
+      reply("RESUMED " + posText() + " Q=" + qCount);
+    } else {
+      reply(String("HELLO ") + modeName() + " " + stateName() + " " + posText());
+    }
   }
 }
 
@@ -345,33 +490,48 @@ void setup() {
   while (!Serial && millis() - t0 < SERIAL_WAIT_MS) delay(10);
 
   int reason = esp_reset_reason();
-
-  prefs.begin("calib", false);
-  minAngle[0] = prefs.getInt("xmin", -1);
-  maxAngle[0] = prefs.getInt("xmax", -1);
-  minAngle[1] = prefs.getInt("ymin", -1);
-  maxAngle[1] = prefs.getInt("ymax", -1);
-  homeAngle[0] = prefs.getInt("xhome", -1);
-  homeAngle[1] = prefs.getInt("yhome", -1);
-
   Serial.println();
-  Serial.println("=== Phase 1b: X/Y travel calibration (ESP32-C3 Super Mini) ===");
+  Serial.println("=== Phase 2: BLE stage control (ESP32-C3 Super Mini) ===");
   Serial.printf("Reset reason: %s (%d)\n", resetName(reason), reason);
-  Serial.printf("Servos X (GPIO3), Y (GPIO4) | safe range %d-%d deg | nothing moves until you type a command\n",
-                SAFE_MIN, SAFE_MAX);
-  printStatus();
-  printHelp();
+  loadLimits();
+
+  // Attach X, then Y, each with one jump to its home (position unknown after power-up).
+  delay(BOOT_WAIT_MS);
+  for (int i = 0; i < NUM_SERVOS; i++) {
+    stamp();
+    Serial.printf("startup | servo %c (GPIO%d) | attach at home %d deg (one direct jump)\n",
+                  SERVO_NAMES[i], SERVO_PINS[i], homeAngle[i]);
+    currentAngle[i] = homeAngle[i];
+    projected[i] = homeAngle[i];
+    servoOn(i);
+    delay(SETTLE_MS);
+    servoOff(i);
+    delay(GAP_MS);
+  }
+  lastOffMs = millis();
+
+  cmdQueue = xQueueCreate(8, CMD_LEN);
+  setupBle();
+  Serial.println("Ready. Mode MANUAL. Commands: STATUS, MODE AUTO|MANUAL, JOG X|Y n, GOTO X|Y n,");
+  Serial.println("PATH x,y;x,y;..., START, TRAVERSE, STOP, RESUME, HOME, END");
 }
 
 void loop() {
+  handleBleEvents();
+
+  char buf[CMD_LEN];
+  while (xQueueReceive(cmdQueue, buf, 0) == pdTRUE) handleCommand(String(buf));
+
   while (Serial.available()) {
     char c = Serial.read();
     if (c == '\n' || c == '\r') {
-      handle(line);
-      line = "";
+      handleCommand(serialLine);
+      serialLine = "";
     } else {
-      line += c;
+      serialLine += c;
     }
   }
-  delay(10);
+
+  runEngine();
+  delay(1);
 }
