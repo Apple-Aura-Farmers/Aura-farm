@@ -29,6 +29,9 @@ final class StageBLEClient: NSObject {
     private(set) var lastError: String?
     private(set) var log: [LogLine] = []
 
+    /// Called on the main thread for every parsed reply, after the state above is updated.
+    @ObservationIgnored var onReply: ((StageReply) -> Void)?
+
     @ObservationIgnored private var central: CBCentralManager?
     @ObservationIgnored private var peripheral: CBPeripheral?
     @ObservationIgnored private var rx: CBCharacteristic?
@@ -132,7 +135,9 @@ final class StageBLEClient: NSObject {
 
     private func handle(_ line: String) {
         append(line)
-        switch StageReply.parse(line) {
+        let reply = StageReply.parse(line)
+        defer { onReply?(reply) }
+        switch reply {
         case .ok(let text):
             lastError = nil
             if text == "MODE AUTO" { mode = .auto } else if text == "MODE MANUAL" { mode = .manual }

@@ -82,6 +82,10 @@ enum SlideMovementInfo {
         /// The vector to the target, in fields (screen axes); nil when there is none.
         var targetDx: Double?
         var targetDy: Double?
+        /// Where the stage should move the view, in fields (screen axes): the target, or the
+        /// instruction's direction; nil for "do not move". See `GuideInstruction.stageSteer`.
+        var steerDx: Double?
+        var steerDy: Double?
         var viewClass = ""
         var captures = 0
         var captureCount = 0

@@ -178,6 +178,15 @@ final class LabSetupSession {
         info.stageAxes = .identity
     }
 
+    /// The automated stage measured the axes itself: the step is done with them.
+    func completeStage(with axes: StageAxes) {
+        guard flow.step == .stage else { return }
+        flow.update(stageMeasured: true)
+        stageAxes = axes
+        info.step = flow.step
+        info.stageAxes = axes
+    }
+
     /// - Parameters:
     ///   - guidePosition: where the view is, in the guide's screen fields (the dry run's
     ///     conversion), which the stage step measures the axes from.

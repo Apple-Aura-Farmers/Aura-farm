@@ -49,12 +49,29 @@
         @AppStorage("slideLab.cameraRate") private var cameraRateName = CameraRate.fps20.rawValue
         @AppStorage("slideLab.confidence") private var confidence = 0.3
         @State private var noteText = ""
+        // Automated stage (Terraloka BLE stage in place of the knobs).
+        @State private var autoStage: AutoStageDriver?
+        @State private var isAskingMovement = false
+        @State private var hasAskedMovement = false
 
         // Recorded video.
         @State private var selectedVideo: URL?
         @State private var startMinutes = 0.0
 
         private var mapping: ScreenMapping { ScreenMapping(rawValue: mappingName) ?? .asIs }
+
+        /// Turns the Terraloka stage in or out; with it off the lab behaves as it always has.
+        private func setAutomatedStage(_ on: Bool) {
+            if on, autoStage == nil {
+                let driver = AutoStageDriver(engine: model)
+                driver.guideIsStraightened = straightens && centresField
+                driver.activate(restoringAsksEdges: asksEdges)
+                autoStage = driver
+            } else if !on, let driver = autoStage {
+                driver.deactivate()
+                autoStage = nil
+            }
+        }
         private var spotMode: SpotConfirmMode { spotModeName == "holdStill" ? .holdStill : .briefTouch }
 
         var body: some View {
@@ -64,6 +81,10 @@
                 }
                 .pickerStyle(.segmented)
                 .padding()
+
+                if let autoStage, mode == .live {
+                    AutoStagePanel(driver: autoStage, setupStep: model.setupInfo.step)
+                }
 
                 switch mode {
                 case .live: liveBody
@@ -76,7 +97,33 @@
             .modifier(
                 LabSettingsSync(model: model) { if mode == .live { model.start() } }
             )
-            .onDisappear { model.stop() }
+            .onDisappear {
+                model.stop()
+                setAutomatedStage(false)
+            }
+            .onAppear {
+                if !hasAskedMovement {
+                    hasAskedMovement = true
+                    isAskingMovement = true
+                }
+            }
+            .confirmationDialog("How will the slide move?", isPresented: $isAskingMovement) {
+                Button("Manual knobs") {}
+                Button("Automated stage") { setAutomatedStage(true) }
+            }
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Toggle(
+                        "Automated stage",
+                        isOn: Binding(get: { autoStage != nil }, set: { setAutomatedStage($0) })
+                    )
+                    .toggleStyle(.button)
+                    .font(.footnote)
+                }
+            }
+            .onChange(of: straightens && centresField) { _, value in
+                autoStage?.guideIsStraightened = value
+            }
             .onChange(of: mode) { _, newMode in
                 if newMode == .live { model.start() } else { model.stop() }
             }

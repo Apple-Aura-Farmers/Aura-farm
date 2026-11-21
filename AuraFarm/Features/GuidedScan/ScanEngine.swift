@@ -336,6 +336,30 @@ class ScanEngine: NSObject {
         }
     }
 
+    /// The automated stage measured the axes: the stage step is done with them.
+    func completeStage(with axes: StageAxes) {
+        analysisQueue.async { [weak self] in
+            guard let self, self.setup.step == .stage else { return }
+            self.setup.completeStage(with: axes)
+            self.lastPublishedStep = .done
+            self.clearTrackingDisplay()
+            self.resetGuide()
+            let info = self.setup.info
+            DispatchQueue.main.async { self.setupInfo = info }
+        }
+    }
+
+    /// Called on the main thread with the guide position, the tracking state and the time of every
+    /// analysed frame while the setup step is stage or done (the automated stage measures from it).
+    @ObservationIgnored var onGuideSample: ((CGPoint, TrackingState, Double) -> Void)? {
+        didSet {
+            let handler = onGuideSample
+            analysisQueue.async { [weak self] in self?.guideSampleHandler = handler }
+        }
+    }
+    /// Analysis queue's copy of `onGuideSample`.
+    @ObservationIgnored private var guideSampleHandler: ((CGPoint, TrackingState, Double) -> Void)?
+
     /// Starts the setup of a session, on the analysis queue: at align, or at field when
     /// skipping, which learns the eyepiece mask afresh from the next frame.
     private func beginSetup() {
@@ -1240,6 +1264,10 @@ extension ScanEngine: AVCaptureVideoDataOutputSampleBufferDelegate {
             }
         }
 
+        if let handler = guideSampleHandler, setup.step == .stage || setup.step == .done {
+            let sample = (dryRun.guidePosition(for: step), step.tracking.trackingState)
+            DispatchQueue.main.async { handler(sample.0, sample.1, time) }
+        }
         if let image = step.thumbnail { thumbnailThrottle.offer(image) }
         latestPositionFields = step.positionFields
         indicators.update(

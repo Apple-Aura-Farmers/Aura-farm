@@ -215,6 +215,28 @@ enum GuideInstruction: Equatable {
     case slowDown
     case finished
 
+    /// The vector (fields, guide axes) an automated stage should move the view by, or nil for
+    /// "do not move". Direction-only instructions give a unit vector when there is no target.
+    func stageSteer(target: CGPoint?, heading: CGPoint?) -> CGPoint? {
+        func unit(_ v: CGPoint?) -> CGPoint? {
+            guard let v else { return nil }
+            let length = hypot(Double(v.x), Double(v.y))
+            return length > 0 ? CGPoint(x: v.x / length, y: v.y / length) : nil
+        }
+        switch self {
+        case .move, .tooFar, .otherWay, .aligned, .holding:
+            return target
+        case .travel(let direction), .farAway(let direction), .lineLead(let direction, _),
+            .edgeGoBack(let direction), .stillNoDetail(let direction), .checkEdge(let direction),
+            .edgeBehind(let direction), .missedSpot(let direction):
+            return target ?? unit(direction)
+        case .lineAhead, .notAnEdge:
+            return target ?? unit(heading)
+        default:
+            return nil
+        }
+    }
+
     /// One short line in plain words, for the lab.
     var debugText: String {
         switch self {

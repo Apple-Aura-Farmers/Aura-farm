@@ -396,6 +396,9 @@ final class GuideDryRun {
             }
             return PredictedTrailLine(kind: segment.kind, from: from, to: to)
         }
+        let steer = result.instruction.stageSteer(
+            target: dx.flatMap { x in dy.map { CGPoint(x: x, y: $0) } },
+            heading: guide.heading ?? lastHeading)
         return GuideDryRunResult(
             fields: GuideRowFields(
                 viewClass: viewClass.rawValue, state: result.stateName,
@@ -418,8 +421,10 @@ final class GuideDryRun {
                 expectedEdgeAsk: result.edge.expectedEdgeAsk),
             info: SlideMovementInfo.Guide(
                 isOn: true, instruction: result.instruction.debugText, state: result.stateName,
-                targetDx: dx, targetDy: dy, viewClass: viewClass.rawValue, captures: captures,
-                captureCount: captureCount, edgeCount: edgeCount, isFinished: result.isFinished,
+                targetDx: dx, targetDy: dy, steerDx: steer.map { Double($0.x) },
+                steerDy: steer.map { Double($0.y) }, viewClass: viewClass.rawValue,
+                captures: captures, captureCount: captureCount, edgeCount: edgeCount,
+                isFinished: result.isFinished,
                 wrongWayCount: wrongWayCount, nudgeCount: nudgeCount,
                 edgeReachedCount: edgeReachedCount, axesLine: axesLine,
                 axesDiffer: differs, showsStageLimitHint: showsHint,
