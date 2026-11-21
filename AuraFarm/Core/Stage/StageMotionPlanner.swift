@@ -21,7 +21,22 @@ struct StageMotionPlanner {
             let needed = mapping.degrees(forMove: target)
         else { return .idle }
         let servo: StageAxis = abs(needed.x) >= abs(needed.y) ? .x : .y
-        let degrees = servo == .x ? needed.x : needed.y
+        let other: StageAxis = servo == .x ? .y : .x
+        let dominant = move(servo, degrees(of: servo, in: needed), angles)
+        guard case .atLimit = dominant else { return dominant }
+        // The main servo is pinned: the other one may still help.
+        if case .move = move(other, degrees(of: other, in: needed), angles) {
+            return move(other, degrees(of: other, in: needed), angles)
+        }
+        return dominant
+    }
+
+    private func degrees(of servo: StageAxis, in needed: (x: Double, y: Double)) -> Double {
+        servo == .x ? needed.x : needed.y
+    }
+
+    /// One servo's move for `degrees`: idle for under one degree, at limit when pinned.
+    private func move(_ servo: StageAxis, _ degrees: Double, _ angles: (x: Int, y: Int)) -> StageMove {
         guard degrees != 0 else { return .idle }
         let chunk = Double(min(max(chunkDegrees, 1), 10))
         let step = Int(min(max(degrees, -chunk), chunk).rounded())

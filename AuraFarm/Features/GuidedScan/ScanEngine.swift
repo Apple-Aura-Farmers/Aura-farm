@@ -303,12 +303,13 @@ class ScanEngine: NSObject {
     }
 
     /// The helper says the stage cannot go further: the guide turns and remembers the limit.
-    /// Written to the movement CSV as the event "stage_limit". Ignored unless the guide is on.
-    func stageLimit() {
+    /// Written to the movement CSV as the event "stage_limit" ("stage_limit_auto" when the
+    /// automated stage pressed it). Ignored unless the guide is on.
+    func stageLimit(auto: Bool = false) {
         analysisQueue.async { [weak self] in
             guard let self, self.guideEnabled else { return }
             self.dryRun.stageLimitPressed = true
-            self.pendingEventName = "stage_limit"
+            self.pendingEventName = auto ? "stage_limit_auto" : "stage_limit"
         }
     }
 
@@ -331,6 +332,16 @@ class ScanEngine: NSObject {
             self.lastPublishedStep = .done
             self.clearTrackingDisplay()
             self.resetGuide()
+            let info = self.setup.info
+            DispatchQueue.main.async { self.setupInfo = info }
+        }
+    }
+
+    /// The lab's stage step starts again from X (the automated stage's own moves must not count).
+    func restartStageMeasurement() {
+        analysisQueue.async { [weak self] in
+            guard let self, self.setup.step == .stage else { return }
+            self.setup.restartStageMeasurement()
             let info = self.setup.info
             DispatchQueue.main.async { self.setupInfo = info }
         }

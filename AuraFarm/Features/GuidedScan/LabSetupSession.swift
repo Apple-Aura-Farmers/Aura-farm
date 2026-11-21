@@ -178,6 +178,13 @@ final class LabSetupSession {
         info.stageAxes = .identity
     }
 
+    /// The stage step starts again at the X axis.
+    func restartStageMeasurement() {
+        guard flow.step == .stage else { return }
+        calibration.reset()
+        info.stage = nil
+    }
+
     /// The automated stage measured the axes itself: the step is done with them.
     func completeStage(with axes: StageAxes) {
         guard flow.step == .stage else { return }

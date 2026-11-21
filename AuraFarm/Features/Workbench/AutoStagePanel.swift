@@ -19,9 +19,15 @@
                         Button("Connect") { driver.client.connect() }
                     }
                 }
-                if !driver.mappingSummary.isEmpty {
-                    Text(driver.mappingSummary).font(.caption).foregroundStyle(.secondary)
+                if !driver.mappingSummary.isEmpty || driver.autoStageLimitCount > 0 {
+                    Text(
+                        driver.mappingSummary
+                            + (driver.autoStageLimitCount > 0
+                                ? " · auto limits: \(driver.autoStageLimitCount)" : "")
+                    )
+                    .font(.caption).foregroundStyle(.secondary)
                 }
+                Toggle("Auto stage limit", isOn: $driver.autoStageLimit).font(.footnote)
                 Picker("Chunk", selection: $driver.chunkDegrees) {
                     ForEach([1, 2, 3, 5, 10], id: \.self) { Text("\($0)°").tag($0) }
                 }
@@ -66,8 +72,12 @@
             case .calibrated: "Calibrated"
             case .following: "Following the guide" + (driver.lastMove.isEmpty ? "" : " (\(driver.lastMove))")
             case .waitingForEdgeAnswer: "Stopped: answer the edge question"
+            case .stageStep(let axis, let travel):
+                String(format: "Lab stage step: servo %@, %.1f of 2.0 fields", axis.letter, travel)
             case .atLimit(let servo):
-                "Servo \(servo.letter) reached its limit; press Stage limit if the edge can't be reached"
+                driver.autoStageLimit
+                    ? "Servo \(servo.letter) at its limit, telling the guide"
+                    : "Servo \(servo.letter) reached its limit; press Stage limit if the edge can't be reached"
             case .paused: "Paused"
             case .failed(let message): message
             }

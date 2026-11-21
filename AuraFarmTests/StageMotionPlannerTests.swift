@@ -65,4 +65,19 @@ final class StageMotionPlannerTests: XCTestCase {
             planner(swapped: true).next(angles: (90, 90), target: CGPoint(x: 1, y: 0.1)),
             .move(servo: .y, toAngle: 93))
     }
+
+    func testFreeServoUsedWhenDominantIsPinned() {
+        // X wants +10 degrees (2 fields) but is at 180; Y needs 5 degrees (1 field).
+        XCTAssertEqual(
+            planner().next(angles: (180, 90), target: CGPoint(x: 2, y: 1)),
+            .move(servo: .y, toAngle: 93))
+    }
+
+    func testBothPinnedIsAtLimit() {
+        XCTAssertEqual(
+            planner().next(angles: (180, 180), target: CGPoint(x: 2, y: 1)), .atLimit(.x))
+        // The other servo needs under a degree: nothing to move, so still at limit.
+        XCTAssertEqual(
+            planner().next(angles: (180, 90), target: CGPoint(x: 2, y: 0.05)), .atLimit(.x))
+    }
 }

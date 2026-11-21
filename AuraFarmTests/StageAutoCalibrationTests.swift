@@ -115,4 +115,32 @@ final class StageAutoCalibrationTests: XCTestCase {
         XCTAssertEqual(back.x, target.x, accuracy: 1e-6)
         XCTAssertEqual(back.y, target.y, accuracy: 1e-6)
     }
+
+    func testMovingAnglesSkipSlack() {
+        var c = StageAutoCalibration()
+        for i in 0..<6 {
+            c.add(servo: .x, angle: Double(90 + 3 * i), position: .zero, tracking: .tracking)
+        }
+        for i in 1...3 {
+            c.add(
+                servo: .x, angle: Double(105 + 3 * i),
+                position: CGPoint(x: 0.1 * Double(i), y: 0), tracking: .tracking)
+        }
+        // The onset sample (105) and the three moving ones.
+        XCTAssertEqual(c.movingAngles(of: .x), 4)
+    }
+
+    func testStageStepSweep() throws {
+        let sweep = try XCTUnwrap(
+            StageAutoCalibration.stageStepSweep(fieldsPerDegree: 0.026, slackDegrees: 18))
+        XCTAssertEqual(sweep.end - sweep.start, 111)
+        XCTAssertEqual(Double(sweep.start + sweep.end) / 2, 90, accuracy: 1)
+        let near = try XCTUnwrap(
+            StageAutoCalibration.stageStepSweep(
+                fieldsPerDegree: 0.026, slackDegrees: 18, centre: 170))
+        XCTAssertEqual(near.end, 180)
+        XCTAssertEqual(near.end - near.start, 111)
+        XCTAssertNil(StageAutoCalibration.stageStepSweep(fieldsPerDegree: 0.01, slackDegrees: 0))
+        XCTAssertNil(StageAutoCalibration.stageStepSweep(fieldsPerDegree: 0, slackDegrees: 0))
+    }
 }

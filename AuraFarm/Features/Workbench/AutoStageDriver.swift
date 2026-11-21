@@ -13,6 +13,7 @@
             case disconnected
             case waitingForStageStep
             case calibrating(axis: StageAxis, travel: Double)
+            case stageStep(axis: StageAxis, travel: Double)
             case calibrated(summary: String)
             case following
             case waitingForEdgeAnswer
@@ -26,6 +27,9 @@
         private(set) var lastMove = ""
         private(set) var mappingSummary = ""
         var chunkDegrees = 3
+        /// Press the guide's "Stage limit" when a servo is pinned at 0 or 180.
+        var autoStageLimit = true
+        private(set) var autoStageLimitCount = 0
         /// The lab shows the picture straightened (and so measures the guide in straightened axes).
         var guideIsStraightened = true
 
@@ -41,6 +45,10 @@
         private var userPaused = false
         private var lastServo = StageAxis.x
         private var isCalibrating = false
+        private var limitPress = StageLimitAutoPress()
+        private var movedSinceLastPress = false
+        /// Pause, End session or leaving stops the lab-stage-step sweep between moves.
+        private var cancelSweep = false
         /// Tracking broke since the last calibration sample.
         private var trackingBroke = false
         /// The text of the stage's latest ERR reply ("LIMIT 0-180", ...).
@@ -79,6 +87,7 @@
         func deactivate() {
             loop?.cancel()
             loop = nil
+            cancelSweep = true
             if client.status == .connected { client.send(.stop) }
             engine.setAsksEdges(restoreAsksEdges)
             engine.onGuideSample = nil
@@ -91,6 +100,7 @@
 
         func pause() {
             userPaused = true
+            cancelSweep = true
             client.send(.stop)
             inFlight = false
             phase = .paused
@@ -98,11 +108,12 @@
 
         func resume() {
             userPaused = false
-            if mapping != nil, phase == .paused { phase = .following }
+            if phase == .paused { phase = mapping != nil ? .following : .waitingForStageStep }
         }
 
         func endSession() {
             userPaused = true
+            cancelSweep = true
             client.send(.end)
             inFlight = false
             phase = .paused
@@ -197,6 +208,8 @@
         }
 
         private func goTo(_ servo: StageAxis, _ angle: Int) async -> Bool {
+            // The firmware drops a move to where the servo already is without a reply.
+            if (servo == .x ? angleX : angleY) == angle { return true }
             inFlight = true
             let ok = await request(.goTo(servo, angle)) {
                 if case .position = $0 { return true }
@@ -211,6 +224,7 @@
 
         private func calibrate() async {
             isCalibrating = true
+            cancelSweep = false
             defer { isCalibrating = false }
             calibration = StageAutoCalibration()
             let ready = await request(.mode(.manual)) {
@@ -233,7 +247,8 @@
                 let direction = start <= 90 ? 1 : -1
                 var current = start
                 await collect(servo, current)
-                while calibration.travel(of: servo) < calibration.minTravelFields,
+                while calibration.travel(of: servo) < calibration.minTravelFields
+                    || calibration.movingAngles(of: servo) < 4,
                     abs(current - start) < calibration.maxDegrees,
                     (0...180).contains(current + direction * calibrationStepDegrees)
                 {
@@ -262,9 +277,99 @@
             case .success(let found):
                 mapping = found
                 mappingSummary = found.summary
-                phase = .calibrated(summary: found.summary)
-                engine.completeStage(with: found.axes)
+                if engine.setupInfo.step == .stage {
+                    await runStageStep(found)
+                } else {
+                    phase = .calibrated(summary: found.summary)
+                }
             }
+        }
+
+        // MARK: The lab's stage step, run with the servos
+
+        private var sweepStopped: Bool { cancelSweep || client.status != .connected }
+
+        private func labStage() -> StageAxesStep? { engine.setupInfo.stage?.step }
+
+        /// Gives up on the lab's own measurement: its axes are the automated ones.
+        private func useAutomatedAxes(_ found: StageServoMapping) {
+            engine.completeStage(with: found.axes)
+            mappingSummary = found.summary + " (lab stage step not completed: used the automated axes)"
+            phase = .calibrated(summary: mappingSummary)
+        }
+
+        private func runStageStep(_ found: StageServoMapping) async {
+            guard
+                let sweepX = StageAutoCalibration.stageStepSweep(
+                    fieldsPerDegree: hypot(Double(found.x.x), Double(found.x.y)),
+                    slackDegrees: found.xSlackDegrees),
+                let sweepY = StageAutoCalibration.stageStepSweep(
+                    fieldsPerDegree: hypot(Double(found.y.x), Double(found.y.y)),
+                    slackDegrees: found.ySlackDegrees)
+            else { return useAutomatedAxes(found) }
+
+            for _ in 0..<2 {
+                guard await goTo(.x, sweepX.start), await goTo(.y, sweepY.start) else {
+                    return useAutomatedAxes(found)
+                }
+                try? await Task.sleep(for: .seconds(settleSeconds))
+                // The moves above are the driver's own: the lab's measurement starts now.
+                engine.restartStageMeasurement()
+                try? await Task.sleep(for: .seconds(0.5))
+                // The screen's copy of the lab's step arrives a few frames later.
+                for _ in 0..<25 where labStage() != .waitX && !sweepStopped {
+                    try? await Task.sleep(for: .milliseconds(100))
+                }
+                await sweep(.x, sweepX, while: .waitX)
+                // "X done" pause: no reading counts until it ends.
+                for _ in 0..<30 where engine.setupInfo.stage?.isPause == true && !sweepStopped {
+                    try? await Task.sleep(for: .milliseconds(100))
+                }
+                await sweep(.y, sweepY, while: .waitY)
+                if sweepStopped { return stopSweep() }
+                if engine.setupInfo.step != .stage {
+                    mappingSummary = found.summary
+                    phase = .calibrated(summary: found.summary)
+                    return
+                }
+            }
+            useAutomatedAxes(found)
+        }
+
+        /// Turns one servo back and forth over `range`, a step at a time, while the lab's stage
+        /// step still waits for this axis; two passes at most.
+        private func sweep(
+            _ servo: StageAxis, _ range: (start: Int, end: Int), while waiting: StageAxesStep
+        ) async {
+            var current = servo == .x ? angleX : angleY
+            var direction = 1
+            var passes = 0
+            while !sweepStopped, labStage() == waiting, passes < 2 {
+                let next = min(
+                    max(current + direction * calibrationStepDegrees, range.start), range.end)
+                if next == current {
+                    direction = -direction
+                    passes += 1
+                    continue
+                }
+                lastErrorText = ""
+                if await goTo(servo, next) {
+                    current = next
+                } else if lastErrorText.hasPrefix("LIMIT") {
+                    direction = -direction  // the stage's own range ends here
+                    passes += 1
+                } else {
+                    return
+                }
+                phase = .stageStep(axis: servo, travel: engine.setupInfo.stage?.travelFields ?? 0)
+            }
+        }
+
+        /// Pause / End session / disconnect during the sweep: measure again on Resume.
+        private func stopSweep() {
+            mapping = nil
+            mappingSummary = ""
+            if phase != .paused, phase != .disconnected { phase = .paused }
         }
 
         /// Lets the picture settle, then takes samples for a moment.
@@ -347,8 +452,19 @@
             case .idle: break
             case .atLimit(let servo):
                 phase = .atLimit(servo)
+                if autoStageLimit,
+                    limitPress.update(
+                        now: Date(), atLimit: true, lastSettledAt: lastSettledAt,
+                        movedSinceLastPress: movedSinceLastPress)
+                {
+                    engine.stageLimit(auto: true)
+                    autoStageLimitCount += 1
+                    movedSinceLastPress = false
+                    lastMove = "Stage limit (auto)"
+                }
             case .move(let servo, let angle):
                 if client.send(.goTo(servo, angle)) {
+                    movedSinceLastPress = true
                     inFlight = true
                     moveSentAt = Date()
                     lastServo = servo
