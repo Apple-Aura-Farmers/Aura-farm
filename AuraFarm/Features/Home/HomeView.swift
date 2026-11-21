@@ -125,6 +125,11 @@ private struct HomeTab: View {
                             } label: {
                                 Label("Slide movement lab", systemImage: "move.3d")
                             }
+                            NavigationLink {
+                                StageControlLabView()
+                            } label: {
+                                Label("Stage control", systemImage: "dot.radiowaves.left.and.right")
+                            }
                         } label: {
                             Label("Workbench", systemImage: "hammer")
                         }
