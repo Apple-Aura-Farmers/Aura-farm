@@ -47,7 +47,20 @@ struct RunMonitorThresholds {
     var pauseBelowShareOfBaseline: Double = 0.6
     var pauseSeconds: Double = 2.5
     var resumeAtShareOfBaseline: Double = 0.8
-    var resumeSeconds: Double = 1.0
+    /// PLACEHOLDER: raised from 1.0 after Run 6, where blurry views resumed too early.
+    var resumeSeconds: Double = 1.5
+    /// A pause for focus also needs the index back to this share of its peak during the pause.
+    /// PLACEHOLDER: Run 6 resumed at 0.382 after a peak of 0.728 with 38 of 40 frames blurry.
+    var resumeShareOfPeak: Double = 0.75
+    /// The peak ignores the first part of a pause: the picture is still settling. PLACEHOLDER.
+    var peakIgnoreSeconds: Double = 0.5
+    /// Hint "turned past focus": the peak rose this share above the index at the pause's start
+    /// and the index has fallen under `resumeShareOfPeak` of it. PLACEHOLDER.
+    var hintPeakRise: Double = 0.15
+    /// Hint "try the other way": this long into the pause, under `hintOtherWayShare` of the
+    /// starting index, and the peak never rose above it. PLACEHOLDER.
+    var hintOtherWaySeconds: Double = 3.0
+    var hintOtherWayShare: Double = 0.8
     /// With no baseline from setup: the median of this many seconds of eligible readings.
     var baselineSeconds: Double = 3.0
     /// A real defocus: detail lost while STILL. The readings with detail this far back give the
@@ -122,6 +135,15 @@ struct RunMonitor {
     private(set) var sharpnessShare: Double?
     /// Why the run is paused: "index_and_sharpness", "detail_lost" or "alignment"; empty while ok.
     private(set) var pauseCause = ""
+    /// The highest focus index among still detail readings in this pause (not the first
+    /// `peakIgnoreSeconds`); nil outside a pause or before one.
+    private(set) var peakIndex: Double?
+    /// Set on the update that ended a pause for focus by itself: the numbers for the CSV.
+    private(set) var resumeNote = ""
+    private var latestIndex: Double?
+    private var startIndex: Double?
+    private var pauseStartedAt: Double?
+    private var lastBadAt: Double?
 
     init(thresholds: RunMonitorThresholds = RunMonitorThresholds()) {
         self.thresholds = thresholds
@@ -142,6 +164,7 @@ struct RunMonitor {
     ) -> RunMonitorState {
         if let last = lastUpdateSeconds, state == .ok { referenceClock += min(max(seconds - last, 0), 1) }
         lastUpdateSeconds = seconds
+        resumeNote = ""
         if let alignment { updateAlignment(alignment, confirmedCircle, seconds) }
         defer { if state == .ok { pauseCause = "" } }
         guard state != .pausedAlignment else {
@@ -165,12 +188,45 @@ struct RunMonitor {
     /// bump, not an edge. For the CSV.
     var isStillOnset: Bool { stillOnset && state != .pausedAlignment }
 
+    /// While paused for focus: which way to turn, from how the index has moved since the pause.
+    var focusHint: String? {
+        guard state == .pausedFocus, let start = startIndex, let current = latestIndex,
+            let began = pauseStartedAt, let now = lastUpdateSeconds
+        else { return nil }
+        if let peak = peakIndex, peak >= start * (1 + thresholds.hintPeakRise),
+            current < thresholds.resumeShareOfPeak * peak
+        {
+            return "Turned past focus: turn back a little"
+        }
+        if now - began >= thresholds.hintOtherWaySeconds,
+            current < thresholds.hintOtherWayShare * start, (peakIndex ?? 0) <= start
+        {
+            return "Try turning the other way"
+        }
+        return nil
+    }
+
+    private mutating func beginFocusPause(_ now: Double) {
+        pauseStartedAt = now
+        startIndex = latestIndex
+        peakIndex = nil
+        lastBadAt = nil
+    }
+
+    private mutating func endFocusPause() {
+        pauseStartedAt = nil
+        startIndex = nil
+        peakIndex = nil
+        lastBadAt = nil
+    }
+
     /// "Resume anyway": back to running at once, and the baseline measured again from the next
     /// `baselineSeconds` of eligible readings. For a pause for focus only; the sharpness reference
     /// is kept.
     mutating func resumeManually() {
         guard state == .pausedFocus else { return }
         state = .ok
+        endFocusPause()
         pauseCause = ""
         stretch = nil
         stillOnset = false
@@ -184,6 +240,7 @@ struct RunMonitor {
     mutating func pauseForStall() -> Bool {
         guard state == .ok else { return false }
         state = .pausedFocus
+        beginFocusPause(lastUpdateSeconds ?? 0)
         pauseCause = "stall"
         clearFocusCounts()
         stretch = nil
@@ -290,6 +347,15 @@ struct RunMonitor {
             clearFocusCounts()
             return
         }
+        if let index {
+            latestIndex = index
+            if state == .pausedFocus {
+                if startIndex == nil { startIndex = index }
+                if let began = pauseStartedAt, now - began >= thresholds.peakIgnoreSeconds {
+                    peakIndex = max(peakIndex ?? index, index)
+                }
+            }
+        }
         let baseline = focusBaseline ?? 0
         var share = 1.0
         if baseline > 0 {
@@ -311,15 +377,26 @@ struct RunMonitor {
             lowSince = focusLow ? (lowSince ?? now) : nil
             if let lowSince, now - lowSince >= thresholds.pauseSeconds - 1e-9 {
                 state = .pausedFocus
+                beginFocusPause(now)
                 pauseCause = "index_and_sharpness"
                 clearFocusCounts()
             }
         case .pausedFocus:
             let sharpBack = sharpnessShare.map { $0 >= thresholds.sharpnessResumeShare } ?? false
             let back = share >= thresholds.resumeAtShareOfBaseline || sharpBack
-            highSince = back ? (highSince ?? now) : nil
-            if let highSince, now - highSince >= thresholds.resumeSeconds - 1e-9 {
+            // Near the best the pause saw, and no blurry or blank reading lately: a blurry view
+            // can score well against the baseline.
+            let nearPeak =
+                peakIndex.flatMap { peak in
+                    index.map { $0 >= thresholds.resumeShareOfPeak * peak }
+                } ?? true
+            let clean = lastBadAt.map { now - $0 >= thresholds.resumeSeconds - 1e-9 } ?? true
+            highSince = back && nearPeak ? (highSince ?? now) : nil
+            if clean, let highSince, now - highSince >= thresholds.resumeSeconds - 1e-9 {
+                resumeNote = String(
+                    format: "index=%.3f peak=%.3f share=%.2f", index ?? -1, peakIndex ?? -1, share)
                 state = .ok
+                endFocusPause()
                 clearFocusCounts()
             }
         case .pausedAlignment:
@@ -332,6 +409,7 @@ struct RunMonitor {
     /// changes. Held for `pauseSeconds` it pauses for focus.
     private mutating func updateStretch(_ sharpness: Double?, _ isStill: Bool, _ now: Double) {
         clearFocusCounts()
+        if state == .pausedFocus { lastBadAt = now }
         if stretch == nil {
             let before = detailHistory.filter {
                 now - $0.seconds <= thresholds.stillOnsetLookbackSeconds
@@ -356,6 +434,7 @@ struct RunMonitor {
         onsetSince = onsetSince ?? now
         if let onsetSince, now - onsetSince >= thresholds.pauseSeconds - 1e-9 {
             state = .pausedFocus
+            beginFocusPause(now)
             pauseCause = "detail_lost"
             self.onsetSince = nil
         }

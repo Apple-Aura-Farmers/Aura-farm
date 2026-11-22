@@ -213,6 +213,9 @@ struct MovementLogRow: Equatable {
     var sharpnessRef: Double?
     var sharpnessShare: Double?
     var pauseCause = ""
+    /// The highest focus index of the current pause for focus, and the turning hint shown.
+    var focusPeak: Double?
+    var focusHint = ""
     /// The detector's result arrives after its frame: when the frame it ran on was taken (run
     /// seconds), and where its time went: crop and render, the model alone, and decoding.
     var detFrameSeconds: Double?
@@ -272,7 +275,7 @@ enum MovementLog {
         "sharpness_ref", "sharpness_share", "pause_cause", "det_frame_seconds", "det_pre_ms",
         "det_infer_ms", "det_decode_ms",
         "line_accept", "area_ahead_share", "predicted_edge_along", "expected_edge_ask",
-        "camera_drops", "knob_words",
+        "camera_drops", "knob_words", "focus_peak", "focus_hint",
     ]
 
     static func csv(_ rows: [MovementLogRow]) -> String {
@@ -352,6 +355,7 @@ enum MovementLog {
             row.lineAccept, number(row.areaAheadShare, 3), number(row.predictedEdgeAlong, 3),
             row.lineState.isEmpty ? "" : (row.expectedEdgeAsk ? "1" : "0"),
             row.cameraDrops.map(String.init) ?? "", row.knobWords,
+            number(row.focusPeak, 3), row.focusHint,
         ]
     }
 

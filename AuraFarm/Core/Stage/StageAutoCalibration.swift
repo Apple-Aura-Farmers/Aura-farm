@@ -6,6 +6,9 @@ enum StageCalibrationFailure: Error, Equatable, LocalizedError {
     case lostTracking
     case parallel
     case noAxes
+    /// Both servos drive the same actuator, so one measuring far less than the other means the
+    /// tracker slipped. Fields per degree of the weak and the strong servo.
+    case scaleMismatch(servo: StageAxis, weak: Double, strong: Double)
 
     var errorDescription: String? {
         switch self {
@@ -14,6 +17,11 @@ enum StageCalibrationFailure: Error, Equatable, LocalizedError {
         case .parallel:
             "Servo axes look parallel: tracking probably slipped. Pick a smaller chunk, then Retry"
         case .noAxes: "Could not build the stage axes"
+        case .scaleMismatch(let servo, let weak, let strong):
+            String(
+                format:
+                    "Servo %@ barely moved the picture (%.3f vs %.3f f/°): tracking probably slipped. Check focus and that the view has particles, then Retry.",
+                servo.letter, weak, strong)
         }
     }
 }
@@ -58,6 +66,9 @@ struct StageAutoCalibration {
     var maxDegrees = 90
     /// Samples this close to the first tracked one count as "has not started moving" (slack).
     var onsetFields = 0.03
+    /// The smaller fields per degree must be at least this share of the larger. PLACEHOLDER: Run 6
+    /// measured 0.002 against 0.092; the live correction later found 0.05 to 0.09.
+    static let scaleRatioFloor = 0.4
 
     private struct Sample {
         var angle: Double
@@ -165,6 +176,22 @@ struct StageAutoCalibration {
         return .success(CGPoint(x: sax / saa, y: say / saa))
     }
 
+    /// The servo whose fields per degree is under `scaleRatioFloor` of the other's, with both
+    /// numbers; nil when they are alike enough.
+    static func weakServo(x: CGPoint, y: CGPoint) -> (servo: StageAxis, weak: Double, strong: Double)? {
+        let lx = hypot(Double(x.x), Double(x.y))
+        let ly = hypot(Double(y.x), Double(y.y))
+        let (weak, strong) = (min(lx, ly), max(lx, ly))
+        guard weak < scaleRatioFloor * strong else { return nil }
+        return (lx < ly ? .x : .y, weak, strong)
+    }
+
+    /// Forgets a servo's samples, to measure it again.
+    mutating func discard(_ servo: StageAxis) {
+        samples[servo] = nil
+        runs[servo] = nil
+    }
+
     func mapping() -> Result<StageServoMapping, StageCalibrationFailure> {
         let vx: CGPoint
         let vy: CGPoint
@@ -175,6 +202,10 @@ struct StageAutoCalibration {
         switch vector(for: .y) {
         case .success(let v): vy = v
         case .failure(let f): return .failure(f)
+        }
+        // Never decide "swapped" from a vector that is too small against the other.
+        if let weak = Self.weakServo(x: vx, y: vy) {
+            return .failure(.scaleMismatch(servo: weak.servo, weak: weak.weak, strong: weak.strong))
         }
         return Self.servoMapping(
             x: vx, y: vy, xSlack: slackDegrees(of: .x), ySlack: slackDegrees(of: .y))

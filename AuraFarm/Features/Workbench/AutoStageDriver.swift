@@ -456,44 +456,31 @@
             else { return fail("The stage did not answer MODE MANUAL / HOME") }
 
             for servo in [StageAxis.x, .y] {
-                let start = servo == .x ? angleX : angleY
-                let direction = start <= 90 ? 1 : -1
-                var current = start
-                await collect(servo, current)
-                while calibration.travel(of: servo) < calibration.minTravelFields
-                    || calibration.movingAngles(of: servo) < 5,
-                    abs(current - start) < calibration.maxDegrees,
-                    (0...180).contains(current + direction * calibrationStepDegrees)
-                {
-                    current += direction * calibrationStepDegrees
-                    lastErrorText = ""
-                    guard await goTo(servo, current) else {
-                        if lastErrorText.hasPrefix("LIMIT") {
-                            // The firmware's saved range ends here: measure with what was covered.
-                            current -= direction * calibrationStepDegrees
-                            break
-                        }
-                        _ = await goTo(servo, start)
-                        return fail("Servo \(servo.letter) did not move")
-                    }
-                    await collect(servo, current)
-                    phase = .calibrating(axis: servo, travel: calibration.travel(of: servo))
+                guard await sweepServo(servo) else { return }
+            }
+            // Both servos drive one actuator: one far weaker than the other is a slipped tracker.
+            // Measure that servo once more before giving up.
+            if case .success(let vx) = calibration.vector(for: .x),
+                case .success(let vy) = calibration.vector(for: .y),
+                let weak = StageAutoCalibration.weakServo(x: vx, y: vy)
+            {
+                calibration.discard(weak.servo)
+                guard await sweepServo(weak.servo) else { return }
+                var now = 0.0
+                if case .success(let v) = calibration.vector(for: weak.servo) {
+                    now = hypot(Double(v.x), Double(v.y))
                 }
-                // Back to where it began, in the same steps, so the tracker follows the picture
-                // there (one big jump loses it, and the next servo's samples start from a wrong
-                // position).
-                while current != start {
-                    let back = current - direction * calibrationStepDegrees
-                    current = direction > 0 ? max(back, start) : min(back, start)
-                    guard await goTo(servo, current) else { break }
-                }
-                try? await Task.sleep(for: .seconds(settleSeconds))
-                if case .failure(let failure) = calibration.vector(for: servo) {
-                    return fail(failure.localizedDescription)
-                }
+                engine.logEvent(
+                    "calibration_recheck",
+                    detail: String(
+                        format: "servo %@ old=%.4f new=%.4f f/deg", weak.servo.letter, weak.weak, now))
             }
             switch calibration.mapping() {
-            case .failure(let failure): fail(failure.localizedDescription)
+            case .failure(let failure):
+                if case .scaleMismatch = failure {
+                    engine.logEvent("calibration_ratio_failed", detail: failure.localizedDescription)
+                }
+                fail(failure.localizedDescription)
             case .success(let found):
                 mapping = found
                 mappingSummary = found.summary
@@ -509,6 +496,50 @@
                 }
                 phase = .calibrated(summary: mappingSummary)
             }
+        }
+
+        /// Turns one servo from where it is until the picture has moved enough, and back to where it
+        /// began; false (with the phase set to failed) when it could not be measured.
+        private func sweepServo(_ servo: StageAxis) async -> Bool {
+            let start = servo == .x ? angleX : angleY
+            let direction = start <= 90 ? 1 : -1
+            var current = start
+            await collect(servo, current)
+            while calibration.travel(of: servo) < calibration.minTravelFields
+                || calibration.movingAngles(of: servo) < 5,
+                abs(current - start) < calibration.maxDegrees,
+                (0...180).contains(current + direction * calibrationStepDegrees)
+            {
+                current += direction * calibrationStepDegrees
+                lastErrorText = ""
+                guard await goTo(servo, current) else {
+                    if lastErrorText.hasPrefix("LIMIT") {
+                        // The firmware's saved range ends here: measure with what was covered.
+                        current -= direction * calibrationStepDegrees
+                        break
+                    }
+                    _ = await goTo(servo, start)
+                    fail("Servo \(servo.letter) did not move")
+                    return false
+                }
+                await collect(servo, current)
+                phase = .calibrating(axis: servo, travel: calibration.travel(of: servo))
+            }
+            // Back to where it began, in the same steps, so the tracker follows the picture
+            // there (one big jump loses it, and the next servo's samples start from a wrong
+            // position).
+            while current != start {
+                let back = current - direction * calibrationStepDegrees
+                current = direction > 0 ? max(back, start) : min(back, start)
+                guard await goTo(servo, current) else { break }
+            }
+            try? await Task.sleep(for: .seconds(settleSeconds))
+            if case .failure(let failure) = calibration.vector(for: servo) {
+                fail(failure.localizedDescription)
+                return false
+            }
+
+            return true
         }
 
         /// Runs a preset path in AUTO to take up the linkage's slack before calibrating. A timeout
@@ -715,6 +746,7 @@
             }
             guard zigzag != nil else { return }
             zigzag?.dwellSeconds = dwellSeconds
+            zigzag?.mapping = mapping
             zigzag?.chunkDegrees = max(chunkDegrees, 1)
             phase = .presetPath(column: zigzag?.column ?? 0, spot: zigzag?.spot ?? 0)
             if inFlight, Date().timeIntervalSince(moveSentAt) > 5 {
@@ -790,6 +822,11 @@
                     countingColumn = column
                     engine.setExternalCounting(active: true, column: column)
                     engine.logEvent("preset_path_column", detail: "\(column) at \(angleX),\(angleY)")
+                case .swapped(let dx, let dy):
+                    // The path starts again from the new corner: drop what belonged to the old one.
+                    dwellUntil = nil
+                    engine.logEvent(
+                        "preset_path_swapped", detail: String(format: "dx=%.2f dy=%.2f", dx, dy))
                 case .columnEnded(let column):
                     countingColumn = nil
                     engine.setExternalCounting(active: false, column: column)
@@ -802,6 +839,14 @@
                     lastMove = "Preset path done: \(reason)"
                     userPaused = true
                     phase = .paused
+                    // A natural finish ends the analysis session like the lab's "End now" (CSV,
+                    // summary, run JSON, map) and sends END to the stage. Later than the event
+                    // above, so the two do not share a CSV row.
+                    Task {
+                        try? await Task.sleep(for: .milliseconds(400))
+                        engine.endRun(.now)
+                        endSession()
+                    }
                     return
                 }
             }
@@ -855,6 +900,7 @@
             else { return }
             let before = servo == .x ? old.x : old.y
             mapping = new
+            zigzag?.mapping = new
             zigzag?.setFieldsPerDegree(
                 x: hypot(Double(new.x.x), Double(new.x.y)),
                 y: hypot(Double(new.y.x), Double(new.y.y)))

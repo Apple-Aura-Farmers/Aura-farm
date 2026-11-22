@@ -49,13 +49,73 @@ final class RunMonitorTests: XCTestCase {
         XCTAssertEqual(feed(focus: 0.5, for: 0.1), .pausedFocus, "spanning 2.5 s")
     }
 
-    func testItResumesAtEightyPercentForOneSecond() {
+    func testItResumesAtEightyPercentForOneAndAHalfSeconds() {
         withBaseline()
         feed(focus: 0.5, for: 2.6)
         XCTAssertEqual(monitor.state, .pausedFocus)
         XCTAssertEqual(feed(focus: 0.7, for: 3), .pausedFocus, "70% is not enough")
-        XCTAssertEqual(feed(focus: 0.85, for: 1.0), .pausedFocus, "spanning 0.9 s")
-        XCTAssertEqual(feed(focus: 0.85, for: 0.1), .ok, "spanning 1.0 s at 85%")
+        XCTAssertEqual(feed(focus: 0.85, for: 1.4), .pausedFocus, "spanning 1.3 s")
+        XCTAssertEqual(feed(focus: 0.85, for: 0.2), .ok, "spanning 1.5 s at 85%")
+    }
+
+    /// A pause for focus with baseline 1.0: still detail readings at `start` begin it by
+    /// falling to `low`, so the pause starts with `start` as its index.
+    private func pauseAt(_ low: Double) {
+        withBaseline()
+        feed(focus: 1.0, for: 0.5)
+        feed(focus: low, for: 2.6)
+        XCTAssertEqual(monitor.state, .pausedFocus)
+    }
+
+    func testRun6TheIndexFallingBackFromItsPeakDoesNotResume() {
+        monitor.setFocusBaseline(0.324)
+        feed(focus: 0.3, for: 0.5)
+        feed(focus: 0.1, for: 2.6)
+        XCTAssertEqual(monitor.state, .pausedFocus)
+        feed(focus: 0.728, for: 1.0)  // the peak
+        // 0.38 is 117% of the baseline but far below 0.75 of the peak: no resume.
+        XCTAssertEqual(feed(focus: 0.38, for: 5), .pausedFocus)
+    }
+
+    func testBackWithinThreeQuartersOfThePeakForOneAndAHalfSecondsResumes() {
+        monitor.setFocusBaseline(0.324)
+        feed(focus: 0.1, for: 2.6)
+        feed(focus: 0.728, for: 0.8)
+        feed(focus: 0.38, for: 0.2)  // too low for the peak: restarts the window
+        XCTAssertEqual(feed(focus: 0.6, for: 1.4), .pausedFocus, "spanning 1.3 s")
+        for _ in 0..<5 where monitor.state == .pausedFocus { feed(focus: 0.6, for: 0.1) }
+        XCTAssertEqual(monitor.state, .ok, "spanning 1.5 s")
+        XCTAssertTrue(monitor.resumeNote.hasPrefix("index=0.600 peak=0.728"))
+    }
+
+    func testABlurryReadingInsideTheWindowBlocksTheResume() {
+        monitor.setFocusBaseline(0.324)
+        feed(focus: 0.1, for: 2.6)
+        feed(focus: 0.5, for: 1.0)
+        feed(focus: 0.5, viewClass: .blurry, for: 0.1)
+        XCTAssertEqual(feed(focus: 0.5, for: 1.3), .pausedFocus, "the window starts after it")
+        XCTAssertEqual(feed(focus: 0.5, for: 0.4), .ok)
+    }
+
+    func testHintTurnedPastFocus() {
+        withBaseline()
+        feed(focus: 0.4, for: 2.6)  // starts at 0.4
+        feed(focus: 0.6, for: 1.0)  // peak 0.6 is 50% above the start
+        XCTAssertNil(monitor.focusHint)
+        feed(focus: 0.4, for: 0.2)  // under 0.75 of the peak
+        XCTAssertEqual(monitor.focusHint, "Turned past focus: turn back a little")
+    }
+
+    func testHintTryTurningTheOtherWay() {
+        withBaseline()
+        feed(focus: 0.5, for: 2.6)  // starts at 0.5
+        feed(focus: 0.3, for: 2.0)
+        XCTAssertNil(monitor.focusHint, "under 3 s into the pause")
+        feed(focus: 0.3, for: 1.5)
+        XCTAssertEqual(monitor.focusHint, "Try turning the other way")
+        // A peak above the start takes that hint away.
+        feed(focus: 0.9, for: 0.2)
+        XCTAssertNotEqual(monitor.focusHint, "Try turning the other way")
     }
 
     func testReadingsOnBlankOrBlurryViewClassesAreIgnored() {
@@ -139,7 +199,7 @@ final class RunMonitorTests: XCTestCase {
         withBaseline()
         feed(focus: 0.5, for: 2.6)
         XCTAssertEqual(feed(focus: 1.0, still: false, for: 5), .pausedFocus)
-        XCTAssertEqual(feed(focus: 1.0, for: 1.1), .ok)
+        XCTAssertEqual(feed(focus: 1.0, for: 1.6), .ok)
     }
 
     func testTheBaselineIgnoresMovingReadings() {
@@ -212,15 +272,15 @@ final class RunMonitorTests: XCTestCase {
         feed(sharpness: 60, tracking: .paused, for: 2.6)
         XCTAssertEqual(monitor.state, .pausedFocus)
         XCTAssertEqual(feed(focus: 0.9, sharpness: 400, still: false, for: 3), .pausedFocus)
-        XCTAssertEqual(feed(focus: 0.9, sharpness: 400, for: 0.9), .pausedFocus, "spanning 0.8 s")
-        XCTAssertEqual(feed(focus: 0.9, sharpness: 400, for: 0.2), .ok)
+        XCTAssertEqual(feed(focus: 0.9, sharpness: 400, for: 1.4), .pausedFocus, "spanning 1.3 s")
+        XCTAssertEqual(feed(focus: 0.9, sharpness: 400, for: 0.3), .ok)
     }
 
     func testWithoutABaselineAStillOnsetPausesAndDetailPlusStillResumes() {
         feed(focus: 1.0, sharpness: 400, for: 0.6)
         XCTAssertNil(monitor.focusBaseline)
         XCTAssertEqual(feed(sharpness: 60, tracking: .paused, for: 2.6), .pausedFocus)
-        XCTAssertEqual(feed(focus: 0.2, sharpness: 400, for: 1.2), .ok)
+        XCTAssertEqual(feed(focus: 0.2, sharpness: 400, for: 1.7), .ok)
     }
 
     // MARK: Two-signal focus pause (Phase 2s-D part C), numbers from the 17 Nov device runs
@@ -250,15 +310,15 @@ final class RunMonitorTests: XCTestCase {
         feed(focus: 0.08, sharpness: 585, for: 60)
         XCTAssertEqual(monitor.state, .pausedFocus, "still blurry: stays paused")
         XCTAssertEqual(feed(focus: 0.08, sharpness: 1600, for: 3), .pausedFocus, "0.71 of the reference")
-        XCTAssertEqual(feed(focus: 0.08, sharpness: 1900, for: 0.9), .pausedFocus, "spanning 0.8 s")
-        XCTAssertEqual(feed(focus: 0.08, sharpness: 1900, for: 0.2), .ok, "0.85 of the reference")
+        XCTAssertEqual(feed(focus: 0.08, sharpness: 1900, for: 1.4), .pausedFocus, "spanning 1.3 s")
+        XCTAssertEqual(feed(focus: 0.08, sharpness: 1900, for: 0.3), .ok, "0.85 of the reference")
     }
 
     func testSharpnessBackAtEightyPercentOfTheReferenceResumes() {
         monitor.setFocusBaseline(0.222)
         feed(focus: 0.3, sharpness: 2240, for: 8)
         feed(focus: 0.08, sharpness: 585, for: 3)
-        XCTAssertEqual(feed(focus: 0.08, sharpness: 1900, for: 1.2), .ok)
+        XCTAssertEqual(feed(focus: 0.08, sharpness: 1900, for: 1.7), .ok)
         XCTAssertEqual(monitor.pauseCause, "")
     }
 

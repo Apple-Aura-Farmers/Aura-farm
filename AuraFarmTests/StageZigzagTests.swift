@@ -43,7 +43,7 @@ final class StageZigzagTests: XCTestCase {
             case .columnStarted(let n):
                 dwell = 0
                 if n > stopAfterColumn { return actions }
-            case .columnEnded: break
+            case .columnEnded, .swapped: break
             case .finished: return actions
             }
         }
@@ -218,6 +218,40 @@ final class StageZigzagTests: XCTestCase {
         let actions = simulate(&zigzag, angles: &angles, stopAfterColumn: 2)
         let stops = stopAngles(actions, zigzag.plan, start: legStart, column: 0)
         XCTAssertEqual(Array(stops.prefix(3)), [180, 172, 164])
+    }
+
+    func testColumnOneRunningSidewaysSwapsTheRolesOnceAndStartsAgain() throws {
+        let m = mapping()
+        var zigzag = try makeZigzag(m)
+        zigzag.mapping = m
+        XCTAssertEqual(zigzag.plan.legServo, .y)
+        var angles = (x: 90, y: 90)
+        // Wrong mapping: the picture really moves sideways with the "leg" servo, and stays
+        // sideways whatever turns, so a second check would swap again if it were allowed.
+        let actions = simulate(
+            &zigzag, angles: &angles,
+            picture: { CGPoint(x: Double($0.y + $0.x) * 0.2, y: 0) }, stopAfterColumn: 2)
+        let swaps = actions.filter { if case .swapped = $0 { true } else { false } }
+        XCTAssertEqual(swaps.count, 1)
+        XCTAssertEqual(zigzag.plan.legServo, .x)
+        XCTAssertEqual(zigzag.plan.stepServo, .y)
+        let starts = actions.compactMap { action -> Int? in
+            if case .columnStarted(let n) = action { return n } else { return nil }
+        }
+        XCTAssertEqual(Array(starts.prefix(2)), [1, 1], "column 1 starts again after the swap")
+        let swapAt = try XCTUnwrap(
+            actions.firstIndex { if case .swapped = $0 { true } else { false } })
+        XCTAssertEqual(actions[swapAt + 1], .columnEnded(1))
+    }
+
+    func testAColumnThatRunsVerticallyIsNotSwapped() throws {
+        let m = mapping()
+        var zigzag = try makeZigzag(m)
+        zigzag.mapping = m
+        var angles = (x: 90, y: 90)
+        let actions = simulate(
+            &zigzag, angles: &angles, picture: picture(x: 0.2, y: 0.2), stopAfterColumn: 2)
+        XCTAssertFalse(actions.contains { if case .swapped = $0 { true } else { false } })
     }
 
     func testAnEdgeEndsTheLegAndNarrowsLaterOnes() throws {

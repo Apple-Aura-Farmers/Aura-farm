@@ -24,6 +24,11 @@ struct RunMonitorInfo: Equatable {
     var sharpnessReference: Double?
     var sharpnessShare: Double?
     var pauseCause = ""
+    /// While paused for focus: the highest index so far and which way to turn. `resumedNote` is
+    /// set for the one frame on which the pause ended by itself.
+    var focusPeak: Double?
+    var focusHint: String?
+    var resumedNote = ""
 }
 
 /// What the setup screens draw, published by the lab at its normal throttle.
@@ -449,7 +454,9 @@ final class LabSetupSession {
             circle: referenceCircle, focusLow: monitor.isFocusLow,
             focusStillOnset: monitor.isStillOnset, dial: dial,
             sharpnessReference: monitor.sharpnessReference,
-            sharpnessShare: monitor.sharpnessShare, pauseCause: monitor.pauseCause)
+            sharpnessShare: monitor.sharpnessShare, pauseCause: monitor.pauseCause,
+            focusPeak: monitor.peakIndex, focusHint: monitor.focusHint,
+            resumedNote: monitor.resumeNote)
     }
 
     /// "Resume anyway": the run goes on at once and the focus baseline is measured again from

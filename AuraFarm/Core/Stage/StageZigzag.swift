@@ -25,10 +25,14 @@ struct StageZigzagPlan: Equatable {
     /// puts it at screen-left (true: 180, false: 0).
     var legStartsHigh: Bool
     var stepStartsHigh: Bool
+    /// The two servos' roles were exchanged after the first column ran sideways.
+    var rolesSwapped = false
 
-    init?(mapping: StageServoMapping) {
+    /// - Parameter swappingRoles: the other servo walks the columns (the first-column check).
+    init?(mapping: StageServoMapping, swappingRoles: Bool = false) {
+        rolesSwapped = swappingRoles
         // The servo that moves the picture more vertically walks the columns.
-        let legIsX = mapping.swapped
+        let legIsX = mapping.swapped != swappingRoles
         let leg = legIsX ? mapping.x : mapping.y
         let step = legIsX ? mapping.y : mapping.x
         legServo = legIsX ? .x : .y
@@ -57,6 +61,9 @@ enum StageZigzagAction: Equatable {
     case columnStarted(Int)
     case columnEnded(Int)
     case finished(String)
+    /// Column 1 ran sideways: the roles were exchanged and the path starts again (the picture's
+    /// travel in fields).
+    case swapped(dx: Double, dy: Double)
 }
 
 /// The zig-zag as a state machine: walk to the start corner, then for each column walk the leg
@@ -64,9 +71,13 @@ enum StageZigzagAction: Equatable {
 /// step servo across and turn round. No move is longer than `chunkDegrees`. The caller sends
 /// the moves and the dwells, and says when they are done.
 struct StageZigzag {
-    let plan: StageZigzagPlan
+    private(set) var plan: StageZigzagPlan
     var dwellSeconds: Double
     var chunkDegrees: Int
+    /// The current mapping (kept up to date by the caller); used to rebuild the plan on a swap.
+    var mapping: StageServoMapping?
+    /// Picture travel in column 1 that is enough to tell its direction, in fields.
+    static let swapCheckFields = 1.0
     /// Live fields per degree; the degree fallbacks use these (a mapping correction updates them).
     var legFieldsPerDegree: Double
     var stepFieldsPerDegree: Double
@@ -85,6 +96,8 @@ struct StageZigzag {
     private var tracked: CGPoint?
     private var anchorPosition: CGPoint?
     private var anchorAngle = 0
+    private var swapAnchor: CGPoint?
+    private var swapCheckOpen = true
 
     init(plan: StageZigzagPlan, chunkDegrees: Int, dwellSeconds: Double = 1.2) {
         self.plan = plan
@@ -127,12 +140,53 @@ struct StageZigzag {
         angles: (x: Int, y: Int), event: StageZigzagEvent?, tracked: CGPoint? = nil
     ) -> StageZigzagAction? {
         self.tracked = tracked
+        if checkFirstColumn(angles) { return queue.removeFirst() }
         if !started {
             started = true
             approach(angles)
         }
         if let event { handle(event, angles) }
         return queue.isEmpty ? nil : queue.removeFirst()
+    }
+
+    // MARK: First-column direction check
+
+    /// During column 1, once the picture has moved a field, compare its horizontal and vertical
+    /// travel: columns that run sideways mean the leg servo is the wrong one. Swaps the roles
+    /// (at most once per run) and starts again. True when it did.
+    private mutating func checkFirstColumn(_ angles: (x: Int, y: Int)) -> Bool {
+        guard swapCheckOpen, column == 1, stage == .legDwell || stage == .legMove else {
+            if column > 1 { swapCheckOpen = false }
+            return false
+        }
+        guard let tracked else {
+            if swapAnchor != nil { swapCheckOpen = false }  // lost before a field: no check
+            return false
+        }
+        guard let anchor = swapAnchor else {
+            swapAnchor = tracked
+            return false
+        }
+        let dx = Double(tracked.x - anchor.x)
+        let dy = Double(tracked.y - anchor.y)
+        guard hypot(dx, dy) >= Self.swapCheckFields else { return false }
+        swapCheckOpen = false
+        guard abs(dx) > abs(dy), let mapping,
+            let swapped = StageZigzagPlan(mapping: mapping, swappingRoles: !plan.rolesSwapped)
+        else { return false }
+        let ended = column
+        plan = swapped
+        legFieldsPerDegree = swapped.legFieldsPerDegree
+        stepFieldsPerDegree = swapped.stepFieldsPerDegree
+        direction = swapped.legStartsHigh ? -1 : 1
+        column = 0
+        spot = 0
+        lowEdge = nil
+        highEdge = nil
+        queue = [.swapped(dx: dx, dy: dy), .columnEnded(ended)]
+        started = true
+        approach(angles)
+        return true
     }
 
     // MARK: Events

@@ -1133,6 +1133,12 @@ class ScanEngine: NSObject {
         logged.sharpnessRef = monitor?.sharpnessReference
         logged.sharpnessShare = monitor?.sharpnessShare
         logged.pauseCause = monitor?.pauseCause ?? ""
+        logged.focusPeak = monitor?.focusPeak
+        logged.focusHint = monitor?.focusHint ?? ""
+        if let note = monitor?.resumedNote, !note.isEmpty, pendingEventName.isEmpty {
+            pendingEventName = "focus_resumed"
+            pendingEventDetail = note
+        }
         logged.focusDialOffset = monitor?.dial?.offset
         logged.focusDialSide = monitor?.dial?.csvSide ?? ""
         logged.quadAheadAway = guide?.quadAheadAway

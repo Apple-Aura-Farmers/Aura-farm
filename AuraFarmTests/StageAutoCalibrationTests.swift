@@ -21,6 +21,41 @@ final class StageAutoCalibrationTests: XCTestCase {
         try calibrate(vx: vx, vy: vy).mapping().get()
     }
 
+    func testAServoFarWeakerThanTheOtherFailsTheRatioCheckNamingBoth() throws {
+        let c = calibrate(vx: CGPoint(x: 0.01, y: 0), vy: CGPoint(x: 0, y: 0.092), degrees: 60)
+        let weak = try XCTUnwrap(
+            StageAutoCalibration.weakServo(x: CGPoint(x: 0.01, y: 0), y: CGPoint(x: 0, y: 0.092)))
+        XCTAssertEqual(weak.servo, .x)
+        XCTAssertEqual(weak.weak, 0.01, accuracy: 1e-9)
+        XCTAssertEqual(weak.strong, 0.092, accuracy: 1e-9)
+        guard case .failure(let failure) = c.mapping() else { return XCTFail("should fail") }
+        guard case .scaleMismatch(let servo, let low, let high) = failure else {
+            return XCTFail("wrong failure \(failure)")
+        }
+        XCTAssertEqual(servo, .x)
+        XCTAssertEqual(low, 0.01, accuracy: 1e-6)
+        XCTAssertEqual(high, 0.092, accuracy: 1e-6)
+        XCTAssertEqual(
+            failure.localizedDescription,
+            "Servo X barely moved the picture (0.010 vs 0.092 f/°): tracking probably slipped. "
+                + "Check focus and that the view has particles, then Retry.")
+    }
+
+    func testRatioCheckPassesWhenServosAreAlikeAndAfterAServoIsMeasuredAgain() throws {
+        XCTAssertNil(
+            StageAutoCalibration.weakServo(x: CGPoint(x: 0.04, y: 0), y: CGPoint(x: 0, y: 0.09)))
+        var c = calibrate(vx: CGPoint(x: 0.01, y: 0), vy: CGPoint(x: 0, y: 0.09), degrees: 60)
+        c.discard(.x)
+        for d in stride(from: 0, through: 60, by: 3) {
+            c.add(
+                servo: .x, angle: Double(90 + d), position: CGPoint(x: 0.08 * Double(d), y: 0),
+                tracking: .tracking)
+        }
+        let m = try c.mapping().get()
+        XCTAssertEqual(m.x.x, 0.08, accuracy: 1e-6)
+        XCTAssertFalse(m.swapped)
+    }
+
     func testStraight() throws {
         let m = try mapping(CGPoint(x: 0.2, y: 0), CGPoint(x: 0, y: 0.2))
         XCTAssertFalse(m.swapped)

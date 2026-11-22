@@ -395,6 +395,9 @@ struct PausedOverlay: View {
                     if reason == .focus, let dial = monitor.dial {
                         FocusDialView(reading: dial)
                         SetupLine(text: dial.message, tone: dial.isGreen ? .green : .orange)
+                        if let hint = monitor.focusHint {
+                            SetupLine(text: hint, tone: .white)
+                        }
                     } else if !GuideInstruction.paused(reason).helperText.isEmpty {
                         SetupLine(text: GuideInstruction.paused(reason).helperText, tone: .orange)
                     }
