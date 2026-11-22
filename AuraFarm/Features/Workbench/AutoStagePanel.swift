@@ -71,6 +71,9 @@
                             .buttonStyle(.bordered)
                     }
                 }
+                if let notice = driver.restartNotice {
+                    Text(notice).font(.caption).foregroundStyle(.orange)
+                }
                 if let warning = driver.objective.warning(forChunk: driver.chunkDegrees) {
                     Text(warning).font(.caption).foregroundStyle(.orange)
                 }
@@ -149,6 +152,7 @@
                 driver.autoStageLimit
                     ? "Servo \(servo.letter) at its limit, telling the guide"
                     : "Servo \(servo.letter) reached its limit; press Stage limit if the edge can't be reached"
+            case .walkingBack(let x, let y): "Walking the stage back to \(x),\(y)"
             case .crossingEmpty(let fields):
                 String(format: "Crossing empty area: %.1f of %.1f fields", fields, driver.blindCap)
             case .emptyCapReached(let fields):

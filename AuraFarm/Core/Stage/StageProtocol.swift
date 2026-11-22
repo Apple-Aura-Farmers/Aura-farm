@@ -34,6 +34,9 @@ enum StageCommand: Equatable {
     case mode(StageMode)
     case jog(StageAxis, Int)
     case goTo(StageAxis, Int)
+    /// The focus (Z) servo, MANUAL only. Never sent by the automated stage.
+    case focusGoTo(Int)
+    case focusJog(Int)
     case path([StagePoint])
     case start, traverse, stop, resume, home, end
 
@@ -46,6 +49,8 @@ enum StageCommand: Equatable {
         case .mode(let m): m == .auto ? "MODE AUTO" : "MODE MANUAL"
         case .jog(let a, let n): "JOG \(a.letter) \(n)"
         case .goTo(let a, let n): "GOTO \(a.letter) \(n)"
+        case .focusGoTo(let n): "GOTO Z \(n)"
+        case .focusJog(let n): "JOG Z \(n)"
         case .path(let pts): "PATH " + pts.map { "\($0.x),\($0.y)" }.joined(separator: ";")
         case .start: "START"
         case .traverse: "TRAVERSE"
@@ -59,6 +64,8 @@ enum StageCommand: Equatable {
     func validated() throws -> String {
         switch self {
         case .goTo(_, let n) where !(0...180).contains(n):
+            throw StageCommandError.angleOutOfRange
+        case .focusGoTo(let n) where !(0...180).contains(n):
             throw StageCommandError.angleOutOfRange
         case .path(let pts):
             if pts.isEmpty { throw StageCommandError.emptyPath }
@@ -111,6 +118,8 @@ enum StageReply: Equatable {
     case hello(mode: StageMode, state: StageRunState, x: Int, y: Int)
     case resumed(x: Int, y: Int, queued: Int)
     case status(mode: StageMode, state: StageRunState, x: Int, y: Int, queued: Int)
+    /// "ZPOS Z=n": the focus servo, on its own line.
+    case focusPosition(z: Int)
     case unknown(String)
 
     static func parse(_ line: String) -> StageReply {
@@ -127,6 +136,8 @@ enum StageReply: Equatable {
             if let x = f["X"], let y = f["Y"], words.count == 3 { return .position(x: x, y: y) }
         case "DONE":
             if let x = f["X"], let y = f["Y"], words.count == 3 { return .done(x: x, y: y) }
+        case "ZPOS":
+            if let z = f["Z"], words.count == 2 { return .focusPosition(z: z) }
         case "RESUMED":
             if let x = f["X"], let y = f["Y"], let q = f["Q"], words.count == 4 {
                 return .resumed(x: x, y: y, queued: q)

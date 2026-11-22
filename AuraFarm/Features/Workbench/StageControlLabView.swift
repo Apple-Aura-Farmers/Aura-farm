@@ -12,6 +12,7 @@
         @State private var path: [StagePoint] = []
         @State private var sliderX = 90.0
         @State private var sliderY = 90.0
+        @State private var sliderZ = 90.0
         @State private var pathNote: String?
 
         private var connected: Bool { client.status == .connected }
@@ -40,6 +41,7 @@
                         Toggle("Flip Y", isOn: $flipY)
                     }
                     manualControls
+                    focusControls
                     autoControls
                     alwaysControls
                     if let e = client.lastError { Text(e).foregroundStyle(.red) }
@@ -51,6 +53,7 @@
             .navigationBarTitleDisplayMode(.inline)
             .onChange(of: client.x) { _, v in sliderX = Double(v) }
             .onChange(of: client.y) { _, v in sliderY = Double(v) }
+            .onChange(of: client.z) { _, v in if let v { sliderZ = Double(v) } }
             .onDisappear { client.disconnect() }
         }
 
@@ -101,6 +104,32 @@
                         arrow("arrow.down") { client.jog(.y, flipY ? step : -step) }
                         arrow("arrow.up") { client.jog(.y, flipY ? -step : step) }
                     }
+                }
+            }
+            .disabled(!manualOn)
+        }
+
+        private var focusControls: some View {
+            GroupBox("Focus (Z)") {
+                VStack(spacing: 12) {
+                    Text(client.z.map { "Z: \($0)°" } ?? "Z: not reported (old firmware)")
+                        .font(.callout.monospacedDigit())
+                    HStack(spacing: 12) {
+                        ForEach([-5, -1, 1, 5], id: \.self) { delta in
+                            Button(delta > 0 ? "+\(delta)" : "\(delta)") { client.jogFocus(delta) }
+                                .buttonStyle(.bordered)
+                                .frame(maxWidth: .infinity)
+                        }
+                    }
+                    HStack {
+                        Text("\(Int(sliderZ))°").monospacedDigit().frame(
+                            width: 70, alignment: .leading)
+                        Slider(value: $sliderZ, in: 0...180, step: 1) { editing in
+                            if !editing { client.moveFocus(to: Int(sliderZ)) }
+                        }
+                    }
+                    Text("Free-spinning test: the servo is not on the focus knob yet")
+                        .font(.footnote).foregroundStyle(.secondary)
                 }
             }
             .disabled(!manualOn)

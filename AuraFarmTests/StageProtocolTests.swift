@@ -65,4 +65,16 @@ final class StageProtocolTests: XCTestCase {
         XCTAssertEqual(StageReply.parse(""), .unknown(""))
         XCTAssertEqual(StageReply.parse("POS X=abc"), .unknown("POS X=abc"))
     }
+
+    func testFocusServoCommandsAndReply() throws {
+        XCTAssertEqual(StageCommand.focusGoTo(120).text, "GOTO Z 120")
+        XCTAssertEqual(StageCommand.focusJog(-5).text, "JOG Z -5")
+        XCTAssertEqual(try StageCommand.focusGoTo(120).validated(), "GOTO Z 120")
+        XCTAssertThrowsError(try StageCommand.focusGoTo(181).validated())
+        XCTAssertThrowsError(try StageCommand.focusGoTo(-1).validated())
+        XCTAssertEqual(StageReply.parse("ZPOS Z=87"), .focusPosition(z: 87))
+        XCTAssertEqual(StageReply.parse("ZPOS"), .unknown("ZPOS"))
+        XCTAssertEqual(StageReply.parse("ZPOS X=1"), .unknown("ZPOS X=1"))
+        XCTAssertEqual(StageReply.parse("ZPOS Z=87 X=1"), .unknown("ZPOS Z=87 X=1"))
+    }
 }

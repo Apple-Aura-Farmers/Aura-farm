@@ -74,6 +74,9 @@ struct StageZigzag {
     private(set) var plan: StageZigzagPlan
     var dwellSeconds: Double
     var chunkDegrees: Int
+    /// Degrees added to the leg servo's and the step servo's moves while their gears are stuck.
+    var boostLeg = 0
+    var boostStep = 0
     /// The current mapping (kept up to date by the caller); used to rebuild the plan on a swap.
     var mapping: StageServoMapping?
     /// Picture travel in column 1 that is enough to tell its direction, in fields.
@@ -218,8 +221,9 @@ struct StageZigzag {
     }
 
     /// One step of at most `chunkDegrees` from `current` toward `end`.
-    private func stepToward(_ end: Int, from current: Int) -> Int {
-        current + max(-chunkDegrees, min(chunkDegrees, end - current))
+    private func stepToward(_ end: Int, from current: Int, servo: StageAxis) -> Int {
+        let chunk = chunkDegrees + (servo == plan.legServo ? boostLeg : boostStep)
+        return current + max(-chunk, min(chunk, end - current))
     }
 
     private mutating func approach(_ angles: (x: Int, y: Int)) {
@@ -229,10 +233,13 @@ struct StageZigzag {
         let step = angle(of: plan.stepServo, angles)
         if leg != legEnd {
             stage = .approachLeg
-            queue.append(.moveTo(servo: plan.legServo, angle: stepToward(legEnd, from: leg)))
+            queue.append(
+                .moveTo(servo: plan.legServo, angle: stepToward(legEnd, from: leg, servo: plan.legServo)))
         } else if step != stepEnd {
             stage = .approachStep
-            queue.append(.moveTo(servo: plan.stepServo, angle: stepToward(stepEnd, from: step)))
+            queue.append(
+                .moveTo(
+                    servo: plan.stepServo, angle: stepToward(stepEnd, from: step, servo: plan.stepServo)))
         } else {
             beginColumn(angles)
         }
@@ -272,7 +279,7 @@ struct StageZigzag {
         let current = angle(of: plan.legServo, angles)
         let range = bounds()
         let end = direction > 0 ? range.high : range.low
-        let target = stepToward(end, from: current)
+        let target = stepToward(end, from: current, servo: plan.legServo)
         guard target != current else { return endLeg(angles) }
         stage = .legMove
         queue.append(.moveTo(servo: plan.legServo, angle: target))
@@ -305,7 +312,8 @@ struct StageZigzag {
         stage = .stepMove
         anchorPosition = tracked
         anchorAngle = current
-        queue.append(.moveTo(servo: plan.stepServo, angle: stepToward(far, from: current)))
+        queue.append(
+            .moveTo(servo: plan.stepServo, angle: stepToward(far, from: current, servo: plan.stepServo)))
     }
 
     /// After a settled step of the column move: next column once the picture has moved a
@@ -323,6 +331,7 @@ struct StageZigzag {
             arrived = arrived || moved >= columnFallbackDegrees
         }
         if arrived { return beginColumn(angles) }
-        queue.append(.moveTo(servo: plan.stepServo, angle: stepToward(far, from: current)))
+        queue.append(
+            .moveTo(servo: plan.stepServo, angle: stepToward(far, from: current, servo: plan.stepServo)))
     }
 }

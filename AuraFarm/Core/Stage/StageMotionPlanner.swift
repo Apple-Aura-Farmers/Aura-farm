@@ -12,6 +12,9 @@ struct StageMotionPlanner {
     var mapping: StageServoMapping
     var chunkDegrees = 3
     var deadbandFields = 0.15
+    /// Degrees added to a servo's step while its gear is stuck (see `StageStuckWatch`).
+    var boostX = 0
+    var boostY = 0
 
     /// - Parameters:
     ///   - angles: where the servos are now.
@@ -53,7 +56,7 @@ struct StageMotionPlanner {
     /// One servo's move for `degrees`: idle for under one degree, at limit when pinned.
     private func move(_ servo: StageAxis, _ degrees: Double, _ angles: (x: Int, y: Int)) -> StageMove {
         guard degrees != 0 else { return .idle }
-        let chunk = Double(min(max(chunkDegrees, 1), 10))
+        let chunk = Double(min(max(chunkDegrees, 1), 10) + (servo == .x ? boostX : boostY))
         let step = Int(min(max(degrees, -chunk), chunk).rounded())
         // Closer than one degree is not possible: stop here instead of hunting.
         guard step != 0 else { return .idle }

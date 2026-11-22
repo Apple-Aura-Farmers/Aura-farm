@@ -1,6 +1,12 @@
-// Phase 2 (lab version): Bluetooth Low Energy control of the X/Y stage, ESP32-C3 Super Mini.
-// X servo GPIO3, Y servo GPIO4. Board: ESP32-C3 Super Mini, core 3.x, USB CDC On Boot: Enabled.
+// Bluetooth Low Energy control of the X/Y stage plus the Z (focus) servo, ESP32-C3 Super Mini.
+// X servo GPIO3, Y servo GPIO4, Z servo GPIO5. Board: ESP32-C3 Super Mini, core 3.x,
+// USB CDC On Boot: Enabled.
 // C3 runs from the Mac's USB. Servos run from the HW-131 rail (separate power, shared ground).
+//
+// Z (focus): JOG/GOTO Z only, in MANUAL. Z is NOT attached at boot (no startup jump): it starts
+// from its last angle, saved in flash once it has stopped with no Z move queued. HOME, END, PATH, START and TRAVERSE
+// never move Z. Replies keep the X/Y format; Z is reported on its own line, "ZPOS Z=n", after a Z
+// move and after HELLO, RESUMED and STATUS.
 //
 // BLE: advertises as "terraloka_stage" using the Nordic UART Service (BLE only, no classic
 // Bluetooth). The phone WRITES text commands to the RX characteristic and receives text replies
@@ -23,9 +29,12 @@ const char* BLE_NAME = "terraloka_stage";
 #define RX_UUID      "6E400002-B5A3-F393-E0A9-E50E24DCCA9E"  // phone -> C3 (write)
 #define TX_UUID      "6E400003-B5A3-F393-E0A9-E50E24DCCA9E"  // C3 -> phone (notify)
 
-const int  NUM_SERVOS = 2;
-const int  SERVO_PINS[NUM_SERVOS]  = {3, 4};
-const char SERVO_NAMES[NUM_SERVOS] = {'X', 'Y'};
+const int  NUM_SERVOS = 3;
+const int  SERVO_PINS[NUM_SERVOS]  = {3, 4, 5};
+const char SERVO_NAMES[NUM_SERVOS] = {'X', 'Y', 'Z'};
+const int  Z_SERVO = 2;               // index of the focus servo
+const int  STAGE_SERVOS = 2;          // X and Y: homed at boot and by HOME / END
+const unsigned long Z_SAVE_DELAY_MS = 500;   // flash write this long after the last Z move ends
 
 const int DEFAULT_MIN  = 0;     // used when no calibration is saved
 const int DEFAULT_MAX  = 180;   // (0-180 checked clean on these servos with 'sweep')
@@ -67,6 +76,9 @@ unsigned long lastOffMs = 0;       // when the last move switched its signal off
 int minAngle[NUM_SERVOS], maxAngle[NUM_SERVOS], homeAngle[NUM_SERVOS];
 int currentAngle[NUM_SERVOS];      // last commanded angle per servo
 int projected[NUM_SERVOS];         // angle each servo will have after the queued moves
+
+bool zSavePending = false;         // Z moved: save its angle once it has been still a while
+unsigned long zSaveAt = 0;
 
 int pathX[MAX_POINTS], pathY[MAX_POINTS];
 int pathLen = 0;
@@ -133,13 +145,54 @@ String posText() {
   return String("X=") + currentAngle[0] + " Y=" + currentAngle[1];
 }
 
+// Z on a line of its own, so the X/Y replies keep their format for older app versions.
+void replyZ() {
+  reply(String("ZPOS Z=") + currentAngle[Z_SERVO]);
+}
+
+// ---------------- Z angle in flash ----------------
+int loadSavedZ() {
+  Preferences zp;
+  zp.begin("zpos", false);  // read-write so a first boot creates the namespace (no error line)
+  int z = zp.getInt("z", -1);
+  zp.end();
+  return z;
+}
+
+void scheduleZSave() {
+  zSavePending = true;
+  zSaveAt = millis() + Z_SAVE_DELAY_MS;
+}
+
+// True while a Z move runs or waits in the queue: its angle is not final yet.
+bool zBusy() {
+  for (int k = 0; k < qCount; k++) {
+    if (queue[(qHead + k) % QUEUE_SIZE].servo == Z_SERVO) return true;
+  }
+  return false;
+}
+
+// Saves Z only once it is still with nothing queued, so the saved angle is always one the servo
+// really stopped at (never a point in the middle of a move).
+void saveZIfDue() {
+  if (!zSavePending || (long)(millis() - zSaveAt) < 0) return;
+  if (zBusy()) return;
+  zSavePending = false;
+  Preferences zp;
+  zp.begin("zpos", false);
+  zp.putInt("z", currentAngle[Z_SERVO]);
+  zp.end();
+  stamp();
+  Serial.printf("servo Z (GPIO%d) | saved angle %d deg\n", SERVO_PINS[Z_SERVO], currentAngle[Z_SERVO]);
+}
+
 // ---------------- Limits and home (from calibration) ----------------
 void loadLimits() {
   Preferences cal;
   cal.begin("calib", true);  // read-only; missing values fall back to defaults
-  const char* minKeys[NUM_SERVOS]  = {"xmin", "ymin"};
-  const char* maxKeys[NUM_SERVOS]  = {"xmax", "ymax"};
-  const char* homeKeys[NUM_SERVOS] = {"xhome", "yhome"};
+  const char* minKeys[NUM_SERVOS]  = {"xmin", "ymin", "zmin"};
+  const char* maxKeys[NUM_SERVOS]  = {"xmax", "ymax", "zmax"};
+  const char* homeKeys[NUM_SERVOS] = {"xhome", "yhome", "zhome"};
   for (int i = 0; i < NUM_SERVOS; i++) {
     int mn = cal.getInt(minKeys[i], -1);
     int mx = cal.getInt(maxKeys[i], -1);
@@ -191,6 +244,7 @@ void haltCurrentMove() {
     int s = queue[qHead].servo;
     servoOff(s);
     lastOffMs = millis();
+    if (s == Z_SERVO) scheduleZSave();
     stamp();
     Serial.printf("servo %c (GPIO%d) | stopped at %d deg (signal off)\n", SERVO_NAMES[s], SERVO_PINS[s], currentAngle[s]);
   }
@@ -251,9 +305,15 @@ void runEngine() {
     lastOffMs = now;
     stamp();
     Serial.printf("servo %c (GPIO%d) | at %d deg | end\n", SERVO_NAMES[m.servo], SERVO_PINS[m.servo], currentAngle[m.servo]);
+    int movedServo = m.servo;  // read before popMove frees the slot
     popMove();
     phase = PH_IDLE;
-    reply("POS " + posText());
+    if (movedServo == Z_SERVO) {
+      scheduleZSave();
+      replyZ();
+    } else {
+      reply("POS " + posText());
+    }
   }
 
   if (qCount == 0 && phase == PH_IDLE && jobActive) {
@@ -266,6 +326,7 @@ void runEngine() {
 int axisIndex(const String& a) {
   if (a == "X") return 0;
   if (a == "Y") return 1;
+  if (a == "Z") return Z_SERVO;
   return -1;
 }
 
@@ -297,6 +358,7 @@ void handleCommand(String cmd) {
 
   if (word == "STATUS") {
     reply(String(modeName()) + " " + stateName() + " " + posText() + " Q=" + qCount);
+    replyZ();
 
   } else if (word == "MODE") {
     if (qCount > 0 || phase != PH_IDLE) { reply("ERR BUSY (STOP or wait)"); return; }
@@ -313,7 +375,7 @@ void handleCommand(String cmd) {
     int servo = axisIndex(sp2 < 0 ? rest : rest.substring(0, sp2));
     int value;
     if (servo < 0 || sp2 < 0 || !parseInt(rest.substring(sp2 + 1), value)) {
-      reply(String("ERR ") + word + " X|Y <deg>");
+      reply(String("ERR ") + word + " X|Y|Z <deg>");
       return;
     }
     int target = (word == "JOG") ? projected[servo] + value : value;
@@ -475,6 +537,7 @@ void handleBleEvents() {
     } else {
       reply(String("HELLO ") + modeName() + " " + stateName() + " " + posText());
     }
+    replyZ();
   }
 }
 
@@ -491,13 +554,21 @@ void setup() {
 
   int reason = esp_reset_reason();
   Serial.println();
-  Serial.println("=== Phase 2: BLE stage control (ESP32-C3 Super Mini) ===");
+  Serial.println("=== Stage control X/Y/Z (ESP32-C3 Super Mini) ===");
   Serial.printf("Reset reason: %s (%d)\n", resetName(reason), reason);
   loadLimits();
 
+  // Z is not attached at boot: it starts from its saved angle, and its first move begins there.
+  int savedZ = loadSavedZ();
+  bool zOk = inLimits(Z_SERVO, savedZ);
+  currentAngle[Z_SERVO] = zOk ? savedZ : homeAngle[Z_SERVO];
+  projected[Z_SERVO] = currentAngle[Z_SERVO];
+  Serial.printf("startup | servo Z (GPIO%d) | not attached, last angle %d deg (%s)\n",
+                SERVO_PINS[Z_SERVO], currentAngle[Z_SERVO], zOk ? "saved" : "home, nothing saved");
+
   // Attach X, then Y, each with one jump to its home (position unknown after power-up).
   delay(BOOT_WAIT_MS);
-  for (int i = 0; i < NUM_SERVOS; i++) {
+  for (int i = 0; i < STAGE_SERVOS; i++) {
     stamp();
     Serial.printf("startup | servo %c (GPIO%d) | attach at home %d deg (one direct jump)\n",
                   SERVO_NAMES[i], SERVO_PINS[i], homeAngle[i]);
@@ -512,8 +583,8 @@ void setup() {
 
   cmdQueue = xQueueCreate(8, CMD_LEN);
   setupBle();
-  Serial.println("Ready. Mode MANUAL. Commands: STATUS, MODE AUTO|MANUAL, JOG X|Y n, GOTO X|Y n,");
-  Serial.println("PATH x,y;x,y;..., START, TRAVERSE, STOP, RESUME, HOME, END");
+  Serial.println("Ready. Mode MANUAL. Commands: STATUS, MODE AUTO|MANUAL, JOG X|Y|Z n, GOTO X|Y|Z n,");
+  Serial.println("PATH x,y;x,y;..., START, TRAVERSE, STOP, RESUME, HOME, END (HOME/END: X and Y only)");
 }
 
 void loop() {
@@ -533,5 +604,6 @@ void loop() {
   }
 
   runEngine();
+  saveZIfDue();
   delay(1);
 }

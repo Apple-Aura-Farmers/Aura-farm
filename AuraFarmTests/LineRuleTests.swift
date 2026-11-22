@@ -325,7 +325,7 @@ final class LineRuleTests: XCTestCase {
     func testTheLineAttachSourceIsFollowedOnlyByTheSpotAndCountingColumns() {
         // The spot check, coverage, counting, event detail, model, units, camera, phone, edge
         // acceptance, camera drops, the guided scan's knob words and the focus pause's peak and
-        // hint follow it.
-        XCTAssertEqual(MovementLog.header[MovementLog.header.count - 43], "line_attach_source")
+        // hint, then the stage's servo angles follow it.
+        XCTAssertEqual(MovementLog.header[MovementLog.header.count - 45], "line_attach_source")
     }
 }

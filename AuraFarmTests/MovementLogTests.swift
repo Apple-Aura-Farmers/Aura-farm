@@ -49,13 +49,13 @@ final class MovementLogTests: XCTestCase {
         XCTAssertEqual(fields[index("position_x_frames")], "0.014")
         XCTAssertEqual(fields[index("frame_width")], "1280")
         XCTAssertEqual(
-            MovementLog.header.suffix(115).prefix(7),
+            MovementLog.header.suffix(117).prefix(7),
             [
                 "box_brightness", "box_sharpness", "box_contrast", "reading", "predicted_streak",
                 "no_detail", "blind_stretches",
             ])
         XCTAssertEqual(
-            MovementLog.header.suffix(108).prefix(27),
+            MovementLog.header.suffix(110).prefix(27),
             [
                 "start_match_x_px", "start_match_y_px", "true_off_start_fields",
                 "tracker_error_fields", "blank_returns_matched", "blank_returns_unmatched",
@@ -89,7 +89,7 @@ final class MovementLogTests: XCTestCase {
         XCTAssertEqual(fields[index("focus_top")], "1.200")
         XCTAssertEqual(fields[index("focus_bottom")], "", "a half with no ratio is empty")
         XCTAssertEqual(
-            MovementLog.header.suffix(80).prefix(5),
+            MovementLog.header.suffix(82).prefix(5),
             ["focus_index", "focus_baseline", "circle_shift_r", "circle_radius_change", "focus_low"],
             "the run monitor's columns are appended after every column")
         XCTAssertEqual(fields[index("monitor_state")], "")
@@ -186,9 +186,9 @@ final class MovementLogTests: XCTestCase {
 
     func testTheSpotAndCountingColumnsAreAppendedLast() {
         XCTAssertEqual(
-            MovementLog.header.suffix(42).prefix(3), ["spot_mode", "spot_window", "touch_seconds"])
+            MovementLog.header.suffix(44).prefix(3), ["spot_mode", "spot_window", "touch_seconds"])
         XCTAssertEqual(
-            MovementLog.header.suffix(26).prefix(18),
+            MovementLog.header.suffix(28).prefix(18),
             [
                 "event_detail", "detector_model", "det_drop_disc", "det_drop_big", "det_units",
                 "frame_dt", "camera_fps", "exposure_ms", "iso", "thermal_state", "battery_level",
@@ -264,7 +264,7 @@ final class MovementLogTests: XCTestCase {
     func testThePhase2uColumnsAreAppendedLast() {
         // `knob_words` came after these, in Phase 3c, then the focus pause's peak and hint.
         XCTAssertEqual(
-            Array(MovementLog.header.suffix(8).dropLast(3)),
+            Array(MovementLog.header.suffix(10).dropLast(5)),
             ["line_accept", "area_ahead_share", "predicted_edge_along", "expected_edge_ask", "camera_drops"])
         var logged = row()
         logged.lineState = "attached"
@@ -277,12 +277,12 @@ final class MovementLogTests: XCTestCase {
             separator: ",", omittingEmptySubsequences: false
         ).map(String.init)
         XCTAssertEqual(fields.count, MovementLog.header.count)
-        XCTAssertEqual(Array(fields.suffix(8).dropLast(3)), ["area", "0.051", "-9.123", "1", "7"])
+        XCTAssertEqual(Array(fields.suffix(10).dropLast(5)), ["area", "0.051", "-9.123", "1", "7"])
     }
 
     /// The focus pause's peak and turning hint are appended last.
     func testTheFocusPauseColumnsAreAppendedLast() {
-        XCTAssertEqual(Array(MovementLog.header.suffix(2)), ["focus_peak", "focus_hint"])
+        XCTAssertEqual(Array(MovementLog.header.suffix(4).prefix(2)), ["focus_peak", "focus_hint"])
         var logged = row()
         logged.focusPeak = 0.7281
         logged.focusHint = "Try turning the other way"
@@ -290,6 +290,23 @@ final class MovementLogTests: XCTestCase {
             separator: ",", omittingEmptySubsequences: false
         ).map(String.init)
         XCTAssertEqual(fields.count, MovementLog.header.count)
-        XCTAssertEqual(Array(fields.suffix(2)), ["0.728", "Try turning the other way"])
+        XCTAssertEqual(Array(fields.suffix(4).prefix(2)), ["0.728", "Try turning the other way"])
+    }
+
+    /// The automated stage's servo angles are the last two columns, empty without the stage.
+    func testTheStageAngleColumnsAreLast() {
+        XCTAssertEqual(Array(MovementLog.header.suffix(2)), ["stage_angle_x", "stage_angle_y"])
+        var logged = row()
+        let plain = MovementLog.csv([logged]).split(separator: "\n")[1].split(
+            separator: ",", omittingEmptySubsequences: false
+        ).map(String.init)
+        XCTAssertEqual(Array(plain.suffix(2)), ["", ""])
+        logged.stageAngleX = 87
+        logged.stageAngleY = 142
+        let fields = MovementLog.csv([logged]).split(separator: "\n")[1].split(
+            separator: ",", omittingEmptySubsequences: false
+        ).map(String.init)
+        XCTAssertEqual(fields.count, MovementLog.header.count)
+        XCTAssertEqual(Array(fields.suffix(2)), ["87", "142"])
     }
 }

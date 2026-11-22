@@ -216,6 +216,9 @@ struct MovementLogRow: Equatable {
     /// The highest focus index of the current pause for focus, and the turning hint shown.
     var focusPeak: Double?
     var focusHint = ""
+    /// The automated stage's servo angles (degrees); nil without it.
+    var stageAngleX: Int?
+    var stageAngleY: Int?
     /// The detector's result arrives after its frame: when the frame it ran on was taken (run
     /// seconds), and where its time went: crop and render, the model alone, and decoding.
     var detFrameSeconds: Double?
@@ -276,6 +279,7 @@ enum MovementLog {
         "det_infer_ms", "det_decode_ms",
         "line_accept", "area_ahead_share", "predicted_edge_along", "expected_edge_ask",
         "camera_drops", "knob_words", "focus_peak", "focus_hint",
+        "stage_angle_x", "stage_angle_y",
     ]
 
     static func csv(_ rows: [MovementLogRow]) -> String {
@@ -356,6 +360,7 @@ enum MovementLog {
             row.lineState.isEmpty ? "" : (row.expectedEdgeAsk ? "1" : "0"),
             row.cameraDrops.map(String.init) ?? "", row.knobWords,
             number(row.focusPeak, 3), row.focusHint,
+            row.stageAngleX.map(String.init) ?? "", row.stageAngleY.map(String.init) ?? "",
         ]
     }
 

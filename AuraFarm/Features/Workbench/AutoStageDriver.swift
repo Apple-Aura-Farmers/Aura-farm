@@ -18,6 +18,8 @@
             case following
             case waitingForEdgeAnswer
             case atLimit(StageAxis)
+            /// After a stage restart: moving the servos back to where they were.
+            case walkingBack(x: Int, y: Int)
             case crossingEmpty(fields: Double)
             case emptyCapReached(fields: Double)
             case presetPath(column: Int, spot: Int)
@@ -61,8 +63,19 @@
         private var limitPress = StageLimitAutoPress()
         private var stallWatch = StageStallWatch()
         private var mappingWatch = StageMappingWatch()
+        private var stuckWatch = StageStuckWatch()
+        // A stage restart: where the servos and the tracker were when the link dropped.
+        private var savedAngles: (x: Int, y: Int)?
+        private var savedTrackerPosition: CGPoint?
+        private var walkBack: (angles: (x: Int, y: Int), tracker: CGPoint)?
+        /// Shown in the panel after the stage restarted, until Resume has walked it back.
+        private(set) var restartNotice: String?
         /// The move being checked against the mapping: where the picture was when it was sent.
-        private var moveCheck: (servo: StageAxis, from: Int, before: CGPoint, lost: Bool, posAt: Date?)?
+        private var moveCheck:
+            (
+                servo: StageAxis, from: Int, before: CGPoint, lost: Bool, posAt: Date?,
+                detailBefore: Bool
+            )?
         /// The latest tracked guide position (raw), and when it was seen.
         private var lastTracked: (position: CGPoint, at: Date)?
         // The preset zig-zag.
@@ -140,6 +153,7 @@
             if client.status == .connected { client.send(.stop) }
             engine.setAsksEdges(restoreAsksEdges)
             engine.onGuideSample = nil
+            engine.setStageAngles(nil)
             client.onReply = nil
             client.disconnect()
             finishWaiter(false)
@@ -164,6 +178,15 @@
                 phase = .waitingForStageStep
                 return
             }
+            if let walkBack {
+                // The stage restarted: counting stays off until the servos are back.
+                phase = .walkingBack(x: walkBack.angles.x, y: walkBack.angles.y)
+                return
+            }
+            resumeWhereItStopped()
+        }
+
+        private func resumeWhereItStopped() {
             if pathMode == .presetPath {
                 // A move that was stopped counts as settled where it stopped.
                 if presetAwaitingSettle {
@@ -175,6 +198,55 @@
             } else {
                 phase = .following
             }
+        }
+
+        // MARK: A restarted stage
+
+        /// The first HELLO / STATUS after a drop: angles more than a degree from where the servos
+        /// were mean the stage lost power and started again (its servos jump to 90).
+        private func checkForRestart(reported: (x: Int, y: Int)) {
+            guard let saved = savedAngles, let tracker = savedTrackerPosition else { return }
+            savedAngles = nil
+            savedTrackerPosition = nil
+            guard StageRestart.detected(saved: saved, reported: reported) else { return }  // a plain drop
+            walkBack = (saved, tracker)
+            restartNotice =
+                "The stage restarted (check its power). Resume walks it back to \(saved.x),\(saved.y)."
+            engine.logEvent(
+                "stage_restart_detected",
+                detail: "saved \(saved.x),\(saved.y) reported \(reported.x),\(reported.y)")
+        }
+
+        /// Walks the servos back to the saved angles, Y first, in panel-sized steps; then the
+        /// tracker's position is put back and the path or the guide goes on where it was.
+        private func walkBackStep() {
+            guard let walkBack else { return resumeWhereItStopped() }
+            if inFlight, Date().timeIntervalSince(moveSentAt) > 5 {
+                inFlight = false
+                lastSettledAt = Date()
+                client.send(.status)
+                lastMove = "No reply, resynced"
+            }
+            guard !inFlight, Date().timeIntervalSince(lastSettledAt) >= 0.3 else { return }
+            guard
+                let next = StageRestart.nextStep(
+                    from: (angleX, angleY), to: walkBack.angles, chunk: chunkDegrees)
+            else {
+                engine.restoreTrackerPosition(to: walkBack.tracker)
+                engine.logEvent(
+                    "stage_restart_walked_back", detail: "\(walkBack.angles.x),\(walkBack.angles.y)")
+                self.walkBack = nil
+                restartNotice = nil
+                lastMove = "Walked back after the restart"
+                resumeWhereItStopped()
+                return
+            }
+            moveCheck = nil  // these moves say nothing about the mapping
+            guard client.send(.goTo(next.servo, next.angle)) else { return }
+            inFlight = true
+            moveSentAt = Date()
+            lastServo = next.servo
+            lastMove = "GOTO \(next.servo.letter) \(next.angle) (walk back)"
         }
 
         /// Only while paused or before setup is done (the panel enforces it).
@@ -211,6 +283,8 @@
 
         /// After a failure, or to measure again at the stage step.
         func recalibrate() {
+            walkBack = nil
+            restartNotice = nil
             mapping = nil
             mappingSummary = ""
             phase = .waitingForStageStep
@@ -298,7 +372,7 @@
                 phase = .emptyCapReached(fields: crossedFields)
                 return
             }
-            var planner = StageMotionPlanner(mapping: mapping, chunkDegrees: chunkDegrees)
+            var planner = makePlanner(mapping)
             planner.deadbandFields = 0.15
             switch planner.next(angles: angles, target: current.target()) {
             case .idle: break
@@ -325,8 +399,11 @@
             switch reply {
             case .position(let x, let y), .done(let x, let y), .resumed(let x, let y, _),
                 .hello(_, _, let x, let y), .status(_, _, let x, let y, _):
+                if case .hello = reply { checkForRestart(reported: (x, y)) }
+                if case .status = reply { checkForRestart(reported: (x, y)) }
                 angleX = x
                 angleY = y
+                engine.setStageAngles((x, y))
             case .ok(let text) where text.hasPrefix("STOP"):
                 // "OK STOP X=120 Y=90"
                 for part in text.split(separator: " ") {
@@ -436,6 +513,7 @@
             cancelSweep = false
             defer { isCalibrating = false }
             calibration = StageAutoCalibration()
+            stuckWatch = StageStuckWatch()
             if let preset = warmUp {
                 await warmUpStage(preset)
                 if sweepStopped { return stopSweep() }
@@ -608,6 +686,11 @@
         private func tick() {
             guard client.status == .connected else {
                 if phase != .disconnected, !isCalibrating {
+                    // The last position before the drop, to tell a restart from a plain drop.
+                    if mapping != nil, savedAngles == nil, walkBack == nil {
+                        savedAngles = (angleX, angleY)
+                        savedTrackerPosition = engine.trackerPosition()
+                    }
                     phase = .disconnected
                     inFlight = false
                     userPaused = userPaused || mapping != nil  // stay paused until Resume
@@ -637,6 +720,14 @@
                 if pathMode == .followGuide { engine.logEvent("stage_mapping", detail: mappingSummary) }
             }
             if userPaused || phase == .paused { return }
+            if case .walkingBack = phase {
+                walkBackStep()
+                return
+            }
+            if let zigzag {
+                self.zigzag?.boostLeg = stuckWatch.extraDegrees(for: zigzag.plan.legServo)
+                self.zigzag?.boostStep = stuckWatch.extraDegrees(for: zigzag.plan.stepServo)
+            }
             if pathMode == .presetPath { presetStep() } else { follow() }
         }
 
@@ -863,9 +954,35 @@
             if trackingNow == .tracking, let seen = lastTracked,
                 Date().timeIntervalSince(seen.at) < 0.5
             {
-                moveCheck = (servo, servo == .x ? angleX : angleY, seen.position, false, nil)
+                moveCheck = (
+                    servo, servo == .x ? angleX : angleY, seen.position, false, nil, hasDetailNow
+                )
             }
             return true
+        }
+
+        private func makePlanner(_ mapping: StageServoMapping) -> StageMotionPlanner {
+            var planner = StageMotionPlanner(mapping: mapping, chunkDegrees: chunkDegrees)
+            planner.boostX = stuckWatch.extraDegrees(for: .x)
+            planner.boostY = stuckWatch.extraDegrees(for: .y)
+            return planner
+        }
+
+        /// The view shows sample or thin while tracking.
+        private var hasDetailNow: Bool {
+            let viewClass = engine.guideInfo.viewClass
+            return trackingNow == .tracking && (viewClass == "sample" || viewClass == "thin")
+        }
+
+        /// CSV events one row apart, so none overwrites another logged in the same moment.
+        private func logSpaced(_ events: [(name: String, detail: String)]) {
+            guard !events.isEmpty else { return }
+            Task {
+                for (index, event) in events.enumerated() {
+                    if index > 0 { try? await Task.sleep(for: .milliseconds(300)) }
+                    engine.logEvent(event.name, detail: event.detail)
+                }
+            }
         }
 
         /// A settled move is judged 0.4 s after its POS, or when the next move is sent.
@@ -877,6 +994,32 @@
             let degrees = Double((check.servo == .x ? angleX : angleY) - check.from)
             let delta = CGPoint(
                 x: after.position.x - check.before.x, y: after.position.y - check.before.y)
+            // A gear that did not answer says nothing about the fields per degree: it is judged
+            // first and its move never reaches the mapping watch.
+            let vector = check.servo == .x ? mapping.x : mapping.y
+            let expected = hypot(Double(vector.x), Double(vector.y)) * abs(degrees)
+            let seen = hypot(Double(delta.x), Double(delta.y))
+            let outcome = stuckWatch.record(
+                servo: check.servo, seen: seen, expected: expected,
+                detailBefore: check.detailBefore, detailAfter: hasDetailNow)
+            var events: [(name: String, detail: String)] = []
+            if outcome.noResponse {
+                events.append(
+                    (
+                        "move_no_response",
+                        String(
+                            format: "servo %@ %+.0f° expected=%.3f seen=%.3f", check.servo.letter,
+                            degrees, expected, seen)
+                    ))
+            }
+            if outcome.boostOn {
+                events.append(("step_boost_on", "servo \(check.servo.letter)"))
+            }
+            if let reason = outcome.boostOff {
+                events.append(("step_boost_off", "servo \(check.servo.letter) \(reason.rawValue)"))
+            }
+            logSpaced(events)
+            if outcome.noResponse { return }
             if let fix = mappingWatch.record(
                 servo: check.servo, degrees: degrees, delta: delta, mapping: mapping)
             {
@@ -973,7 +1116,7 @@
             // The guide's axes may be the straightened picture's; the servos were measured raw.
             let target = unstraightened(CGPoint(x: dx, y: dy))
             if hypot(Double(target.x), Double(target.y)) > 0 { lastSteer = target }
-            var planner = StageMotionPlanner(mapping: mapping, chunkDegrees: chunkDegrees)
+            var planner = makePlanner(mapping)
             planner.deadbandFields = 0.15
             switch planner.next(angles: (angleX, angleY), target: target) {
             case .idle: break

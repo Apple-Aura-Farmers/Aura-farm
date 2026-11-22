@@ -118,7 +118,9 @@ final class KnobRuleTests: XCTestCase {
         XCTAssertTrue(KnobRule.xAxisIsVertical(CGPoint(x: 0.2, y: 0.98)))
     }
 
-    func testTheKnobWordsColumnIsLastBeforeTheFocusPauseColumns() {
-        XCTAssertEqual(Array(MovementLog.header.suffix(3)), ["knob_words", "focus_peak", "focus_hint"])
+    func testTheKnobWordsColumnIsLastBeforeTheFocusPauseAndStageAngleColumns() {
+        XCTAssertEqual(
+            Array(MovementLog.header.suffix(5)),
+            ["knob_words", "focus_peak", "focus_hint", "stage_angle_x", "stage_angle_y"])
     }
 }

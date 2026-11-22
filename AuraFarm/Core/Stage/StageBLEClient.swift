@@ -26,6 +26,8 @@ final class StageBLEClient: NSObject {
     private(set) var x = 90
     private(set) var y = 90
     private(set) var queued = 0
+    /// The focus servo's angle; nil until the first "ZPOS" (old firmware never sends one).
+    private(set) var z: Int?
     private(set) var lastError: String?
     private(set) var log: [LogLine] = []
 
@@ -41,6 +43,7 @@ final class StageBLEClient: NSObject {
     /// Last angle sent (or reported) per axis; not shown, so not observed.
     @ObservationIgnored private(set) var targetX = 90
     @ObservationIgnored private(set) var targetY = 90
+    @ObservationIgnored private var targetZ: Int?
 
     // MARK: Public
 
@@ -90,6 +93,19 @@ final class StageBLEClient: NSObject {
             targetY = newY
             send(.goTo(.y, newY))
         }
+    }
+
+    /// MANUAL: GOTO Z, once per change.
+    func moveFocus(to newZ: Int) {
+        guard newZ != targetZ else { return }
+        targetZ = newZ
+        send(.focusGoTo(newZ))
+    }
+
+    /// MANUAL: JOG Z; the remembered target moves with it.
+    func jogFocus(_ delta: Int) {
+        targetZ = min(180, max(0, (targetZ ?? z ?? 90) + delta))
+        send(.focusJog(delta))
     }
 
     /// AUTO: PATH, then START once the device answers "OK PATH".
@@ -173,6 +189,9 @@ final class StageBLEClient: NSObject {
                 targetX = nx
                 targetY = ny
             }
+        case .focusPosition(let nz):
+            z = nz
+            targetZ = nz
         case .unknown:
             break
         }

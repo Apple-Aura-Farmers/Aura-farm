@@ -120,6 +120,10 @@ class ScanEngine: NSObject {
     @ObservationIgnored private var lastCountingActive = false
     @ObservationIgnored private var lastCountFrameSize = CGSize.zero
     @ObservationIgnored private var runStartedAt: Date?
+    /// The automated stage's servo angles, for the CSV (analysis queue; nil without the stage).
+    @ObservationIgnored private var stageAngles: (x: Int, y: Int)?
+    /// The tracker's latest position, frame px (analysis queue).
+    @ObservationIgnored private var lastTrackerPosition = CGPoint.zero
     /// The run's name: its JSON, map and organisms folder all carry it. Set when the guide resets.
     @ObservationIgnored private var runStamp = ScanEngine.stamp()
     @ObservationIgnored private var runStartSeconds = 0.0
@@ -353,6 +357,27 @@ class ScanEngine: NSObject {
                     forGuideFields: guideFields, boxSide: self.lastBoxSide)
             else { return }
             self.pipeline.requestReanchor(addingOffset: offset)
+        }
+    }
+
+    /// The automated stage's angles for the CSV's `stage_angle_x` / `stage_angle_y`; nil clears them.
+    func setStageAngles(_ angles: (x: Int, y: Int)?) {
+        analysisQueue.async { [weak self] in self?.stageAngles = angles }
+    }
+
+    /// The tracker's position now (frame px). Call from the main queue.
+    func trackerPosition() -> CGPoint {
+        analysisQueue.sync { lastTrackerPosition }
+    }
+
+    /// Puts the tracker's position back to `saved` (frame px) after the stage was walked back
+    /// to where it was: the blind re-anchor adds the difference on the next frame.
+    func restoreTrackerPosition(to saved: CGPoint) {
+        analysisQueue.async { [weak self] in
+            guard let self else { return }
+            let current = self.lastTrackerPosition
+            self.pipeline.requestReanchor(
+                addingOffset: CGPoint(x: saved.x - current.x, y: saved.y - current.y))
         }
     }
 
@@ -1138,6 +1163,8 @@ class ScanEngine: NSObject {
         logged.pauseCause = monitor?.pauseCause ?? ""
         logged.focusPeak = monitor?.focusPeak
         logged.focusHint = monitor?.focusHint ?? ""
+        logged.stageAngleX = stageAngles?.x
+        logged.stageAngleY = stageAngles?.y
         if let note = monitor?.resumedNote, !note.isEmpty, pendingEventName.isEmpty {
             pendingEventName = "focus_resumed"
             pendingEventDetail = note
@@ -1390,6 +1417,7 @@ extension ScanEngine: AVCaptureVideoDataOutputSampleBufferDelegate {
         if let image = step.thumbnail { thumbnailThrottle.offer(image) }
         latestPositionFields = step.positionFields
         lastBoxSide = step.boxSide
+        lastTrackerPosition = step.position
         indicators.update(
             shake: step.shake, anchorOffset: step.usedOffset,
             positionFields: step.positionFields, isLost: step.isLost, event: step.event,
