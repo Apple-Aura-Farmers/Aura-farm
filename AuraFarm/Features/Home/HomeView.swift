@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// Where the app opens: start a test, or look at the ones already taken.
+/// The scientist's screens: Action, the plots a field helper has asked them to test, and Archive,
+/// the tests already done.
 struct HomeView: View {
     /// Sends the person back to the role picker. nil where there is no picker, as in previews.
     var onSwitchRole: (() -> Void)?
@@ -12,16 +13,16 @@ struct HomeView: View {
     var body: some View {
         TabView {
             HomeTab(onSwitchRole: onSwitchRole)
-                .tabItem { Label("Home", systemImage: "house.fill") }
-            NavigationStack {
-                SweepLibraryView()
-            }
-            .tabItem { Label("Results", systemImage: "doc.text.image") }
+                .tabItem { Label("Action", systemImage: "list.bullet.clipboard.fill") }
+            ScientistArchiveView()
+                .tabItem { Label("Archive", systemImage: "archivebox.fill") }
         }
+        .tint(.aura)
     }
 }
 
-/// The first tab: one button to start a test, and what the finished ones add up to.
+/// The first tab: the plots waiting for a test. Analyze opens a test already filled in for that
+/// plot. The plus button still starts a test from scratch, which the debugging needs.
 private struct HomeTab: View {
     var onSwitchRole: (() -> Void)?
 
@@ -41,34 +42,58 @@ private struct HomeTab: View {
     /// The sweep the camera just saved, to show its result.
     @State private var finishedSweep: SavedSweep?
 
+    @Environment(FarmStore.self) private var store
+
     private var notices: [SweepNotice] { SweepNotice.all(for: sweeps) }
+
+    /// Plots a helper has alerted that have no test newer than the alert, newest alert first.
+    private var pending: [(farm: Farm, plot: Plot, asked: Date)] {
+        store.farms.flatMap { farm in
+            farm.plots.compactMap { plot in
+                guard let asked = plot.scientistAlertedAt,
+                    asked > (sweeps.latestTest(of: plot, in: farm) ?? .distantPast)
+                else { return nil }
+                return (farm, plot, asked)
+            }
+        }
+        .sorted { $0.asked > $1.asked }
+    }
 
     var body: some View {
         NavigationStack {
-            List {
-                Section {
+            ScrollView {
+                if pending.isEmpty {
+                    ScientistEmptyState(
+                        symbol: "pencil.and.list.clipboard", title: "No Action Needed",
+                        message: "No samples from the field helpers are needed for analysis right now.")
+                } else {
+                    VStack(spacing: 12) {
+                        ForEach(pending, id: \.plot.id) { item in
+                            ScientistRow(
+                                corners: item.plot.corners,
+                                title: "\(item.farm.farmerName) ∙ \(item.farm.title(of: item.plot))",
+                                subtitle: scientistAgo(item.asked), isAlert: true, button: "Analyze"
+                            ) {
+                                details = .blank
+                                details.use(item.plot, of: item.farm)
+                                isNaming = true
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 20)
+                }
+            }
+            .auraBackground()
+            .navigationTitle("Action")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         details = .blank
                         isNaming = true
                     } label: {
                         Label("New Test", systemImage: "plus")
-                            // A list tints a label's icon with the accent colour, which
-                            // would sink it into the filled button.
-                            .foregroundStyle(Color.auraOnAccent)
-                            .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                    .listRowInsets(EdgeInsets())
-                    .listRowBackground(Color.clear)
                 }
-
-                Section("Overview") {
-                    overview
-                }
-            }
-            .navigationTitle("Home")
-            .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     NoticesButton(notices: notices) { isReadingNotices = true }
                 }
@@ -90,6 +115,11 @@ private struct HomeTab: View {
                     // A workbench for trying the pipeline without a microscope.
                     ToolbarItem(placement: .topBarTrailing) {
                         Menu {
+                            NavigationLink {
+                                SweepLibraryView()
+                            } label: {
+                                Label("All sweeps", systemImage: "doc.text.image")
+                            }
                             NavigationLink {
                                 VideoStitchWorkbenchView()
                             } label: {
@@ -174,25 +204,6 @@ private struct HomeTab: View {
                 }
             }
             .task(id: isScanning) { sweeps = SweepLibrary.sweeps() }
-        }
-    }
-
-    @ViewBuilder
-    private var overview: some View {
-        if sweeps.isEmpty {
-            Text("Tests you take will be summed up here.")
-                .foregroundStyle(.secondary)
-        } else {
-            LabeledContent("Tests", value: sweeps.count.formatted())
-            if let latest = sweeps.first {
-                LabeledContent("Latest") {
-                    VStack(alignment: .trailing) {
-                        Text(latest.manifest?.details.sampleID ?? latest.name)
-                        Text(latest.recordedAt.formatted(date: .abbreviated, time: .shortened))
-                            .font(.footnote)
-                    }
-                }
-            }
         }
     }
 }

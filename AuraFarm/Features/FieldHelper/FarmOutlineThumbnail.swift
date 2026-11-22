@@ -4,6 +4,7 @@ import SwiftUI
 /// map behind it, so it costs nothing to draw and reads at a glance.
 struct FarmOutlineThumbnail: View {
     let corners: [GeoPoint]
+    var size: CGFloat = 52
 
     var body: some View {
         ZStack {
@@ -13,7 +14,7 @@ struct FarmOutlineThumbnail: View {
                 .stroke(Color.aura, style: StrokeStyle(lineWidth: 1.5, lineJoin: .round))
         }
         .padding(10)
-        .frame(width: 52, height: 52)
+        .frame(width: size, height: size)
         .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 12))
         .accessibilityHidden(true)
     }
