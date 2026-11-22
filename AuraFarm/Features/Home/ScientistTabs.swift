@@ -20,7 +20,7 @@ struct ScientistArchiveView: View {
                 } else {
                     VStack(spacing: 12) {
                         ForEach(tests) { sweep in
-                            let plot = plot(of: sweep)
+                            let plot = store.farms.plot(for: sweep.manifest?.details)
                             ScientistRow(
                                 corners: plot?.plot.corners ?? [],
                                 title: plot.map { "\($0.farm.farmerName) ∙ \($0.farm.title(of: $0.plot))" }
@@ -35,16 +35,23 @@ struct ScientistArchiveView: View {
             }
             .auraBackground()
             .navigationTitle("Archives")
-            .sheet(item: $opened) { sweep in
-                NavigationStack { SoilResultScreen(sweep: sweep) }
+            // A page pushed onto the stack, not a sheet, so the screen's own background is not drawn
+            // twice. SavedSweep is not Hashable, so the push is driven by whether one is chosen.
+            .navigationDestination(
+                isPresented: Binding(get: { opened != nil }, set: { if !$0 { opened = nil } })
+            ) {
+                if let opened { ScientistResultScreen(sweep: opened) }
             }
             .onAppear { sweeps = SweepLibrary.sweeps() }
         }
     }
+}
 
-    private func plot(of sweep: SavedSweep) -> (farm: Farm, plot: Plot)? {
-        guard let details = sweep.manifest?.details,
-            let farm = store.farms.first(where: { $0.id == details.farmID }),
+extension Array where Element == Farm {
+    /// The farm and plot a test was taken on. A test with no plot was taken before plots could be
+    /// chosen, so it belongs to the farm's first.
+    func plot(for details: SampleDetails?) -> (farm: Farm, plot: Plot)? {
+        guard let details, let farm = first(where: { $0.id == details.farmID }),
             let plot = farm.plots.first(where: { $0.id == details.plotID }) ?? farm.plots.first
         else { return nil }
         return (farm, plot)

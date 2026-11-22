@@ -40,7 +40,11 @@ private struct HomeTab: View {
     @State private var isReadingNotices = false
     @State private var isShowingAccount = false
     /// The sweep the camera just saved, to show its result.
-    @State private var finishedSweep: SavedSweep?
+    @State private var outcome: ScanOutcome?
+    /// The scan closed without a saved result, so the failure screen opens once it has gone.
+    @State private var scanFailed = false
+    /// Retry was tapped: the scan opens again as soon as the outcome screen is gone.
+    @State private var retryRequested = false
 
     @Environment(FarmStore.self) private var store
 
@@ -189,19 +193,38 @@ private struct HomeTab: View {
                 onDismiss: {
                     if let name = savedName {
                         savedName = nil
-                        finishedSweep = SweepLibrary.sweeps().first { $0.name == name }
+                        // A run that saved but counted nothing is no result, so it fails and
+                        // the alert stays on Action.
+                        let sweep = SweepLibrary.sweeps().first { $0.name == name }
+                        outcome =
+                            if let sweep, sweep.manifest?.organismCounts != nil {
+                                .success(sweep)
+                            } else {
+                                .failure
+                            }
+                    } else if scanFailed {
+                        scanFailed = false
+                        outcome = .failure
                     }
                 }
             ) {
                 NavigationStack {
-                    GuidedScanPage(details: $details) { savedName = $0 }
+                    GuidedScanPage(
+                        details: $details, onSaved: { savedName = $0 }, onFailed: { scanFailed = true }
+                    )
                 }
                 .interactiveDismissDisabled(true)
             }
-            .sheet(item: $finishedSweep) { sweep in
-                NavigationStack {
-                    SoilResultScreen(sweep: sweep)
+            .fullScreenCover(
+                item: $outcome,
+                onDismiss: {
+                    if retryRequested {
+                        retryRequested = false
+                        isScanning = true
+                    }
                 }
+            ) { outcome in
+                ScanOutcomeView(outcome: outcome) { retryRequested = true }
             }
             .task(id: isScanning) { sweeps = SweepLibrary.sweeps() }
         }
