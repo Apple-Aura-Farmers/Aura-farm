@@ -67,8 +67,6 @@ struct StageZigzag {
     let plan: StageZigzagPlan
     var dwellSeconds: Double
     var chunkDegrees: Int
-    /// Crossing an empty patch: keep stepping along the leg with no dwell.
-    var walksBlind = false
     /// Live fields per degree; the degree fallbacks use these (a mapping correction updates them).
     var legFieldsPerDegree: Double
     var stepFieldsPerDegree: Double
@@ -210,7 +208,6 @@ struct StageZigzag {
     /// True once the picture has moved `stepFields` since the last dwell (or, without a
     /// tracked position, the degree fallback has been walked).
     private func legStopReached(_ angles: (x: Int, y: Int)) -> Bool {
-        if walksBlind { return false }
         if let tracked, let anchorPosition {
             return hypot(tracked.x - anchorPosition.x, tracked.y - anchorPosition.y) >= plan.stepFields
         }

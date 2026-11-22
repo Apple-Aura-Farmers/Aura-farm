@@ -220,23 +220,6 @@ final class StageZigzagTests: XCTestCase {
         XCTAssertEqual(Array(stops.prefix(3)), [180, 172, 164])
     }
 
-    func testWalkingBlindStepsAlongTheLegWithNoDwell() throws {
-        var zigzag = try makeZigzag(mapping())
-        var angles = (x: 90, y: 90)
-        let actions = simulate(&zigzag, angles: &angles, stopAfterColumn: 1)  // to column 2
-        XCTAssertFalse(actions.isEmpty)
-        zigzag.walksBlind = true
-        XCTAssertEqual(zigzag.next(angles: angles, event: nil), .dwell(seconds: 1))
-        var next = zigzag.next(angles: angles, event: .dwellDone)
-        var moves = 0
-        while case .moveTo(let servo, let angle)? = next, moves < 20 {
-            if servo == zigzag.plan.legServo { angles.y = angle } else { angles.x = angle }
-            moves += 1
-            next = zigzag.next(angles: angles, event: .settled)
-        }
-        XCTAssertEqual(moves, 20)  // never a dwell in between
-    }
-
     func testAnEdgeEndsTheLegAndNarrowsLaterOnes() throws {
         var zigzag = try makeZigzag(mapping())
         var angles = (x: 90, y: 90)

@@ -30,9 +30,6 @@
         var onEmptyArea: (() -> Void)?
         /// The automated stage is on: the lab's stage step needs no knob turning.
         var automatedStage = false
-        /// The automated stage's empty-patch question, shown in the focus-pause banner.
-        var emptyPrompt: AutoStageDriver.EmptyPrompt?
-        var onRefocus: (() -> Void)?
 
         var body: some View {
             ZStack {
@@ -89,10 +86,7 @@
                         mapper: FramePreviewConverter(
                             layer: previewLayer, frameSize: model.fieldInfo.frameSize,
                             display: display),
-                        onResumeAnyway: { model.resumeFocusAnyway() }, onEmptyArea: onEmptyArea,
-                        title: emptyPrompt?.title ?? "Paused",
-                        countdown: { if case .sharp(let n)? = emptyPrompt { n } else { nil } }(),
-                        onRefocus: { if case .sharp? = emptyPrompt { onRefocus } else { nil } }())
+                        onResumeAnyway: { model.resumeFocusAnyway() }, onEmptyArea: onEmptyArea)
                     VStack {
                         HStack(alignment: .top) {
                             // The picture stays clear while the guide is drawing on it.

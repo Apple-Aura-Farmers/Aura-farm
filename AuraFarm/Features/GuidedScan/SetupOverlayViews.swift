@@ -371,11 +371,6 @@ struct PausedOverlay: View {
     var onResumeAnyway: (() -> Void)?
     /// "In focus – empty area", shown under "Resume anyway" while paused for focus; nil hides it.
     var onEmptyArea: (() -> Void)?
-    /// The automated stage's question about an empty-looking patch: its own title, an optional
-    /// "Moving on in N…" countdown, and a "Refocus" button that stops the countdown.
-    var title = "Paused"
-    var countdown: Int?
-    var onRefocus: (() -> Void)?
 
     var body: some View {
         if let reason = monitor.state.pauseReason {
@@ -391,7 +386,7 @@ struct PausedOverlay: View {
                 }
                 .allowsHitTesting(false)
                 VStack {
-                    Text(title)
+                    Text("Paused")
                         .font(.headline)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 4)
@@ -402,17 +397,6 @@ struct PausedOverlay: View {
                         SetupLine(text: dial.message, tone: dial.isGreen ? .green : .orange)
                     } else if !GuideInstruction.paused(reason).helperText.isEmpty {
                         SetupLine(text: GuideInstruction.paused(reason).helperText, tone: .orange)
-                    }
-                    if reason == .focus, let countdown {
-                        Text("Moving on in \(countdown)…")
-                            .font(.title3.monospacedDigit().bold())
-                            .foregroundStyle(.white)
-                    }
-                    if reason == .focus, let onRefocus {
-                        Button("Refocus", action: onRefocus)
-                            .buttonStyle(.borderedProminent)
-                            .tint(.orange)
-                            .foregroundStyle(.black)
                     }
                     if reason == .focus, let onResumeAnyway {
                         Button("Resume anyway", action: onResumeAnyway)

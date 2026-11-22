@@ -189,9 +189,7 @@
                                     onTapTrail: { isShowingTrail = true },
                                     onEmptyArea: autoStage?.canConfirmEmptyArea == true
                                         ? { autoStage?.confirmEmptyArea() } : nil,
-                                    automatedStage: autoStage != nil,
-                                    emptyPrompt: autoStage?.emptyPrompt,
-                                    onRefocus: { autoStage?.refocusEmpty() })
+                                    automatedStage: autoStage != nil)
                             } else {
                                 startingCard
                             }

@@ -25,23 +25,7 @@
             case failed(String)
         }
 
-        /// What the focus-pause banner asks about an empty-looking patch.
-        enum EmptyPrompt: Equatable {
-            /// Waits for the person.
-            case blurry
-            /// Counts down, then acts as "In focus – empty area".
-            case sharp(secondsLeft: Int)
-
-            var title: String {
-                switch self {
-                case .blurry: "Looks out of focus: refocus"
-                case .sharp: "Looks in focus but empty"
-                }
-            }
-        }
-
         let client = StageBLEClient()
-        private(set) var emptyPrompt: EmptyPrompt?
         private(set) var phase = Phase.disconnected
         private(set) var lastMove = ""
         private(set) var mappingSummary = ""
@@ -88,13 +72,9 @@
         private var presetFinished = false
         private var dwellUntil: Date?
         private var countingColumn: Int?
-        /// A dwell was cut short by the empty-patch question.
-        private var dwellInterrupted = false
-        /// The preset path crossing an empty patch: where the leg servo started and how far it may go.
-        private var presetEmptyWalk: (startAngle: Int, capDegrees: Int)?
-        private var emptyDeadline: Date?
-        private var emptyFiredAt = Date.distantPast
-        private let emptyCountdownSeconds = 5.0
+        private var sawSampleInColumn = false
+        private var noSampleSince: Date?
+        private var ignoreEdgeThisLeg = false
         /// Since when the leg servo could not move while a cross-axis servo is pinned.
         private var crossStuckSince: Date?
         /// The last direction the guide steered in (raw guide fields), for crossing blind.
@@ -104,6 +84,8 @@
         private var trackingNow = TrackingState.lost
         /// How far the current crossing may go before the person is asked, in fields.
         private(set) var blindCap = 2.0
+        /// A move was sent since the last stall check.
+        private var movedForStall = false
         /// Tracking has been lost since this time; nil while it is not.
         private var lostSince: Date?
         private var lastReanchorAt = Date.distantPast
@@ -155,7 +137,6 @@
             loop = nil
             cancelSweep = true
             engine.setExternalCounting(active: false, column: 0)
-            clearEmptyState()
             if client.status == .connected { client.send(.stop) }
             engine.setAsksEdges(restoreAsksEdges)
             engine.onGuideSample = nil
@@ -168,7 +149,6 @@
 
         func pause() {
             if crossing != nil { finishCrossing("blind_cross_paused") }
-            clearEmptyState()
             userPaused = true
             cancelSweep = true
             client.send(.stop)
@@ -207,14 +187,12 @@
             presetAwaitingSettle = false
             dwellUntil = nil
             presetEdgePrompt = false
-            clearEmptyState()
             countingColumn = nil
             engine.setExternalCounting(active: false, column: 0)
             engine.logEvent("path_mode_\(new.rawValue)")
         }
 
         func endSession() {
-            clearEmptyState()
             userPaused = true
             cancelSweep = true
             client.send(.end)
@@ -242,141 +220,23 @@
 
         /// The focus-pause banner may offer "In focus – empty area".
         var canConfirmEmptyArea: Bool {
-            guard mapping != nil else { return false }
-            if pathMode == .followGuide { return phase == .following }
-            if case .presetPath = phase { return true }
-            return false
+            phase == .following && mapping != nil && pathMode == .followGuide
         }
 
-        /// The person says the view is in focus: it is an empty patch.
+        /// The person says the view is in focus: it is an empty patch. Cross it blind.
         func confirmEmptyArea() {
             guard canConfirmEmptyArea else { return }
-            confirmEmpty(auto: false)
-        }
-
-        /// "Refocus" on the countdown: the banner waits for the person.
-        func refocusEmpty() {
-            guard case .sharp = emptyPrompt else { return }
-            emptyPrompt = .blurry
-            emptyDeadline = nil
-            engine.logEvent("empty_countdown_cancelled", detail: "refocus")
-        }
-
-        /// Follow guide crosses the patch blind; the preset path keeps walking its leg with no dwell.
-        private func confirmEmpty(auto: Bool) {
-            if pathMode == .followGuide {
-                guard let lastSteer, hypot(Double(lastSteer.x), Double(lastSteer.y)) > 0 else {
-                    lastMove = "No direction to cross in"
-                    if auto {
-                        emptyPrompt = .blurry
-                        emptyDeadline = nil
-                    }
-                    return
-                }
-                crossing = StageBlindCrossing(direction: lastSteer, startAngles: (angleX, angleY))
-                blindCap = crossing?.capFields ?? 2.0
-                crossingLogged = false
-                phase = .crossingEmpty(fields: 0)
-            } else {
-                beginPresetEmptyWalk()
+            guard let lastSteer, hypot(Double(lastSteer.x), Double(lastSteer.y)) > 0 else {
+                lastMove = "No direction to cross in"
+                return
             }
             engine.resumeFocusAnyway()
-            engine.logEvent(auto ? "empty_auto_confirmed" : "empty_confirmed")
-            emptyPrompt = nil
-            emptyDeadline = nil
-        }
-
-        private func clearEmptyState() {
-            emptyPrompt = nil
-            emptyDeadline = nil
-            dwellInterrupted = false
-            presetEmptyWalk = nil
-            zigzag?.walksBlind = false
-        }
-
-        private func logLater(_ name: String, detail: String = "", after seconds: Double = 0.3) {
-            Task {
-                // Another row than the event logged now, so they do not overwrite each other.
-                try? await Task.sleep(for: .seconds(seconds))
-                engine.logEvent(name, detail: detail)
-            }
-        }
-
-        /// What this frame says about detail: none (the guide holds, or blank / blurry) or some
-        /// (sample / thin while tracking).
-        private var frameDetail: (noDetail: Bool, hasDetail: Bool) {
-            let info = engine.guideInfo
-            let shown = info.viewClass == "sample" || info.viewClass == "thin"
-            let hasDetail = trackingNow == .tracking && shown && !info.holdsForPicture
-            let noDetail =
-                info.holdsForPicture || info.viewClass == "blank" || info.viewClass == "blurry"
-            return (noDetail && !hasDetail, hasDetail)
-        }
-
-        /// Watches for a patch with no detail, asks about it through the focus pause, and runs the
-        /// countdown. Returns true while moves must wait.
-        private func watchEmpty() -> Bool {
-            let now = Date()
-            let monitor = engine.setupInfo.monitor
-            let frame = frameDetail
-            if stallWatch.update(now: now, noDetail: frame.noDetail, hasDetail: frame.hasDetail),
-                presetEmptyWalk == nil
-            {
-                fireEmptyWatch(monitor)
-            }
-            if let prompt = emptyPrompt {
-                if monitor.state == .ok, now.timeIntervalSince(emptyFiredAt) > 1 {
-                    // Detail came back and the focus pause ended: carry on where it stopped.
-                    if case .sharp = prompt {
-                        engine.logEvent("empty_countdown_cancelled", detail: "detail_back")
-                    }
-                    emptyPrompt = nil
-                    emptyDeadline = nil
-                    if dwellInterrupted {
-                        dwellInterrupted = false
-                        dwellUntil = now.addingTimeInterval(dwellSeconds)
-                    }
-                } else if case .sharp = prompt, let deadline = emptyDeadline {
-                    if now >= deadline {
-                        confirmEmpty(auto: true)
-                    } else {
-                        emptyPrompt = .sharp(secondsLeft: Int(deadline.timeIntervalSince(now).rounded(.up)))
-                    }
-                }
-            }
-            return emptyPrompt != nil || monitor.state != .ok
-        }
-
-        private func fireEmptyWatch(_ monitor: RunMonitorInfo) {
-            if inFlight {
-                client.send(.stop)
-                inFlight = false
-                lastSettledAt = Date()
-            }
-            if pathMode == .presetPath {
-                if presetAwaitingSettle {  // the move that was stopped counts as done
-                    presetAwaitingSettle = false
-                    presetEvent = .settled
-                }
-                if dwellUntil != nil {
-                    dwellUntil = nil
-                    dwellInterrupted = true
-                }
-            }
-            engine.requestFocusPause()
-            emptyFiredAt = Date()
-            let kind = stallWatch.kind(focusIndex: monitor.focusIndex, baseline: monitor.focusBaseline)
-            let numbers = String(
-                format: "index=%.3f baseline=%.3f", monitor.focusIndex ?? -1, monitor.focusBaseline ?? -1)
-            lastMove = "Looks empty: stopped"
-            if kind == .sharp {
-                emptyPrompt = .sharp(secondsLeft: Int(emptyCountdownSeconds))
-                emptyDeadline = Date().addingTimeInterval(emptyCountdownSeconds)
-                logLater("empty_countdown_started", after: 0.6)
-            } else {
-                emptyPrompt = .blurry
-            }
-            logLater("empty_watch_fired", detail: "\(kind == .sharp ? "sharp" : "blurry") \(numbers)")
+            engine.logEvent("empty_confirmed")
+            crossing = StageBlindCrossing(
+                direction: lastSteer, startAngles: (angleX, angleY))
+            blindCap = crossing?.capFields ?? 2.0
+            crossingLogged = false
+            phase = .crossingEmpty(fields: 0)
         }
 
         /// "End column here" after a crossing that stayed empty.
@@ -771,64 +631,16 @@
         /// "Keep going" on the edge prompt: no edge on this leg.
         func keepGoingPastEdge() {
             presetEdgePrompt = false
+            ignoreEdgeThisLeg = true
             if presetAwaitingSettle {  // the move that was stopped counts as done
                 presetAwaitingSettle = false
                 presetEvent = .settled
             }
-            beginPresetEmptyWalk()  // another stretch of blind walking
-        }
-
-        /// Keeps walking the leg in steps with no dwell, as far as the blind crossing's cap.
-        private func beginPresetEmptyWalk() {
-            guard let zigzag, zigzag.column > 0 else { return }
-            let start = zigzag.plan.legServo == .x ? angleX : angleY
-            // The blind crossing's default cap (2 fields), in degrees of the leg servo.
-            let cap = max(chunkDegrees, Int((2.0 / zigzag.legFieldsPerDegree).rounded(.up)))
-            presetEmptyWalk = (start, cap)
-            self.zigzag?.walksBlind = true
-            if dwellInterrupted {
-                dwellInterrupted = false
-                presetEvent = .dwellDone
-            }
-            logLater("preset_empty_walk_start", detail: "cap \(cap)°")
-        }
-
-        private func endPresetEmptyWalk(_ reason: String) {
-            guard presetEmptyWalk != nil else { return }
-            presetEmptyWalk = nil
-            zigzag?.walksBlind = false
-            logLater("preset_empty_walk_end", detail: reason)
-        }
-
-        /// While walking blind: detail back returns to normal stepping; the cap reached is the
-        /// edge. Returns true when it stopped the stage for the edge.
-        private func checkPresetEmptyWalk() -> Bool {
-            guard let walk = presetEmptyWalk, let zigzag else { return false }
-            if frameDetail.hasDetail {
-                endPresetEmptyWalk("detail_back")
-                return false
-            }
-            let angle = zigzag.plan.legServo == .x ? angleX : angleY
-            guard abs(angle - walk.startAngle) >= walk.capDegrees else { return false }
-            endPresetEmptyWalk("edge")
-            presetEdgeFound()
-            return true
-        }
-
-        private func presetEdgeFound() {
-            if restoreAsksEdges {
-                presetEdgePrompt = true
-                if inFlight {
-                    client.send(.stop)
-                    inFlight = false
-                    lastSettledAt = Date()
-                }
-            } else {
-                applyPresetEdge()
-            }
         }
 
         private func applyPresetEdge() {
+            noSampleSince = nil
+            sawSampleInColumn = false
             if inFlight {
                 client.send(.stop)
                 inFlight = false
@@ -861,6 +673,40 @@
             }
         }
 
+        /// Looks for the end of the sample along a leg: blank (not blurry) for 0.6 s after the
+        /// column showed sample.
+        private func watchPresetEdge() {
+            guard (zigzag?.column ?? 0) > 0, !ignoreEdgeThisLeg, !presetEdgePrompt else { return }
+            let viewClass = engine.guideInfo.viewClass
+            if viewClass == "sample" || viewClass == "thin" {
+                sawSampleInColumn = true
+                noSampleSince = nil
+                return
+            }
+            let blank =
+                viewClass == "blank"
+                || (engine.guideInfo.holdsForPicture && trackingNow == .paused
+                    && viewClass != "blurry")
+            guard sawSampleInColumn, blank else {
+                noSampleSince = nil
+                return
+            }
+            let since = noSampleSince ?? Date()
+            noSampleSince = since
+            guard Date().timeIntervalSince(since) >= 0.6 else { return }
+            noSampleSince = nil
+            if restoreAsksEdges {
+                presetEdgePrompt = true
+                if inFlight {
+                    client.send(.stop)
+                    inFlight = false
+                    lastSettledAt = Date()
+                }
+            } else {
+                applyPresetEdge()
+            }
+        }
+
         private func presetStep() {
             guard let mapping else { return }
             if zigzag == nil {
@@ -881,9 +727,18 @@
                     presetEvent = .settled
                 }
             }
-            let holding = watchEmpty()
-            guard !holding else { return }
-            if checkPresetEmptyWalk() { return }
+            // A blurry view is the stall rule's (a focus pause), not an edge.
+            let monitor = engine.setupInfo.monitor
+            if stallWatch.update(
+                now: Date(), holds: engine.guideInfo.holdsForPicture, moved: movedForStall,
+                focusIndex: monitor.focusIndex, baseline: monitor.focusBaseline)
+            {
+                engine.requestFocusPause()
+                lastMove = "Focus pause (stall)"
+            }
+            movedForStall = false
+            guard monitor.state == .ok else { return }
+            watchPresetEdge()
             guard !presetEdgePrompt else { return }
             if let until = dwellUntil {
                 guard Date() >= until else { return }
@@ -895,7 +750,7 @@
                 let event = presetEvent
                 presetEvent = nil
                 var trackedPosition: CGPoint?
-                if trackingNow == .tracking, presetEmptyWalk == nil, let seen = lastTracked,
+                if trackingNow == .tracking, let seen = lastTracked,
                     Date().timeIntervalSince(seen.at) < 0.5
                 {
                     trackedPosition = seen.position
@@ -911,6 +766,7 @@
                     if sendMove(servo, angle) {
                         inFlight = true
                         moveSentAt = Date()
+                        movedForStall = true
                         presetAwaitingSettle = true
                         lastServo = servo
                         lastMove = "GOTO \(servo.letter) \(angle) (preset)"
@@ -928,11 +784,13 @@
                     }
                     return
                 case .columnStarted(let column):
+                    ignoreEdgeThisLeg = false
+                    sawSampleInColumn = false
+                    noSampleSince = nil
                     countingColumn = column
                     engine.setExternalCounting(active: true, column: column)
                     engine.logEvent("preset_path_column", detail: "\(column) at \(angleX),\(angleY)")
                 case .columnEnded(let column):
-                    endPresetEmptyWalk("edge")  // the leg ended inside the empty patch
                     countingColumn = nil
                     engine.setExternalCounting(active: false, column: column)
                 case .finished(let reason):
@@ -1018,6 +876,7 @@
         private func sendFollowMove(_ servo: StageAxis, _ angle: Int) {
             guard sendMove(servo, angle) else { return }
             movedSinceLastPress = true
+            movedForStall = true
             inFlight = true
             moveSentAt = Date()
             lastServo = servo
@@ -1037,7 +896,15 @@
                 crossStep()
                 return
             }
-            let holding = watchEmpty()
+            let monitor = engine.setupInfo.monitor
+            if stallWatch.update(
+                now: Date(), holds: engine.guideInfo.holdsForPicture, moved: movedForStall,
+                focusIndex: monitor.focusIndex, baseline: monitor.focusBaseline)
+            {
+                engine.requestFocusPause()
+                lastMove = "Focus pause (stall)"
+            }
+            movedForStall = false
             if engine.overlayState.asksEdge {
                 if inFlight {
                     client.send(.stop)
@@ -1054,7 +921,6 @@
                 return
             }
             if lastMove == guideOff { lastMove = "" }
-            guard !holding else { return }
             guard let mapping, !inFlight, Date().timeIntervalSince(lastSettledAt) >= 0.3,
                 let dx = engine.guideInfo.steerDx, let dy = engine.guideInfo.steerDy
             else { return }
