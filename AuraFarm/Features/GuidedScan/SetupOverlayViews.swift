@@ -362,6 +362,8 @@ struct PausedOverlay: View {
     var mapper: (any FrameToView)?
     /// "Resume anyway", shown while paused for focus.
     var onResumeAnyway: (() -> Void)?
+    /// "In focus – empty area", shown under "Resume anyway" while paused for focus; nil hides it.
+    var onEmptyArea: (() -> Void)?
 
     var body: some View {
         if let reason = monitor.state.pauseReason {
@@ -394,6 +396,11 @@ struct PausedOverlay: View {
                             .buttonStyle(.borderedProminent)
                             .tint(.orange)
                             .foregroundStyle(.black)
+                    }
+                    if reason == .focus, let onEmptyArea {
+                        Button("In focus – empty area", action: onEmptyArea)
+                            .buttonStyle(.bordered)
+                            .tint(.orange)
                     }
                     Spacer()
                 }

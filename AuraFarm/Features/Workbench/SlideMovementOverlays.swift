@@ -26,6 +26,8 @@
         /// The picture is shown as the field's square: everything outside the circle is dark.
         var centred = false
         var onTapTrail: () -> Void = {}
+        /// "In focus – empty area" on the focus-pause banner; nil (the default) hides the button.
+        var onEmptyArea: (() -> Void)?
 
         var body: some View {
             ZStack {
@@ -80,7 +82,7 @@
                         mapper: FramePreviewConverter(
                             layer: previewLayer, frameSize: model.fieldInfo.frameSize,
                             display: display),
-                        onResumeAnyway: { model.resumeFocusAnyway() })
+                        onResumeAnyway: { model.resumeFocusAnyway() }, onEmptyArea: onEmptyArea)
                     VStack {
                         HStack(alignment: .top) {
                             // The picture stays clear while the guide is drawing on it.

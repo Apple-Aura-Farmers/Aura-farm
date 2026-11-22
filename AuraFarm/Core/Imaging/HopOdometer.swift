@@ -39,7 +39,7 @@ struct HopOdometerThresholds {
 /// nothing trustworthy came back"; it is not "nothing to measure against yet", so the
 /// caller must not feed nils while it has no anchor.
 struct HopOdometer {
-    enum Event: Equatable { case none, hop, lost, regained }
+    enum Event: Equatable { case none, hop, lost, regained, reanchor, blindReanchor }
 
     var thresholds: HopOdometerThresholds
 
@@ -91,16 +91,22 @@ struct HopOdometer {
     ///   last known; the position keeps its last committed + live, and that error is
     ///   accepted. A hop that lands while lost also counts as tracking regained (`gaps`
     ///   goes up) but is reported as `.hop`, the more important of the two.
-    mutating func update(
-        offset: CGPoint?, frameSize: CGSize, referenceSide: Double? = nil
-    ) -> (event: Event, reanchor: Bool) {
+    /// Whether `offset` is within the distance a reading is trusted at (beyond it the match
+    /// against the anchor is unreliable).
+    func isTrusted(_ offset: CGPoint, frameSize: CGSize, referenceSide: Double? = nil) -> Bool {
         let shortSide = Double(min(frameSize.width, frameSize.height))
         let trusted =
             referenceSide.map { thresholds.maxTrustedFractionOfBox * $0 }
             ?? thresholds.maxTrustedFraction * shortSide
+        return hypot(offset.x, offset.y) <= trusted
+    }
+
+    mutating func update(
+        offset: CGPoint?, frameSize: CGSize, referenceSide: Double? = nil
+    ) -> (event: Event, reanchor: Bool) {
         let hopAt = hopDistance(frameSize: frameSize, referenceSide: referenceSide)
 
-        guard let offset, hypot(offset.x, offset.y) <= trusted
+        guard let offset, isTrusted(offset, frameSize: frameSize, referenceSide: referenceSide)
         else {
             untrustedStreak += 1
             if untrustedStreak >= thresholds.readingsToLose && !isLost {
@@ -149,6 +155,17 @@ struct HopOdometer {
         committed = position
         live = .zero
         untrustedStreak = 0
+    }
+
+    /// Adds a distance the tracker could not see (crossed blind) to the position.
+    mutating func skip(by offset: CGPoint) {
+        committed = CGPoint(x: committed.x + offset.x, y: committed.y + offset.y)
+    }
+
+    /// Carries on from the last known position and trusts the next reading again.
+    mutating func recover() {
+        rebase()
+        isLost = false
     }
 
     mutating func reset() {

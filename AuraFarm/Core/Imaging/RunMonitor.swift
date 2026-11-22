@@ -178,6 +178,20 @@ struct RunMonitor {
         setFocusBaseline(nil)
     }
 
+    /// The picture stalled blurry for long enough that the caller says so: the same pause for
+    /// focus as the monitor's own, which resumes by the same rules. Does nothing unless running.
+    @discardableResult
+    mutating func pauseForStall() -> Bool {
+        guard state == .ok else { return false }
+        state = .pausedFocus
+        pauseCause = "stall"
+        clearFocusCounts()
+        stretch = nil
+        stillOnset = false
+        onsetSince = nil
+        return true
+    }
+
     /// Sets the focus index the run is compared with (from setup's focus step), or nil to
     /// collect it from the first readings.
     mutating func setFocusBaseline(_ value: Double?) {

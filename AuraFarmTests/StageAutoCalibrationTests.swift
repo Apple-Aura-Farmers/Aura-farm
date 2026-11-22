@@ -143,4 +143,19 @@ final class StageAutoCalibrationTests: XCTestCase {
         XCTAssertNil(StageAutoCalibration.stageStepSweep(fieldsPerDegree: 0.01, slackDegrees: 0))
         XCTAssertNil(StageAutoCalibration.stageStepSweep(fieldsPerDegree: 0, slackDegrees: 0))
     }
+
+    func testSweepWithAFirstStepLurchKeepsTheTrueSlope() throws {
+        var c = StageAutoCalibration()
+        // 40 samples over 120 degrees at 0.02 field/degree; the first moving step lurches 0.8.
+        for i in 0..<40 {
+            let angle = Double(i) * 120.0 / 39.0
+            let lurch = i >= 1 ? 0.8 : 0.0
+            c.add(
+                servo: .x, angle: angle, position: CGPoint(x: 0.02 * angle + lurch, y: 0),
+                tracking: .tracking)
+        }
+        let v = try c.vector(for: .x).get()
+        XCTAssertEqual(Double(v.x), 0.02, accuracy: 0.002)
+        XCTAssertEqual(Double(v.y), 0, accuracy: 1e-9)
+    }
 }

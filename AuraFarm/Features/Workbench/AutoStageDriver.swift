@@ -12,12 +12,15 @@
         enum Phase: Equatable {
             case disconnected
             case waitingForStageStep
+            case warmingUp(String)
             case calibrating(axis: StageAxis, travel: Double)
             case stageStep(axis: StageAxis, travel: Double)
             case calibrated(summary: String)
             case following
             case waitingForEdgeAnswer
             case atLimit(StageAxis)
+            case crossingEmpty(fields: Double)
+            case emptyCapReached(fields: Double)
             case paused
             case failed(String)
         }
@@ -27,6 +30,10 @@
         private(set) var lastMove = ""
         private(set) var mappingSummary = ""
         var chunkDegrees = 3
+        /// The objective in use; set before `activate`. The step size starts at its default.
+        var objective = StageObjective.x40
+        /// A path run before calibration, so the linkage is past its slack and stick-slip.
+        var warmUp: StagePresetPath? = .centreCross
         /// Press the guide's "Stage limit" when a servo is pinned at 0 or 180.
         var autoStageLimit = true
         private(set) var autoStageLimitCount = 0
@@ -46,6 +53,25 @@
         private var lastServo = StageAxis.x
         private var isCalibrating = false
         private var limitPress = StageLimitAutoPress()
+        private var stallWatch = StageStallWatch()
+        /// The samples of the lab-step sweeps, which re-measure the servos' fields per degree.
+        private var sweepCalibration = StageAutoCalibration()
+        private var gapPending = false
+        private var latestSample: (position: CGPoint, tracking: TrackingState)?
+        /// Since when the leg servo could not move while a cross-axis servo is pinned.
+        private var crossStuckSince: Date?
+        /// The last direction the guide steered in (raw guide fields), for crossing blind.
+        private var lastSteer: CGPoint?
+        private var crossing: StageBlindCrossing?
+        private var crossingLogged = false
+        private var trackingNow = TrackingState.lost
+        /// How far the current crossing may go before the person is asked, in fields.
+        private(set) var blindCap = 2.0
+        /// A move was sent since the last stall check.
+        private var movedForStall = false
+        /// Tracking has been lost since this time; nil while it is not.
+        private var lostSince: Date?
+        private var lastReanchorAt = Date.distantPast
         private var movedSinceLastPress = false
         /// Pause, End session or leaving stops the lab-stage-step sweep between moves.
         private var cancelSweep = false
@@ -58,7 +84,9 @@
         private var waiter: (id: Int, accept: (StageReply) -> Bool?, done: (Bool) -> Void)?
         private var nextWaiterID = 0
 
-        private let calibrationStepDegrees = 3
+        /// Calibration and the lab stage step move in the chosen chunk (at most 3 degrees): at
+        /// 100x one 3-degree step jumps the picture further than the tracker can follow.
+        private var calibrationStepDegrees: Int { min(max(chunkDegrees, 1), 3) }
         private let settleSeconds = 0.3
         private let sampleSeconds = 0.4
 
@@ -69,6 +97,7 @@
         func activate(restoringAsksEdges previous: Bool) {
             restoreAsksEdges = previous
             engine.setAsksEdges(true)
+            engine.logEvent("objective_\(objective.title)")
             client.onReply = { [weak self] reply in
                 MainActor.assumeIsolated { self?.handle(reply) }
             }
@@ -99,6 +128,7 @@
         // MARK: Buttons
 
         func pause() {
+            if crossing != nil { finishCrossing("blind_cross_paused") }
             userPaused = true
             cancelSweep = true
             client.send(.stop)
@@ -119,11 +149,120 @@
             phase = .paused
         }
 
+        /// A measurement taken at the other magnification is wrong: it is made again.
+        func changeObjective(to new: StageObjective) {
+            objective = new
+            chunkDegrees = new.defaultChunk
+            engine.logEvent("objective_\(new.title)")
+            if mapping != nil { recalibrate() }
+        }
+
         /// After a failure, or to measure again at the stage step.
         func recalibrate() {
             mapping = nil
             mappingSummary = ""
             phase = .waitingForStageStep
+        }
+
+        // MARK: Crossing an empty patch
+
+        /// The focus-pause banner may offer "In focus – empty area".
+        var canConfirmEmptyArea: Bool { phase == .following && mapping != nil }
+
+        /// The person says the view is in focus: it is an empty patch. Cross it blind.
+        func confirmEmptyArea() {
+            guard canConfirmEmptyArea else { return }
+            guard let lastSteer, hypot(Double(lastSteer.x), Double(lastSteer.y)) > 0 else {
+                lastMove = "No direction to cross in"
+                return
+            }
+            engine.resumeFocusAnyway()
+            engine.logEvent("empty_confirmed")
+            crossing = StageBlindCrossing(
+                direction: lastSteer, startAngles: (angleX, angleY))
+            blindCap = crossing?.capFields ?? 2.0
+            crossingLogged = false
+            phase = .crossingEmpty(fields: 0)
+        }
+
+        /// "End column here" after a crossing that stayed empty.
+        func endColumnHere() {
+            guard crossing != nil else { return }
+            // The crossed distance first: the tracker adds it on the next frame, before the guide
+            // reads the limit on that same frame, so the column ends where the stage is.
+            finishCrossing("blind_cross_end")
+            engine.stageLimit(cause: .blindEdge)
+        }
+
+        /// "Keep going": the cap grows and the crossing continues.
+        func keepCrossing() {
+            guard crossing != nil else { return }
+            crossing?.extendCap()
+            blindCap = crossing?.capFields ?? blindCap
+            phase = .crossingEmpty(fields: crossedFields)
+        }
+
+        private var crossedFields: Double {
+            guard let crossing, let mapping else { return 0 }
+            return crossing.distance(angles: (angleX, angleY), mapping: mapping)
+        }
+
+        /// Ends the crossing: the distance crossed goes to the tracker, which jumps there at the
+        /// next frame with detail, and the focus baseline is measured again.
+        private func finishCrossing(_ event: String) {
+            guard let crossing, let mapping else { return }
+            let moved = crossing.movedFields(angles: (angleX, angleY), mapping: mapping)
+            // The guide's axes may be the straightened picture's: the inverse of `unstraightened`.
+            let guideFields = straightening.map { moved.applying($0.withoutTranslation) } ?? moved
+            engine.addBlindMove(guideFields: guideFields)
+            engine.logEvent(event, detail: String(format: "%.2f fields", crossedFields))
+            engine.requestFocusBaselineRemeasure()
+            self.crossing = nil
+            stallWatch = StageStallWatch()
+            phase = .following
+        }
+
+        private func crossStep() {
+            guard let current = crossing, let mapping else { return }
+            if engine.overlayState.asksEdge {
+                if inFlight {
+                    client.send(.stop)
+                    inFlight = false
+                    lastSettledAt = Date()
+                }
+                finishCrossing("blind_cross_edge_question")
+                phase = .waitingForEdgeAnswer
+                return
+            }
+            guard !inFlight, Date().timeIntervalSince(lastSettledAt) >= 0.3 else { return }
+            let angles = (angleX, angleY)
+            if trackingNow == .tracking, !engine.guideInfo.holdsForPicture {
+                return finishCrossing("blind_cross_end")  // detail is back
+            }
+            if case .emptyCapReached = phase { return }  // waiting for the person's choice
+            if current.reachedCap(angles: angles, mapping: mapping) {
+                phase = .emptyCapReached(fields: crossedFields)
+                return
+            }
+            var planner = StageMotionPlanner(mapping: mapping, chunkDegrees: chunkDegrees)
+            planner.deadbandFields = 0.15
+            switch planner.next(angles: angles, target: current.target()) {
+            case .idle: break
+            case .atLimit:
+                phase = .emptyCapReached(fields: crossedFields)
+            case .move(let servo, let angle):
+                if !crossingLogged {
+                    crossingLogged = true
+                    engine.logEvent("blind_cross_start")
+                }
+                if client.send(.goTo(servo, angle)) {
+                    inFlight = true
+                    moveSentAt = Date()
+                    lastServo = servo
+                    lastMove = "GOTO \(servo.letter) \(angle) (blind)"
+                    phase = .crossingEmpty(fields: crossedFields)
+                }
+            }
         }
 
         // MARK: Replies and samples
@@ -146,6 +285,9 @@
             case .position, .done:
                 inFlight = false
                 lastSettledAt = Date()
+                // Every step starts from zero offset: a step can move the picture further than the
+                // tracker trusts between two frames.
+                engine.requestTrackerReanchor()
             case .ok(let text) where text.hasPrefix("STOP"):
                 inFlight = false
                 lastSettledAt = Date()
@@ -162,6 +304,10 @@
         /// servo moves) still splits the calibration's runs.
         private func sample(_ position: CGPoint, _ tracking: TrackingState) {
             let tracked = tracking == .tracking
+            trackingNow = tracking
+            if tracking == .lost { lostSince = lostSince ?? Date() } else { lostSince = nil }
+            if tracked, trackingBroke { gapPending = true }
+            latestSample = (unstraightened(position), tracking)
             if !tracked { trackingBroke = true }
             guard let c = collecting else { return }
             calibration.add(
@@ -227,6 +373,10 @@
             cancelSweep = false
             defer { isCalibrating = false }
             calibration = StageAutoCalibration()
+            if let preset = warmUp {
+                await warmUpStage(preset)
+                if sweepStopped { return stopSweep() }
+            }
             let ready = await request(.mode(.manual)) {
                 if case .ok = $0 { return true }
                 if case .error = $0 { return false }
@@ -248,7 +398,7 @@
                 var current = start
                 await collect(servo, current)
                 while calibration.travel(of: servo) < calibration.minTravelFields
-                    || calibration.movingAngles(of: servo) < 4,
+                    || calibration.movingAngles(of: servo) < 5,
                     abs(current - start) < calibration.maxDegrees,
                     (0...180).contains(current + direction * calibrationStepDegrees)
                 {
@@ -266,7 +416,14 @@
                     await collect(servo, current)
                     phase = .calibrating(axis: servo, travel: calibration.travel(of: servo))
                 }
-                _ = await goTo(servo, start)  // back to where it began
+                // Back to where it began, in the same steps, so the tracker follows the picture
+                // there (one big jump loses it, and the next servo's samples start from a wrong
+                // position).
+                while current != start {
+                    let back = current - direction * calibrationStepDegrees
+                    current = direction > 0 ? max(back, start) : min(back, start)
+                    guard await goTo(servo, current) else { break }
+                }
                 try? await Task.sleep(for: .seconds(settleSeconds))
                 if case .failure(let failure) = calibration.vector(for: servo) {
                     return fail(failure.localizedDescription)
@@ -285,17 +442,92 @@
             }
         }
 
+        /// Runs a preset path in AUTO to take up the linkage's slack before calibrating. A timeout
+        /// or an ERR is logged and calibration carries on.
+        private func warmUpStage(_ preset: StagePresetPath) async {
+            phase = .warmingUp(preset.title)
+            engine.logEvent("warmup_start", detail: preset.title)
+            func answered(_ reply: StageReply, ok: (String) -> Bool) -> Bool? {
+                if case .ok(let text) = reply { return ok(text) ? true : nil }
+                if case .error = reply { return false }
+                return nil
+            }
+            var finished = false
+            if await request(.mode(.auto), accept: { answered($0) { $0.hasPrefix("MODE") } }),
+                !sweepStopped,
+                await request(
+                    .path(preset.points), accept: { answered($0) { $0.hasPrefix("PATH") } }),
+                !sweepStopped
+            {
+                finished = await request(
+                    .start, timeout: 90,
+                    accept: {
+                        if case .done = $0 { return true }
+                        if case .error = $0 { return false }
+                        return nil
+                    })
+            }
+            if sweepStopped {
+                client.send(.stop)
+                return
+            }
+            if finished {
+                engine.logEvent("warmup_done", detail: preset.title)
+            } else {
+                client.send(.stop)
+                engine.logEvent("warmup_failed", detail: "\(preset.title): \(lastErrorText)")
+            }
+        }
+
         // MARK: The lab's stage step, run with the servos
 
         private var sweepStopped: Bool { cancelSweep || client.status != .connected }
 
         private func labStage() -> StageAxesStep? { engine.setupInfo.stage?.step }
 
-        /// Gives up on the lab's own measurement: its axes are the automated ones.
+        /// Gives up on the lab's own measurement: its axes are the automated ones, built from the
+        /// re-measured vectors when there are any.
         private func useAutomatedAxes(_ found: StageServoMapping) {
-            engine.completeStage(with: found.axes)
-            mappingSummary = found.summary + " (lab stage step not completed: used the automated axes)"
+            let refit = refitMapping(found)
+            engine.completeStage(with: refit.axes)
+            mapping = refit
+            mappingSummary =
+                refit.summary
+                + (refit == found ? "" : " (re-measured from the lab sweep)")
+                + " (lab stage step not completed: used the automated axes)"
             phase = .calibrated(summary: mappingSummary)
+        }
+
+        /// The lab accepted the axes: the servos' vectors are still re-measured from the sweeps.
+        private func finishStageStep(_ found: StageServoMapping) {
+            let refit = refitMapping(found)
+            mapping = refit
+            mappingSummary = refit.summary + (refit == found ? "" : " (re-measured from the lab sweep)")
+            phase = .calibrated(summary: mappingSummary)
+        }
+
+        /// Replaces a servo's vector with the one the sweeps measured, when they covered enough.
+        private func refitMapping(_ found: StageServoMapping) -> StageServoMapping {
+            func better(_ servo: StageAxis) -> CGPoint? {
+                guard sweepCalibration.travel(of: servo) >= 1.0,
+                    sweepCalibration.movingAngles(of: servo) >= 8,
+                    case .success(let v) = sweepCalibration.vector(for: servo)
+                else { return nil }
+                return v
+            }
+            let vx = better(.x)
+            let vy = better(.y)
+            guard vx != nil || vy != nil,
+                case .success(let refit) = StageAutoCalibration.servoMapping(
+                    x: vx ?? found.x, y: vy ?? found.y, xSlack: found.xSlackDegrees,
+                    ySlack: found.ySlackDegrees)
+            else { return found }
+            engine.logEvent(
+                "mapping_refit",
+                detail: String(
+                    format: "x=%.4f y=%.4f f/deg", hypot(Double(refit.x.x), Double(refit.x.y)),
+                    hypot(Double(refit.y.x), Double(refit.y.y))))
+            return refit
         }
 
         private func runStageStep(_ found: StageServoMapping) async {
@@ -308,6 +540,7 @@
                     slackDegrees: found.ySlackDegrees)
             else { return useAutomatedAxes(found) }
 
+            sweepCalibration = StageAutoCalibration()
             for _ in 0..<2 {
                 guard await goTo(.x, sweepX.start), await goTo(.y, sweepY.start) else {
                     return useAutomatedAxes(found)
@@ -320,41 +553,39 @@
                 for _ in 0..<25 where labStage() != .waitX && !sweepStopped {
                     try? await Task.sleep(for: .milliseconds(100))
                 }
-                await sweep(.x, sweepX, while: .waitX)
+                await sweep(.x, while: .waitX)
                 // "X done" pause: no reading counts until it ends.
                 for _ in 0..<30 where engine.setupInfo.stage?.isPause == true && !sweepStopped {
                     try? await Task.sleep(for: .milliseconds(100))
                 }
-                await sweep(.y, sweepY, while: .waitY)
+                await sweep(.y, while: .waitY)
                 if sweepStopped { return stopSweep() }
                 if engine.setupInfo.step != .stage {
-                    mappingSummary = found.summary
-                    phase = .calibrated(summary: found.summary)
-                    return
+                    return finishStageStep(found)
                 }
             }
             useAutomatedAxes(found)
         }
 
-        /// Turns one servo back and forth over `range`, a step at a time, while the lab's stage
-        /// step still waits for this axis; two passes at most.
-        private func sweep(
-            _ servo: StageAxis, _ range: (start: Int, end: Int), while waiting: StageAxesStep
-        ) async {
+        /// Turns one servo from where it was parked to its end, and back, a step at a time, while
+        /// the lab's stage step still waits for this axis; two passes at most. After each step
+        /// the picture's position is recorded, to re-measure the servo's fields per degree.
+        private func sweep(_ servo: StageAxis, while waiting: StageAxesStep) async {
             var current = servo == .x ? angleX : angleY
             var direction = 1
             var passes = 0
             while !sweepStopped, labStage() == waiting, passes < 2 {
-                let next = min(
-                    max(current + direction * calibrationStepDegrees, range.start), range.end)
+                let next = min(max(current + direction * calibrationStepDegrees, 0), 180)
                 if next == current {
-                    direction = -direction
+                    direction = -direction  // at the servo's end: turn round
                     passes += 1
                     continue
                 }
                 lastErrorText = ""
                 if await goTo(servo, next) {
                     current = next
+                    try? await Task.sleep(for: .milliseconds(150))
+                    recordSweepSample(servo, next)
                 } else if lastErrorText.hasPrefix("LIMIT") {
                     direction = -direction  // the stage's own range ends here
                     passes += 1
@@ -363,6 +594,14 @@
                 }
                 phase = .stageStep(axis: servo, travel: engine.setupInfo.stage?.travelFields ?? 0)
             }
+        }
+
+        private func recordSweepSample(_ servo: StageAxis, _ angle: Int) {
+            guard let latest = latestSample else { return }
+            sweepCalibration.add(
+                servo: servo, angle: Double(angle), position: latest.position,
+                tracking: latest.tracking, afterGap: gapPending)
+            gapPending = false
         }
 
         /// Pause / End session / disconnect during the sweep: measure again on Resume.
@@ -396,6 +635,7 @@
                 }
                 return
             }
+            reanchorIfStuckLost()
             let step = engine.setupInfo.step
             if phase == .disconnected {
                 phase = mapping != nil && step == .done ? .paused : .waitingForStageStep
@@ -417,6 +657,28 @@
             follow()
         }
 
+        /// Tracking lost for a while with the stage still: anchor again where it is.
+        private func reanchorIfStuckLost() {
+            let now = Date()
+            guard let lostSince, now.timeIntervalSince(lostSince) >= 1.5, !inFlight,
+                now.timeIntervalSince(lastSettledAt) >= 1,
+                now.timeIntervalSince(lastReanchorAt) >= 2
+            else { return }
+            lastReanchorAt = now
+            engine.requestTrackerReanchor()
+        }
+
+        private func sendFollowMove(_ servo: StageAxis, _ angle: Int) {
+            guard client.send(.goTo(servo, angle)) else { return }
+            movedSinceLastPress = true
+            movedForStall = true
+            inFlight = true
+            moveSentAt = Date()
+            lastServo = servo
+            lastMove = "GOTO \(servo.letter) \(angle)"
+            phase = .following
+        }
+
         private func follow() {
             if inFlight, Date().timeIntervalSince(moveSentAt) > 5 {
                 // The reply never came (or the move was to the angle it is already at).
@@ -425,6 +687,19 @@
                 client.send(.status)
                 lastMove = "No reply, resynced"
             }
+            if crossing != nil {
+                crossStep()
+                return
+            }
+            let monitor = engine.setupInfo.monitor
+            if stallWatch.update(
+                now: Date(), holds: engine.guideInfo.holdsForPicture, moved: movedForStall,
+                focusIndex: monitor.focusIndex, baseline: monitor.focusBaseline)
+            {
+                engine.requestFocusPause()
+                lastMove = "Focus pause (stall)"
+            }
+            movedForStall = false
             if engine.overlayState.asksEdge {
                 if inFlight {
                     client.send(.stop)
@@ -446,31 +721,52 @@
             else { return }
             // The guide's axes may be the straightened picture's; the servos were measured raw.
             let target = unstraightened(CGPoint(x: dx, y: dy))
+            if hypot(Double(target.x), Double(target.y)) > 0 { lastSteer = target }
             var planner = StageMotionPlanner(mapping: mapping, chunkDegrees: chunkDegrees)
             planner.deadbandFields = 0.15
             switch planner.next(angles: (angleX, angleY), target: target) {
             case .idle: break
             case .atLimit(let servo):
                 phase = .atLimit(servo)
+                // Only the column's own servo ends a column: a pinned cross-axis correction
+                // must not press Stage limit.
+                var heading: CGPoint?
+                if let hx = engine.guideInfo.headingDx, let hy = engine.guideInfo.headingDy {
+                    heading = unstraightened(CGPoint(x: hx, y: hy))
+                }
+                let leg = heading.flatMap { StageLegServo.choose(heading: $0, mapping: mapping) }
+                var crossStuck = false
+                if let leg, leg != servo {
+                    if case .move(let legServo, let angle) = planner.move(
+                        servo: leg, angles: (angleX, angleY), target: target)
+                    {
+                        crossStuckSince = nil
+                        sendFollowMove(legServo, angle)
+                        break
+                    }
+                    let since = crossStuckSince ?? Date()
+                    crossStuckSince = since
+                    crossStuck = Date().timeIntervalSince(since) >= 5
+                } else {
+                    crossStuckSince = nil
+                    crossStuck = true
+                }
                 if autoStageLimit,
                     limitPress.update(
-                        now: Date(), atLimit: true, lastSettledAt: lastSettledAt,
+                        now: Date(), atLimit: crossStuck, lastSettledAt: lastSettledAt,
                         movedSinceLastPress: movedSinceLastPress)
                 {
-                    engine.stageLimit(auto: true)
+                    engine.stageLimit(cause: .auto)
+                    if leg != nil, leg != servo {
+                        engine.logEvent("stage_limit_auto", detail: "stage_limit_auto_cross")
+                    }
                     autoStageLimitCount += 1
                     movedSinceLastPress = false
                     lastMove = "Stage limit (auto)"
                 }
             case .move(let servo, let angle):
-                if client.send(.goTo(servo, angle)) {
-                    movedSinceLastPress = true
-                    inFlight = true
-                    moveSentAt = Date()
-                    lastServo = servo
-                    lastMove = "GOTO \(servo.letter) \(angle)"
-                    phase = .following
-                }
+                crossStuckSince = nil
+                sendFollowMove(servo, angle)
             }
         }
     }

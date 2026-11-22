@@ -133,6 +133,9 @@ class ScanEngine: NSObject {
     @ObservationIgnored private var lastPublishedStep = LabSetupStep.align
     @ObservationIgnored private var pausesOnMonitorFlag = true
     @ObservationIgnored var pendingEventName = ""
+    @ObservationIgnored private var pendingEventDetail = ""
+    /// The side of the registration box (frame px) on the last analysed frame.
+    @ObservationIgnored private var lastBoxSide = 1.0
     @ObservationIgnored private var latestGuide: GuideRowFields?
     @ObservationIgnored private var latestGuideInfo = SlideMovementInfo.Guide()
     @ObservationIgnored private var guideCaptured: [CGPoint] = []
@@ -304,12 +307,43 @@ class ScanEngine: NSObject {
 
     /// The helper says the stage cannot go further: the guide turns and remembers the limit.
     /// Written to the movement CSV as the event "stage_limit" ("stage_limit_auto" when the
-    /// automated stage pressed it). Ignored unless the guide is on.
-    func stageLimit(auto: Bool = false) {
+    /// automated stage pressed it, "blind_edge" when it ended a column after crossing an empty
+    /// patch). Ignored unless the guide is on.
+    func stageLimit(cause: StageLimitCause = .manual) {
         analysisQueue.async { [weak self] in
             guard let self, self.guideEnabled else { return }
             self.dryRun.stageLimitPressed = true
-            self.pendingEventName = auto ? "stage_limit_auto" : "stage_limit"
+            self.pendingEventName = cause.eventName
+        }
+    }
+
+    /// Writes `name` as the event of the next movement row (with `detail` as its event_detail).
+    func logEvent(_ name: String, detail: String = "") {
+        analysisQueue.async { [weak self] in
+            self?.pendingEventName = name
+            self?.pendingEventDetail = detail
+        }
+    }
+
+    /// The stage crossed `guideFields` (current guide fields) without the tracker seeing it: at
+    /// the next frame with detail the position jumps by that much and the tracker anchors there.
+    func addBlindMove(guideFields: CGPoint) {
+        analysisQueue.async { [weak self] in
+            guard let self,
+                let offset = self.dryRun.trackerOffset(
+                    forGuideFields: guideFields, boxSide: self.lastBoxSide)
+            else { return }
+            self.pipeline.requestReanchor(addingOffset: offset)
+        }
+    }
+
+    /// The focus baseline is measured again from the next readings; the monitor's state stays.
+    func requestFocusBaselineRemeasure() {
+        analysisQueue.async { [weak self] in
+            guard let self, self.setup.step == .done else { return }
+            self.setup.remeasureFocusBaseline()
+            let info = self.setup.info
+            DispatchQueue.main.async { self.setupInfo = info }
         }
     }
 
@@ -332,6 +366,23 @@ class ScanEngine: NSObject {
             self.lastPublishedStep = .done
             self.clearTrackingDisplay()
             self.resetGuide()
+            let info = self.setup.info
+            DispatchQueue.main.async { self.setupInfo = info }
+        }
+    }
+
+    /// The tracker anchors on the next tracked frame with the position kept (see
+    /// `SlideTracker.requestReanchor`).
+    func requestTrackerReanchor() {
+        analysisQueue.async { [weak self] in self?.pipeline.requestReanchor() }
+    }
+
+    /// Pauses the run for focus, as the run monitor would, for a stall it did not catch. Written to
+    /// the CSV as the event "focus_pause_stall". Nothing happens if it is already paused.
+    func requestFocusPause() {
+        analysisQueue.async { [weak self] in
+            guard let self, self.setup.requestFocusPause() else { return }
+            self.pendingEventName = "focus_pause_stall"
             let info = self.setup.info
             DispatchQueue.main.async { self.setupInfo = info }
         }
@@ -543,6 +594,19 @@ class ScanEngine: NSObject {
             guard let self, self.guideEnabled else { return }
             self.dryRun.userEdge(feedback, seconds: self.lastFrameSeconds)
             self.pendingEdgeFeedback = feedback
+        }
+    }
+
+    /// What pressed "Stage limit", for the movement CSV's event name.
+    enum StageLimitCause {
+        case manual, auto, blindEdge
+
+        var eventName: String {
+            switch self {
+            case .manual: "stage_limit"
+            case .auto: "stage_limit_auto"
+            case .blindEdge: "blind_edge"
+            }
         }
     }
 
@@ -1281,6 +1345,7 @@ extension ScanEngine: AVCaptureVideoDataOutputSampleBufferDelegate {
         }
         if let image = step.thumbnail { thumbnailThrottle.offer(image) }
         latestPositionFields = step.positionFields
+        lastBoxSide = step.boxSide
         indicators.update(
             shake: step.shake, anchorOffset: step.usedOffset,
             positionFields: step.positionFields, isLost: step.isLost, event: step.event,
@@ -1485,11 +1550,16 @@ extension ScanEngine: AVCaptureVideoDataOutputSampleBufferDelegate {
                 pendingEventName = "camera_config"
                 logged.eventDetail = cameraConfigText
             }
+            if step.event == .blindReanchor, logged.eventDetail.isEmpty {
+                logged.eventDetail = "blind"
+            }
             if !pendingEventName.isEmpty { logged.event = pendingEventName }
+            if !pendingEventDetail.isEmpty { logged.eventDetail = pendingEventDetail }
             rows.append(logged)
             onRowLogged?(logged, time)
         }
         pendingEventName = ""
+        pendingEventDetail = ""
         if guideEnabled, dryRun.isFinished, !runFinalized {
             runFinalized = true
             finalizeRun(seconds: time)

@@ -11,7 +11,8 @@ enum StageCalibrationFailure: Error, Equatable, LocalizedError {
         switch self {
         case .barelyMoves(let axis): "Servo \(axis.letter) barely moves the picture"
         case .lostTracking: "Lost tracking, move to a patch with more particles"
-        case .parallel: "Servo axes look parallel"
+        case .parallel:
+            "Servo axes look parallel: tracking probably slipped. Pick a smaller chunk, then Retry"
         case .noAxes: "Could not build the stage axes"
         }
     }
@@ -188,7 +189,17 @@ struct StageAutoCalibration {
         case .success(let v): vy = v
         case .failure(let f): return .failure(f)
         }
+        return Self.servoMapping(
+            x: vx, y: vy, xSlack: slackDegrees(of: .x), ySlack: slackDegrees(of: .y))
+    }
+
+    /// The mapping for two servo vectors: checks they are not parallel and builds the axes
+    /// (the servo that moves the picture more horizontally is the stage's X).
+    static func servoMapping(
+        x vx: CGPoint, y vy: CGPoint, xSlack: Double, ySlack: Double
+    ) -> Result<StageServoMapping, StageCalibrationFailure> {
         let lengths = hypot(Double(vx.x), Double(vx.y)) * hypot(Double(vy.x), Double(vy.y))
+        guard lengths > 0 else { return .failure(.parallel) }
         let cosine = abs(Double(vx.x * vy.x + vx.y * vy.y)) / lengths
         let angle = acos(min(cosine, 1)) * 180 / .pi
         let limits = StageAxesThresholds()
@@ -201,13 +212,13 @@ struct StageAutoCalibration {
         let vertical = swapped ? vx : vy
         guard
             let axes = StageAxes(
-                xDirection: Self.unit(horizontal, toward: CGPoint(x: 1, y: 0)),
-                yDirection: Self.unit(vertical, toward: CGPoint(x: 0, y: 1)))
+                xDirection: unit(horizontal, toward: CGPoint(x: 1, y: 0)),
+                yDirection: unit(vertical, toward: CGPoint(x: 0, y: 1)))
         else { return .failure(.noAxes) }
         return .success(
             StageServoMapping(
-                x: vx, y: vy, swapped: swapped, axes: axes, xSlackDegrees: slackDegrees(of: .x),
-                ySlackDegrees: slackDegrees(of: .y)))
+                x: vx, y: vy, swapped: swapped, axes: axes, xSlackDegrees: xSlack,
+                ySlackDegrees: ySlack))
     }
 
     private static func unit(_ v: CGPoint, toward t: CGPoint) -> CGPoint {

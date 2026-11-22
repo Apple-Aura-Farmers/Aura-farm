@@ -52,6 +52,8 @@
         // Automated stage (Terraloka BLE stage in place of the knobs).
         @State private var autoStage: AutoStageDriver?
         @State private var isAskingMovement = false
+        @State private var isAskingObjective = false
+        @AppStorage("slideLab.stageObjective") private var lastObjectiveName = StageObjective.x40.rawValue
         @State private var hasAskedMovement = false
 
         // Recorded video.
@@ -60,18 +62,38 @@
 
         private var mapping: ScreenMapping { ScreenMapping(rawValue: mappingName) ?? .asIs }
 
+        /// Asks for the objective first (the step size depends on it); a second dialog cannot open
+        /// while the first is closing, so it waits a moment.
+        private func askObjective() {
+            guard autoStage == nil else { return }
+            Task {
+                try? await Task.sleep(for: .milliseconds(400))
+                isAskingObjective = true
+            }
+        }
+
         /// Turns the Terraloka stage in or out; with it off the lab behaves as it always has.
         private func setAutomatedStage(_ on: Bool) {
-            if on, autoStage == nil {
-                let driver = AutoStageDriver(engine: model)
-                driver.guideIsStraightened = straightens && centresField
-                driver.activate(restoringAsksEdges: asksEdges)
-                autoStage = driver
-            } else if !on, let driver = autoStage {
+            if on {
+                askObjective()
+            } else if let driver = autoStage {
                 driver.deactivate()
                 autoStage = nil
             }
         }
+
+        private func startAutomatedStage(_ objective: StageObjective) {
+            lastObjectiveName = objective.rawValue
+            if autoStage == nil {
+                let driver = AutoStageDriver(engine: model)
+                driver.objective = objective
+                driver.chunkDegrees = objective.defaultChunk
+                driver.guideIsStraightened = straightens && centresField
+                driver.activate(restoringAsksEdges: asksEdges)
+                autoStage = driver
+            }
+        }
+
         private var spotMode: SpotConfirmMode { spotModeName == "holdStill" ? .holdStill : .briefTouch }
 
         var body: some View {
@@ -109,7 +131,16 @@
             }
             .confirmationDialog("How will the slide move?", isPresented: $isAskingMovement) {
                 Button("Manual knobs") {}
-                Button("Automated stage") { setAutomatedStage(true) }
+                Button("Automated stage") { askObjective() }
+            }
+            .confirmationDialog("Which objective are you using?", isPresented: $isAskingObjective) {
+                // The last choice first; the question is asked every time.
+                ForEach(
+                    StageObjective.allCases.sorted { a, _ in a.rawValue == lastObjectiveName },
+                    id: \.self
+                ) { objective in
+                    Button(objective.title) { startAutomatedStage(objective) }
+                }
             }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -176,7 +207,9 @@
                                 SlideMovementOverlays(
                                     model: model, mapping: mapping, mirrored: mirrored,
                                     previewLayer: previewLayer, display: display, centred: isCentred,
-                                    onTapTrail: { isShowingTrail = true })
+                                    onTapTrail: { isShowingTrail = true },
+                                    onEmptyArea: autoStage?.canConfirmEmptyArea == true
+                                        ? { autoStage?.confirmEmptyArea() } : nil)
                             } else {
                                 startingCard
                             }

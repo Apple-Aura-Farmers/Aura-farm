@@ -24,11 +24,26 @@ struct StageMotionPlanner {
         let other: StageAxis = servo == .x ? .y : .x
         let dominant = move(servo, degrees(of: servo, in: needed), angles)
         guard case .atLimit = dominant else { return dominant }
-        // The main servo is pinned: the other one may still help.
-        if case .move = move(other, degrees(of: other, in: needed), angles) {
+        // The main servo is pinned: the other one helps only when its own share of the move is
+        // real (not the small tilt share of a straight move) and worth a whole chunk.
+        let vector = other == .x ? mapping.x : mapping.y
+        let perDegree = hypot(Double(vector.x), Double(vector.y))
+        let share = abs(degrees(of: other, in: needed)) * perDegree
+        let chunk = Double(min(max(chunkDegrees, 1), 10))
+        let length = hypot(Double(target.x), Double(target.y))
+        if share >= max(deadbandFields, 1.5 * chunk * perDegree), share >= length / 3,
+            case .move = move(other, degrees(of: other, in: needed), angles)
+        {
             return move(other, degrees(of: other, in: needed), angles)
         }
         return dominant
+    }
+
+    /// One servo's move for its own share of `target` (the leg servo's, when the other one
+    /// is pinned): same chunk, rounding and 0...180 clamp as `next`.
+    func move(servo: StageAxis, angles: (x: Int, y: Int), target: CGPoint?) -> StageMove {
+        guard let target, let needed = mapping.degrees(forMove: target) else { return .idle }
+        return move(servo, degrees(of: servo, in: needed), angles)
     }
 
     private func degrees(of servo: StageAxis, in needed: (x: Double, y: Double)) -> Double {
@@ -45,5 +60,14 @@ struct StageMotionPlanner {
         let current = servo == .x ? angles.x : angles.y
         let angle = min(max(current + step, 0), 180)
         return angle == current ? .atLimit(servo) : .move(servo: servo, toAngle: angle)
+    }
+}
+
+/// Which servo walks a column: the one with the larger share of the leg's heading.
+enum StageLegServo {
+    static func choose(heading: CGPoint, mapping: StageServoMapping) -> StageAxis? {
+        guard let needed = mapping.degrees(forMove: heading) else { return nil }
+        guard needed.x != 0 || needed.y != 0 else { return nil }
+        return abs(needed.x) >= abs(needed.y) ? .x : .y
     }
 }

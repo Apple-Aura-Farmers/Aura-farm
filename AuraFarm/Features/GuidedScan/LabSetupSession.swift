@@ -474,6 +474,22 @@ final class LabSetupSession {
         return true
     }
 
+    /// Pauses the run for focus from outside (a stall the monitor has not caught); false when it
+    /// is already paused. Analysis queue.
+    @discardableResult
+    func requestFocusPause() -> Bool {
+        guard flow.step == .done, monitor.pauseForStall() else { return false }
+        info.monitor.state = monitor.state
+        info.monitor.pauseCause = monitor.pauseCause
+        return true
+    }
+
+    /// The focus baseline is measured again from the next readings; the monitor's state stays.
+    func remeasureFocusBaseline() {
+        monitor.setFocusBaseline(nil)
+        info.monitor.focusBaseline = nil
+    }
+
     /// Starts afresh when the person marks the start of a run: counts cleared, and with no
     /// setup baseline the focus baseline is collected from the next readings.
     func rearmMonitor() {

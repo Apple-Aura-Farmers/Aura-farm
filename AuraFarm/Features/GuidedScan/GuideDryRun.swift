@@ -212,6 +212,17 @@ final class GuideDryRun {
             pointsPerField: geometry?.pointsPerField ?? max(step.boxSide, 1))
     }
 
+    /// The tracker position change (frame px) that moves the guide's position by `fields`: the
+    /// inverse of `guidePosition(for:)`. nil when the axes are degenerate.
+    func trackerOffset(forGuideFields fields: CGPoint, boxSide: Double) -> CGPoint? {
+        let perField = geometry?.pointsPerField ?? max(boxSide, 1)
+        guard
+            let frame = axes.frameVector(
+                ofScreenVector: CGPoint(x: Double(fields.x) * perField, y: Double(fields.y) * perField))
+        else { return nil }
+        return CGPoint(x: -frame.x, y: -frame.y)
+    }
+
     /// Feeds one lab step; returns the CSV fields and the info for the screen.
     func update(
         step: SlideMovementStep, indicators: MovementIndicators, seconds: Double,
@@ -422,7 +433,12 @@ final class GuideDryRun {
             info: SlideMovementInfo.Guide(
                 isOn: true, instruction: result.instruction.debugText, state: result.stateName,
                 targetDx: dx, targetDy: dy, steerDx: steer.map { Double($0.x) },
-                steerDy: steer.map { Double($0.y) }, viewClass: viewClass.rawValue,
+                steerDy: steer.map { Double($0.y) },
+                headingDx: (guide.heading ?? lastHeading).map { Double($0.x) },
+                headingDy: (guide.heading ?? lastHeading).map { Double($0.y) },
+                holdsForPicture: result.instruction == .refocus
+                    || result.instruction == .nothingToFollow || viewClass == .blurry,
+                viewClass: viewClass.rawValue,
                 captures: captures, captureCount: captureCount, edgeCount: edgeCount,
                 isFinished: result.isFinished,
                 wrongWayCount: wrongWayCount, nudgeCount: nudgeCount,

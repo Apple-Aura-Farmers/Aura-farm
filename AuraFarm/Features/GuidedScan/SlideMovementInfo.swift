@@ -86,6 +86,12 @@ enum SlideMovementInfo {
         /// instruction's direction; nil for "do not move". See `GuideInstruction.stageSteer`.
         var steerDx: Double?
         var steerDy: Double?
+        /// The direction of the leg the guide walks, a screen unit vector; nil when it has none.
+        var headingDx: Double?
+        var headingDy: Double?
+        /// The guide waits for the picture (refocus, nothing to follow, or a blurry view), which
+        /// moving the stage does not fix.
+        var holdsForPicture = false
         var viewClass = ""
         var captures = 0
         var captureCount = 0

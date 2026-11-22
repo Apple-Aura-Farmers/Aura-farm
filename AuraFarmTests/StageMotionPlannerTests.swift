@@ -81,3 +81,64 @@ final class StageMotionPlannerTests: XCTestCase {
             planner().next(angles: (180, 90), target: CGPoint(x: 2, y: 0.05)), .atLimit(.x))
     }
 }
+
+extension StageMotionPlannerTests {
+    func testStraightMoveDoesNotChaseTiltShare() {
+        // A 10-degree tilt: moving (-1, 0) needs a little of Y too, which is not worth chasing.
+        let t = 10.0 * .pi / 180
+        let axes = StageAxes(xDirection: CGPoint(x: 1, y: 0), yDirection: CGPoint(x: 0, y: 1))!
+        let tilted = StageMotionPlanner(
+            mapping: StageServoMapping(
+                x: CGPoint(x: 0.2 * cos(t), y: 0.2 * sin(t)), y: CGPoint(x: 0, y: 0.2),
+                swapped: false, axes: axes))
+        XCTAssertEqual(
+            tilted.next(angles: (0, 108), target: CGPoint(x: -1, y: 0)), .atLimit(.x))
+    }
+
+    func testSmallOtherShareIsAtLimit() {
+        let axes = StageAxes(xDirection: CGPoint(x: 1, y: 0), yDirection: CGPoint(x: 0, y: 1))!
+        let slow = StageMotionPlanner(
+            mapping: StageServoMapping(
+                x: CGPoint(x: 0.08, y: 0), y: CGPoint(x: 0, y: 0.08), swapped: false, axes: axes),
+            chunkDegrees: 2)
+        // Y is pinned; X would need 0.2 field, under 1.5 x 2 x 0.08.
+        XCTAssertEqual(slow.next(angles: (90, 180), target: CGPoint(x: 0.2, y: 0.4)), .atLimit(.y))
+    }
+
+    func testRealDiagonalUsesTheOtherServo() {
+        // Y pinned; X needs 0.6 of a 0.9-field move.
+        XCTAssertEqual(
+            planner(chunk: 1).next(angles: (90, 180), target: CGPoint(x: 0.6, y: 0.67)),
+            .move(servo: .x, toAngle: 91))
+    }
+
+    func testMoveServoUsesOnlyItsOwnShare() {
+        // Target (0.6, 0.4): X needs 3 degrees, Y needs 2.
+        XCTAssertEqual(
+            planner().move(servo: .x, angles: (90, 90), target: CGPoint(x: 0.6, y: 0.4)),
+            .move(servo: .x, toAngle: 93))
+        XCTAssertEqual(
+            planner().move(servo: .y, angles: (90, 90), target: CGPoint(x: 0.6, y: 0.4)),
+            .move(servo: .y, toAngle: 92))
+    }
+
+    func testMoveServoIdleUnderOneDegreeAndAtLimit() {
+        XCTAssertEqual(
+            planner().move(servo: .y, angles: (90, 90), target: CGPoint(x: 0.6, y: 0.05)), .idle)
+        XCTAssertEqual(planner().move(servo: .y, angles: (90, 90), target: nil), .idle)
+        XCTAssertEqual(
+            planner().move(servo: .y, angles: (90, 180), target: CGPoint(x: 0, y: 1)),
+            .atLimit(.y))
+    }
+
+    func testLegServoFollowsTheHeading() {
+        XCTAssertEqual(
+            StageLegServo.choose(heading: CGPoint(x: 0, y: 1), mapping: planner().mapping), .y)
+        XCTAssertEqual(
+            StageLegServo.choose(heading: CGPoint(x: 1, y: 0), mapping: planner().mapping), .x)
+        let swapped = planner(swapped: true).mapping
+        XCTAssertEqual(StageLegServo.choose(heading: CGPoint(x: 0, y: 1), mapping: swapped), .x)
+        XCTAssertEqual(StageLegServo.choose(heading: CGPoint(x: 1, y: 0), mapping: swapped), .y)
+        XCTAssertNil(StageLegServo.choose(heading: .zero, mapping: swapped))
+    }
+}
