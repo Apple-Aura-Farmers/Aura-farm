@@ -43,9 +43,34 @@
                 .disabled(busyMeasuring)
                 Toggle("Auto stage limit", isOn: $driver.autoStageLimit).font(.footnote)
                 Picker("Chunk", selection: $driver.chunkDegrees) {
-                    ForEach([1, 2, 3, 5, 10], id: \.self) { Text("\($0)°").tag($0) }
+                    ForEach([1, 2, 3, 5, 10].filter { $0 >= driver.objective.minChunk }, id: \.self) {
+                        Text("\($0)°").tag($0)
+                    }
                 }
                 .pickerStyle(.segmented)
+                Picker(
+                    "Path",
+                    selection: Binding(
+                        get: { driver.pathMode }, set: { driver.setPathMode($0) })
+                ) {
+                    ForEach(StagePathMode.allCases, id: \.self) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .disabled(!canChangePathMode)
+                if driver.pathMode == .presetPath {
+                    Stepper(value: $driver.dwellSeconds, in: 0.6...3.0, step: 0.2) {
+                        Text(String(format: "Dwell %.1f s", driver.dwellSeconds)).font(.footnote)
+                    }
+                }
+                if driver.presetEdgePrompt {
+                    HStack {
+                        Text("Edge?").font(.footnote.bold())
+                        Button("Edge here") { driver.edgeHere() }
+                            .buttonStyle(.borderedProminent)
+                        Button("Keep going") { driver.keepGoingPastEdge() }
+                            .buttonStyle(.bordered)
+                    }
+                }
                 if let warning = driver.objective.warning(forChunk: driver.chunkDegrees) {
                     Text(warning).font(.caption).foregroundStyle(.orange)
                 }
@@ -85,6 +110,15 @@
             }
         }
 
+        /// Only while paused, or before setup is done and nothing is being measured.
+        private var canChangePathMode: Bool {
+            switch driver.phase {
+            case .paused: true
+            case .disconnected, .waitingForStageStep, .failed: setupStep != .done
+            default: false
+            }
+        }
+
         /// Calibrating or running the lab's stage step: the objective cannot change now.
         private var busyMeasuring: Bool {
             switch driver.phase {
@@ -121,6 +155,8 @@
                 String(format: "Crossing empty area: %.1f of %.1f fields", fields, driver.blindCap)
             case .emptyCapReached(let fields):
                 String(format: "Still empty after %.1f fields", fields)
+            case .presetPath(let column, let spot):
+                "Preset path: column \(column), spot \(spot)"
             case .paused: "Paused"
             case .failed(let message): message
             }

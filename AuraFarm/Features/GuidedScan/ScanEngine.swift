@@ -134,6 +134,9 @@ class ScanEngine: NSObject {
     @ObservationIgnored private var pausesOnMonitorFlag = true
     @ObservationIgnored var pendingEventName = ""
     @ObservationIgnored private var pendingEventDetail = ""
+    @ObservationIgnored private var queuedEvents: [(name: String, detail: String)] = []
+    /// The column of an external counting path (see `setExternalCounting`); nil when off.
+    @ObservationIgnored private var externalColumn: Int?
     /// The side of the registration box (frame px) on the last analysed frame.
     @ObservationIgnored private var lastBoxSide = 1.0
     @ObservationIgnored private var latestGuide: GuideRowFields?
@@ -318,11 +321,25 @@ class ScanEngine: NSObject {
     }
 
     /// Writes `name` as the event of the next movement row (with `detail` as its event_detail).
+    /// While nothing is being recorded the event waits (at most 50) and goes on the first rows
+    /// once recording starts, oldest first.
     func logEvent(_ name: String, detail: String = "") {
         analysisQueue.async { [weak self] in
-            self?.pendingEventName = name
-            self?.pendingEventDetail = detail
+            guard let self else { return }
+            if self.logging {
+                self.pendingEventName = name
+                self.pendingEventDetail = detail
+            } else if self.queuedEvents.count < 50 {
+                self.queuedEvents.append((name, detail))
+            }
         }
+    }
+
+    /// Switches organism counting on for a path that is not the guide's (the automated stage's
+    /// preset zig-zag), with the column number; off with `active: false`. Overrides the guide
+    /// route's own counting and column while it is on.
+    func setExternalCounting(active: Bool, column: Int) {
+        analysisQueue.async { [weak self] in self?.externalColumn = active ? column : nil }
     }
 
     /// The stage crossed `guideFields` (current guide fields) without the tracker seeing it: at
@@ -573,6 +590,7 @@ class ScanEngine: NSObject {
         analysisQueue.async { [weak self] in
             guard let self, self.logging else { return }
             self.logging = false
+            self.queuedEvents = []
             let url = Self.write(self.rows, test: self.currentTest)
             let items = (url.map { [$0] } ?? []) + self.snapshots.urls
             let count = self.rows.count
@@ -1377,12 +1395,13 @@ extension ScanEngine: AVCaptureVideoDataOutputSampleBufferDelegate {
                 runStartSeconds = time
                 live.prepare()
             }
-            if dryRun.countingActive != lastCountingActive {
-                lastCountingActive = dryRun.countingActive
+            let countingOn = externalColumn != nil || dryRun.countingActive
+            if countingOn != lastCountingActive {
+                lastCountingActive = countingOn
                 live.setCounting(lastCountingActive)
             }
             lastCountFrameSize = step.frameSize
-            if dryRun.countingActive {
+            if countingOn {
                 let reason = LiveOrganismCounter.skipReason(
                     tracking: step.tracking.trackingState,
                     isGhostOrSparseSkip: step.reading == "ghost" || step.reading == "sparse_skip",
@@ -1397,10 +1416,10 @@ extension ScanEngine: AVCaptureVideoDataOutputSampleBufferDelegate {
                         frameShift: step.tracking.frameShift),
                     trackerPosition: step.position, frameSize: step.frameSize,
                     fieldCircle: step.fieldState?.mask.flatMap { FieldCircle(fitting: $0) },
-                    seconds: time - runStartSeconds, column: dryRun.column,
+                    seconds: time - runStartSeconds, column: externalColumn ?? dryRun.column,
                     fieldSide: step.boxSide)
             }
-            publishCount(isActive: dryRun.countingActive, frameSize: step.frameSize)
+            publishCount(isActive: countingOn, frameSize: step.frameSize)
             let path = edgeLine.map { $0.isCandidate ? $0.path : [] }
             let lineState = dryRun.lineState
             DispatchQueue.main.async { [edgeLineState] in
@@ -1524,6 +1543,7 @@ extension ScanEngine: AVCaptureVideoDataOutputSampleBufferDelegate {
             logged.cameraFps = Double(frameTimes.count)
             logged.cameraDrops = lateFrameDrops
             logged.knobWords = helperWords
+            if externalColumn != nil { logged.countingActive = true }
             logged.exposureMs = device.map { $0.exposureDuration.seconds * 1000 }
             logged.iso = device.map { Double($0.iso) }
             logged.thermalState = LabDeviceStatus.thermalName
@@ -1549,6 +1569,11 @@ extension ScanEngine: AVCaptureVideoDataOutputSampleBufferDelegate {
                 cameraConfigPending = false
                 pendingEventName = "camera_config"
                 logged.eventDetail = cameraConfigText
+            }
+            if pendingEventName.isEmpty, !queuedEvents.isEmpty {
+                let queued = queuedEvents.removeFirst()
+                pendingEventName = queued.name
+                pendingEventDetail = queued.detail
             }
             if step.event == .blindReanchor, logged.eventDetail.isEmpty {
                 logged.eventDetail = "blind"

@@ -53,6 +53,10 @@
         @State private var autoStage: AutoStageDriver?
         @State private var isAskingMovement = false
         @State private var isAskingObjective = false
+        @State private var isAskingPathMode = false
+        @State private var chosenObjective = StageObjective.x40
+        @AppStorage("slideLab.stagePathMode") private var lastPathModeName = StagePathMode.followGuide
+            .rawValue
         @AppStorage("slideLab.stageObjective") private var lastObjectiveName = StageObjective.x40.rawValue
         @State private var hasAskedMovement = false
 
@@ -82,12 +86,23 @@
             }
         }
 
-        private func startAutomatedStage(_ objective: StageObjective) {
+        /// The objective is chosen: now how the stage should move. Same delayed presentation.
+        private func askPathMode(_ objective: StageObjective) {
+            chosenObjective = objective
             lastObjectiveName = objective.rawValue
+            Task {
+                try? await Task.sleep(for: .milliseconds(400))
+                isAskingPathMode = true
+            }
+        }
+
+        private func startAutomatedStage(_ pathMode: StagePathMode) {
+            lastPathModeName = pathMode.rawValue
             if autoStage == nil {
                 let driver = AutoStageDriver(engine: model)
-                driver.objective = objective
-                driver.chunkDegrees = objective.defaultChunk
+                driver.objective = chosenObjective
+                driver.chunkDegrees = chosenObjective.defaultChunk
+                driver.pathMode = pathMode
                 driver.guideIsStraightened = straightens && centresField
                 driver.activate(restoringAsksEdges: asksEdges)
                 autoStage = driver
@@ -133,13 +148,22 @@
                 Button("Manual knobs") {}
                 Button("Automated stage") { askObjective() }
             }
+            .confirmationDialog("How should the stage move?", isPresented: $isAskingPathMode) {
+                // The last choice first; the question is asked every time.
+                ForEach(
+                    StagePathMode.allCases.sorted { a, _ in a.rawValue == lastPathModeName },
+                    id: \.self
+                ) { pathMode in
+                    Button(pathMode.title) { startAutomatedStage(pathMode) }
+                }
+            }
             .confirmationDialog("Which objective are you using?", isPresented: $isAskingObjective) {
                 // The last choice first; the question is asked every time.
                 ForEach(
                     StageObjective.allCases.sorted { a, _ in a.rawValue == lastObjectiveName },
                     id: \.self
                 ) { objective in
-                    Button(objective.title) { startAutomatedStage(objective) }
+                    Button(objective.title) { askPathMode(objective) }
                 }
             }
             .toolbar {

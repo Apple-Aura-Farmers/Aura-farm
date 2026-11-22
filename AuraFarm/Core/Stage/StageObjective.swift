@@ -7,7 +7,10 @@ enum StageObjective: String, CaseIterable {
 
     var title: String { self == .x40 ? "40x" : "100x" }
 
-    var defaultChunk: Int { self == .x40 ? 3 : 1 }
+    /// The smallest step (degrees) that moves the stage at all: a degree barely moves it at 100x.
+    var minChunk: Int { self == .x40 ? 1 : 2 }
+
+    var defaultChunk: Int { self == .x40 ? 3 : 2 }
 
     /// The largest step (degrees) known to keep the tracker on the picture.
     var recommendedMaxChunk: Int { self == .x40 ? 3 : 2 }

@@ -5,7 +5,12 @@ import XCTest
 final class StageObjectiveTests: XCTestCase {
     func testDefaultChunks() {
         XCTAssertEqual(StageObjective.x40.defaultChunk, 3)
-        XCTAssertEqual(StageObjective.x100.defaultChunk, 1)
+        XCTAssertEqual(StageObjective.x100.defaultChunk, 2)
+        XCTAssertEqual(StageObjective.x40.minChunk, 1)
+        XCTAssertEqual(StageObjective.x100.minChunk, 2)
+        for objective in StageObjective.allCases {
+            XCTAssertGreaterThanOrEqual(objective.defaultChunk, objective.minChunk)
+        }
         XCTAssertEqual(StageObjective.x40.title, "40x")
         XCTAssertEqual(StageObjective.x100.title, "100x")
     }

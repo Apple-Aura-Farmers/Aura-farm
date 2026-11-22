@@ -21,6 +21,7 @@
             case atLimit(StageAxis)
             case crossingEmpty(fields: Double)
             case emptyCapReached(fields: Double)
+            case presetPath(column: Int, spot: Int)
             case paused
             case failed(String)
         }
@@ -34,6 +35,12 @@
         var objective = StageObjective.x40
         /// A path run before calibration, so the linkage is past its slack and stick-slip.
         var warmUp: StagePresetPath? = .centreCross
+        /// How the stage moves once setup is done; set before `activate`.
+        var pathMode = StagePathMode.followGuide
+        /// How long the preset path stays at each spot, in seconds.
+        var dwellSeconds = 1.2
+        /// The preset path asks before ending a leg at an edge (the lab's "Ask me to confirm edges").
+        private(set) var presetEdgePrompt = false
         /// Press the guide's "Stage limit" when a servo is pinned at 0 or 180.
         var autoStageLimit = true
         private(set) var autoStageLimitCount = 0
@@ -54,10 +61,24 @@
         private var isCalibrating = false
         private var limitPress = StageLimitAutoPress()
         private var stallWatch = StageStallWatch()
+        private var mappingWatch = StageMappingWatch()
+        /// The move being checked against the mapping: where the picture was when it was sent.
+        private var moveCheck: (servo: StageAxis, from: Int, before: CGPoint, lost: Bool, posAt: Date?)?
+        /// The latest tracked guide position (raw), and when it was seen.
+        private var lastTracked: (position: CGPoint, at: Date)?
+        // The preset zig-zag.
+        private var zigzag: StageZigzag?
+        private var presetEvent: StageZigzagEvent?
+        private var presetAwaitingSettle = false
+        private var presetFinished = false
+        private var dwellUntil: Date?
+        private var countingColumn: Int?
+        private var sawSampleInColumn = false
+        private var noSampleSince: Date?
+        private var ignoreEdgeThisLeg = false
         /// The samples of the lab-step sweeps, which re-measure the servos' fields per degree.
         private var sweepCalibration = StageAutoCalibration()
         private var gapPending = false
-        private var latestSample: (position: CGPoint, tracking: TrackingState)?
         /// Since when the leg servo could not move while a cross-axis servo is pinned.
         private var crossStuckSince: Date?
         /// The last direction the guide steered in (raw guide fields), for crossing blind.
@@ -86,7 +107,9 @@
 
         /// Calibration and the lab stage step move in the chosen chunk (at most 3 degrees): at
         /// 100x one 3-degree step jumps the picture further than the tracker can follow.
-        private var calibrationStepDegrees: Int { min(max(chunkDegrees, 1), 3) }
+        private var calibrationStepDegrees: Int {
+            max(objective.minChunk, min(chunkDegrees, 3))
+        }
         private let settleSeconds = 0.3
         private let sampleSeconds = 0.4
 
@@ -117,6 +140,7 @@
             loop?.cancel()
             loop = nil
             cancelSweep = true
+            engine.setExternalCounting(active: false, column: 0)
             if client.status == .connected { client.send(.stop) }
             engine.setAsksEdges(restoreAsksEdges)
             engine.onGuideSample = nil
@@ -133,12 +157,43 @@
             cancelSweep = true
             client.send(.stop)
             inFlight = false
+            engine.setExternalCounting(active: false, column: 0)
             phase = .paused
         }
 
         func resume() {
             userPaused = false
-            if phase == .paused { phase = mapping != nil ? .following : .waitingForStageStep }
+            guard phase == .paused else { return }
+            guard mapping != nil else {
+                phase = .waitingForStageStep
+                return
+            }
+            if pathMode == .presetPath {
+                // A move that was stopped counts as settled where it stopped.
+                if presetAwaitingSettle {
+                    presetAwaitingSettle = false
+                    presetEvent = .settled
+                }
+                if let countingColumn { engine.setExternalCounting(active: true, column: countingColumn) }
+                phase = .presetPath(column: zigzag?.column ?? 0, spot: zigzag?.spot ?? 0)
+            } else {
+                phase = .following
+            }
+        }
+
+        /// Only while paused or before setup is done (the panel enforces it).
+        func setPathMode(_ new: StagePathMode) {
+            guard new != pathMode else { return }
+            pathMode = new
+            zigzag = nil
+            presetFinished = false
+            presetEvent = nil
+            presetAwaitingSettle = false
+            dwellUntil = nil
+            presetEdgePrompt = false
+            countingColumn = nil
+            engine.setExternalCounting(active: false, column: 0)
+            engine.logEvent("path_mode_\(new.rawValue)")
         }
 
         func endSession() {
@@ -146,13 +201,14 @@
             cancelSweep = true
             client.send(.end)
             inFlight = false
+            engine.setExternalCounting(active: false, column: 0)
             phase = .paused
         }
 
         /// A measurement taken at the other magnification is wrong: it is made again.
         func changeObjective(to new: StageObjective) {
             objective = new
-            chunkDegrees = new.defaultChunk
+            chunkDegrees = max(new.defaultChunk, new.minChunk)
             engine.logEvent("objective_\(new.title)")
             if mapping != nil { recalibrate() }
         }
@@ -167,7 +223,9 @@
         // MARK: Crossing an empty patch
 
         /// The focus-pause banner may offer "In focus – empty area".
-        var canConfirmEmptyArea: Bool { phase == .following && mapping != nil }
+        var canConfirmEmptyArea: Bool {
+            phase == .following && mapping != nil && pathMode == .followGuide
+        }
 
         /// The person says the view is in focus: it is an empty patch. Cross it blind.
         func confirmEmptyArea() {
@@ -255,7 +313,7 @@
                     crossingLogged = true
                     engine.logEvent("blind_cross_start")
                 }
-                if client.send(.goTo(servo, angle)) {
+                if sendMove(servo, angle) {
                     inFlight = true
                     moveSentAt = Date()
                     lastServo = servo
@@ -288,6 +346,11 @@
                 // Every step starts from zero offset: a step can move the picture further than the
                 // tracker trusts between two frames.
                 engine.requestTrackerReanchor()
+                if moveCheck != nil, moveCheck?.posAt == nil { moveCheck?.posAt = Date() }
+                if presetAwaitingSettle, zigzag != nil {
+                    presetAwaitingSettle = false
+                    presetEvent = .settled
+                }
             case .ok(let text) where text.hasPrefix("STOP"):
                 inFlight = false
                 lastSettledAt = Date()
@@ -306,10 +369,15 @@
             let tracked = tracking == .tracking
             trackingNow = tracking
             if tracking == .lost { lostSince = lostSince ?? Date() } else { lostSince = nil }
+            // Only a real loss splits the calibration's runs; the brief paused / matching frames
+            // of motion blur at 100x do not (and add no sample).
+            if tracking == .lost {
+                trackingBroke = true
+                moveCheck?.lost = true
+            }
             if tracked, trackingBroke { gapPending = true }
-            latestSample = (unstraightened(position), tracking)
-            if !tracked { trackingBroke = true }
-            guard let c = collecting else { return }
+            if tracked { lastTracked = (unstraightened(position), Date()) }
+            guard let c = collecting, tracked || tracking == .lost else { return }
             calibration.add(
                 servo: c.servo, angle: c.angle, position: unstraightened(position),
                 tracking: tracking, afterGap: tracked && trackingBroke)
@@ -597,10 +665,11 @@
         }
 
         private func recordSweepSample(_ servo: StageAxis, _ angle: Int) {
-            guard let latest = latestSample else { return }
+            // Only a fresh tracked position counts: a blurred frame just means a missed step.
+            guard let latest = lastTracked, Date().timeIntervalSince(latest.at) < 0.5 else { return }
             sweepCalibration.add(
                 servo: servo, angle: Double(angle), position: latest.position,
-                tracking: latest.tracking, afterGap: gapPending)
+                tracking: .tracking, afterGap: gapPending)
             gapPending = false
         }
 
@@ -652,9 +721,13 @@
             }
             guard step == .done else { return }
             guard mapping != nil else { return }
-            if case .calibrated = phase { phase = .following }
+            evaluateMoveCheck(force: false)
+            if case .calibrated = phase {
+                phase = pathMode == .presetPath ? .presetPath(column: 0, spot: 0) : .following
+                if pathMode == .followGuide { engine.logEvent("stage_mapping", detail: mappingSummary) }
+            }
             if userPaused || phase == .paused { return }
-            follow()
+            if pathMode == .presetPath { presetStep() } else { follow() }
         }
 
         /// Tracking lost for a while with the stage still: anchor again where it is.
@@ -668,8 +741,240 @@
             engine.requestTrackerReanchor()
         }
 
+        // MARK: The preset path
+
+        /// "Edge here" on the preset path's edge prompt.
+        func edgeHere() {
+            presetEdgePrompt = false
+            applyPresetEdge()
+        }
+
+        /// "Keep going" on the edge prompt: no edge on this leg.
+        func keepGoingPastEdge() {
+            presetEdgePrompt = false
+            ignoreEdgeThisLeg = true
+            if presetAwaitingSettle {  // the move that was stopped counts as done
+                presetAwaitingSettle = false
+                presetEvent = .settled
+            }
+        }
+
+        private func applyPresetEdge() {
+            noSampleSince = nil
+            sawSampleInColumn = false
+            if inFlight {
+                client.send(.stop)
+                inFlight = false
+                lastSettledAt = Date()
+            }
+            presetAwaitingSettle = false
+            dwellUntil = nil
+            presetEvent = .edge
+            if let plan = zigzag?.plan {
+                let angle = plan.legServo == .x ? angleX : angleY
+                engine.logEvent(
+                    "preset_path_edge", detail: "servo \(plan.legServo.letter) angle \(angle)")
+            }
+        }
+
+        private func startPreset(_ mapping: StageServoMapping) {
+            guard let plan = StageZigzagPlan(mapping: mapping, minChunk: objective.minChunk) else {
+                phase = .failed("Preset path: the servos do not move the picture")
+                return
+            }
+            zigzag = StageZigzag(plan: plan, dwellSeconds: dwellSeconds)
+            presetFinished = false
+            engine.logEvent("stage_mapping", detail: mappingSummary)
+            Task {
+                // Another row, so the two events do not overwrite each other.
+                try? await Task.sleep(for: .milliseconds(300))
+                engine.logEvent("preset_path_start", detail: plan.summary)
+            }
+        }
+
+        /// Looks for the end of the sample along a leg: blank (not blurry) for 0.6 s after the
+        /// column showed sample.
+        private func watchPresetEdge() {
+            guard (zigzag?.column ?? 0) > 0, !ignoreEdgeThisLeg, !presetEdgePrompt else { return }
+            let viewClass = engine.guideInfo.viewClass
+            if viewClass == "sample" || viewClass == "thin" {
+                sawSampleInColumn = true
+                noSampleSince = nil
+                return
+            }
+            let blank =
+                viewClass == "blank"
+                || (engine.guideInfo.holdsForPicture && trackingNow == .paused
+                    && viewClass != "blurry")
+            guard sawSampleInColumn, blank else {
+                noSampleSince = nil
+                return
+            }
+            let since = noSampleSince ?? Date()
+            noSampleSince = since
+            guard Date().timeIntervalSince(since) >= 0.6 else { return }
+            noSampleSince = nil
+            if restoreAsksEdges {
+                presetEdgePrompt = true
+                if inFlight {
+                    client.send(.stop)
+                    inFlight = false
+                    lastSettledAt = Date()
+                }
+            } else {
+                applyPresetEdge()
+            }
+        }
+
+        private func presetStep() {
+            guard let mapping else { return }
+            if zigzag == nil {
+                guard !presetFinished else { return }
+                startPreset(mapping)
+            }
+            guard zigzag != nil else { return }
+            zigzag?.dwellSeconds = dwellSeconds
+            phase = .presetPath(column: zigzag?.column ?? 0, spot: zigzag?.spot ?? 0)
+            if inFlight, Date().timeIntervalSince(moveSentAt) > 5 {
+                inFlight = false
+                lastSettledAt = Date()
+                client.send(.status)
+                lastMove = "No reply, resynced"
+                if presetAwaitingSettle {
+                    presetAwaitingSettle = false
+                    presetEvent = .settled
+                }
+            }
+            // A blurry view is the stall rule's (a focus pause), not an edge.
+            let monitor = engine.setupInfo.monitor
+            if stallWatch.update(
+                now: Date(), holds: engine.guideInfo.holdsForPicture, moved: movedForStall,
+                focusIndex: monitor.focusIndex, baseline: monitor.focusBaseline)
+            {
+                engine.requestFocusPause()
+                lastMove = "Focus pause (stall)"
+            }
+            movedForStall = false
+            guard monitor.state == .ok else { return }
+            watchPresetEdge()
+            guard !presetEdgePrompt else { return }
+            if let until = dwellUntil {
+                guard Date() >= until else { return }
+                dwellUntil = nil
+                presetEvent = .dwellDone
+            }
+            guard !inFlight, Date().timeIntervalSince(lastSettledAt) >= 0.3 else { return }
+            for _ in 0..<6 {
+                let event = presetEvent
+                presetEvent = nil
+                guard let action = zigzag?.next(angles: (angleX, angleY), event: event) else {
+                    return
+                }
+                switch action {
+                case .moveTo(let servo, let angle):
+                    if sendMove(servo, angle) {
+                        inFlight = true
+                        moveSentAt = Date()
+                        movedForStall = true
+                        presetAwaitingSettle = true
+                        lastServo = servo
+                        lastMove = "GOTO \(servo.letter) \(angle) (preset)"
+                    } else {
+                        presetEvent = event  // not sent: try again next tick
+                    }
+                    return
+                case .dwell(let seconds):
+                    dwellUntil = Date().addingTimeInterval(seconds)
+                    return
+                case .columnStarted(let column):
+                    ignoreEdgeThisLeg = false
+                    sawSampleInColumn = false
+                    noSampleSince = nil
+                    countingColumn = column
+                    engine.setExternalCounting(active: true, column: column)
+                    engine.logEvent("preset_path_column", detail: "\(column) at \(angleX),\(angleY)")
+                case .columnEnded(let column):
+                    countingColumn = nil
+                    engine.setExternalCounting(active: false, column: column)
+                case .finished(let reason):
+                    presetFinished = true
+                    zigzag = nil
+                    countingColumn = nil
+                    engine.setExternalCounting(active: false, column: 0)
+                    engine.logEvent("preset_path_done", detail: reason)
+                    lastMove = "Preset path done: \(reason)"
+                    userPaused = true
+                    phase = .paused
+                    return
+                }
+            }
+        }
+
+        // MARK: Checking the mapping against what the picture did
+
+        /// Sends a move and starts checking it: where the picture is now is "before", and what it
+        /// shows after the move settled says whether the mapping's direction and size are right.
+        private func sendMove(_ servo: StageAxis, _ angle: Int) -> Bool {
+            evaluateMoveCheck(force: true)
+            guard client.send(.goTo(servo, angle)) else { return false }
+            moveCheck = nil
+            if trackingNow == .tracking, let seen = lastTracked,
+                Date().timeIntervalSince(seen.at) < 0.5
+            {
+                moveCheck = (servo, servo == .x ? angleX : angleY, seen.position, false, nil)
+            }
+            return true
+        }
+
+        /// A settled move is judged 0.4 s after its POS, or when the next move is sent.
+        private func evaluateMoveCheck(force: Bool) {
+            guard let check = moveCheck, let posAt = check.posAt else { return }
+            guard force || Date().timeIntervalSince(posAt) >= 0.4 else { return }
+            moveCheck = nil
+            guard !check.lost, let after = lastTracked, after.at >= posAt, let mapping else { return }
+            let degrees = Double((check.servo == .x ? angleX : angleY) - check.from)
+            let delta = CGPoint(
+                x: after.position.x - check.before.x, y: after.position.y - check.before.y)
+            if let fix = mappingWatch.record(
+                servo: check.servo, degrees: degrees, delta: delta, mapping: mapping)
+            {
+                apply(fix)
+            }
+        }
+
+        private func apply(_ fix: StageMappingCorrection) {
+            guard let old = mapping else { return }
+            let servo: StageAxis
+            let vector: CGPoint
+            let flipped: Bool
+            switch fix {
+            case .flip(let s, let v): (servo, vector, flipped) = (s, v, true)
+            case .scale(let s, let v): (servo, vector, flipped) = (s, v, false)
+            }
+            guard
+                case .success(let new) = StageAutoCalibration.servoMapping(
+                    x: servo == .x ? vector : old.x, y: servo == .y ? vector : old.y,
+                    xSlack: old.xSlackDegrees, ySlack: old.ySlackDegrees)
+            else { return }
+            let before = servo == .x ? old.x : old.y
+            mapping = new
+            mappingSummary =
+                new.summary + (flipped ? " (direction corrected)" : " (step size re-measured)")
+            lastMove =
+                flipped
+                ? "Direction corrected (servo \(servo.letter))"
+                : "Step size re-measured (servo \(servo.letter))"
+            engine.logEvent(
+                flipped ? "mapping_flip" : "mapping_scale",
+                detail: String(
+                    format: "servo %@ old=%.4f new=%.4f f/deg", servo.letter,
+                    hypot(Double(before.x), Double(before.y)),
+                    hypot(Double(vector.x), Double(vector.y))))
+            mappingWatch.reset(servo)
+        }
+
         private func sendFollowMove(_ servo: StageAxis, _ angle: Int) {
-            guard client.send(.goTo(servo, angle)) else { return }
+            guard sendMove(servo, angle) else { return }
             movedSinceLastPress = true
             movedForStall = true
             inFlight = true
