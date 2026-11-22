@@ -51,14 +51,9 @@
         @State private var noteText = ""
         // Automated stage (Terraloka BLE stage in place of the knobs).
         @State private var autoStage: AutoStageDriver?
-        @State private var isAskingMovement = false
-        @State private var isAskingObjective = false
-        @State private var isAskingPathMode = false
-        @State private var chosenObjective = StageObjective.x40
-        @AppStorage("slideLab.stagePathMode") private var lastPathModeName = StagePathMode.followGuide
-            .rawValue
-        @AppStorage("slideLab.stageObjective") private var lastObjectiveName = StageObjective.x40.rawValue
-        @State private var hasAskedMovement = false
+        /// "How will the slide move?" card, shown until a choice is made.
+        @State private var needsMovementChoice = true
+        @State private var isShowingStageSheet = false
 
         // Recorded video.
         @State private var selectedVideo: URL?
@@ -66,47 +61,27 @@
 
         private var mapping: ScreenMapping { ScreenMapping(rawValue: mappingName) ?? .asIs }
 
-        /// Asks for the objective first (the step size depends on it); a second dialog cannot open
-        /// while the first is closing, so it waits a moment.
-        private func askObjective() {
-            guard autoStage == nil else { return }
-            Task {
-                try? await Task.sleep(for: .milliseconds(400))
-                isAskingObjective = true
-            }
-        }
-
-        /// Turns the Terraloka stage in or out; with it off the lab behaves as it always has.
+        /// Turns the Terraloka stage in or out; with it off the lab behaves as it always has. Turning
+        /// it on opens the "Automated stage" sheet, which starts it.
         private func setAutomatedStage(_ on: Bool) {
             if on {
-                askObjective()
+                needsMovementChoice = false
+                if autoStage == nil { isShowingStageSheet = true }
             } else if let driver = autoStage {
                 driver.deactivate()
                 autoStage = nil
             }
         }
 
-        /// The objective is chosen: now how the stage should move. Same delayed presentation.
-        private func askPathMode(_ objective: StageObjective) {
-            chosenObjective = objective
-            lastObjectiveName = objective.rawValue
-            Task {
-                try? await Task.sleep(for: .milliseconds(400))
-                isAskingPathMode = true
-            }
-        }
-
-        private func startAutomatedStage(_ pathMode: StagePathMode) {
-            lastPathModeName = pathMode.rawValue
-            if autoStage == nil {
-                let driver = AutoStageDriver(engine: model)
-                driver.objective = chosenObjective
-                driver.chunkDegrees = chosenObjective.defaultChunk
-                driver.pathMode = pathMode
-                driver.guideIsStraightened = straightens && centresField
-                driver.activate(restoringAsksEdges: asksEdges)
-                autoStage = driver
-            }
+        private func startAutomatedStage(_ objective: StageObjective, _ pathMode: StagePathMode) {
+            guard autoStage == nil else { return }
+            let driver = AutoStageDriver(engine: model)
+            driver.objective = objective
+            driver.chunkDegrees = objective.defaultChunk
+            driver.pathMode = pathMode
+            driver.guideIsStraightened = straightens && centresField
+            driver.activate(restoringAsksEdges: asksEdges)
+            autoStage = driver
         }
 
         private var spotMode: SpotConfirmMode { spotModeName == "holdStill" ? .holdStill : .briefTouch }
@@ -119,6 +94,11 @@
                 .pickerStyle(.segmented)
                 .padding()
 
+                if needsMovementChoice, mode == .live {
+                    MovementChoiceCard(
+                        onManual: { needsMovementChoice = false },
+                        onAutomated: { setAutomatedStage(true) })
+                }
                 if let autoStage, mode == .live {
                     AutoStagePanel(driver: autoStage, setupStep: model.setupInfo.step)
                 }
@@ -138,33 +118,8 @@
                 model.stop()
                 setAutomatedStage(false)
             }
-            .onAppear {
-                if !hasAskedMovement {
-                    hasAskedMovement = true
-                    isAskingMovement = true
-                }
-            }
-            .confirmationDialog("How will the slide move?", isPresented: $isAskingMovement) {
-                Button("Manual knobs") {}
-                Button("Automated stage") { askObjective() }
-            }
-            .confirmationDialog("How should the stage move?", isPresented: $isAskingPathMode) {
-                // The last choice first; the question is asked every time.
-                ForEach(
-                    StagePathMode.allCases.sorted { a, _ in a.rawValue == lastPathModeName },
-                    id: \.self
-                ) { pathMode in
-                    Button(pathMode.title) { startAutomatedStage(pathMode) }
-                }
-            }
-            .confirmationDialog("Which objective are you using?", isPresented: $isAskingObjective) {
-                // The last choice first; the question is asked every time.
-                ForEach(
-                    StageObjective.allCases.sorted { a, _ in a.rawValue == lastObjectiveName },
-                    id: \.self
-                ) { objective in
-                    Button(objective.title) { askPathMode(objective) }
-                }
+            .sheet(isPresented: $isShowingStageSheet) {
+                AutomatedStageSheet(onStart: startAutomatedStage)
             }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -233,7 +188,10 @@
                                     previewLayer: previewLayer, display: display, centred: isCentred,
                                     onTapTrail: { isShowingTrail = true },
                                     onEmptyArea: autoStage?.canConfirmEmptyArea == true
-                                        ? { autoStage?.confirmEmptyArea() } : nil)
+                                        ? { autoStage?.confirmEmptyArea() } : nil,
+                                    automatedStage: autoStage != nil,
+                                    emptyPrompt: autoStage?.emptyPrompt,
+                                    onRefocus: { autoStage?.refocusEmpty() })
                             } else {
                                 startingCard
                             }
@@ -686,4 +644,72 @@
     }
 
     #Preview("Cover slip setting") { CoverSlipPreview() }
+
+    /// The top-of-screen question that replaces the old dialog: not modal, so nothing can drop it.
+    private struct MovementChoiceCard: View {
+        var onManual: () -> Void
+        var onAutomated: () -> Void
+
+        var body: some View {
+            VStack(spacing: 8) {
+                Text("How will the slide move?").font(.subheadline.bold())
+                HStack {
+                    Button("Manual knobs", action: onManual).buttonStyle(.bordered)
+                    Button("Automated stage", action: onAutomated).buttonStyle(.borderedProminent)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+            .background(.thinMaterial)
+        }
+    }
+
+    /// The one place the objective and the path mode are chosen; both start from the last choice.
+    private struct AutomatedStageSheet: View {
+        var onStart: (StageObjective, StagePathMode) -> Void
+        @Environment(\.dismiss) private var dismiss
+        @AppStorage("slideLab.stageObjective") private var objectiveName = StageObjective.x40.rawValue
+        @AppStorage("slideLab.stagePathMode") private var pathModeName = StagePathMode.followGuide.rawValue
+
+        var body: some View {
+            NavigationStack {
+                Form {
+                    Picker(
+                        "Objective",
+                        selection: Binding(
+                            get: { StageObjective(rawValue: objectiveName) ?? .x40 },
+                            set: { objectiveName = $0.rawValue })
+                    ) {
+                        ForEach(StageObjective.allCases, id: \.self) { Text($0.title).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    Picker(
+                        "Path",
+                        selection: Binding(
+                            get: { StagePathMode(rawValue: pathModeName) ?? .followGuide },
+                            set: { pathModeName = $0.rawValue })
+                    ) {
+                        ForEach(StagePathMode.allCases, id: \.self) { Text($0.title).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                }
+                .navigationTitle("Automated stage")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") { dismiss() }
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Start") {
+                            onStart(
+                                StageObjective(rawValue: objectiveName) ?? .x40,
+                                StagePathMode(rawValue: pathModeName) ?? .followGuide)
+                            dismiss()
+                        }
+                    }
+                }
+            }
+            .presentationDetents([.medium])
+        }
+    }
 #endif

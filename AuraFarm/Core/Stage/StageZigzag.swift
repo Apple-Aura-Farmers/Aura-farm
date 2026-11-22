@@ -17,19 +17,16 @@ struct StageZigzagPlan: Equatable {
     var stepServo: StageAxis
     var legFieldsPerDegree: Double
     var stepFieldsPerDegree: Double
-    var legSlackDegrees: Double
-    var stepSlackDegrees: Double
-    /// Column spacing and spot spacing, in fields.
+    /// Distance between stops along a leg and between columns, in fields.
     var stepFields = 0.8
     /// Degrees kept beyond a learned edge.
     var rangeMargin = 3
-    var minChunk: Int
     /// The leg servo's end that puts the view at screen-top, and the step servo's end that
     /// puts it at screen-left (true: 180, false: 0).
     var legStartsHigh: Bool
     var stepStartsHigh: Bool
 
-    init?(mapping: StageServoMapping, minChunk: Int) {
+    init?(mapping: StageServoMapping) {
         // The servo that moves the picture more vertically walks the columns.
         let legIsX = mapping.swapped
         let leg = legIsX ? mapping.x : mapping.y
@@ -39,24 +36,9 @@ struct StageZigzagPlan: Equatable {
         legFieldsPerDegree = hypot(Double(leg.x), Double(leg.y))
         stepFieldsPerDegree = hypot(Double(step.x), Double(step.y))
         guard legFieldsPerDegree > 0, stepFieldsPerDegree > 0 else { return nil }
-        legSlackDegrees = legIsX ? mapping.xSlackDegrees : mapping.ySlackDegrees
-        stepSlackDegrees = legIsX ? mapping.ySlackDegrees : mapping.xSlackDegrees
-        self.minChunk = minChunk
         // More turn moves the view by the servo's vector: top is a negative y, left a negative x.
         legStartsHigh = leg.y < 0
         stepStartsHigh = step.x < 0
-    }
-
-    var columnStepDegrees: Int {
-        max(minChunk, Int((stepFields / stepFieldsPerDegree).rounded()))
-    }
-
-    var spotStepDegrees: Int {
-        max(minChunk, Int((stepFields / legFieldsPerDegree).rounded()))
-    }
-
-    var summary: String {
-        "leg servo \(legServo.letter), column step \(columnStepDegrees)°, spot step \(spotStepDegrees)°"
     }
 }
 
@@ -77,12 +59,19 @@ enum StageZigzagAction: Equatable {
     case finished(String)
 }
 
-/// The zig-zag as a state machine: go to the start corner, then for each column move the leg
-/// servo one spot at a time with a dwell at each, and at the end of a leg step across and turn
-/// round. The caller sends the moves and the dwells, and says when they are done.
+/// The zig-zag as a state machine: walk to the start corner, then for each column walk the leg
+/// servo with a dwell every `stepFields` of picture travel, and at the end of a leg walk the
+/// step servo across and turn round. No move is longer than `chunkDegrees`. The caller sends
+/// the moves and the dwells, and says when they are done.
 struct StageZigzag {
     let plan: StageZigzagPlan
     var dwellSeconds: Double
+    var chunkDegrees: Int
+    /// Crossing an empty patch: keep stepping along the leg with no dwell.
+    var walksBlind = false
+    /// Live fields per degree; the degree fallbacks use these (a mapping correction updates them).
+    var legFieldsPerDegree: Double
+    var stepFieldsPerDegree: Double
 
     private(set) var column = 0
     private(set) var spot = 0
@@ -94,23 +83,55 @@ struct StageZigzag {
     private var stage = Stage.approachLeg
     private var queue: [StageZigzagAction] = []
     private var direction: Int
-    private var needsSlack = true
     private var started = false
+    private var tracked: CGPoint?
+    private var anchorPosition: CGPoint?
+    private var anchorAngle = 0
 
-    init(plan: StageZigzagPlan, dwellSeconds: Double = 1.2) {
+    init(plan: StageZigzagPlan, chunkDegrees: Int, dwellSeconds: Double = 1.2) {
         self.plan = plan
+        self.chunkDegrees = max(chunkDegrees, 1)
         self.dwellSeconds = dwellSeconds
+        legFieldsPerDegree = plan.legFieldsPerDegree
+        stepFieldsPerDegree = plan.stepFieldsPerDegree
         // From the start end toward the other.
         direction = plan.legStartsHigh ? -1 : 1
     }
 
+    /// Degrees between stops along a leg when the picture position is not known.
+    var legFallbackDegrees: Int {
+        max(chunkDegrees, Int((plan.stepFields / legFieldsPerDegree).rounded()))
+    }
+
+    /// Degrees of a column step when the picture position is not known.
+    var columnFallbackDegrees: Int {
+        max(chunkDegrees, Int((plan.stepFields / stepFieldsPerDegree).rounded()))
+    }
+
+    var summary: String {
+        "leg servo \(plan.legServo.letter), step \(chunkDegrees)°, stops every "
+            + "\(plan.stepFields) field (fallback \(legFallbackDegrees)° leg / "
+            + "\(columnFallbackDegrees)° column)"
+    }
+
+    /// Sets the live fields per degree of each servo (x, y).
+    mutating func setFieldsPerDegree(x: Double, y: Double) {
+        let leg = plan.legServo == .x ? x : y
+        let step = plan.legServo == .x ? y : x
+        if leg > 0 { legFieldsPerDegree = leg }
+        if step > 0 { stepFieldsPerDegree = step }
+    }
+
     /// The next thing to do, or nil while waiting for an event. Call again after the caller has
-    /// handled an action that needs no waiting (columnStarted / columnEnded).
-    mutating func next(angles: (x: Int, y: Int), event: StageZigzagEvent?) -> StageZigzagAction? {
+    /// handled an action that needs no waiting (columnStarted / columnEnded). `tracked` is the
+    /// picture position in fields, nil when the tracker has no fresh reading.
+    mutating func next(
+        angles: (x: Int, y: Int), event: StageZigzagEvent?, tracked: CGPoint? = nil
+    ) -> StageZigzagAction? {
+        self.tracked = tracked
         if !started {
             started = true
-            queueMove(plan.legServo, to: plan.legStartsHigh ? 180 : 0, angles)
-            if queue.isEmpty { handle(.settled, angles) }  // already at the start end
+            approach(angles)
         }
         if let event { handle(event, angles) }
         return queue.isEmpty ? nil : queue.removeFirst()
@@ -120,35 +141,63 @@ struct StageZigzag {
 
     private mutating func handle(_ event: StageZigzagEvent, _ angles: (x: Int, y: Int)) {
         switch (stage, event) {
-        case (.approachLeg, .settled):
-            stage = .approachStep
-            queueMove(plan.stepServo, to: plan.stepStartsHigh ? 180 : 0, angles)
-        case (.approachStep, .settled):
-            beginColumn()
+        case (.approachLeg, .settled), (.approachStep, .settled):
+            approach(angles)
         case (.legDwell, .dwellDone):
-            nextSpot(angles)
+            legStep(angles)
         case (.legMove, .settled):
-            spot += 1
-            stage = .legDwell
-            queue.append(.dwell(seconds: dwellSeconds))
+            if legStopReached(angles) {
+                spot += 1
+                startDwell(angles)
+            } else {
+                legStep(angles)
+            }
         case (.stepMove, .settled):
-            beginColumn()
+            stepStep(angles)
         case (.legDwell, .edge), (.legMove, .edge):
             edgeReached(angles)
         default:
             break
         }
-        // A move to where the servo already is gets no reply: carry straight on.
-        if stage == .approachStep, queue.isEmpty { handle(.settled, angles) }
     }
 
-    private mutating func beginColumn() {
+    private func angle(of servo: StageAxis, _ angles: (x: Int, y: Int)) -> Int {
+        servo == .x ? angles.x : angles.y
+    }
+
+    /// One step of at most `chunkDegrees` from `current` toward `end`.
+    private func stepToward(_ end: Int, from current: Int) -> Int {
+        current + max(-chunkDegrees, min(chunkDegrees, end - current))
+    }
+
+    private mutating func approach(_ angles: (x: Int, y: Int)) {
+        let legEnd = plan.legStartsHigh ? 180 : 0
+        let stepEnd = plan.stepStartsHigh ? 180 : 0
+        let leg = angle(of: plan.legServo, angles)
+        let step = angle(of: plan.stepServo, angles)
+        if leg != legEnd {
+            stage = .approachLeg
+            queue.append(.moveTo(servo: plan.legServo, angle: stepToward(legEnd, from: leg)))
+        } else if step != stepEnd {
+            stage = .approachStep
+            queue.append(.moveTo(servo: plan.stepServo, angle: stepToward(stepEnd, from: step)))
+        } else {
+            beginColumn(angles)
+        }
+    }
+
+    private mutating func beginColumn(_ angles: (x: Int, y: Int)) {
         column += 1
         spot = 1
         if column > 1 { direction = -direction }
-        needsSlack = true
-        stage = .legDwell
         queue.append(.columnStarted(column))
+        startDwell(angles)
+    }
+
+    private mutating func startDwell(_ angles: (x: Int, y: Int)) {
+        stage = .legDwell
+        anchorPosition = tracked
+        anchorAngle = angle(of: plan.legServo, angles)
         queue.append(.dwell(seconds: dwellSeconds))
     }
 
@@ -158,18 +207,22 @@ struct StageZigzag {
         return (low, high)
     }
 
-    private func angle(of servo: StageAxis, _ angles: (x: Int, y: Int)) -> Int {
-        servo == .x ? angles.x : angles.y
+    /// True once the picture has moved `stepFields` since the last dwell (or, without a
+    /// tracked position, the degree fallback has been walked).
+    private func legStopReached(_ angles: (x: Int, y: Int)) -> Bool {
+        if walksBlind { return false }
+        if let tracked, let anchorPosition {
+            return hypot(tracked.x - anchorPosition.x, tracked.y - anchorPosition.y) >= plan.stepFields
+        }
+        return abs(angle(of: plan.legServo, angles) - anchorAngle) >= legFallbackDegrees
     }
 
-    private mutating func nextSpot(_ angles: (x: Int, y: Int)) {
+    private mutating func legStep(_ angles: (x: Int, y: Int)) {
         let current = angle(of: plan.legServo, angles)
         let range = bounds()
-        let slack = needsSlack ? Int(plan.legSlackDegrees.rounded()) : 0
-        let target = min(
-            max(current + direction * (plan.spotStepDegrees + slack), range.low), range.high)
+        let end = direction > 0 ? range.high : range.low
+        let target = stepToward(end, from: current)
         guard target != current else { return endLeg(angles) }
-        needsSlack = false
         stage = .legMove
         queue.append(.moveTo(servo: plan.legServo, angle: target))
     }
@@ -191,7 +244,6 @@ struct StageZigzag {
     private mutating func endLeg(_ angles: (x: Int, y: Int)) {
         queue.append(.columnEnded(column))
         let current = angle(of: plan.stepServo, angles)
-        let stepDirection = plan.stepStartsHigh ? -1 : 1
         let far = plan.stepStartsHigh ? 0 : 180
         guard current != far else {
             stage = .done
@@ -199,14 +251,27 @@ struct StageZigzag {
             queue.append(.finished("end of range"))
             return
         }
-        let target = min(
-            max(current + stepDirection * plan.columnStepDegrees, 0), 180)
         stage = .stepMove
-        queue.append(.moveTo(servo: plan.stepServo, angle: target))
+        anchorPosition = tracked
+        anchorAngle = current
+        queue.append(.moveTo(servo: plan.stepServo, angle: stepToward(far, from: current)))
     }
 
-    private mutating func queueMove(_ servo: StageAxis, to angle: Int, _ angles: (x: Int, y: Int)) {
-        guard self.angle(of: servo, angles) != angle else { return }
-        queue.append(.moveTo(servo: servo, angle: angle))
+    /// After a settled step of the column move: next column once the picture has moved a
+    /// column's width (or the degree fallback, capped at twice that), else another step.
+    private mutating func stepStep(_ angles: (x: Int, y: Int)) {
+        let current = angle(of: plan.stepServo, angles)
+        let far = plan.stepStartsHigh ? 0 : 180
+        let moved = abs(current - anchorAngle)
+        var arrived = moved >= 2 * columnFallbackDegrees || current == far
+        if let tracked, let anchorPosition {
+            arrived =
+                arrived
+                || hypot(tracked.x - anchorPosition.x, tracked.y - anchorPosition.y) >= plan.stepFields
+        } else {
+            arrived = arrived || moved >= columnFallbackDegrees
+        }
+        if arrived { return beginColumn(angles) }
+        queue.append(.moveTo(servo: plan.stepServo, angle: stepToward(far, from: current)))
     }
 }

@@ -1,38 +1,42 @@
 import Foundation
 
-/// Spots a stall where the guide waits for the picture (blurry, nothing to follow) and the focus
-/// index has dropped well below its baseline, so the run should pause for focus.
+/// Spots a patch with no detail: the guide waits for the picture, or the view is blank or blurry.
+/// Moves do not matter (the preset path moves every second); only a frame with detail restarts
+/// the count. Once the stretch is long enough the person is asked to refocus.
 struct StageStallWatch {
-    var holdSeconds = 3.0
+    var noDetailSeconds = 2.0
+    /// A view is sharp (so probably empty) when its focus index is at least this share of the
+    /// baseline.
     var focusShareOfBaseline = 0.8
-    /// A stall this long fires whatever the focus numbers say (or when they are missing): an
-    /// empty patch and a blurry view look alike, so the person is always asked first.
-    var longStallSeconds = 6.0
+
+    enum Kind: Equatable { case sharp, blurry }
 
     private var since: Date?
     private var fired = false
 
     /// - Parameters:
-    ///   - holds: the guide is waiting for the picture right now.
-    ///   - moved: a move was sent since the last call (the stall window starts again).
-    /// - Returns: true once per stall, when it should pause for focus.
-    mutating func update(
-        now: Date, holds: Bool, moved: Bool, focusIndex: Double?, baseline: Double?
-    ) -> Bool {
-        guard holds else {
+    ///   - noDetail: the guide holds for the picture, or the view is blank or blurry.
+    ///   - hasDetail: a frame with sample or thin detail while tracking. A frame that is neither
+    ///     leaves the count as it is.
+    /// - Returns: true once per stretch without detail.
+    mutating func update(now: Date, noDetail: Bool, hasDetail: Bool) -> Bool {
+        if hasDetail {
             since = nil
             fired = false
             return false
         }
-        if moved || since == nil { since = now }
-        guard !fired, let since else { return false }
-        let held = now.timeIntervalSince(since)
-        var low = false
-        if let focusIndex, let baseline, baseline > 0 {
-            low = focusIndex < focusShareOfBaseline * baseline
-        }
-        guard (held >= holdSeconds && low) || held >= longStallSeconds else { return false }
+        guard noDetail else { return false }
+        let start = since ?? now
+        since = start
+        guard !fired, now.timeIntervalSince(start) >= noDetailSeconds else { return false }
         fired = true
         return true
+    }
+
+    /// Sharp when the focus index is at least `focusShareOfBaseline` of the baseline; blurry
+    /// otherwise, and when either number is missing.
+    func kind(focusIndex: Double?, baseline: Double?) -> Kind {
+        guard let focusIndex, let baseline, baseline > 0 else { return .blurry }
+        return focusIndex >= focusShareOfBaseline * baseline ? .sharp : .blurry
     }
 }

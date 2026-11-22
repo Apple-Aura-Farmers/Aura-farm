@@ -114,19 +114,6 @@ struct StageAutoCalibration {
         Set(trackedRuns(servo).flatMap { $0.map(\.angle) }).count
     }
 
-    /// The angles to sweep a servo through so the lab's stage step sees `fields` of motion: the
-    /// slack plus `fields / fieldsPerDegree`, rounded up, centred on `centre` and kept inside
-    /// 0...180. nil when it needs more than 180 degrees or the servo does not move the picture.
-    static func stageStepSweep(
-        fieldsPerDegree: Double, slackDegrees: Double, fields: Double = 2.4, centre: Int = 90
-    ) -> (start: Int, end: Int)? {
-        guard fieldsPerDegree > 0 else { return nil }
-        let span = Int((slackDegrees + fields / fieldsPerDegree).rounded(.up))
-        guard span <= 180 else { return nil }
-        let start = min(max(centre - span / 2, 0), 180 - span)
-        return (start, start + span)
-    }
-
     /// Degrees covered by the tracked samples.
     func degreesUsed(of servo: StageAxis) -> Double {
         let angles = (samples[servo] ?? []).map(\.angle)

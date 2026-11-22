@@ -179,6 +179,27 @@ final class LabSetupSessionTests: XCTestCase {
         XCTAssertEqual(session.info.stageAxes, .identity)
     }
 
+    func testCompleteStageAtTheStageStepMovesToDoneWithThoseAxes() throws {
+        let pipeline = makePipeline()
+        let session = LabSetupSession(skippingAlignAndFocus: true)
+        let frame = discFrame()
+        var seconds = 0.0
+        for _ in 0..<31 {
+            seconds += 0.1
+            _ = session.process(frame, seconds: seconds, pipeline: pipeline, measureAgreement: false)
+        }
+        pipeline.confirmField()
+        seconds += 0.1
+        _ = session.process(frame, seconds: seconds, pipeline: pipeline, measureAgreement: false)
+        XCTAssertEqual(session.step, .stage)
+        let axes = try XCTUnwrap(
+            StageAxes(xDirection: CGPoint(x: 0.98, y: 0.2), yDirection: CGPoint(x: -0.05, y: 1)))
+        session.completeStage(with: axes)
+        XCTAssertEqual(session.step, .done)
+        XCTAssertEqual(session.stageAxes, axes)
+        XCTAssertEqual(session.info.stageAxes, axes)
+    }
+
     /// Phase 2l: redoing the field after the stage was calibrated (or skipped) forgets the
     /// straightening, so the new stage step measures in the unstraightened axes. The display's
     /// straightening is `setupInfo.stageAxes ?? .identity`, which is nil here until the new

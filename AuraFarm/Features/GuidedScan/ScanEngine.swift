@@ -405,16 +405,6 @@ class ScanEngine: NSObject {
         }
     }
 
-    /// The lab's stage step starts again from X (the automated stage's own moves must not count).
-    func restartStageMeasurement() {
-        analysisQueue.async { [weak self] in
-            guard let self, self.setup.step == .stage else { return }
-            self.setup.restartStageMeasurement()
-            let info = self.setup.info
-            DispatchQueue.main.async { self.setupInfo = info }
-        }
-    }
-
     /// The automated stage measured the axes: the stage step is done with them.
     func completeStage(with axes: StageAxes) {
         analysisQueue.async { [weak self] in

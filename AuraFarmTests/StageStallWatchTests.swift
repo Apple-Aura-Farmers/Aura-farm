@@ -6,64 +6,55 @@ final class StageStallWatchTests: XCTestCase {
     private let t0 = Date(timeIntervalSince1970: 1000)
 
     private func update(
-        _ w: inout StageStallWatch, at s: Double, holds: Bool = true, moved: Bool = false,
-        index: Double? = 0.1, baseline: Double? = 0.21
+        _ w: inout StageStallWatch, at s: Double, noDetail: Bool = true, hasDetail: Bool = false
     ) -> Bool {
-        w.update(
-            now: t0.addingTimeInterval(s), holds: holds, moved: moved, focusIndex: index,
-            baseline: baseline)
+        w.update(now: t0.addingTimeInterval(s), noDetail: noDetail, hasDetail: hasDetail)
     }
 
-    func testFiresOnceAfterHold() {
+    func testFiresAfterTwoSecondsAndOnlyOncePerStretch() {
         var w = StageStallWatch()
         XCTAssertFalse(update(&w, at: 0))
-        XCTAssertFalse(update(&w, at: 2.9))
-        XCTAssertTrue(update(&w, at: 3.0))
-        XCTAssertFalse(update(&w, at: 6.0))
+        XCTAssertFalse(update(&w, at: 1.9))
+        XCTAssertTrue(update(&w, at: 2.0))
+        XCTAssertFalse(update(&w, at: 2.1))
+        XCTAssertFalse(update(&w, at: 10))
     }
 
-    func testNeedsLowFocus() {
+    func testMovesDoNotRestartTheCount() {
+        // Moves are not an input: calling every 0.85 s, as the preset path does, still fires.
         var w = StageStallWatch()
-        XCTAssertFalse(update(&w, at: 0, index: 0.2))
-        XCTAssertFalse(update(&w, at: 4, index: 0.2))
-        XCTAssertFalse(update(&w, at: 5, index: nil))
-        XCTAssertTrue(update(&w, at: 6, index: 0.1))
+        var fired = false
+        for i in 0..<4 { fired = fired || update(&w, at: Double(i) * 0.85) }
+        XCTAssertTrue(fired)
     }
 
-    func testMoveRestartsWindow() {
-        var w = StageStallWatch()
-        XCTAssertFalse(update(&w, at: 0))
-        XCTAssertFalse(update(&w, at: 2.5, moved: true))
-        XCTAssertFalse(update(&w, at: 5.0))
-        XCTAssertTrue(update(&w, at: 5.5))
-    }
-
-    func testNewStallNeedsHoldToDrop() {
+    func testADetailFrameResetsTheCountAndTheStretch() {
         var w = StageStallWatch()
         XCTAssertFalse(update(&w, at: 0))
-        XCTAssertTrue(update(&w, at: 3))
-        XCTAssertFalse(update(&w, at: 4, holds: false))
-        XCTAssertFalse(update(&w, at: 5))
-        XCTAssertTrue(update(&w, at: 8))
+        XCTAssertFalse(update(&w, at: 1.5))
+        XCTAssertFalse(update(&w, at: 1.6, noDetail: false, hasDetail: true))
+        XCTAssertFalse(update(&w, at: 3.0))  // counting again from here
+        XCTAssertTrue(update(&w, at: 5.0))
+        // Detail again, then a new stretch fires again.
+        XCTAssertFalse(update(&w, at: 6, noDetail: false, hasDetail: true))
+        XCTAssertFalse(update(&w, at: 7))
+        XCTAssertTrue(update(&w, at: 9))
     }
 
-    func testLongStallFiresWithGoodFocus() {
+    func testAFrameThatIsNeitherLeavesTheCountAlone() {
         var w = StageStallWatch()
-        XCTAssertFalse(update(&w, at: 0, index: 0.2))
-        XCTAssertFalse(update(&w, at: 5.9, index: 0.2))
-        XCTAssertTrue(update(&w, at: 6.0, index: 0.2))
-        XCTAssertFalse(update(&w, at: 9.0, index: 0.2))
+        XCTAssertFalse(update(&w, at: 0))
+        XCTAssertFalse(update(&w, at: 1.0, noDetail: false))
+        XCTAssertTrue(update(&w, at: 2.0))
     }
 
-    func testLongStallFiresWithoutFocusNumbers() {
-        var w = StageStallWatch()
-        XCTAssertFalse(update(&w, at: 0, index: nil, baseline: nil))
-        XCTAssertFalse(update(&w, at: 5.9, index: nil, baseline: nil))
-        XCTAssertTrue(update(&w, at: 6.0, index: nil, baseline: nil))
-        XCTAssertFalse(update(&w, at: 12.0, index: nil, baseline: nil))
-        // A new stall needs holds to drop first.
-        XCTAssertFalse(update(&w, at: 13, holds: false))
-        XCTAssertFalse(update(&w, at: 14, index: nil, baseline: nil))
-        XCTAssertTrue(update(&w, at: 20, index: nil, baseline: nil))
+    func testSharpWhenFocusIsAtLeastEightyPercentOfBaselineElseBlurry() {
+        let w = StageStallWatch()
+        XCTAssertEqual(w.kind(focusIndex: 0.2, baseline: 0.25), .sharp)  // exactly 0.8
+        XCTAssertEqual(w.kind(focusIndex: 0.3, baseline: 0.25), .sharp)
+        XCTAssertEqual(w.kind(focusIndex: 0.19, baseline: 0.25), .blurry)
+        XCTAssertEqual(w.kind(focusIndex: nil, baseline: 0.25), .blurry)
+        XCTAssertEqual(w.kind(focusIndex: 0.2, baseline: nil), .blurry)
+        XCTAssertEqual(w.kind(focusIndex: 0.2, baseline: 0), .blurry)
     }
 }

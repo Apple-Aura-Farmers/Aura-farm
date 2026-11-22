@@ -119,10 +119,10 @@
             }
         }
 
-        /// Calibrating or running the lab's stage step: the objective cannot change now.
+        /// Calibrating: the objective cannot change now.
         private var busyMeasuring: Bool {
             switch driver.phase {
-            case .warmingUp, .calibrating, .stageStep: true
+            case .warmingUp, .calibrating: true
             default: false
             }
         }
@@ -145,8 +145,6 @@
             case .calibrated: "Calibrated"
             case .following: "Following the guide" + (driver.lastMove.isEmpty ? "" : " (\(driver.lastMove))")
             case .waitingForEdgeAnswer: "Stopped: answer the edge question"
-            case .stageStep(let axis, let travel):
-                String(format: "Lab stage step: servo %@, %.1f of 2.0 fields", axis.letter, travel)
             case .atLimit(let servo):
                 driver.autoStageLimit
                     ? "Servo \(servo.letter) at its limit, telling the guide"

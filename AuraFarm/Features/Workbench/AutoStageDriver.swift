@@ -14,7 +14,6 @@
             case waitingForStageStep
             case warmingUp(String)
             case calibrating(axis: StageAxis, travel: Double)
-            case stageStep(axis: StageAxis, travel: Double)
             case calibrated(summary: String)
             case following
             case waitingForEdgeAnswer
@@ -26,7 +25,23 @@
             case failed(String)
         }
 
+        /// What the focus-pause banner asks about an empty-looking patch.
+        enum EmptyPrompt: Equatable {
+            /// Waits for the person.
+            case blurry
+            /// Counts down, then acts as "In focus – empty area".
+            case sharp(secondsLeft: Int)
+
+            var title: String {
+                switch self {
+                case .blurry: "Looks out of focus: refocus"
+                case .sharp: "Looks in focus but empty"
+                }
+            }
+        }
+
         let client = StageBLEClient()
+        private(set) var emptyPrompt: EmptyPrompt?
         private(set) var phase = Phase.disconnected
         private(set) var lastMove = ""
         private(set) var mappingSummary = ""
@@ -73,12 +88,13 @@
         private var presetFinished = false
         private var dwellUntil: Date?
         private var countingColumn: Int?
-        private var sawSampleInColumn = false
-        private var noSampleSince: Date?
-        private var ignoreEdgeThisLeg = false
-        /// The samples of the lab-step sweeps, which re-measure the servos' fields per degree.
-        private var sweepCalibration = StageAutoCalibration()
-        private var gapPending = false
+        /// A dwell was cut short by the empty-patch question.
+        private var dwellInterrupted = false
+        /// The preset path crossing an empty patch: where the leg servo started and how far it may go.
+        private var presetEmptyWalk: (startAngle: Int, capDegrees: Int)?
+        private var emptyDeadline: Date?
+        private var emptyFiredAt = Date.distantPast
+        private let emptyCountdownSeconds = 5.0
         /// Since when the leg servo could not move while a cross-axis servo is pinned.
         private var crossStuckSince: Date?
         /// The last direction the guide steered in (raw guide fields), for crossing blind.
@@ -88,13 +104,11 @@
         private var trackingNow = TrackingState.lost
         /// How far the current crossing may go before the person is asked, in fields.
         private(set) var blindCap = 2.0
-        /// A move was sent since the last stall check.
-        private var movedForStall = false
         /// Tracking has been lost since this time; nil while it is not.
         private var lostSince: Date?
         private var lastReanchorAt = Date.distantPast
         private var movedSinceLastPress = false
-        /// Pause, End session or leaving stops the lab-stage-step sweep between moves.
+        /// Pause, End session or leaving stops the warm-up and calibration between moves.
         private var cancelSweep = false
         /// Tracking broke since the last calibration sample.
         private var trackingBroke = false
@@ -141,6 +155,7 @@
             loop = nil
             cancelSweep = true
             engine.setExternalCounting(active: false, column: 0)
+            clearEmptyState()
             if client.status == .connected { client.send(.stop) }
             engine.setAsksEdges(restoreAsksEdges)
             engine.onGuideSample = nil
@@ -153,6 +168,7 @@
 
         func pause() {
             if crossing != nil { finishCrossing("blind_cross_paused") }
+            clearEmptyState()
             userPaused = true
             cancelSweep = true
             client.send(.stop)
@@ -191,12 +207,14 @@
             presetAwaitingSettle = false
             dwellUntil = nil
             presetEdgePrompt = false
+            clearEmptyState()
             countingColumn = nil
             engine.setExternalCounting(active: false, column: 0)
             engine.logEvent("path_mode_\(new.rawValue)")
         }
 
         func endSession() {
+            clearEmptyState()
             userPaused = true
             cancelSweep = true
             client.send(.end)
@@ -224,23 +242,141 @@
 
         /// The focus-pause banner may offer "In focus – empty area".
         var canConfirmEmptyArea: Bool {
-            phase == .following && mapping != nil && pathMode == .followGuide
+            guard mapping != nil else { return false }
+            if pathMode == .followGuide { return phase == .following }
+            if case .presetPath = phase { return true }
+            return false
         }
 
-        /// The person says the view is in focus: it is an empty patch. Cross it blind.
+        /// The person says the view is in focus: it is an empty patch.
         func confirmEmptyArea() {
             guard canConfirmEmptyArea else { return }
-            guard let lastSteer, hypot(Double(lastSteer.x), Double(lastSteer.y)) > 0 else {
-                lastMove = "No direction to cross in"
-                return
+            confirmEmpty(auto: false)
+        }
+
+        /// "Refocus" on the countdown: the banner waits for the person.
+        func refocusEmpty() {
+            guard case .sharp = emptyPrompt else { return }
+            emptyPrompt = .blurry
+            emptyDeadline = nil
+            engine.logEvent("empty_countdown_cancelled", detail: "refocus")
+        }
+
+        /// Follow guide crosses the patch blind; the preset path keeps walking its leg with no dwell.
+        private func confirmEmpty(auto: Bool) {
+            if pathMode == .followGuide {
+                guard let lastSteer, hypot(Double(lastSteer.x), Double(lastSteer.y)) > 0 else {
+                    lastMove = "No direction to cross in"
+                    if auto {
+                        emptyPrompt = .blurry
+                        emptyDeadline = nil
+                    }
+                    return
+                }
+                crossing = StageBlindCrossing(direction: lastSteer, startAngles: (angleX, angleY))
+                blindCap = crossing?.capFields ?? 2.0
+                crossingLogged = false
+                phase = .crossingEmpty(fields: 0)
+            } else {
+                beginPresetEmptyWalk()
             }
             engine.resumeFocusAnyway()
-            engine.logEvent("empty_confirmed")
-            crossing = StageBlindCrossing(
-                direction: lastSteer, startAngles: (angleX, angleY))
-            blindCap = crossing?.capFields ?? 2.0
-            crossingLogged = false
-            phase = .crossingEmpty(fields: 0)
+            engine.logEvent(auto ? "empty_auto_confirmed" : "empty_confirmed")
+            emptyPrompt = nil
+            emptyDeadline = nil
+        }
+
+        private func clearEmptyState() {
+            emptyPrompt = nil
+            emptyDeadline = nil
+            dwellInterrupted = false
+            presetEmptyWalk = nil
+            zigzag?.walksBlind = false
+        }
+
+        private func logLater(_ name: String, detail: String = "", after seconds: Double = 0.3) {
+            Task {
+                // Another row than the event logged now, so they do not overwrite each other.
+                try? await Task.sleep(for: .seconds(seconds))
+                engine.logEvent(name, detail: detail)
+            }
+        }
+
+        /// What this frame says about detail: none (the guide holds, or blank / blurry) or some
+        /// (sample / thin while tracking).
+        private var frameDetail: (noDetail: Bool, hasDetail: Bool) {
+            let info = engine.guideInfo
+            let shown = info.viewClass == "sample" || info.viewClass == "thin"
+            let hasDetail = trackingNow == .tracking && shown && !info.holdsForPicture
+            let noDetail =
+                info.holdsForPicture || info.viewClass == "blank" || info.viewClass == "blurry"
+            return (noDetail && !hasDetail, hasDetail)
+        }
+
+        /// Watches for a patch with no detail, asks about it through the focus pause, and runs the
+        /// countdown. Returns true while moves must wait.
+        private func watchEmpty() -> Bool {
+            let now = Date()
+            let monitor = engine.setupInfo.monitor
+            let frame = frameDetail
+            if stallWatch.update(now: now, noDetail: frame.noDetail, hasDetail: frame.hasDetail),
+                presetEmptyWalk == nil
+            {
+                fireEmptyWatch(monitor)
+            }
+            if let prompt = emptyPrompt {
+                if monitor.state == .ok, now.timeIntervalSince(emptyFiredAt) > 1 {
+                    // Detail came back and the focus pause ended: carry on where it stopped.
+                    if case .sharp = prompt {
+                        engine.logEvent("empty_countdown_cancelled", detail: "detail_back")
+                    }
+                    emptyPrompt = nil
+                    emptyDeadline = nil
+                    if dwellInterrupted {
+                        dwellInterrupted = false
+                        dwellUntil = now.addingTimeInterval(dwellSeconds)
+                    }
+                } else if case .sharp = prompt, let deadline = emptyDeadline {
+                    if now >= deadline {
+                        confirmEmpty(auto: true)
+                    } else {
+                        emptyPrompt = .sharp(secondsLeft: Int(deadline.timeIntervalSince(now).rounded(.up)))
+                    }
+                }
+            }
+            return emptyPrompt != nil || monitor.state != .ok
+        }
+
+        private func fireEmptyWatch(_ monitor: RunMonitorInfo) {
+            if inFlight {
+                client.send(.stop)
+                inFlight = false
+                lastSettledAt = Date()
+            }
+            if pathMode == .presetPath {
+                if presetAwaitingSettle {  // the move that was stopped counts as done
+                    presetAwaitingSettle = false
+                    presetEvent = .settled
+                }
+                if dwellUntil != nil {
+                    dwellUntil = nil
+                    dwellInterrupted = true
+                }
+            }
+            engine.requestFocusPause()
+            emptyFiredAt = Date()
+            let kind = stallWatch.kind(focusIndex: monitor.focusIndex, baseline: monitor.focusBaseline)
+            let numbers = String(
+                format: "index=%.3f baseline=%.3f", monitor.focusIndex ?? -1, monitor.focusBaseline ?? -1)
+            lastMove = "Looks empty: stopped"
+            if kind == .sharp {
+                emptyPrompt = .sharp(secondsLeft: Int(emptyCountdownSeconds))
+                emptyDeadline = Date().addingTimeInterval(emptyCountdownSeconds)
+                logLater("empty_countdown_started", after: 0.6)
+            } else {
+                emptyPrompt = .blurry
+            }
+            logLater("empty_watch_fired", detail: "\(kind == .sharp ? "sharp" : "blurry") \(numbers)")
         }
 
         /// "End column here" after a crossing that stayed empty.
@@ -375,7 +511,6 @@
                 trackingBroke = true
                 moveCheck?.lost = true
             }
-            if tracked, trackingBroke { gapPending = true }
             if tracked { lastTracked = (unstraightened(position), Date()) }
             guard let c = collecting, tracked || tracking == .lost else { return }
             calibration.add(
@@ -503,10 +638,16 @@
                 mapping = found
                 mappingSummary = found.summary
                 if engine.setupInfo.step == .stage {
-                    await runStageStep(found)
-                } else {
-                    phase = .calibrated(summary: found.summary)
+                    // The servos measured the axes: the lab's own tilt step is not needed.
+                    engine.completeStage(with: found.axes)
+                    engine.logEvent(
+                        "stage_step_skipped",
+                        detail: String(
+                            format: "automated stage axes: tilt %.1f° skew %.1f°",
+                            found.axes.tiltDegrees, found.axes.skewDegrees))
+                    mappingSummary += " (lab tilt step skipped: automated stage axes)"
                 }
+                phase = .calibrated(summary: mappingSummary)
             }
         }
 
@@ -547,133 +688,11 @@
             }
         }
 
-        // MARK: The lab's stage step, run with the servos
+        // MARK: Stopping a measurement
 
         private var sweepStopped: Bool { cancelSweep || client.status != .connected }
 
-        private func labStage() -> StageAxesStep? { engine.setupInfo.stage?.step }
-
-        /// Gives up on the lab's own measurement: its axes are the automated ones, built from the
-        /// re-measured vectors when there are any.
-        private func useAutomatedAxes(_ found: StageServoMapping) {
-            let refit = refitMapping(found)
-            engine.completeStage(with: refit.axes)
-            mapping = refit
-            mappingSummary =
-                refit.summary
-                + (refit == found ? "" : " (re-measured from the lab sweep)")
-                + " (lab stage step not completed: used the automated axes)"
-            phase = .calibrated(summary: mappingSummary)
-        }
-
-        /// The lab accepted the axes: the servos' vectors are still re-measured from the sweeps.
-        private func finishStageStep(_ found: StageServoMapping) {
-            let refit = refitMapping(found)
-            mapping = refit
-            mappingSummary = refit.summary + (refit == found ? "" : " (re-measured from the lab sweep)")
-            phase = .calibrated(summary: mappingSummary)
-        }
-
-        /// Replaces a servo's vector with the one the sweeps measured, when they covered enough.
-        private func refitMapping(_ found: StageServoMapping) -> StageServoMapping {
-            func better(_ servo: StageAxis) -> CGPoint? {
-                guard sweepCalibration.travel(of: servo) >= 1.0,
-                    sweepCalibration.movingAngles(of: servo) >= 8,
-                    case .success(let v) = sweepCalibration.vector(for: servo)
-                else { return nil }
-                return v
-            }
-            let vx = better(.x)
-            let vy = better(.y)
-            guard vx != nil || vy != nil,
-                case .success(let refit) = StageAutoCalibration.servoMapping(
-                    x: vx ?? found.x, y: vy ?? found.y, xSlack: found.xSlackDegrees,
-                    ySlack: found.ySlackDegrees)
-            else { return found }
-            engine.logEvent(
-                "mapping_refit",
-                detail: String(
-                    format: "x=%.4f y=%.4f f/deg", hypot(Double(refit.x.x), Double(refit.x.y)),
-                    hypot(Double(refit.y.x), Double(refit.y.y))))
-            return refit
-        }
-
-        private func runStageStep(_ found: StageServoMapping) async {
-            guard
-                let sweepX = StageAutoCalibration.stageStepSweep(
-                    fieldsPerDegree: hypot(Double(found.x.x), Double(found.x.y)),
-                    slackDegrees: found.xSlackDegrees),
-                let sweepY = StageAutoCalibration.stageStepSweep(
-                    fieldsPerDegree: hypot(Double(found.y.x), Double(found.y.y)),
-                    slackDegrees: found.ySlackDegrees)
-            else { return useAutomatedAxes(found) }
-
-            sweepCalibration = StageAutoCalibration()
-            for _ in 0..<2 {
-                guard await goTo(.x, sweepX.start), await goTo(.y, sweepY.start) else {
-                    return useAutomatedAxes(found)
-                }
-                try? await Task.sleep(for: .seconds(settleSeconds))
-                // The moves above are the driver's own: the lab's measurement starts now.
-                engine.restartStageMeasurement()
-                try? await Task.sleep(for: .seconds(0.5))
-                // The screen's copy of the lab's step arrives a few frames later.
-                for _ in 0..<25 where labStage() != .waitX && !sweepStopped {
-                    try? await Task.sleep(for: .milliseconds(100))
-                }
-                await sweep(.x, while: .waitX)
-                // "X done" pause: no reading counts until it ends.
-                for _ in 0..<30 where engine.setupInfo.stage?.isPause == true && !sweepStopped {
-                    try? await Task.sleep(for: .milliseconds(100))
-                }
-                await sweep(.y, while: .waitY)
-                if sweepStopped { return stopSweep() }
-                if engine.setupInfo.step != .stage {
-                    return finishStageStep(found)
-                }
-            }
-            useAutomatedAxes(found)
-        }
-
-        /// Turns one servo from where it was parked to its end, and back, a step at a time, while
-        /// the lab's stage step still waits for this axis; two passes at most. After each step
-        /// the picture's position is recorded, to re-measure the servo's fields per degree.
-        private func sweep(_ servo: StageAxis, while waiting: StageAxesStep) async {
-            var current = servo == .x ? angleX : angleY
-            var direction = 1
-            var passes = 0
-            while !sweepStopped, labStage() == waiting, passes < 2 {
-                let next = min(max(current + direction * calibrationStepDegrees, 0), 180)
-                if next == current {
-                    direction = -direction  // at the servo's end: turn round
-                    passes += 1
-                    continue
-                }
-                lastErrorText = ""
-                if await goTo(servo, next) {
-                    current = next
-                    try? await Task.sleep(for: .milliseconds(150))
-                    recordSweepSample(servo, next)
-                } else if lastErrorText.hasPrefix("LIMIT") {
-                    direction = -direction  // the stage's own range ends here
-                    passes += 1
-                } else {
-                    return
-                }
-                phase = .stageStep(axis: servo, travel: engine.setupInfo.stage?.travelFields ?? 0)
-            }
-        }
-
-        private func recordSweepSample(_ servo: StageAxis, _ angle: Int) {
-            // Only a fresh tracked position counts: a blurred frame just means a missed step.
-            guard let latest = lastTracked, Date().timeIntervalSince(latest.at) < 0.5 else { return }
-            sweepCalibration.add(
-                servo: servo, angle: Double(angle), position: latest.position,
-                tracking: .tracking, afterGap: gapPending)
-            gapPending = false
-        }
-
-        /// Pause / End session / disconnect during the sweep: measure again on Resume.
+        /// Pause / End session / disconnect during the warm-up or calibration: measure again on Resume.
         private func stopSweep() {
             mapping = nil
             mappingSummary = ""
@@ -752,16 +771,64 @@
         /// "Keep going" on the edge prompt: no edge on this leg.
         func keepGoingPastEdge() {
             presetEdgePrompt = false
-            ignoreEdgeThisLeg = true
             if presetAwaitingSettle {  // the move that was stopped counts as done
                 presetAwaitingSettle = false
                 presetEvent = .settled
             }
+            beginPresetEmptyWalk()  // another stretch of blind walking
+        }
+
+        /// Keeps walking the leg in steps with no dwell, as far as the blind crossing's cap.
+        private func beginPresetEmptyWalk() {
+            guard let zigzag, zigzag.column > 0 else { return }
+            let start = zigzag.plan.legServo == .x ? angleX : angleY
+            // The blind crossing's default cap (2 fields), in degrees of the leg servo.
+            let cap = max(chunkDegrees, Int((2.0 / zigzag.legFieldsPerDegree).rounded(.up)))
+            presetEmptyWalk = (start, cap)
+            self.zigzag?.walksBlind = true
+            if dwellInterrupted {
+                dwellInterrupted = false
+                presetEvent = .dwellDone
+            }
+            logLater("preset_empty_walk_start", detail: "cap \(cap)°")
+        }
+
+        private func endPresetEmptyWalk(_ reason: String) {
+            guard presetEmptyWalk != nil else { return }
+            presetEmptyWalk = nil
+            zigzag?.walksBlind = false
+            logLater("preset_empty_walk_end", detail: reason)
+        }
+
+        /// While walking blind: detail back returns to normal stepping; the cap reached is the
+        /// edge. Returns true when it stopped the stage for the edge.
+        private func checkPresetEmptyWalk() -> Bool {
+            guard let walk = presetEmptyWalk, let zigzag else { return false }
+            if frameDetail.hasDetail {
+                endPresetEmptyWalk("detail_back")
+                return false
+            }
+            let angle = zigzag.plan.legServo == .x ? angleX : angleY
+            guard abs(angle - walk.startAngle) >= walk.capDegrees else { return false }
+            endPresetEmptyWalk("edge")
+            presetEdgeFound()
+            return true
+        }
+
+        private func presetEdgeFound() {
+            if restoreAsksEdges {
+                presetEdgePrompt = true
+                if inFlight {
+                    client.send(.stop)
+                    inFlight = false
+                    lastSettledAt = Date()
+                }
+            } else {
+                applyPresetEdge()
+            }
         }
 
         private func applyPresetEdge() {
-            noSampleSince = nil
-            sawSampleInColumn = false
             if inFlight {
                 client.send(.stop)
                 inFlight = false
@@ -778,51 +845,19 @@
         }
 
         private func startPreset(_ mapping: StageServoMapping) {
-            guard let plan = StageZigzagPlan(mapping: mapping, minChunk: objective.minChunk) else {
+            guard let plan = StageZigzagPlan(mapping: mapping) else {
                 phase = .failed("Preset path: the servos do not move the picture")
                 return
             }
-            zigzag = StageZigzag(plan: plan, dwellSeconds: dwellSeconds)
+            let zigzag = StageZigzag(
+                plan: plan, chunkDegrees: chunkDegrees, dwellSeconds: dwellSeconds)
+            self.zigzag = zigzag
             presetFinished = false
             engine.logEvent("stage_mapping", detail: mappingSummary)
             Task {
                 // Another row, so the two events do not overwrite each other.
                 try? await Task.sleep(for: .milliseconds(300))
-                engine.logEvent("preset_path_start", detail: plan.summary)
-            }
-        }
-
-        /// Looks for the end of the sample along a leg: blank (not blurry) for 0.6 s after the
-        /// column showed sample.
-        private func watchPresetEdge() {
-            guard (zigzag?.column ?? 0) > 0, !ignoreEdgeThisLeg, !presetEdgePrompt else { return }
-            let viewClass = engine.guideInfo.viewClass
-            if viewClass == "sample" || viewClass == "thin" {
-                sawSampleInColumn = true
-                noSampleSince = nil
-                return
-            }
-            let blank =
-                viewClass == "blank"
-                || (engine.guideInfo.holdsForPicture && trackingNow == .paused
-                    && viewClass != "blurry")
-            guard sawSampleInColumn, blank else {
-                noSampleSince = nil
-                return
-            }
-            let since = noSampleSince ?? Date()
-            noSampleSince = since
-            guard Date().timeIntervalSince(since) >= 0.6 else { return }
-            noSampleSince = nil
-            if restoreAsksEdges {
-                presetEdgePrompt = true
-                if inFlight {
-                    client.send(.stop)
-                    inFlight = false
-                    lastSettledAt = Date()
-                }
-            } else {
-                applyPresetEdge()
+                engine.logEvent("preset_path_start", detail: zigzag.summary)
             }
         }
 
@@ -834,6 +869,7 @@
             }
             guard zigzag != nil else { return }
             zigzag?.dwellSeconds = dwellSeconds
+            zigzag?.chunkDegrees = max(chunkDegrees, 1)
             phase = .presetPath(column: zigzag?.column ?? 0, spot: zigzag?.spot ?? 0)
             if inFlight, Date().timeIntervalSince(moveSentAt) > 5 {
                 inFlight = false
@@ -845,18 +881,9 @@
                     presetEvent = .settled
                 }
             }
-            // A blurry view is the stall rule's (a focus pause), not an edge.
-            let monitor = engine.setupInfo.monitor
-            if stallWatch.update(
-                now: Date(), holds: engine.guideInfo.holdsForPicture, moved: movedForStall,
-                focusIndex: monitor.focusIndex, baseline: monitor.focusBaseline)
-            {
-                engine.requestFocusPause()
-                lastMove = "Focus pause (stall)"
-            }
-            movedForStall = false
-            guard monitor.state == .ok else { return }
-            watchPresetEdge()
+            let holding = watchEmpty()
+            guard !holding else { return }
+            if checkPresetEmptyWalk() { return }
             guard !presetEdgePrompt else { return }
             if let until = dwellUntil {
                 guard Date() >= until else { return }
@@ -867,7 +894,16 @@
             for _ in 0..<6 {
                 let event = presetEvent
                 presetEvent = nil
-                guard let action = zigzag?.next(angles: (angleX, angleY), event: event) else {
+                var trackedPosition: CGPoint?
+                if trackingNow == .tracking, presetEmptyWalk == nil, let seen = lastTracked,
+                    Date().timeIntervalSince(seen.at) < 0.5
+                {
+                    trackedPosition = seen.position
+                }
+                guard
+                    let action = zigzag?.next(
+                        angles: (angleX, angleY), event: event, tracked: trackedPosition)
+                else {
                     return
                 }
                 switch action {
@@ -875,7 +911,6 @@
                     if sendMove(servo, angle) {
                         inFlight = true
                         moveSentAt = Date()
-                        movedForStall = true
                         presetAwaitingSettle = true
                         lastServo = servo
                         lastMove = "GOTO \(servo.letter) \(angle) (preset)"
@@ -885,15 +920,19 @@
                     return
                 case .dwell(let seconds):
                     dwellUntil = Date().addingTimeInterval(seconds)
+                    let detail = "column \(zigzag?.column ?? 0) at \(angleX),\(angleY)"
+                    Task {
+                        // Another row than preset_path_column, so they do not overwrite each other.
+                        try? await Task.sleep(for: .milliseconds(300))
+                        engine.logEvent("preset_path_stop", detail: detail)
+                    }
                     return
                 case .columnStarted(let column):
-                    ignoreEdgeThisLeg = false
-                    sawSampleInColumn = false
-                    noSampleSince = nil
                     countingColumn = column
                     engine.setExternalCounting(active: true, column: column)
                     engine.logEvent("preset_path_column", detail: "\(column) at \(angleX),\(angleY)")
                 case .columnEnded(let column):
+                    endPresetEmptyWalk("edge")  // the leg ended inside the empty patch
                     countingColumn = nil
                     engine.setExternalCounting(active: false, column: column)
                 case .finished(let reason):
@@ -958,6 +997,9 @@
             else { return }
             let before = servo == .x ? old.x : old.y
             mapping = new
+            zigzag?.setFieldsPerDegree(
+                x: hypot(Double(new.x.x), Double(new.x.y)),
+                y: hypot(Double(new.y.x), Double(new.y.y)))
             mappingSummary =
                 new.summary + (flipped ? " (direction corrected)" : " (step size re-measured)")
             lastMove =
@@ -976,7 +1018,6 @@
         private func sendFollowMove(_ servo: StageAxis, _ angle: Int) {
             guard sendMove(servo, angle) else { return }
             movedSinceLastPress = true
-            movedForStall = true
             inFlight = true
             moveSentAt = Date()
             lastServo = servo
@@ -996,15 +1037,7 @@
                 crossStep()
                 return
             }
-            let monitor = engine.setupInfo.monitor
-            if stallWatch.update(
-                now: Date(), holds: engine.guideInfo.holdsForPicture, moved: movedForStall,
-                focusIndex: monitor.focusIndex, baseline: monitor.focusBaseline)
-            {
-                engine.requestFocusPause()
-                lastMove = "Focus pause (stall)"
-            }
-            movedForStall = false
+            let holding = watchEmpty()
             if engine.overlayState.asksEdge {
                 if inFlight {
                     client.send(.stop)
@@ -1021,6 +1054,7 @@
                 return
             }
             if lastMove == guideOff { lastMove = "" }
+            guard !holding else { return }
             guard let mapping, !inFlight, Date().timeIntervalSince(lastSettledAt) >= 0.3,
                 let dx = engine.guideInfo.steerDx, let dy = engine.guideInfo.steerDy
             else { return }

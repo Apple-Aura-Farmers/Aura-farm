@@ -130,20 +130,6 @@ final class StageAutoCalibrationTests: XCTestCase {
         XCTAssertEqual(c.movingAngles(of: .x), 4)
     }
 
-    func testStageStepSweep() throws {
-        let sweep = try XCTUnwrap(
-            StageAutoCalibration.stageStepSweep(fieldsPerDegree: 0.026, slackDegrees: 18))
-        XCTAssertEqual(sweep.end - sweep.start, 111)
-        XCTAssertEqual(Double(sweep.start + sweep.end) / 2, 90, accuracy: 1)
-        let near = try XCTUnwrap(
-            StageAutoCalibration.stageStepSweep(
-                fieldsPerDegree: 0.026, slackDegrees: 18, centre: 170))
-        XCTAssertEqual(near.end, 180)
-        XCTAssertEqual(near.end - near.start, 111)
-        XCTAssertNil(StageAutoCalibration.stageStepSweep(fieldsPerDegree: 0.01, slackDegrees: 0))
-        XCTAssertNil(StageAutoCalibration.stageStepSweep(fieldsPerDegree: 0, slackDegrees: 0))
-    }
-
     func testSweepWithAFirstStepLurchKeepsTheTrueSlope() throws {
         var c = StageAutoCalibration()
         // 40 samples over 120 degrees at 0.02 field/degree; the first moving step lurches 0.8.
