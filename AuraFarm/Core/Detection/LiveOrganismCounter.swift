@@ -36,6 +36,8 @@ struct LiveOrganismCounter {
         var newOnMap = 0
         var repeatOnMap = 0
         var newEntries: [SlideOrganismMap.Entry] = []
+        /// The detection box (frame px, from the top left) of each new entry, by entry id.
+        var newBoxes: [Int: CGRect] = [:]
     }
 
     private var tally = OrganismTally()
@@ -133,10 +135,11 @@ struct LiveOrganismCounter {
                 result.repeatOnMap += 1
             } else {
                 isRepeat[track.id] = false
-                result.newEntries.append(
-                    map.add(
-                        label: track.label, at: position, seconds: seconds, column: column,
-                        fieldSide: fieldSide))
+                let entry = map.add(
+                    label: track.label, at: position, seconds: seconds, column: column,
+                    fieldSide: fieldSide)
+                result.newEntries.append(entry)
+                result.newBoxes[entry.id] = track.box
                 result.newOnMap += 1
             }
         }

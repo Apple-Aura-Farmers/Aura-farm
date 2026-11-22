@@ -106,6 +106,9 @@ final class LiveCountSession {
 
     // Detector queue only.
     private let snapshots = DetectionSnapshotWriter()
+    private let crops = OrganismCropWriter()
+    /// The crop file of each counted entry (by map entry id), for the run record. Under `lock`.
+    private var cropFiles: [Int: String] = [:]
     private var lastHapticAt = -Double.infinity
     // Analysis queue only.
     private var lastCircle: FieldCircle?
@@ -124,7 +127,10 @@ final class LiveCountSession {
     /// A new run: counts and snapshots start afresh. The model stays open. A detection that is
     /// running is thrown away.
     func begin(stamp: String) {
-        restart { [snapshots] in snapshots.begin(stamp: stamp) }
+        restart { [snapshots, crops] in
+            snapshots.begin(stamp: stamp)
+            crops.begin(stamp: stamp)
+        }
     }
 
     /// Counting starts or stops (the guide's `countingActive`). A note like the others, so it
@@ -148,6 +154,14 @@ final class LiveCountSession {
     /// and for tests; the analysis queue never needs it per frame.
     func drain() {
         detectorQueue.sync {}
+        crops.flush()
+    }
+
+    /// The crop saved for a map entry; nil if it has none.
+    func cropFile(forEntry id: Int) -> String? {
+        lock.lock()
+        defer { lock.unlock() }
+        return cropFiles[id]
     }
 
     /// How long ago the detector last ran, on the run's clock; nil if it has not.
@@ -191,11 +205,13 @@ final class LiveCountSession {
         lastDetectedAt = nil
         completed = []
         counterState.reset()
+        cropFiles = [:]
         hapticCount = 0
         lock.unlock()
         detectorQueue.async { [self] in
             lock.lock()
             counterState.reset()
+            cropFiles = [:]
             hapticCount = 0
             completed = []
             lock.unlock()
@@ -413,6 +429,12 @@ final class LiveCountSession {
                     + String(format: " map=(%.2f,%.2f)", entry.fields.x, entry.fields.y)
             )
         }
+        var cropItems: [(id: Int, box: CGRect)] = []
+        for entry in result.newEntries {
+            guard let box = result.newBoxes[entry.id] else { continue }
+            cropFiles[entry.id] = OrganismCropWriter.fileName(id: entry.id)
+            cropItems.append((entry.id, box))
+        }
         var drawn: [(id: Int, label: String, rect: CGRect)] = []
         if !result.newEntries.isEmpty {
             if seconds - lastHapticAt >= 0.5 {
@@ -427,6 +449,7 @@ final class LiveCountSession {
         lock.unlock()
 
         if !drawn.isEmpty { snapshots.save(buffer, boxes: drawn) }
+        crops.save(buffer, items: cropItems)
         held.buffer = nil
         lock.lock()
         detectInFlight = false

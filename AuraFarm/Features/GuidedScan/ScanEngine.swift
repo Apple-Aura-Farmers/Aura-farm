@@ -120,6 +120,8 @@ class ScanEngine: NSObject {
     @ObservationIgnored private var lastCountingActive = false
     @ObservationIgnored private var lastCountFrameSize = CGSize.zero
     @ObservationIgnored private var runStartedAt: Date?
+    /// The run's name: its JSON, map and organisms folder all carry it. Set when the guide resets.
+    @ObservationIgnored private var runStamp = ScanEngine.stamp()
     @ObservationIgnored private var runStartSeconds = 0.0
     @ObservationIgnored private var runFinalized = false
     @ObservationIgnored private var snapshotTrigger = SnapshotTrigger()
@@ -727,7 +729,8 @@ class ScanEngine: NSObject {
         lastEdgeReachedCount = 0
         pendingEdgeQuestionID = nil
         // A new run: counting, its snapshots and the summary start afresh.
-        live.begin(stamp: Self.stamp())
+        runStamp = Self.stamp()
+        live.begin(stamp: runStamp)
         live.setCounting(false)
         lastCountingActive = false
         lastCountInfo = LiveCountInfo()
@@ -1202,12 +1205,15 @@ class ScanEngine: NSObject {
             organisms: live.counter.map.entries.map {
                 RunMapOrganism(
                     label: $0.label, x: Double($0.fields.x), y: Double($0.fields.y),
-                    column: $0.column, seconds: $0.firstSeenSeconds)
+                    column: $0.column, seconds: $0.firstSeenSeconds,
+                    image: live.cropFile(forEntry: $0.id))
             },
             path: RunMapContent.thinned(runPath), edges: runMapEdges(),
             mapMapping: dryRun.mapping.rawValue, mapMirrored: dryRun.mirrored)
+        let stamp = runStamp
         var items: [URL] = []
-        if let json = Self.writeRun(record) { items.append(json) }
+        if let json = Self.writeRun(record, stamp: stamp) { items.append(json) }
+        if let pictures = Self.organismsExport(stamp: stamp) { items.append(pictures) }
         if logging, var last = rows.last {
             last.event = "summary"
             last.eventDetail =
@@ -1217,7 +1223,9 @@ class ScanEngine: NSObject {
         }
         DispatchQueue.main.async { [weak self] in
             // The map as a picture, shared with the JSON and the CSV.
-            if let data = RunMapExport.pngData(for: record), let png = Self.writeMapPNG(data) {
+            if let data = RunMapExport.pngData(for: record),
+                let png = Self.writeMapPNG(data, stamp: stamp)
+            {
                 items.append(png)
             }
             self?.runSummary = record
@@ -1241,11 +1249,11 @@ class ScanEngine: NSObject {
     }
 
     /// Documents/SlideLab/Runs/run-<timestamp>-map.png, next to the run's JSON.
-    private static func writeMapPNG(_ data: Data) -> URL? {
+    private static func writeMapPNG(_ data: Data, stamp: String) -> URL? {
         let folder = DetectionSnapshotWriter.documents.appending(path: "SlideLab/Runs")
         do {
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-            let url = folder.appending(path: "run-\(stamp())-map.png")
+            let url = folder.appending(path: "run-\(stamp)-map.png")
             try data.write(to: url, options: .atomic)
             return url
         } catch {
@@ -1253,12 +1261,34 @@ class ScanEngine: NSObject {
         }
     }
 
+    /// The run's organism pictures for sharing: the folder zipped next to it as
+    /// run-<stamp>-organisms.zip (a folder alone does not share well), or the folder itself if
+    /// zipping fails. nil when the run saved no picture.
+    private static func organismsExport(stamp: String) -> URL? {
+        let folder = OrganismCropWriter.folder(stamp: stamp)
+        guard let files = try? FileManager.default.contentsOfDirectory(atPath: folder.path),
+            !files.isEmpty
+        else { return nil }
+        var zipped: URL?
+        var failure: NSError?
+        // `.forUploading` hands over a zip of the folder, valid only inside the block.
+        NSFileCoordinator().coordinate(
+            readingItemAt: folder, options: .forUploading, error: &failure
+        ) { zip in
+            let target = folder.deletingLastPathComponent()
+                .appending(path: "run-\(stamp)-organisms.zip")
+            try? FileManager.default.removeItem(at: target)
+            if (try? FileManager.default.copyItem(at: zip, to: target)) != nil { zipped = target }
+        }
+        return zipped ?? folder
+    }
+
     /// Documents/SlideLab/Runs/run-<timestamp>.json, which the Files app shows.
-    private static func writeRun(_ record: GuideRunRecord) -> URL? {
+    private static func writeRun(_ record: GuideRunRecord, stamp: String) -> URL? {
         let folder = DetectionSnapshotWriter.documents.appending(path: "SlideLab/Runs")
         do {
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-            let url = folder.appending(path: "run-\(stamp()).json")
+            let url = folder.appending(path: "run-\(stamp).json")
             try GuideRunRecord.encoder().encode(record).write(to: url, options: .atomic)
             return url
         } catch {

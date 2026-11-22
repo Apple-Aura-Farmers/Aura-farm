@@ -8,6 +8,9 @@ struct RunMapOrganism: Codable, Equatable {
     var y: Double
     var column: Int
     var seconds: Double
+    /// The clean crop of this organism, as a file name inside the run's organisms folder
+    /// (`run-<stamp>-organisms/`); nil for runs saved before the crops existed.
+    var image: String?
 
     var point: CGPoint { CGPoint(x: x, y: y) }
 }
