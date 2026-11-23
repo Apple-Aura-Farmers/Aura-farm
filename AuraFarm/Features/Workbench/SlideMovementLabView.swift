@@ -54,6 +54,10 @@
         /// "How will the slide move?" card, shown until a choice is made.
         @State private var needsMovementChoice = true
         @State private var isShowingStageSheet = false
+        /// Waiting for the stage's Bluetooth connection; setup is held while it does, if it
+        /// has not got past Align.
+        @State private var isWaitingForStage = false
+        @State private var holdsSetupForStage = false
 
         // Recorded video.
         @State private var selectedVideo: URL?
@@ -70,6 +74,16 @@
             } else if let driver = autoStage {
                 driver.deactivate()
                 autoStage = nil
+                endWaitingForStage()
+            }
+        }
+
+        /// The connection is made, or the automated stage was cancelled: setup goes on.
+        private func endWaitingForStage() {
+            isWaitingForStage = false
+            if holdsSetupForStage {
+                holdsSetupForStage = false
+                model.setSetupHeld(false)
             }
         }
 
@@ -82,6 +96,12 @@
             driver.guideIsStraightened = straightens && centresField
             driver.activate(restoringAsksEdges: asksEdges)
             autoStage = driver
+            // Setup waits for the connection; a lab already past Align is not sent back.
+            isWaitingForStage = true
+            if model.setupInfo.step == .align {
+                holdsSetupForStage = true
+                model.setSetupHeld(true)
+            }
         }
 
         private var spotMode: SpotConfirmMode { spotModeName == "holdStill" ? .holdStill : .briefTouch }
@@ -98,6 +118,14 @@
                     MovementChoiceCard(
                         onManual: { needsMovementChoice = false },
                         onAutomated: { setAutomatedStage(true) })
+                }
+                if isWaitingForStage, let autoStage, mode == .live {
+                    StageConnectingCard(
+                        client: autoStage.client.status, backTitle: "Cancel",
+                        onRetry: { autoStage.client.connect() },
+                        onBack: { setAutomatedStage(false) }
+                    )
+                    .padding(.horizontal)
                 }
                 if let autoStage, mode == .live {
                     AutoStagePanel(driver: autoStage, setupStep: model.setupInfo.step)
@@ -130,6 +158,9 @@
                     .toggleStyle(.button)
                     .font(.footnote)
                 }
+            }
+            .onChange(of: autoStage?.client.status) { _, status in
+                if status == .connected, isWaitingForStage { endWaitingForStage() }
             }
             .onChange(of: straightens && centresField) { _, value in
                 autoStage?.guideIsStraightened = value
@@ -164,7 +195,8 @@
                         // Uncropped until the field is confirmed, and when the toggle is off.
                         let isCentred =
                             centresField && model.isAnalyzing
-                            && (model.setupInfo.step == .stage || model.setupInfo.step == .done)
+                            && (model.setupInfo.step == .focus || model.setupInfo.step == .stage
+                                || model.setupInfo.step == .done)
                         let display =
                             isCentred
                             ? FramePreviewConverter.displayTransform(

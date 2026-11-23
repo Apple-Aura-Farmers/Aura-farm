@@ -132,7 +132,10 @@ private struct SoilResultContent: View {
             )
 
             if let runRecord {
-                Section("Run map") { RunMapPanel(record: runRecord) }
+                Section("Run map") {
+                    RunMapPanel(record: runRecord)
+                    Text(runRecord.stageLine).font(.footnote).foregroundStyle(.secondary)
+                }
             }
 
             if showsAdvice {

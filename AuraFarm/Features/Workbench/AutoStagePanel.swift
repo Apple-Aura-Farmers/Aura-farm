@@ -32,13 +32,12 @@
                     )
                     .font(.caption).foregroundStyle(.secondary)
                 }
-                Picker("Warm-up", selection: $driver.warmUp) {
-                    Text("Off").tag(StagePresetPath?.none)
-                    ForEach(StagePresetPath.allCases, id: \.self) {
-                        Text($0.title).tag(Optional($0))
-                    }
-                }
-                .pickerStyle(.menu)
+                Toggle(
+                    "Warm-up (traverse, 3×3, cross)",
+                    isOn: Binding(
+                        get: { !driver.warmUpSequence.isEmpty },
+                        set: { driver.warmUpSequence = $0 ? StageWarmUpItem.defaultSequence : [] })
+                )
                 .font(.footnote)
                 .disabled(busyMeasuring)
                 Toggle("Auto stage limit", isOn: $driver.autoStageLimit).font(.footnote)
@@ -142,7 +141,9 @@
             switch driver.phase {
             case .disconnected: "Stage not connected"
             case .waitingForStageStep: "Connected. Waiting for the stage step"
-            case .warmingUp(let title): "Warming up: \(title)"
+            case .warmingUp(let index, let count, let title):
+                "Warming up (\(index) of \(count)): \(title)"
+            case .readyToStart: "Calibrated, waiting for the run to start"
             case .calibrating(let axis, let travel):
                 String(format: "Calibrating servo %@: %.1f fields", axis.letter, travel)
             case .calibrated: "Calibrated"

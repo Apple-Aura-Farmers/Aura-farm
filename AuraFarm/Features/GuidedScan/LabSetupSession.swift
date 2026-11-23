@@ -111,6 +111,10 @@ final class LabSetupSession {
     /// confirmed): the checks must pass AND the person must confirm before the step moves on. The
     /// lab leaves this off and advances as soon as the checks pass.
     var confirmsSteps = false
+    /// Setup is held where it is (the guided scan before a stage is chosen and connected, the lab
+    /// while it waits for the stage): no step advances and a confirmation is ignored. The camera
+    /// and the overlays carry on.
+    var isHeld = false
     private var stepConfirmed = false
     /// The round view the person confirmed, which focus is measured inside.
     private var confirmedFieldCircle: FieldCircle?
@@ -144,7 +148,10 @@ final class LabSetupSession {
     var monitorState: RunMonitorState { info.monitor.state }
 
     /// The person confirmed the align or focus step they are on (see `confirmsSteps`).
-    func confirmStep() { stepConfirmed = true }
+    func confirmStep() {
+        guard !isHeld else { return }
+        stepConfirmed = true
+    }
 
     /// Back to align: the checks start afresh and the stage is forgotten.
     func redo() {
@@ -293,7 +300,7 @@ final class LabSetupSession {
     }
 
     /// The step may move on: always in the lab, after the person's confirmation on the page.
-    private var canAdvance: Bool { !confirmsSteps || stepConfirmed }
+    private var canAdvance: Bool { !isHeld && (!confirmsSteps || stepConfirmed) }
 
     private static func newSetupDial() -> FocusDial {
         FocusDial(
@@ -352,7 +359,7 @@ final class LabSetupSession {
 
         switch atStep {
         case .field:
-            if step.fieldState?.mask != nil, !step.awaitingReview {
+            if step.fieldState?.mask != nil, !step.awaitingReview, !isHeld {
                 // Confirmed: the circle the run is held to is the one measured now, by the
                 // same method that will watch it.
                 if latestAlignment.found { referenceCircle = latestAlignment.circle }

@@ -102,6 +102,8 @@ class ScanEngine: NSObject {
     @ObservationIgnored private let sessionQueue = DispatchQueue(label: "slidelab.session")
     @ObservationIgnored let analysisQueue = DispatchQueue(label: "slidelab.analysis")
     @ObservationIgnored private var confirmsSetupSteps = false
+    /// Setup is held where it is (see `LabSetupSession.isHeld`).
+    @ObservationIgnored private var setupHeld = false
     @ObservationIgnored private var isConfigured = false
     @ObservationIgnored private var device: AVCaptureDevice?
 
@@ -122,12 +124,24 @@ class ScanEngine: NSObject {
     @ObservationIgnored private var runStartedAt: Date?
     /// The automated stage's servo angles, for the CSV (analysis queue; nil without the stage).
     @ObservationIgnored private var stageAngles: (x: Int, y: Int)?
+    /// Who moves the slide in this run, for the run record (analysis queue).
+    @ObservationIgnored private var runStageInfo: (stage: String, objective: String?, pathMode: String?) = (
+        "manual", nil, nil
+    )
     /// The tracker's latest position, frame px (analysis queue).
     @ObservationIgnored private var lastTrackerPosition = CGPoint.zero
     /// The run's name: its JSON, map and organisms folder all carry it. Set when the guide resets.
     @ObservationIgnored private var runStamp = ScanEngine.stamp()
     @ObservationIgnored private var runStartSeconds = 0.0
     @ObservationIgnored private var runFinalized = false
+    /// See `setFinishesOnlyOnRequest` (analysis queue).
+    @ObservationIgnored private var finishesOnlyOnRequest = false
+    /// `endRun` asked for the end, now or after the column (analysis queue).
+    @ObservationIgnored private var endRequested = false
+    /// The run is still going: its path grows and it is not finalized yet.
+    private var runIsOpen: Bool {
+        !dryRun.isFinished || (finishesOnlyOnRequest && !endRequested)
+    }
     @ObservationIgnored private var snapshotTrigger = SnapshotTrigger()
     @ObservationIgnored var snapshotRequested = false
     /// A tap on an edge button waiting for the next logged row: it names the row, saves a
@@ -289,6 +303,23 @@ class ScanEngine: NSObject {
         analysisQueue.async { [weak self] in self?.setup.confirmsSteps = confirms }
     }
 
+    /// Holds setup where it is, or lets it go on. While held no step advances and confirmation
+    /// taps are ignored; the camera and the overlays carry on. Off by default.
+    func setSetupHeld(_ held: Bool) {
+        // On the analysis queue, like the reads in `beginSetup` and `confirmField`, so a
+        // release is never seen half-way.
+        analysisQueue.async { [weak self] in
+            self?.setupHeld = held
+            self?.setup.isHeld = held
+        }
+    }
+
+    /// On: the run ends only when `endRun` asks for it, not when the guide's own plan finishes
+    /// (the automated stage's fixed sweep covers its own range). Off by default.
+    func setFinishesOnlyOnRequest(_ on: Bool) {
+        analysisQueue.async { [weak self] in self?.finishesOnlyOnRequest = on }
+    }
+
     /// The person tapped Confirm on the align or focus step.
     func confirmSetupStep() {
         analysisQueue.async { [weak self] in self?.setup.confirmStep() }
@@ -358,6 +389,12 @@ class ScanEngine: NSObject {
             else { return }
             self.pipeline.requestReanchor(addingOffset: offset)
         }
+    }
+
+    /// Who moves the slide, for the run record: "manual", or "terraloka" with its objective and
+    /// path mode. Set before the scan starts.
+    func setRunStage(stage: String, objective: String?, pathMode: String?) {
+        analysisQueue.async { [weak self] in self?.runStageInfo = (stage, objective, pathMode) }
     }
 
     /// The automated stage's angles for the CSV's `stage_angle_x` / `stage_angle_y`; nil clears them.
@@ -462,6 +499,7 @@ class ScanEngine: NSObject {
         let skips = skipsAlignAndFocus
         setup = LabSetupSession(skippingAlignAndFocus: skips)
         setup.confirmsSteps = confirmsSetupSteps
+        setup.isHeld = setupHeld
         pipeline.resetPosition()
         if skips { pipeline.redetectField() }
         clearTrackingDisplay()
@@ -560,7 +598,7 @@ class ScanEngine: NSObject {
     /// The person confirmed the learned field: tracking starts.
     func confirmField() {
         analysisQueue.async { [weak self] in
-            guard let self else { return }
+            guard let self, !self.setupHeld else { return }
             self.pipeline.confirmField()
             self.clearTrackingDisplay()
         }
@@ -761,6 +799,7 @@ class ScanEngine: NSObject {
         lastCountInfo = LiveCountInfo()
         runStartedAt = nil
         runFinalized = false
+        endRequested = false
         DispatchQueue.main.async { [weak self] in
             self?.countInfo = LiveCountInfo()
             self?.runSummary = nil
@@ -868,12 +907,15 @@ class ScanEngine: NSObject {
             guard let self, self.guideEnabled else { return }
             switch action {
             case .now:
+                self.endRequested = true
                 self.dryRun.endNow()
                 self.pendingEventName = "end_now"
             case .afterColumn:
+                self.endRequested = true
                 self.dryRun.endAfterColumn()
                 self.pendingEventName = self.dryRun.isFinished ? "end_now" : "end_after_column"
             case .cancel:
+                self.endRequested = false
                 self.dryRun.cancelEnd()
                 self.pendingEventName = "end_cancelled"
             }
@@ -1236,7 +1278,9 @@ class ScanEngine: NSObject {
                     image: live.cropFile(forEntry: $0.id))
             },
             path: RunMapContent.thinned(runPath), edges: runMapEdges(),
-            mapMapping: dryRun.mapping.rawValue, mapMirrored: dryRun.mirrored)
+            mapMapping: dryRun.mapping.rawValue, mapMirrored: dryRun.mirrored,
+            stage: runStageInfo.stage, objective: runStageInfo.objective,
+            pathMode: runStageInfo.pathMode)
         let stamp = runStamp
         var items: [URL] = []
         if let json = Self.writeRun(record, stamp: stamp) { items.append(json) }
@@ -1526,7 +1570,7 @@ extension ScanEngine: AVCaptureVideoDataOutputSampleBufferDelegate {
         if step.event != .none { lastEventName = step.eventName }
 
         trail.append(step.positionFields)
-        if guideEnabled, !dryRun.isFinished {
+        if guideEnabled, runIsOpen {
             runPath.append(step.positionFields)
             // Keeps every other point when it gets long: the path stays whole and small.
             if runPath.count > 4 * RunMapContent.maxPathPoints {
@@ -1639,7 +1683,7 @@ extension ScanEngine: AVCaptureVideoDataOutputSampleBufferDelegate {
         }
         pendingEventName = ""
         pendingEventDetail = ""
-        if guideEnabled, dryRun.isFinished, !runFinalized {
+        if guideEnabled, !runIsOpen, !runFinalized {
             runFinalized = true
             finalizeRun(seconds: time)
         }

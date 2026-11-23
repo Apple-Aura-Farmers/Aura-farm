@@ -9,6 +9,9 @@ final class GuidedScanSession {
     private(set) var display: GuidedScanDisplay?
     @ObservationIgnored private var presenter = GuidedScanPresenter()
     @ObservationIgnored private var sentWords = ""
+    /// False with the Terraloka Stage: nobody was told to turn a knob, so the CSV's knob words
+    /// stay empty.
+    @ObservationIgnored var reportsWords = true
 
     func start(coverage: GuidedScanCoverage, rule: KnobRule) {
         presenter = GuidedScanPresenter()
@@ -42,7 +45,7 @@ final class GuidedScanSession {
         let shown = presenter.present(input)
         if shown != display { display = shown }
         // The CSV's knob_words column: what the person was told, when it changes.
-        let words = shown.card?.text ?? ""
+        let words = reportsWords ? (shown.card?.text ?? "") : ""
         if words != sentWords {
             sentWords = words
             model.setHelperWords(words)

@@ -453,10 +453,14 @@ struct LiveSetupOverlay: View {
     var showsIndicator = true
     /// The automated stage measures the stage step itself.
     var automatedStage = false
+    /// The picture's display transform (centred and zoomed from the focus step on), so the focus
+    /// square lands on the picture.
+    var display = CGAffineTransform.identity
 
     var body: some View {
         let info = model.setupInfo
-        let mapper = FramePreviewConverter(layer: previewLayer, frameSize: info.frameSize)
+        let mapper = FramePreviewConverter(
+            layer: previewLayer, frameSize: info.frameSize, display: display)
         switch info.step {
         case .align: AlignOverlay(info: info, mapper: mapper)
         case .focus:

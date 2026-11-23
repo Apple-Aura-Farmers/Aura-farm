@@ -40,7 +40,8 @@
                 if model.setupInfo.step == .align || model.setupInfo.step == .focus {
                     // Steps 1 and 2: nothing is learned or tracked yet.
                     LiveSetupOverlay(
-                        model: model, previewLayer: previewLayer, automatedStage: automatedStage)
+                        model: model, previewLayer: previewLayer, automatedStage: automatedStage,
+                        display: display)
                 } else if model.fieldInfo.awaitingReview {
                     FieldReview(
                         info: model.fieldInfo,
@@ -57,7 +58,8 @@
                     // geometry is hosted even with the dry run off.
                     GuideGeometryHost(model: model, previewLayer: previewLayer, display: display)
                     LiveSetupOverlay(
-                        model: model, previewLayer: previewLayer, automatedStage: automatedStage)
+                        model: model, previewLayer: previewLayer, automatedStage: automatedStage,
+                        display: display)
                 } else {
                     if model.guideDryRun {
                         GuideGeometryHost(model: model, previewLayer: previewLayer, display: display)
