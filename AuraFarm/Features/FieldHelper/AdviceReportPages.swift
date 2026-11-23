@@ -3,107 +3,83 @@ import SwiftUI
 
 /// The pages of the field report PDF, as SwiftUI views the size of an A4 sheet.
 ///
-/// Three dense pages, laid out like a field sheet rather than a dashboard: a summary of the
-/// sample, the soil measurements, and what to do next. A fourth page, "Trends and notes", only
-/// appears when the steps are too many for the third. Each page has a fixed size and does not
-/// scroll, and no text goes below 7.5 points.
+/// Three pages: the field summary (who, when, what the microscope saw and the soil measurements),
+/// what to do next (every step in one table, split by when it can be done), and the notes and
+/// limitations. Each page has a fixed size and does not scroll, and no text goes below 7 points.
 ///
 /// Every word of advice comes from the report value, which carries the recommendation shown in
 /// the app, steps and groups included. Nothing here writes or changes advice.
 enum AdviceReportPages {
-    /// Roughly how much of page 3 the steps and the extras may take before the extras move to a
-    /// fourth page, in points.
-    static let pageThreeBudget: CGFloat = 690
+    static let titles = ["Field summary", "What to do next", "Notes and limitations"]
 
-    /// How the third page's extras are shared out: all on page 3, or "About your soil
-    /// measurements" on page 3 and the trend and notes on a fourth.
-    enum Layout { case compact, split }
+    static func titles(for report: AdviceReport) -> [String] { titles }
 
-    static func titles(for report: AdviceReport) -> [String] {
-        // Without a microscope test the summary has nothing to say, so the report starts with the soil.
-        var titles = report.hasTest ? ["Field summary"] : []
-        if report.education != nil { titles.append("Your soil measurements") }
-        titles.append("What to do next")
-        if report.hasTest, layout(for: report) == .split { titles.append("Trends and notes") }
-        return titles
+    static func pages(for report: AdviceReport) -> [AnyView] {
+        let total = titles.count
+        return [
+            AnyView(
+                ReportPage(report: report, section: titles[0], number: 1, total: total) {
+                    SummaryPage(report: report)
+                }),
+            AnyView(
+                ReportPage(report: report, section: titles[1], number: 2, total: total) {
+                    NextStepsPage(report: report)
+                }),
+            AnyView(
+                ReportPage(report: report, section: titles[2], number: 3, total: total) {
+                    NotesPage(report: report)
+                }),
+        ]
     }
 
-    /// With no soil measurements and no fertilizer recorded there is nothing for a page of cards to
-    /// show, so the report goes from the summary straight to what to do next.
-    static func pages(for report: AdviceReport) -> [AnyView] {
-        let layout = layout(for: report)
-        let names = titles(for: report)
-        let total = names.count
-        var pages: [AnyView] = []
-        for (index, name) in names.enumerated() {
-            let number = index + 1
-            switch name {
-            case "Field summary":
-                pages.append(
-                    AnyView(
-                        ReportPage(report: report, section: name, number: number, total: total) {
-                            SummaryPage(report: report)
-                        }))
-            case "Your soil measurements":
-                pages.append(
-                    AnyView(
-                        ReportPage(report: report, section: name, number: number, total: total) {
-                            MeasurementsPage(report: report)
-                        }))
-            case "What to do next":
-                pages.append(
-                    AnyView(
-                        ReportPage(report: report, section: name, number: number, total: total) {
-                            NextStepsPage(report: report, layout: layout)
-                        }))
-            default:
-                pages.append(
-                    AnyView(
-                        ReportPage(report: report, section: name, number: number, total: total) {
-                            VStack(alignment: .leading, spacing: 14) {
-                                TrendBlock(report: report, chartHeight: 340)
-                                NotesBlock(report: report)
-                            }
-                        }))
+    /// When a step can be done, in the three groups the "What to do next" page is split into.
+    enum When: CaseIterable {
+        case now, afterHarvest, beforeActing
+
+        var title: String {
+            switch self {
+            case .now: "Things you can do now"
+            case .afterHarvest: "After harvest"
+            case .beforeActing: "Before acting"
             }
         }
-        return pages
-    }
 
-    /// A rough measure, in points, of the steps table and the extras, to decide if they fit on one
-    /// page. Worked out from rendered pages; the page has about 718 points.
-    static func layout(for report: AdviceReport) -> Layout {
-        if report.hasTest, report.hasTrend { return .split }
-        let steps = CGFloat(report.recommendation.steps.count)
-        let items = (report.education?.items.count ?? 0)
-        let fertilizer: CGFloat = report.education?.fertilizer == nil ? 0 : 36
-        let table: CGFloat = 150 + steps * 42
-        let about: CGFloat = report.education == nil ? 0 : 14 + CGFloat(items) * 14 + fertilizer
-        let extras: CGFloat = 30 + about + 160 + 24
-        return table + extras > pageBudget ? .split : .compact
+        /// "Before ..." timings are things to check or prepare first, "After harvest" and the
+        /// fallow are for once the crop is off, and everything else can be started now.
+        init(timing: String?) {
+            let text = (timing ?? "").lowercased()
+            if text.hasPrefix("before") {
+                self = .beforeActing
+            } else if text.hasPrefix("after harvest") || text == "next fallow" {
+                self = .afterHarvest
+            } else {
+                self = .now
+            }
+        }
     }
-
-    static let pageBudget: CGFloat = 718
 }
 
 // MARK: - Look
 
 private enum Style {
-    // Cool print palette: white stock, blue-black ink, one ink-blue accent. The status colours are
-    // muted so they read like a second ink, not like interface colours.
-    static let paper = Color(red: 0.992, green: 0.992, blue: 0.988)
-    static let ink = Color(red: 0.07, green: 0.09, blue: 0.13)
-    static let muted = Color(red: 0.38, green: 0.41, blue: 0.46)
-    static let accent = Color(red: 0.10, green: 0.25, blue: 0.43)
+    // The app's own colours: the black and lime of the logo for the band, the olive of the lime
+    // darkened so it reads on paper for the accents, and a warm cream for the panels. The status
+    // colours stay muted so they read like a second ink.
+    static let paper = Color.white
+    static let band = Color(red: 0.035, green: 0.035, blue: 0.035)
+    static let lime = Color.auraGreen
+    static let ink = Color(red: 0.035, green: 0.035, blue: 0.035)
+    static let muted = Color(red: 0.38, green: 0.38, blue: 0.36)
+    static let accent = Color(red: 0.36, green: 0.43, blue: 0)
     static let good = Color(red: 0.14, green: 0.38, blue: 0.31)
     static let amber = Color(red: 0.62, green: 0.43, blue: 0.06)
     static let rust = Color(red: 0.55, green: 0.15, blue: 0.18)
-    static let line = Color(red: 0.76, green: 0.78, blue: 0.82)
-    static let panel = Color(red: 0.950, green: 0.955, blue: 0.965)
-    static let slate = Color(red: 0.30, green: 0.42, blue: 0.48)
+    static let line = Color(red: 0.80, green: 0.79, blue: 0.74)
+    static let panel = Color(red: 0.965, green: 0.95, blue: 0.90)
+    static let slate = Color(red: 0.40, green: 0.56, blue: 0.66)
 
     /// One colour for each organism group, in a fixed order.
-    static let groups: [Color] = [accent, amber, rust, slate, muted]
+    static let groups: [Color] = [slate, accent, Color.auraBrown, amber, muted]
 
     static func color(for tone: SoilTone?) -> Color {
         switch tone {
@@ -129,11 +105,26 @@ private enum Style {
 }
 
 private func day(_ date: Date) -> String {
+    date.formatted(date: .long, time: .omitted)
+}
+
+private func shortDay(_ date: Date) -> String {
     date.formatted(date: .abbreviated, time: .omitted)
 }
 
 private func perFrame(_ value: Double) -> String {
     value.formatted(.number.precision(.fractionLength(2)))
+}
+
+/// The groups across the tests, most counted first, at most five. They are the chart's lines and
+/// the legend beside it, in the same order so the colours agree.
+private func groupNames(_ report: AdviceReport) -> [String] {
+    var totals: [String: Double] = [:]
+    for point in report.history {
+        for (name, value) in point.byGroup { totals[name, default: 0] += value }
+    }
+    if totals.isEmpty { return report.organisms.prefix(5).map(\.name) }
+    return totals.sorted { $0.value > $1.value }.prefix(5).map(\.key)
 }
 
 // MARK: - The sheet every page sits on
@@ -156,39 +147,43 @@ private struct ReportPage<Content: View>: View {
         self.content = content()
     }
 
-    private var place: String {
-        report.plotName.map { "Plot \($0)" } ?? report.farmName
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .firstTextBaseline) {
-                (Text("Aura Farm").font(Style.body(10, weight: .bold))
-                    + Text("   \(section)").font(Style.body(10)).foregroundColor(Style.muted))
+            HStack(spacing: 10) {
+                Image("Icon_PDF")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(height: 44)
+                Text("TERRALOKA")
+                    .font(.system(size: 26, weight: .heavy))
+                    .tracking(2.7)
+                    .foregroundStyle(Style.lime)
                 Spacer()
-                Text("\(place) · \(day(report.sampledAt)) · \(number)/\(total)")
+                Text("\(section) · \(number)/\(total)")
                     .font(Style.mono(8, weight: .regular))
-                    .foregroundStyle(Style.muted)
+                    .foregroundStyle(Style.lime.opacity(0.8))
             }
-            Rectangle().fill(Style.ink).frame(height: 1).padding(.top, 5)
+            .padding(.horizontal, 24)
+            .frame(width: 595, height: 65)
+            .background(Style.band)
 
             content
-                .padding(.top, 12)
+                .padding(.horizontal, 24)
+                .padding(.top, 16)
 
             Spacer(minLength: 6)
 
-            Rectangle().fill(Style.line).frame(height: 0.5)
+            Rectangle().fill(Style.line).frame(height: 0.5).padding(.horizontal, 24)
             Text(
                 "For monitoring and learning, not a diagnosis. Standards are provisional and not yet reviewed by an agronomist. Ask an extension officer before making a major change."
             )
             .font(Style.body(7.5))
             .foregroundStyle(Style.muted)
             .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, 24)
             .padding(.top, 4)
+            .padding(.bottom, 20)
         }
-        .padding(.horizontal, 44)
-        .padding(.top, 30)
-        .padding(.bottom, 24)
         .frame(width: 595, height: 842, alignment: .topLeading)
         .background(Style.paper)
         .foregroundStyle(Style.ink)
@@ -197,6 +192,10 @@ private struct ReportPage<Content: View>: View {
 }
 
 // MARK: - Small parts
+
+private func heading(_ text: String) -> some View {
+    Text(text).font(Style.title(20))
+}
 
 private func smallCaps(_ text: String) -> some View {
     Text(text)
@@ -210,29 +209,21 @@ private func labelled(_ label: String, _ text: String, size: CGFloat = 8.5) -> s
         .fixedSize(horizontal: false, vertical: true)
 }
 
-private func bullet(_ text: String, size: CGFloat = 9) -> some View {
-    HStack(alignment: .firstTextBaseline, spacing: 5) {
-        Text("•")
-        Text(text).fixedSize(horizontal: false, vertical: true)
-    }
-    .font(Style.body(size))
-}
-
 private func chip(_ text: String, color: Color) -> some View {
     Text(text)
-        .font(Style.body(8, weight: .semibold))
+        .font(Style.body(7.5, weight: .semibold))
         .foregroundStyle(color)
-        .padding(.horizontal, 6)
-        .padding(.vertical, 2)
-        .overlay(Rectangle().stroke(color, lineWidth: 0.8))
+        .padding(.horizontal, 5)
+        .padding(.vertical, 1.5)
+        .overlay(RoundedRectangle(cornerRadius: 1.5).stroke(color, lineWidth: 0.8))
 }
 
 private struct Card<Content: View>: View {
-    var fill: Color = .clear
+    var fill: Color = .white
     var stroke: Color = Style.line
     let content: Content
 
-    init(fill: Color = .clear, stroke: Color = Style.line, @ViewBuilder content: () -> Content) {
+    init(fill: Color = .white, stroke: Color = Style.line, @ViewBuilder content: () -> Content) {
         self.fill = fill
         self.stroke = stroke
         self.content = content()
@@ -240,10 +231,10 @@ private struct Card<Content: View>: View {
 
     var body: some View {
         content
-            .padding(9)
+            .padding(8)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .background(fill)
-            .overlay(Rectangle().stroke(stroke, lineWidth: 0.6))
+            .overlay(RoundedRectangle(cornerRadius: 2).stroke(stroke, lineWidth: 0.6))
     }
 }
 
@@ -275,351 +266,198 @@ private struct FrameImage: View {
 private struct SummaryPage: View {
     let report: AdviceReport
 
-    private var place: String {
-        report.plotName.map { "Plot \($0)" } ?? report.farmName
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("\(report.levelTitle) in \(place)")
-                    .font(Style.title(24))
-                Text(subtitle)
-                    .font(Style.body(9.5))
-                    .foregroundStyle(Style.muted)
-                    .fixedSize(horizontal: false, vertical: true)
+                Text("Field Summary").font(Style.title(28))
                 Text(report.recommendation.summary)
-                    .font(Style.body(11))
-                    .padding(.top, 2)
+                    .font(Style.body(12))
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            meetYourSoil
-            HStack(alignment: .top, spacing: 10) {
-                estimate.frame(width: 200)
-                whatChanged
+            details
+
+            if report.hasTest { microscope }
+            soilMeasurements
+        }
+    }
+
+    // MARK: Details
+
+    private var details: some View {
+        let plot = report.plotName ?? "None named"
+        return VStack(spacing: 10) {
+            HStack(alignment: .top, spacing: 0) {
+                detail("Farmer", report.farmerName)
+                detail("Plot", plot, sub: report.areaText)
+                detail("Farm", report.farmName)
             }
-            .fixedSize(horizontal: false, vertical: true)
-            if report.history.count >= 2 { perFrameBars }
-            if let frame = report.frames.first {
-                FrameImage(frame: frame, height: 120)
+            HStack(alignment: .top, spacing: 0) {
+                detail("Sampled Date", day(report.sampledAt))
+                detail("Report Date", day(report.generatedAt))
+                detail("Water state", [report.moisture, report.cropStage].compactMap { $0 }.joined(separator: " · "))
             }
-            startWith
-            if report.education == nil {
-                Text(
-                    "No soil measurements or fertilizer information have been recorded for this farm. Adding nitrogen, phosphorus, potassium, pH, organic carbon and the fertilizer type on the farm's page shows where each sits against its standard, and adds soil steps to the advice."
-                )
-                .font(Style.body(9))
-                .foregroundStyle(Style.muted)
+        }
+        .padding(.vertical, 10)
+        .padding(.horizontal, 12)
+        .background(Style.panel.opacity(0.5))
+        .overlay(alignment: .leading) { Rectangle().fill(Style.accent.opacity(0.7)).frame(width: 5) }
+        .overlay(RoundedRectangle(cornerRadius: 2).stroke(Style.accent.opacity(0.32), lineWidth: 0.6))
+    }
+
+    private func detail(_ label: String, _ value: String, sub: String? = nil) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(label).font(Style.body(11))
+            Text(value).font(Style.body(11, weight: .bold)).fixedSize(horizontal: false, vertical: true)
+            if let sub { Text(sub).font(Style.body(8)).foregroundStyle(Style.muted) }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    // MARK: Microscope
+
+    private var microscope: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            heading("Microscopic Interpretation")
+            Text(interpretation)
+                .font(Style.body(11))
                 .fixedSize(horizontal: false, vertical: true)
-                CanCannotBox()
+            HStack(alignment: .top, spacing: 18) {
+                chart.frame(width: 350)
+                presence
             }
         }
     }
 
-    private var subtitle: String {
-        var parts = ["Farmer \(report.farmerName)"]
-        if let area = report.areaText { parts.append(area) }
-        parts.append("Sampled \(day(report.sampledAt))")
-        parts.append(report.moisture)
-        if let stage = report.cropStage { parts.append(stage) }
-        if !report.recentActions.isEmpty {
-            parts.append("Done recently: " + report.recentActions.joined(separator: ", ").lowercased())
+    private var interpretation: String {
+        var parts: [String] = []
+        if let total = report.totalCount {
+            parts.append(
+                "\(total == 1 ? "1 organism was" : "\(total) organisms were") counted across \(report.framesKept) frames.")
         }
-        return parts.joined(separator: " · ")
-    }
-
-    // MARK: Organisms
-
-    private var meetYourSoil: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            smallCaps("Meet your soil")
-            if report.organisms.isEmpty {
-                Text("Nothing was counted in this sample.")
-                    .font(Style.body(10))
-                    .foregroundStyle(Style.muted)
-            } else {
-                let shown = Array(report.organisms.prefix(6))
-                let rows = stride(from: 0, to: shown.count, by: 3).map {
-                    Array(shown[$0..<min($0 + 3, shown.count)])
-                }
-                ForEach(rows.indices, id: \.self) { row in
-                    HStack(alignment: .top, spacing: 8) {
-                        ForEach(0..<3, id: \.self) { column in
-                            if column < rows[row].count {
-                                organismCard(rows[row][column])
-                            } else {
-                                Color.clear.frame(maxWidth: .infinity)
-                            }
-                        }
-                    }
-                    .fixedSize(horizontal: false, vertical: true)
-                }
-                if report.organisms.count > 6 || report.moreKinds > 0 {
-                    let extra = report.organisms.dropFirst(6).map(\.name)
-                    let names =
-                        extra.isEmpty ? "\(report.moreKinds) more kinds" : extra.joined(separator: ", ")
-                    Text("Also counted: \(names).")
-                        .font(Style.body(8.5))
-                        .foregroundStyle(Style.muted)
-                }
-                Text("\(countLine) Icons show the kind of organism, not an image from this sample.")
-                    .font(Style.body(7.5))
-                    .foregroundStyle(Style.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+        parts.append(contentsOf: report.reasons.filter { !$0.localizedCaseInsensitiveContains("counted") })
+        if !report.confidence.isEmpty { parts.append("\(report.levelTitle), with \(report.confidence.lowercased()) confidence.") }
+        if let previous = report.previousComparable {
+            parts.append(
+                "The current sample was compared with the sample of \(day(previous.date)), taken in the same water state."
+            )
         }
-    }
-
-    private var countLine: String {
-        guard let total = report.totalCount else { return "" }
-        return
-            "\(total == 1 ? "1 organism" : "\(total) organisms") counted across \(report.framesKept) frames."
-    }
-
-    private func organismCard(_ organism: AdviceReport.Organism) -> some View {
-        Card(fill: .white) {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 8) {
-                    Image(systemName: "microbe")
-                        .font(.system(size: 16))
-                        .foregroundStyle(Style.accent)
-                        .frame(width: 28, height: 28)
-                        .background(Style.panel)
-                    Text(organism.name)
-                        .font(Style.body(11, weight: .semibold))
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Text("\(organism.count) found · \(perFrame(organism.perFrame)) per frame")
-                    .font(Style.mono(8, weight: .regular))
-                    .foregroundStyle(Style.accent)
-                if let about = organism.about {
-                    Text(about)
-                        .font(Style.body(8.5))
-                        .foregroundStyle(Style.muted)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-        }
-    }
-
-    // MARK: Estimate and change
-
-    private var estimate: some View {
-        Card(fill: Style.panel, stroke: .clear) {
-            VStack(alignment: .leading, spacing: 5) {
-                smallCaps("Soil life estimate")
-                Text(report.levelTitle).font(Style.title(15))
-                Text("\(report.confidence) confidence")
-                    .font(Style.body(9, weight: .medium))
-                    .foregroundStyle(Style.amber)
-                ForEach(report.reasons, id: \.self) { bullet($0, size: 8.5) }
-                Text(report.followUp)
-                    .font(Style.body(8.5, weight: .medium))
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
+        return parts.joined(separator: " ")
     }
 
     @ViewBuilder
-    private var whatChanged: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            smallCaps("What changed since the last sample")
-            if let current = report.history.last(where: \.isThisSample),
-                let previous = report.previousComparable
-            {
-                let names = Array(current.byGroup.sorted { $0.value > $1.value }.prefix(3).map(\.key))
-                HStack(alignment: .top, spacing: 6) {
-                    ForEach(names, id: \.self) { name in
-                        changeCard(name, now: current.byGroup[name] ?? 0, before: previous.byGroup[name] ?? 0)
+    private var chart: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Soil life over time").font(Style.title(16))
+            if report.history.count >= 2 {
+                TrendChart(report: report, names: groupNames(report), height: 105)
+            }
+            Text(
+                report.hasTrend
+                    ? "Each point is one test, counted per microscope frame. A change over time is an association only: this chart does not show what caused it. Counts from flooded and drained fields are not directly comparable."
+                    : "More samples are needed before a trend can be shown. The more tests you take over time, the clearer the picture of your soil life becomes. Counts are per microscope frame, and flooded and drained fields are not directly comparable."
+            )
+            .font(Style.body(8))
+            .foregroundStyle(Style.muted)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var presence: some View {
+        let names = groupNames(report)
+        return VStack(alignment: .leading, spacing: 7) {
+            Text("Soil life presence").font(Style.title(16))
+            if report.organisms.isEmpty {
+                Text("Nothing was counted in this sample.")
+                    .font(Style.body(9))
+                    .foregroundStyle(Style.muted)
+            }
+            ForEach(names.indices, id: \.self) { index in
+                let organism = report.organisms.first { $0.name == names[index] }
+                HStack(alignment: .top, spacing: 8) {
+                    Rectangle().fill(Style.groups[index % Style.groups.count]).frame(width: 12, height: 12)
+                        .padding(.top, 1)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(names[index]).font(Style.body(11))
+                        if let organism {
+                            Text("\(organism.count) found · \(perFrame(organism.perFrame)) per frame")
+                                .font(Style.mono(7.5, weight: .regular))
+                                .foregroundStyle(Style.accent)
+                            // With many groups the descriptions would push the page past its end.
+                            if names.count <= 3, let about = organism.about {
+                                Text(about)
+                                    .font(Style.body(8))
+                                    .foregroundStyle(Style.muted)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
                     }
                 }
-                .fixedSize(horizontal: false, vertical: true)
-                Text(
-                    "Compared with the sample of \(day(previous.date)), taken in the same water state. Small changes between samples are normal."
-                )
-                .font(Style.body(7.5))
-                .foregroundStyle(Style.muted)
-                .fixedSize(horizontal: false, vertical: true)
-            } else {
-                Text(
-                    "This is the first comparable sample for this farm. The next one, taken in the same water state, will show what changed."
-                )
-                .font(Style.body(9.5))
-                .foregroundStyle(Style.muted)
-                .fixedSize(horizontal: false, vertical: true)
+            }
+            if report.moreKinds > 0 {
+                Text("Also counted: \(report.moreKinds) more kinds.")
+                    .font(Style.body(8))
+                    .foregroundStyle(Style.muted)
             }
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
     }
 
-    private func changeCard(_ name: String, now: Double, before: Double) -> some View {
-        let change = now - before
-        let word = abs(change) <= max(before * 0.1, 0.1) ? "Steady" : (change > 0 ? "Up" : "Down")
-        return Card(fill: .white) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(word)
-                    .font(Style.body(8, weight: .bold))
-                    .foregroundStyle(Style.accent)
-                Text(name).font(Style.body(9.5, weight: .semibold))
-                Text("\(perFrame(now)) per frame")
-                    .font(Style.body(8.5))
-                Text("was \(perFrame(before))")
-                    .font(Style.body(8))
-                    .foregroundStyle(Style.muted)
-            }
-        }
-    }
-
-    // MARK: Bars
-
-    private var perFrameBars: some View {
-        let points = Array(report.history.suffix(4))
-        let names = orderedGroups(points)
-        let top = max(points.map(\.perFrame).max() ?? 1, 0.1)
-        return VStack(alignment: .leading, spacing: 5) {
-            smallCaps("Soil life per frame, by test")
-            ForEach(points.indices, id: \.self) { index in
-                let point = points[index]
-                HStack(spacing: 8) {
-                    Text("\(day(point.date)) · \(point.moisture.lowercased())")
-                        .font(Style.body(8.5, weight: point.isThisSample ? .semibold : .regular))
-                        .frame(width: 118, alignment: .leading)
-                    GeometryReader { proxy in
-                        HStack(spacing: 0) {
-                            ForEach(names.indices, id: \.self) { column in
-                                let value = point.byGroup[names[column]] ?? 0
-                                Rectangle()
-                                    .fill(Style.groups[column % Style.groups.count])
-                                    .frame(width: proxy.size.width * value / top)
-                            }
-                            Spacer(minLength: 0)
-                        }
-                    }
-                    .frame(height: 10)
-                    Text(perFrame(point.perFrame))
-                        .font(Style.body(8.5, weight: .medium))
-                        .frame(width: 34, alignment: .trailing)
-                }
-            }
-            HStack(spacing: 10) {
-                ForEach(names.indices, id: \.self) { column in
-                    HStack(spacing: 3) {
-                        Rectangle().fill(Style.groups[column % Style.groups.count]).frame(width: 6, height: 6)
-                        Text(names[column]).font(Style.body(7.5))
-                    }
-                }
-            }
-            Text(
-                "Organisms counted per microscope frame. Counts from flooded and drained fields are not directly comparable."
-            )
-            .font(Style.body(7.5))
-            .foregroundStyle(Style.muted)
-        }
-    }
-
-    /// The groups across the tests, most counted first, at most five.
-    private func orderedGroups(_ points: [AdviceReport.HistoryPoint]) -> [String] {
-        var totals: [String: Double] = [:]
-        for point in points {
-            for (name, value) in point.byGroup { totals[name, default: 0] += value }
-        }
-        return totals.sorted { $0.value > $1.value }.prefix(5).map(\.key)
-    }
-
-    // MARK: Start with
-
-    @ViewBuilder
-    private var startWith: some View {
-        if let first = report.recommendation.steps.first {
-            VStack(alignment: .leading, spacing: 3) {
-                Text("Start with")
-                    .font(Style.body(8.5, weight: .bold))
-                    .foregroundStyle(Style.accent)
-                Text(first.text)
-                    .font(Style.body(11, weight: .bold))
-                    .fixedSize(horizontal: false, vertical: true)
-                if let why = first.why {
-                    Text(why).font(Style.body(9)).fixedSize(horizontal: false, vertical: true)
-                }
-                Text("All \(report.recommendation.steps.count) steps are on page 3.")
-                    .font(Style.body(8))
-                    .foregroundStyle(Style.muted)
-            }
-            .padding(10)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Style.panel)
-            .overlay(alignment: .leading) { Rectangle().fill(Style.accent).frame(width: 3) }
-        }
-    }
-}
-
-// MARK: - Page 2: soil measurements
-
-private struct MeasurementsPage: View {
-    let report: AdviceReport
+    // MARK: Soil measurements
 
     private let slots = ["Nitrogen", "Phosphorus", "Potassium", "pH", "Organic carbon"]
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text("Your soil measurements").font(Style.title(22))
-                Text(intro)
-                    .font(Style.body(9.5))
-                    .foregroundStyle(Style.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            let cells = cardViews()
-            ForEach(0..<3, id: \.self) { row in
-                HStack(alignment: .top, spacing: 8) {
-                    cells[row * 2]
-                    cells[row * 2 + 1]
-                }
+    @ViewBuilder
+    private var soilMeasurements: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            heading("Your soil measurements")
+            if report.education == nil {
+                Text(
+                    "No soil measurements or fertilizer information have been recorded for this farm. Adding nitrogen, phosphorus, potassium, pH, organic carbon and the fertilizer type on the farm's page shows where each sits against its standard, and adds soil steps to the advice."
+                )
+                .font(Style.body(10))
+                .foregroundStyle(Style.muted)
                 .fixedSize(horizontal: false, vertical: true)
-            }
-
-            CanCannotBox()
-        }
-    }
-
-    private func cardViews() -> [AnyView] {
-        var views: [AnyView] = []
-        for name in slots {
-            if let item = report.education?.items.first(where: { $0.name == name }) {
-                views.append(AnyView(measurementCard(item)))
             } else {
-                views.append(AnyView(missingCard(name)))
+                Text(intro)
+                    .font(Style.body(11))
+                    .fixedSize(horizontal: false, vertical: true)
+                let cells = slots.map { name in
+                    AnyView(
+                        report.education?.items.first(where: { $0.name == name }).map {
+                            AnyView(measurementCard($0))
+                        } ?? AnyView(missingCard(name)))
+                } + [AnyView(fertilizerCard)]
+                ForEach(0..<2, id: \.self) { row in
+                    HStack(alignment: .top, spacing: 8) {
+                        ForEach(0..<3, id: \.self) { column in cells[row * 3 + column] }
+                    }
+                    .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
-        views.append(AnyView(fertilizerCard))
-        return views
     }
 
     private var intro: String {
         var text =
             "Recorded by the field helper, separately from the microscope. Each reading is placed against provisional standards for flooded rice, not graded."
-        if let updated = report.soilUpdatedAt { text += " Measured \(day(updated))." }
+        if let updated = report.soilUpdatedAt { text += " Updated \(shortDay(updated))." }
         return text
     }
 
     private func measurementCard(_ item: AdviceEducation.Item) -> some View {
         Card {
-            VStack(alignment: .leading, spacing: 5) {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text(item.name).font(Style.body(10.5, weight: .semibold))
-                    Spacer()
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Text(item.name).font(Style.body(9, weight: .semibold))
+                    Spacer(minLength: 0)
                     chip(item.band, color: Style.color(for: item.tone))
                 }
-                Text(item.value).font(Style.mono(16))
+                Text(item.value).font(Style.mono(15))
                 RangeBar(standard: item.standard, value: item.number)
                 if let context = item.context {
-                    Text(context).font(Style.body(8)).foregroundStyle(Style.muted)
+                    Text(context).font(Style.body(7)).foregroundStyle(Style.muted)
                 }
-                labelled("What it does", item.whatItDoes)
-                labelled("This reading", item.meaning)
-                labelled("What to do", item.action ?? SoilEducation.noChange)
             }
         }
     }
@@ -627,10 +465,10 @@ private struct MeasurementsPage: View {
     private func missingCard(_ name: String) -> some View {
         Card {
             VStack(alignment: .leading, spacing: 4) {
-                Text(name).font(Style.body(10.5, weight: .semibold)).foregroundStyle(Style.muted)
-                Text("Not recorded").font(Style.title(14)).foregroundStyle(Style.muted)
-                Text("No reading was entered for this farm, so nothing is shown or assumed.")
-                    .font(Style.body(8.5))
+                Text(name).font(Style.body(9, weight: .semibold)).foregroundStyle(Style.muted)
+                Text("Not recorded").font(Style.title(13)).foregroundStyle(Style.muted)
+                Text("No reading was entered, so nothing is shown or assumed.")
+                    .font(Style.body(7.5))
                     .foregroundStyle(Style.muted)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -639,65 +477,25 @@ private struct MeasurementsPage: View {
 
     private var fertilizerCard: some View {
         Card(fill: Style.panel, stroke: .clear) {
-            VStack(alignment: .leading, spacing: 5) {
-                Text("Fertilizer").font(Style.body(10.5, weight: .semibold))
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Fertilizer").font(Style.body(9, weight: .semibold))
                 if let fertilizer = report.education?.fertilizer {
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Text(fertilizer.label).font(Style.title(14))
-                        Spacer()
-                        if let verdict = fertilizer.verdict {
-                            chip(verdict, color: Style.color(for: fertilizer.tone))
-                        }
+                    Text(fertilizer.label).font(Style.title(13))
+                    if let verdict = fertilizer.verdict {
+                        chip(verdict, color: Style.color(for: fertilizer.tone))
                     }
                     if let details = fertilizer.details {
-                        labelled("Recorded", details)
-                    }
-                    Text(fertilizer.definition)
-                        .font(Style.body(8.5))
-                        .fixedSize(horizontal: false, vertical: true)
-                    if let effect = fertilizer.effect {
-                        labelled("On paddy soil", effect)
+                        labelled("Recorded", details, size: 7.5)
                     }
                 } else {
-                    Text("Not recorded").font(Style.title(14)).foregroundStyle(Style.muted)
+                    Text("Not recorded").font(Style.title(13)).foregroundStyle(Style.muted)
                     Text("No fertilizer type was chosen. Nothing is assumed about what was used.")
-                        .font(Style.body(8.5))
+                        .font(Style.body(7.5))
                         .foregroundStyle(Style.muted)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
-    }
-}
-
-private struct CanCannotBox: View {
-    var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text("What the microscope can show")
-                    .font(Style.body(9.5, weight: .semibold))
-                    .foregroundStyle(Style.accent)
-                Text(
-                    "How many small organisms of each group live in a drop of soil water, counted per frame, and whether that changes between samples taken in the same water state."
-                )
-                .font(Style.body(8.5))
-                .fixedSize(horizontal: false, vertical: true)
-            }
-            .frame(maxWidth: .infinity, alignment: .topLeading)
-            VStack(alignment: .leading, spacing: 3) {
-                Text("What it can't show")
-                    .font(Style.body(9.5, weight: .semibold))
-                    .foregroundStyle(Style.rust)
-                Text(
-                    "Nutrient levels, pH, organic carbon, or which nematodes are pests. Those need the field helper's soil measurements or a laboratory test. It is not a laboratory soil test."
-                )
-                .font(Style.body(8.5))
-                .fixedSize(horizontal: false, vertical: true)
-            }
-            .frame(maxWidth: .infinity, alignment: .topLeading)
-        }
-        .padding(10)
-        .background(Style.panel)
     }
 }
 
@@ -761,18 +559,21 @@ private struct RangeBar: View {
     }
 }
 
-// MARK: - Page 3: what to do next
+// MARK: - Page 2: what to do next
 
 private struct NextStepsPage: View {
     let report: AdviceReport
-    let layout: AdviceReportPages.Layout
+
+    private var steps: [(number: Int, step: Recommendation.Step)] {
+        Array(report.recommendation.steps.enumerated()).map { ($0.offset + 1, $0.element) }
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("What to do next").font(Style.title(22))
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text("What to do next").font(Style.title(28))
                 Text(report.recommendation.summary)
-                    .font(Style.body(11))
+                    .font(Style.body(12))
                     .fixedSize(horizontal: false, vertical: true)
                 Text(sourceLine)
                     .font(Style.body(8.5))
@@ -780,21 +581,45 @@ private struct NextStepsPage: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            stepsTable
+            VStack(spacing: 0) {
+                HStack(alignment: .top, spacing: 8) {
+                    Text("No.").frame(width: 18, alignment: .leading)
+                    Text("Step").frame(maxWidth: .infinity, alignment: .leading)
+                    Text("Why").frame(width: 170, alignment: .leading)
+                    Text("Where it is from").frame(width: 84, alignment: .leading)
+                }
+                .font(Style.body(8, weight: .bold))
+                .foregroundStyle(Style.muted)
+                .padding(.bottom, 4)
+
+                ForEach(AdviceReportPages.When.allCases, id: \.self) { when in
+                    let rows = steps.filter { AdviceReportPages.When(timing: $0.step.timing) == when }
+                    if !rows.isEmpty {
+                        Rectangle().fill(Style.line).frame(height: 0.5)
+                        HStack {
+                            Text(when.title)
+                            Spacer()
+                            Text("\(rows.count)")
+                        }
+                        .font(Style.body(10, weight: .bold))
+                        .foregroundStyle(Style.accent)
+                        .padding(.vertical, 5)
+                        .padding(.horizontal, 5)
+                        .background(Style.panel)
+                        ForEach(rows, id: \.number) { row in
+                            Rectangle().fill(Style.line).frame(height: 0.5)
+                            stepRow(row.step, number: row.number)
+                        }
+                    }
+                }
+                Rectangle().fill(Style.line).frame(height: 0.5)
+            }
 
             if let basis = report.basis {
                 Text(basis)
                     .font(Style.body(8.5))
                     .foregroundStyle(Style.muted)
                     .fixedSize(horizontal: false, vertical: true)
-            }
-
-            if layout == .compact, report.hasTest {
-                TrendBlock(report: report, chartHeight: 0)
-            }
-            if let education = report.education { AboutBlock(education: education) }
-            if layout == .compact {
-                NotesBlock(report: report)
             }
         }
     }
@@ -805,58 +630,11 @@ private struct NextStepsPage: View {
         return text
     }
 
-    private enum Row {
-        case header(String)
-        case step(Int, Recommendation.Step)
-    }
-
-    private var rows: [Row] {
-        var rows: [Row] = []
-        var last: Recommendation.Step.Group?
-        var started = false
-        for (index, step) in report.recommendation.steps.enumerated() {
-            if !started || step.group != last {
-                if let group = step.group {
-                    let title =
-                        group == .microscope ? "From the microscope test" : "From your soil measurements"
-                    rows.append(.header(title))
-                }
-                last = step.group
-                started = true
-            }
-            rows.append(.step(index + 1, step))
-        }
-        return rows
-    }
-
-    private var stepsTable: some View {
-        VStack(spacing: 0) {
-            HStack(alignment: .top, spacing: 8) {
-                Text("No.").frame(width: 18, alignment: .leading)
-                Text("Step").frame(maxWidth: .infinity, alignment: .leading)
-                Text("Why").frame(width: 175, alignment: .leading)
-                Text("When").frame(width: 78, alignment: .leading)
-            }
-            .font(Style.body(8, weight: .bold))
-            .foregroundStyle(Style.muted)
-            .padding(.bottom, 4)
-
-            ForEach(rows.indices, id: \.self) { index in
-                Rectangle().fill(Style.line).frame(height: 0.5)
-                switch rows[index] {
-                case .header(let title):
-                    Text(title)
-                        .font(Style.body(8.5, weight: .bold))
-                        .foregroundStyle(Style.accent)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.vertical, 3)
-                        .padding(.horizontal, 4)
-                        .background(Style.panel)
-                case .step(let number, let step):
-                    stepRow(step, number: number)
-                }
-            }
-            Rectangle().fill(Style.line).frame(height: 0.5)
+    private func origin(_ step: Recommendation.Step) -> String {
+        switch step.group {
+        case .microscope: step.alsoFromSoil ? "Microscope test, and soil measurements" : "Microscope test"
+        case .soil: "Soil measurements"
+        case nil: ""
         }
     }
 
@@ -868,75 +646,81 @@ private struct NextStepsPage: View {
                 .frame(width: 18, alignment: .leading)
             VStack(alignment: .leading, spacing: 2) {
                 Text(step.text)
-                    .font(Style.body(10, weight: .semibold))
+                    .font(Style.body(11, weight: .semibold))
                     .fixedSize(horizontal: false, vertical: true)
-                if step.alsoFromSoil {
-                    Text("Also supported by your soil measurements")
-                        .font(Style.body(7.5, weight: .medium))
-                        .foregroundStyle(Style.muted)
+                if let timing = step.timing {
+                    Text(timing)
+                        .font(Style.body(8.5, weight: .medium))
+                        .foregroundStyle(Style.accent)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             Text(step.why ?? "")
-                .font(Style.body(8.5))
+                .font(Style.body(9.5))
                 .fixedSize(horizontal: false, vertical: true)
-                .frame(width: 175, alignment: .leading)
-            Text(step.timing ?? "")
-                .font(Style.body(8.5, weight: .medium))
-                .foregroundStyle(Style.accent)
+                .frame(width: 170, alignment: .leading)
+            Text(origin(step))
+                .font(Style.body(9.5, weight: .medium))
                 .fixedSize(horizontal: false, vertical: true)
-                .frame(width: 78, alignment: .leading)
+                .frame(width: 84, alignment: .leading)
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 6)
+        .padding(.horizontal, 2)
     }
 }
 
-// MARK: - Trend, education and notes
+// MARK: - Page 3: notes and limitations
 
-private struct TrendBlock: View {
+private struct NotesPage: View {
     let report: AdviceReport
-    /// 0 when there is only the message, which is all a page with no trend needs.
-    let chartHeight: CGFloat
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            smallCaps("Soil life over time")
-            if report.hasTrend {
-                TrendChart(report: report, height: max(chartHeight, 110))
-                Text(
-                    "Each point is one test. Counts from flooded and drained fields are not directly comparable, so the water state of each test is listed. A change over time is an association only: this chart does not show what caused it. Only the latest soil measurements are kept, so no soil trend can be shown."
-                )
-                .font(Style.body(8))
-                .foregroundStyle(Style.muted)
-                .fixedSize(horizontal: false, vertical: true)
-            } else {
-                (Text("More samples are needed before a trend can be shown.  ")
-                    .font(Style.body(9, weight: .medium))
-                    + Text("Only the latest soil measurements are kept, so no soil trend can be shown.")
-                    .font(Style.body(8)).foregroundColor(Style.muted))
-                    .fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: 22) {
+            Text("Notes and limitations").font(Style.title(28))
+            if !report.frames.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    smallCaps("From the microscope")
+                    HStack(alignment: .top, spacing: 10) {
+                        ForEach(report.frames.indices, id: \.self) { index in
+                            FrameImage(frame: report.frames[index], height: 170)
+                        }
+                    }
+                }
             }
+            if report.hasTest { CanCannotBox() }
+            NotesBlock(report: report)
         }
     }
 }
 
-private struct AboutBlock: View {
-    let education: AdviceEducation
-
+private struct CanCannotBox: View {
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            smallCaps("About your soil measurements")
-            ForEach(education.items, id: \.name) { item in
-                (Text("\(item.name) · \(item.band).  ").font(Style.body(8.5, weight: .semibold))
-                    + Text(item.meaning).font(Style.body(8.5)))
-                    .fixedSize(horizontal: false, vertical: true)
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("What the microscope can show")
+                    .font(Style.body(9.5, weight: .semibold))
+                    .foregroundStyle(Style.accent)
+                Text(
+                    "How many small organisms of each group live in a drop of soil water, counted per frame, and whether that changes between samples taken in the same water state."
+                )
+                .font(Style.body(10))
+                .fixedSize(horizontal: false, vertical: true)
             }
-            if let fertilizer = education.fertilizer {
-                (Text("Fertilizer · \(fertilizer.label).  ").font(Style.body(8.5, weight: .semibold))
-                    + Text(fertilizer.education ?? fertilizer.definition).font(Style.body(8.5)))
-                    .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            VStack(alignment: .leading, spacing: 3) {
+                Text("What it can't show")
+                    .font(Style.body(9.5, weight: .semibold))
+                    .foregroundStyle(Style.rust)
+                Text(
+                    "Nutrient levels, pH, organic carbon, or which nematodes are pests. Those need the field helper's soil measurements or a laboratory test. It is not a laboratory soil test."
+                )
+                .font(Style.body(10))
+                .fixedSize(horizontal: false, vertical: true)
             }
+            .frame(maxWidth: .infinity, alignment: .topLeading)
         }
+        .padding(10)
+        .background(Style.panel)
     }
 }
 
@@ -962,102 +746,73 @@ private struct NotesBlock: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            smallCaps("Notes and limitations")
-            HStack(alignment: .top, spacing: 14) {
-                VStack(alignment: .leading, spacing: 5) {
-                    note(
-                        "Standards",
-                        "A provisional first draft for flooded rice paddies. No agronomist has reviewed it yet."
-                    )
-                    note("pH in flooded rice", SoilEducation.phCaveat + " " + phLine)
-                    note(
-                        "Using this report",
-                        "For monitoring and learning, not a diagnosis. Ask an extension officer before making a major change."
-                    )
-                }
-                .frame(maxWidth: .infinity, alignment: .topLeading)
-                VStack(alignment: .leading, spacing: 5) {
-                    note(
-                        "Measurements",
-                        "Probe and laboratory readings can differ, and a reading depends on where, how deep and when the soil was sampled. Only the latest measurements are kept."
-                    )
-                    note(
-                        "Fertilizer",
-                        "The type is what the field helper chose from a list. “No fertilizer recorded” does not mean none was used, and “Not sure” is never guessed at. No step gives a product, an amount or a rate."
-                    )
-                    note("How the advice was made", madeLine)
-                }
-                .frame(maxWidth: .infinity, alignment: .topLeading)
-            }
+        VStack(alignment: .leading, spacing: 13) {
+            note(
+                "Standards",
+                "A provisional first draft for flooded rice paddies. No agronomist has reviewed it yet.")
+            note("pH in flooded rice", SoilEducation.phCaveat + " " + phLine)
+            note(
+                "Measurements",
+                "Probe and laboratory readings can differ, and a reading depends on where, how deep and when the soil was sampled. Only the latest measurements are kept, so no soil trend can be shown."
+            )
+            note(
+                "Fertilizer",
+                "The type is what the field helper chose from a list. “No fertilizer recorded” does not mean none was used, and “Not sure” is never guessed at. No step gives a product, an amount or a rate."
+            )
+            note(
+                "Using this report",
+                "For monitoring and learning, not a diagnosis. Ask an extension officer before making a major change."
+            )
+            note("How the advice was made", madeLine)
         }
     }
 
     private func note(_ title: String, _ text: String) -> some View {
         VStack(alignment: .leading, spacing: 1) {
-            Text(title).font(Style.body(8, weight: .semibold)).foregroundStyle(Style.accent)
-            Text(text).font(Style.body(8)).fixedSize(horizontal: false, vertical: true)
+            Text(title).font(Style.body(10.5, weight: .semibold)).foregroundStyle(Style.accent)
+            Text(text).font(Style.body(10)).fixedSize(horizontal: false, vertical: true)
         }
     }
 }
 
 private struct TrendChart: View {
     let report: AdviceReport
+    let names: [String]
     let height: CGFloat
 
-    private var names: [String] {
-        var totals: [String: Double] = [:]
-        for point in report.history {
-            for (name, value) in point.byGroup { totals[name, default: 0] += value }
-        }
-        return totals.sorted { $0.value > $1.value }.prefix(3).map(\.key)
-    }
-
     var body: some View {
-        let shown = names
-        VStack(alignment: .leading, spacing: 4) {
-            Chart {
-                ForEach(shown, id: \.self) { name in
-                    ForEach(report.history.indices, id: \.self) { index in
-                        let point = report.history[index]
-                        let value = point.byGroup[name] ?? 0
-                        LineMark(
-                            x: .value("Sample date", point.date),
-                            y: .value("Organisms per frame", value),
-                            series: .value("Group", name)
-                        )
-                        .foregroundStyle(by: .value("Group", name))
-                        PointMark(
-                            x: .value("Sample date", point.date),
-                            y: .value("Organisms per frame", value)
-                        )
-                        .foregroundStyle(by: .value("Group", name))
-                    }
+        Chart {
+            ForEach(names, id: \.self) { name in
+                ForEach(report.history.indices, id: \.self) { index in
+                    let point = report.history[index]
+                    let value = point.byGroup[name] ?? 0
+                    LineMark(
+                        x: .value("Sample date", point.date),
+                        y: .value("Organisms per frame", value),
+                        series: .value("Group", name)
+                    )
+                    .foregroundStyle(by: .value("Group", name))
+                    PointMark(
+                        x: .value("Sample date", point.date),
+                        y: .value("Organisms per frame", value)
+                    )
+                    .foregroundStyle(by: .value("Group", name))
                 }
             }
-            .chartForegroundStyleScale(
-                domain: shown, range: Array(Style.groups.prefix(max(shown.count, 1)))
-            )
-            .chartXScale(range: .plotDimension(padding: 22))
-            .chartXAxisLabel("Sample date")
-            .chartYAxisLabel("Organisms per frame")
-            .chartXAxis {
-                AxisMarks(values: report.history.map(\.date)) { _ in
-                    AxisGridLine()
-                    AxisValueLabel(format: .dateTime.day().month(.abbreviated))
-                }
-            }
-            .chartLegend(position: .bottom)
-            .frame(height: height)
-
-            Text(
-                report.history.map { "\(day($0.date)): \($0.moisture.lowercased())" }
-                    .joined(separator: " · ")
-            )
-            .font(Style.body(7.5))
-            .foregroundStyle(Style.muted)
-            .fixedSize(horizontal: false, vertical: true)
         }
+        .chartForegroundStyleScale(
+            domain: names, range: Array(Style.groups.prefix(max(names.count, 1)))
+        )
+        .chartXScale(range: .plotDimension(padding: 22))
+        .chartYAxisLabel("Organisms per frame")
+        .chartXAxis {
+            AxisMarks(values: report.history.map(\.date)) { _ in
+                AxisGridLine()
+                AxisValueLabel(format: .dateTime.day().month(.abbreviated))
+            }
+        }
+        .chartLegend(.hidden)
+        .frame(height: height)
     }
 }
 

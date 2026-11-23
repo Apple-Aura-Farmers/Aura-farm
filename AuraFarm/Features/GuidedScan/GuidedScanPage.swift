@@ -11,6 +11,8 @@ struct GuidedScanPage: View {
     @Binding var details: SampleDetails
     /// Called with the saved sweep's folder name when the run is saved; the page then closes.
     var onSaved: (String) -> Void = { _ in }
+    /// Called when the run could not be saved; the page then closes.
+    var onFailed: () -> Void = {}
 
     @Environment(\.dismiss) private var dismiss
     @State private var model = ScanEngine()
@@ -23,7 +25,6 @@ struct GuidedScanPage: View {
     @State private var endsAfterColumn = false
     /// Draws the model's detection boxes over the picture; this scan only, never stored.
     @State private var showsDetections = false
-    @State private var saveProblem: String?
     @State private var haptics = HelperHapticPlayer()
     @Environment(\.scenePhase) private var scenePhase
     // How the slide moves in this test (section A to F of the flow); fresh for every page.
@@ -105,13 +106,6 @@ struct GuidedScanPage: View {
                 // calibration too; it never starts by itself.
                 guard phase == .background, let driver else { return }
                 if hasStarted || driver.client.status == .connected { driver.pause() }
-            }
-            .alert(
-                "The scan could not be saved", isPresented: .constant(saveProblem != nil)
-            ) {
-                Button("OK") { saveProblem = nil }
-            } message: {
-                Text(saveProblem ?? "")
             }
     }
 
@@ -641,7 +635,9 @@ struct GuidedScanPage: View {
                 dismiss()
             }
         } catch {
-            saveProblem = error.localizedDescription
+            model.stop()
+            onFailed()
+            dismiss()
         }
     }
 }
