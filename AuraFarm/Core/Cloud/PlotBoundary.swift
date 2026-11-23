@@ -21,6 +21,11 @@ enum PlotBoundary {
         return "SRID=4326;POLYGON((\(points.joined(separator: ", "))))"
     }
 
+    /// One place in the same text, for a column holding a point rather than a shape.
+    static func wellKnownText(for point: GeoPoint) -> String {
+        "SRID=4326;POINT(\(number(point.longitude)) \(number(point.latitude)))"
+    }
+
     /// Fixed decimals, never exponent form, and never a comma for the decimal point: the
     /// text is parsed by Postgres, not read by anyone here. Eight places is about a
     /// millimetre.

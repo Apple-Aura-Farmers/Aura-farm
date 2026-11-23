@@ -31,7 +31,8 @@ struct PublishResultButton: View {
                     guard let uploader = SoilResultUploader() else {
                         throw SoilResultUploader.Failure.notConfigured
                     }
-                    try await uploader.upload(report, pictures: pictures)
+                    try await uploader.upload(
+                        report, pictures: pictures, from: sweep.manifest?.details)
                 }
             }
         }

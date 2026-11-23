@@ -95,6 +95,40 @@ final class SoilResultUploaderTests: XCTestCase {
         )
     }
 
+    func testTheRegisteredSamplePlaceGoesUpAsGeometryAndNotAsTheLineTheHelperSees() throws {
+        // location is a PostGIS column: the line a sample shows comes back as
+        // "parse error, invalid geometry".
+        let row = SampleRow(
+            code: "Pak Wayan", plotID: UUID(), place: "-8.54000, 115.12000",
+            collectedAt: Date(timeIntervalSince1970: 1_793_000_000))
+
+        // Longitude first, the way well-known text puts it.
+        XCTAssertEqual(row.location, "SRID=4326;POINT(115.12000000 -8.54000000)")
+    }
+
+    func testAPlotWithNoMiddleRegistersTheSampleWithoutAPlace() throws {
+        // A plot with no corners leaves the line empty, and a sample still has to go up.
+        XCTAssertNil(
+            SampleRow(code: "Pak Wayan", plotID: UUID(), place: "", collectedAt: .now).location)
+        XCTAssertNil(
+            SampleRow(code: "Pak Wayan", plotID: UUID(), place: nil, collectedAt: .now).location)
+    }
+
+    func testTheRegisteredSampleIsNamedTheWayThePostgresTableIs() throws {
+        let row = SampleRow(
+            code: "Pak Wayan", plotID: UUID(), place: "-8.54000, 115.12000",
+            collectedAt: Date(timeIntervalSince1970: 1_793_000_000))
+
+        let json =
+            try JSONSerialization.jsonObject(with: JSONEncoder().encode(row)) as? [String: Any]
+
+        // collected_by is left out on purpose: the column defaults to whoever is signed in.
+        XCTAssertEqual(
+            Set(json?.keys ?? [:].keys),
+            ["id", "sample_code", "plot_id", "location", "collected_at"]
+        )
+    }
+
     func testTheRowRepeatsWhatTheManagerFiltersOnAndLeavesTheRestInTheReport() throws {
         let row = ResultRow(report: report(), sampleID: UUID())
 

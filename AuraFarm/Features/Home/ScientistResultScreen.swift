@@ -70,7 +70,9 @@ struct ScientistResultScreen: View {
         .toolbarVisibility(.hidden, for: .navigationBar)
         .toolbarVisibility(.hidden, for: .tabBar)
         .overlay(alignment: .topLeading) {
-            Button { dismiss() } label: {
+            Button {
+                dismiss()
+            } label: {
                 Image(systemName: "chevron.backward").font(.title3).frame(width: 36, height: 36)
             }
             .buttonStyle(.glass)
@@ -147,7 +149,9 @@ struct ScientistResultScreen: View {
             .padding(.top, 36)
             .accessibilityElement(children: .combine)
 
-            Button { showsWhy = true } label: {
+            Button {
+                showsWhy = true
+            } label: {
                 Label("\(estimate.confidence.label) confidence", systemImage: "info.circle")
                     .labelStyle(.titleAndIcon).font(.footnote).foregroundStyle(.secondary)
             }
@@ -176,7 +180,9 @@ struct ScientistResultScreen: View {
 
     private func groupCard(_ group: SoilLifeGroup) -> some View {
         let isOn = selected == group
-        return Button { withAnimation(.snappy) { selected = group } } label: {
+        return Button {
+            withAnimation(.snappy) { selected = group }
+        } label: {
             VStack(spacing: 0) {
                 Group {
                     if let name = group.imageName {
@@ -247,7 +253,9 @@ struct ScientistResultScreen: View {
         VStack(spacing: 12) {
             switch upload {
             case .ready, .failed:
-                Button { Task { await send() } } label: {
+                Button {
+                    Task { await send() }
+                } label: {
                     Label(
                         upload == .ready ? "Upload" : "Try again",
                         systemImage: "icloud.and.arrow.up"
@@ -295,7 +303,9 @@ struct ScientistResultScreen: View {
             guard let uploader = SoilResultUploader() else {
                 throw SoilResultUploader.Failure.notConfigured
             }
-            try await uploader.upload(report, pictures: found) { picturesSent = $0 }
+            try await uploader.upload(report, pictures: found, from: sweep.manifest?.details) {
+                picturesSent = $0
+            }
             upload = .sent
         } catch {
             upload = .failed(error.localizedDescription)
