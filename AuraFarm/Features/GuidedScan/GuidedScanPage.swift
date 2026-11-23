@@ -390,7 +390,8 @@ struct GuidedScanPage: View {
     private func calibrationCard(_ driver: AutoStageDriver) -> some View {
         StageCalibrationCard(
             status: driver.status, isPaused: driver.phase == .paused,
-            onRetry: { driver.recalibrate() }, onResume: { driver.resume() })
+            onRetry: { driver.recalibrate() }, onResume: { driver.resume() },
+            onFocused: { driver.focusIsSharp() })
     }
 
     @ViewBuilder
@@ -533,6 +534,7 @@ struct GuidedScanPage: View {
                 ("End column here", { driver.endColumnHere() }),
             ]
         case .calibrationFailed: return []
+        case .focusFirst: return [("It's sharp. Calibrate", { driver.focusIsSharp() })]
         }
     }
 
@@ -628,7 +630,8 @@ struct GuidedScanPage: View {
         do {
             let video = model.summaryItems.first { $0.pathExtension == "mov" }
             let name = try GuidedScanSaver.save(
-                details: details, record: record, movementCSV: csv, lensVideo: video)
+                details: details, record: record, movementCSV: csv, lensVideo: video,
+                organisms: model.summaryOrganisms)
             model.stop()
             closeStage {
                 onSaved(name)
@@ -636,8 +639,10 @@ struct GuidedScanPage: View {
             }
         } catch {
             model.stop()
-            onFailed()
-            dismiss()
+            closeStage {
+                onFailed()
+                dismiss()
+            }
         }
     }
 }

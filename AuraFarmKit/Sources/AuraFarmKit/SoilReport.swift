@@ -31,6 +31,9 @@ public struct SoilReport: Codable, Equatable, Identifiable, Sendable {
     public var organisms: [OrganismCount]
     /// The sweep's frames joined into one picture of the slide, as JPEG, when there is one.
     public var panoramaJPEG: Data?
+    /// A picture of each organism the sweep counted, by where it is kept; the pictures themselves
+    /// are not in the report. nil in reports from before they were taken.
+    public var organismImages: [OrganismImage]?
 
     public init(
         id: UUID,
@@ -38,7 +41,8 @@ public struct SoilReport: Codable, Equatable, Identifiable, Sendable {
         sample: Sample,
         capture: Capture,
         organisms: [OrganismCount],
-        panoramaJPEG: Data? = nil
+        panoramaJPEG: Data? = nil,
+        organismImages: [OrganismImage]? = nil
     ) {
         self.schemaVersion = Self.currentSchemaVersion
         self.id = id
@@ -47,6 +51,7 @@ public struct SoilReport: Codable, Equatable, Identifiable, Sendable {
         self.capture = capture
         self.organisms = organisms
         self.panoramaJPEG = panoramaJPEG
+        self.organismImages = organismImages
     }
 
     /// Every organism counted, across all groups.
@@ -135,6 +140,20 @@ extension SoilReport {
             self.stoppedEarly = stoppedEarly
             self.detectorModel = detectorModel
             self.appVersion = appVersion
+        }
+    }
+
+    /// The picture of one organism the sweep counted.
+    public struct OrganismImage: Codable, Equatable, Hashable, Sendable {
+        /// The detector's class label, for example `Nematode`.
+        public var taxon: String
+        /// Where the JPEG is in the records' `organism-images` storage:
+        /// `<report id, lowercase>/organism-001.jpg`.
+        public var path: String
+
+        public init(taxon: String, path: String) {
+            self.taxon = taxon
+            self.path = path
         }
     }
 

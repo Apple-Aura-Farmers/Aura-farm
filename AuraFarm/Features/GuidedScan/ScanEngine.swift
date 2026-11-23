@@ -54,6 +54,8 @@ class ScanEngine: NSObject {
     /// What the run came to, once the route finishes; with the files to share.
     private(set) var runSummary: GuideRunRecord?
     private(set) var summaryItems: [URL] = []
+    /// The run's folder of organism pictures; nil when it saved none.
+    private(set) var summaryOrganisms: URL?
     /// "Video saved (2.3 GB available)" or why it stopped; empty when nothing was recorded. Main queue.
     var lensVideoNote = ""
     /// Counts the haptic for "End now" and "End after this column".
@@ -883,6 +885,7 @@ class ScanEngine: NSObject {
             self?.countInfo = LiveCountInfo()
             self?.runSummary = nil
             self?.summaryItems = []
+            self?.summaryOrganisms = nil
             self?.runMarked = false
         }
     }
@@ -1386,7 +1389,11 @@ class ScanEngine: NSObject {
     ) {
         var items: [URL] = []
         if let json = Self.writeRun(record, stamp: stamp) { items.append(json) }
-        if let pictures = Self.organismsExport(stamp: stamp) { items.append(pictures) }
+        var organisms: URL?
+        if let pictures = Self.organismsExport(stamp: stamp) {
+            items.append(pictures)
+            organisms = OrganismCropWriter.folder(stamp: stamp)
+        }
         if logging, var last = rows.last {
             // Video events still waiting (the finished one lands here) get a row each.
             for event in lensEvents {
@@ -1411,8 +1418,9 @@ class ScanEngine: NSObject {
                 items.append(png)
             }
             self?.lensVideoNote = note
-            self?.runSummary = record
+            self?.summaryOrganisms = organisms
             self?.summaryItems = items
+            self?.runSummary = record
             self?.runMarked = false
         }
     }
