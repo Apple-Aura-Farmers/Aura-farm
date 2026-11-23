@@ -68,7 +68,7 @@ struct HelperCardView: View {
         case .question: "questionmark.circle.fill"
         case .stop: "hand.raised.fill"
         case .tooHot: "thermometer.high"
-        case .turn, .backALittle: nil
+        case .turn, .backALittle, .backToLine: nil
         }
     }
 

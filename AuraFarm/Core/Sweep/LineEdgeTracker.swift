@@ -68,6 +68,14 @@ struct LineEdgeThresholds {
     var knownEdgeFields = 0.5
     /// "Not an edge. Keep going" stays this long after the helper says so.
     var notAnEdgeSeconds = 2.0
+    /// "Edge just behind" episodes within this of a recorded location on the leg count at that
+    /// location. PLACEHOLDER; source: the 12.12 to 12.43 spread of one edge in the 20 Nov 2026
+    /// device run.
+    var sameLineFields = 0.4
+    /// Episodes at one location after which the helper is asked about it instead of being sent
+    /// back again. PLACEHOLDER; source: the 20 Nov 2026 run, about 6 episodes at one edge that
+    /// never confirmed.
+    var repeatEpisodes = 2
 }
 
 /// An edge the route has met, in guide coordinates, so the same line is not found twice: the
@@ -173,6 +181,8 @@ struct LineEdgeTracker {
     private(set) var accept: LineAccept?
     /// "line_attached" or "line_confirmed" on the reading that reached it, else empty.
     private(set) var event = ""
+    /// A usable line was accepted on the latest `update` (not carried over from before).
+    private(set) var seenNow = false
 
     private var recent: [Bool] = []
     private var lastSeen: Double?
@@ -233,6 +243,7 @@ struct LineEdgeTracker {
     @discardableResult
     mutating func update(_ reading: GuideReading) -> LineEdgeState {
         event = ""
+        seenNow = false
         let now = reading.seconds
         let step = lastSeconds.map { min(max(now - $0, 0), 0.5) } ?? 0
         lastSeconds = now
@@ -243,6 +254,7 @@ struct LineEdgeTracker {
             let rule = acceptRule(line, areaAheadShare: reading.areaAheadShare)
         {
             lastSeen = now
+            seenNow = true
             accept = rule
             offsetFields = line.offsetFields
             angleDegrees = line.angleDegrees

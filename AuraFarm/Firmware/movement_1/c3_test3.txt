@@ -1,0 +1,224 @@
+// Phase 1 / Test 3 (C3 re-run): three servos, one at a time (X GPIO3, Y GPIO4, Z GPIO5).
+// Board: ESP32-C3 Super Mini, Arduino-ESP32 core 3.x, USB CDC On Boot: Enabled.
+// C3 runs from the Mac's USB. Servos run from the HW-131 rail (separate power, shared ground).
+// PWM: built-in LEDC API (ledcAttach / ledcWrite / ledcDetach). No Bluetooth, no Wi-Fi.
+// Only one servo ever has a signal: each move finishes, settles, switches off and rests
+// before the next move (on any servo) starts.
+
+#include <Preferences.h>
+#include "esp_system.h"
+
+// ---------------- Settings ----------------
+const int  NUM_SERVOS = 3;
+const int  SERVO_PINS[NUM_SERVOS]  = {3, 4, 5};
+const char SERVO_NAMES[NUM_SERVOS] = {'X', 'Y', 'Z'};
+
+const int MIN_ANGLE    = 30;    // sweep range (deg)
+const int MAX_ANGLE    = 150;
+const int START_ANGLE  = 90;    // first position after boot
+const int STEP_DEG     = 2;     // move 2 deg ...
+const int STEP_MS      = 20;    // ... every 20 ms
+const int SETTLE_MS    = 300;   // hold after reaching target, before signal off
+const int GAP_MS       = 500;   // rest with signal off after every move (also between servos)
+const int BOOT_WAIT_MS = 500;   // pause after boot before first attach
+const int CYCLES       = 200;   // 1 cycle = X, then Y, then Z, each MIN->MAX->MIN
+
+const int PULSE_MIN_US = 500;   // pulse width at 0 deg (typical SG90)
+const int PULSE_MAX_US = 2400;  // pulse width at 180 deg
+
+const int PWM_FREQ_HZ = 50;
+const int PWM_BITS    = 14;
+
+const unsigned long SERIAL_WAIT_MS = 5000;  // wait this long for Serial Monitor at boot
+const int LOG_SIZE = 10;                    // boots kept in the saved boot log
+
+// ---------------- State ----------------
+int  currentAngle[NUM_SERVOS] = {START_ANGLE, START_ANGLE, START_ANGLE};  // last commanded angle per servo
+int  cycle = 0;
+bool done = false;
+int  thisReason = 0;
+
+struct BootLog {
+  uint32_t boots;
+  uint8_t  reason[LOG_SIZE];
+  uint16_t cycle[LOG_SIZE];
+};
+BootLog bootLog;
+Preferences prefs;
+
+// ---------------- Reset reason ----------------
+const char* resetName(int r) {
+  switch (r) {
+    case ESP_RST_POWERON:   return "ESP_RST_POWERON";
+    case ESP_RST_BROWNOUT:  return "ESP_RST_BROWNOUT";
+    case ESP_RST_EXT:       return "ESP_RST_EXT";
+    case ESP_RST_SW:        return "ESP_RST_SW";
+    case ESP_RST_PANIC:     return "ESP_RST_PANIC";
+    case ESP_RST_INT_WDT:   return "ESP_RST_INT_WDT";
+    case ESP_RST_TASK_WDT:  return "ESP_RST_TASK_WDT";
+    case ESP_RST_WDT:       return "ESP_RST_WDT";
+    case ESP_RST_DEEPSLEEP: return "ESP_RST_DEEPSLEEP";
+    case ESP_RST_SDIO:      return "ESP_RST_SDIO";
+    case ESP_RST_USB:       return "ESP_RST_USB";
+    case ESP_RST_JTAG:      return "ESP_RST_JTAG";
+    case ESP_RST_UNKNOWN:   return "ESP_RST_UNKNOWN";
+    default:                return "OTHER";
+  }
+}
+
+// ---------------- Helpers ----------------
+void stamp() {
+  Serial.printf("[%9.3f s] ", millis() / 1000.0);
+}
+
+uint32_t angleToDuty(int angle) {
+  uint32_t us = PULSE_MIN_US + (uint32_t)(PULSE_MAX_US - PULSE_MIN_US) * angle / 180;
+  uint32_t periodUs = 1000000UL / PWM_FREQ_HZ;
+  return us * ((1UL << PWM_BITS) - 1) / periodUs;
+}
+
+void printServo(int i) {
+  Serial.printf("servo %c (GPIO%d)", SERVO_NAMES[i], SERVO_PINS[i]);
+}
+
+// ---------------- Saved boot log (flash) ----------------
+void saveLog() {
+  prefs.putBytes("log", &bootLog, sizeof(bootLog));
+}
+
+void printLog() {
+  Serial.println("---- saved boot log (oldest first) ----");
+  uint32_t first = bootLog.boots > LOG_SIZE ? bootLog.boots - LOG_SIZE + 1 : 1;
+  for (uint32_t b = first; b <= bootLog.boots; b++) {
+    int i = b % LOG_SIZE;
+    Serial.printf("boot %lu | reset reason: %s | reached cycle %u/%d\n",
+                  (unsigned long)b, resetName(bootLog.reason[i]), bootLog.cycle[i], CYCLES);
+  }
+  Serial.println("(send any key to reprint, 'c' to clear)");
+  Serial.println("---------------------------------------");
+}
+
+// Called between cycles: any key reprints the boot log, 'c' clears it first.
+void checkSerial() {
+  bool any = false, clear = false;
+  while (Serial.available()) {
+    char c = Serial.read();
+    if (c == 'c' || c == 'C') clear = true;
+    if (c != '\n' && c != '\r') any = true;
+  }
+  if (!any) return;
+  if (clear) {
+    memset(&bootLog, 0, sizeof(bootLog));
+    bootLog.boots = 1;  // keep only the current boot
+    bootLog.reason[1] = thisReason;
+    bootLog.cycle[1] = cycle;
+    saveLog();
+    Serial.println("Boot log cleared.");
+  }
+  printLog();
+}
+
+// ---------------- Servo ----------------
+// Start the signal at this servo's last commanded angle so it does not twitch.
+void servoOn(int i) {
+  if (!ledcAttach(SERVO_PINS[i], PWM_FREQ_HZ, PWM_BITS)) {
+    Serial.println("ERROR: ledcAttach failed");
+  }
+  ledcWrite(SERVO_PINS[i], angleToDuty(currentAngle[i]));
+}
+
+// Stop the signal and hold the line low (no pulses = servo idle).
+void servoOff(int i) {
+  ledcDetach(SERVO_PINS[i]);
+  pinMode(SERVO_PINS[i], OUTPUT);
+  digitalWrite(SERVO_PINS[i], LOW);
+}
+
+void logMove(int i, const char* phase, int target) {
+  stamp();
+  Serial.printf("T3 cycle %d/%d | ", cycle, CYCLES);
+  printServo(i);
+  Serial.printf(" | -> %d deg | %s\n", target, phase);
+}
+
+// One full move of one servo: signal on, small steps to target, settle, signal off, rest.
+void moveTo(int i, int target) {
+  logMove(i, "start", target);
+  servoOn(i);
+  while (currentAngle[i] != target) {
+    delay(STEP_MS);
+    currentAngle[i] += constrain(target - currentAngle[i], -STEP_DEG, STEP_DEG);
+    ledcWrite(SERVO_PINS[i], angleToDuty(currentAngle[i]));
+  }
+  delay(SETTLE_MS);
+  servoOff(i);
+  logMove(i, "end", target);
+  delay(GAP_MS);
+}
+
+// ---------------- Main ----------------
+void setup() {
+  for (int i = 0; i < NUM_SERVOS; i++) {
+    pinMode(SERVO_PINS[i], OUTPUT);
+    digitalWrite(SERVO_PINS[i], LOW);
+  }
+
+  Serial.begin(115200);
+  unsigned long t0 = millis();
+  while (!Serial && millis() - t0 < SERIAL_WAIT_MS) delay(10);
+
+  thisReason = esp_reset_reason();
+
+  // Record this boot in the saved boot log.
+  prefs.begin("c3t3log", false);
+  if (prefs.getBytes("log", &bootLog, sizeof(bootLog)) != sizeof(bootLog)) {
+    memset(&bootLog, 0, sizeof(bootLog));
+  }
+  bootLog.boots++;
+  bootLog.reason[bootLog.boots % LOG_SIZE] = thisReason;
+  bootLog.cycle[bootLog.boots % LOG_SIZE] = 0;
+  saveLog();
+
+  Serial.println();
+  Serial.println("=== Phase 1 / Test 3: three servos, one at a time (ESP32-C3 Super Mini) ===");
+  Serial.printf("Reset reason: %s (%d)\n", resetName(thisReason), thisReason);
+  Serial.printf("Servos X (GPIO3), Y (GPIO4), Z (GPIO5) | range %d-%d deg | step %d deg / %d ms | settle %d ms | gap %d ms | cycles %d\n",
+                MIN_ANGLE, MAX_ANGLE, STEP_DEG, STEP_MS, SETTLE_MS, GAP_MS, CYCLES);
+  printLog();
+
+  // Attach the servos one at a time, GAP_MS apart.
+  delay(BOOT_WAIT_MS);
+  for (int i = 0; i < NUM_SERVOS; i++) {
+    stamp();
+    Serial.print("startup | ");
+    printServo(i);
+    Serial.printf(" | attach at %d deg (one direct jump, position unknown)\n", START_ANGLE);
+    servoOn(i);
+    delay(SETTLE_MS);
+    servoOff(i);
+    delay(GAP_MS);
+  }
+}
+
+void loop() {
+  checkSerial();
+  if (done) {
+    delay(100);
+    return;
+  }
+
+  cycle++;
+  for (int i = 0; i < NUM_SERVOS; i++) {
+    moveTo(i, MAX_ANGLE);
+    moveTo(i, MIN_ANGLE);
+  }
+
+  bootLog.cycle[bootLog.boots % LOG_SIZE] = cycle;
+  saveLog();
+
+  if (cycle >= CYCLES) {
+    done = true;
+    stamp();
+    Serial.printf("TEST 3 DONE: %d cycles, no restart during this boot\n", CYCLES);
+  }
+}

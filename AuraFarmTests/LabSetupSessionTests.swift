@@ -179,6 +179,50 @@ final class LabSetupSessionTests: XCTestCase {
         XCTAssertEqual(session.info.stageAxes, .identity)
     }
 
+    func testCompleteStageAtTheStageStepMovesToDoneWithThoseAxes() throws {
+        let pipeline = makePipeline()
+        let session = LabSetupSession(skippingAlignAndFocus: true)
+        let frame = discFrame()
+        var seconds = 0.0
+        for _ in 0..<31 {
+            seconds += 0.1
+            _ = session.process(frame, seconds: seconds, pipeline: pipeline, measureAgreement: false)
+        }
+        pipeline.confirmField()
+        seconds += 0.1
+        _ = session.process(frame, seconds: seconds, pipeline: pipeline, measureAgreement: false)
+        XCTAssertEqual(session.step, .stage)
+        let axes = try XCTUnwrap(
+            StageAxes(xDirection: CGPoint(x: 0.98, y: 0.2), yDirection: CGPoint(x: -0.05, y: 1)))
+        session.completeStage(with: axes)
+        XCTAssertEqual(session.step, .done)
+        XCTAssertEqual(session.stageAxes, axes)
+        XCTAssertEqual(session.info.stageAxes, axes)
+    }
+
+    func testHeldSetupDoesNotAdvanceAndIgnoresConfirmsAndReleasedSetupDoes() {
+        let pipeline = makePipeline()
+        let session = LabSetupSession(skippingAlignAndFocus: true)
+        let frame = discFrame()
+        var seconds = 0.0
+        session.isHeld = true
+        for _ in 0..<31 {
+            seconds += 0.1
+            _ = session.process(frame, seconds: seconds, pipeline: pipeline, measureAgreement: false)
+        }
+        pipeline.confirmField()
+        for _ in 0..<5 {
+            seconds += 0.1
+            _ = session.process(frame, seconds: seconds, pipeline: pipeline, measureAgreement: false)
+        }
+        XCTAssertEqual(session.step, .field, "held: the confirmed field does not move on")
+        session.confirmStep()
+        session.isHeld = false
+        seconds += 0.1
+        _ = session.process(frame, seconds: seconds, pipeline: pipeline, measureAgreement: false)
+        XCTAssertEqual(session.step, .stage, "released: it advances as before (focus is skipped)")
+    }
+
     /// Phase 2l: redoing the field after the stage was calibrated (or skipped) forgets the
     /// straightening, so the new stage step measures in the unstraightened axes. The display's
     /// straightening is `setupInfo.stageAxes ?? .identity`, which is nil here until the new
@@ -241,7 +285,7 @@ final class LabSetupSessionTests: XCTestCase {
         time = feed(darkFrame(), for: 1.0, from: time, session: session, pipeline: pipeline)
         XCTAssertEqual(session.step, .focus, "a 1 s dip does not go back")
         time = feed(discFrame(), for: 0.5, from: time, session: session, pipeline: pipeline)
-        time = feed(darkFrame(), for: 2.2, from: time, session: session, pipeline: pipeline)
+        time = feed(darkFrame(), for: 3.2, from: time, session: session, pipeline: pipeline)
         XCTAssertEqual(session.step, .align)
         XCTAssertEqual(session.info.resumeStep, .field)
         time = feed(discFrame(), for: 2.0, from: time, session: session, pipeline: pipeline)
@@ -258,7 +302,8 @@ final class LabSetupSessionTests: XCTestCase {
         let pipeline = makePipeline()
         let session = LabSetupSession()
         var time = reachFocus(session: session, pipeline: pipeline)
-        // One half 30% darker: fails passing (0.75) but not the looser limit (0.65).
+        // One half 30% darker: fails passing (0.75); once the field is confirmed evenness and
+        // glare no longer count at all.
         let uneven = SyntheticFrame.make(width: 1280, height: 720) { x, y in
             hypot(Double(x) - 640, Double(y) - 360) <= 300 ? (x >= 640 ? 140 : 200) : 10
         }
@@ -267,13 +312,26 @@ final class LabSetupSessionTests: XCTestCase {
         XCTAssertNil(session.info.resumeStep)
     }
 
+    func testAShiftOfQuarterRadiusInFocusGoesBackAfterThreeSecondsNotTwoAndAHalf() {
+        let shifted = SyntheticFrame.make(width: 1280, height: 720) { x, y in
+            hypot(Double(x) - 715, Double(y) - 360) <= 300 ? 200 : 10  // 75 px = 0.25 r
+        }
+        for (hold, goesBack) in [(2.5, false), (3.2, true)] {
+            let pipeline = makePipeline()
+            let session = LabSetupSession()
+            var time = reachFocus(session: session, pipeline: pipeline)
+            time = feed(shifted, for: hold, from: time, session: session, pipeline: pipeline)
+            XCTAssertEqual(session.step == .align, goesBack, "held \(hold) s")
+        }
+    }
+
     func testALossInFieldGoesBackToAlignAndReturnsToFieldWithARedetect() {
         let pipeline = makePipeline()
         let session = LabSetupSession(skippingAlignAndFocus: true)
         var time = feed(discFrame(), for: 1.0, from: 0, session: session, pipeline: pipeline)
         XCTAssertEqual(session.step, .field)
         XCTAssertGreaterThan(progress(pipeline), 0, "the mask is being learned")
-        time = feed(darkFrame(), for: 3.0, from: time, session: session, pipeline: pipeline)
+        time = feed(darkFrame(), for: 4.0, from: time, session: session, pipeline: pipeline)
         XCTAssertEqual(session.step, .align)
         XCTAssertEqual(session.info.resumeStep, .field)
         time = feed(discFrame(), for: 2.0, from: time, session: session, pipeline: pipeline)

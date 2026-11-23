@@ -58,7 +58,7 @@ final class RunCadenceTests: XCTestCase {
         XCTAssertEqual(Double(result.alignmentReads), 10, accuracy: 1, "about one a second")
     }
 
-    func testARealFocusLossStillPausesAfterTwoAndAHalfSecondsAndResumesAfterOne() {
+    func testARealFocusLossStillPausesAfterTwoAndAHalfSecondsAndResumesAfterOneAndAHalf() {
         var monitor = RunMonitor()
         monitor.setFocusBaseline(1)
         var result = run(&monitor, from: 0, for: 8)
@@ -70,17 +70,19 @@ final class RunCadenceTests: XCTestCase {
         XCTAssertEqual(result.state, .pausedFocus)
         result = run(&monitor, from: result.end, for: 0.6, focus: 1, sharpness: 2000)
         XCTAssertEqual(result.state, .pausedFocus, "under a second of good readings")
-        result = run(&monitor, from: result.end, for: 0.8, focus: 1, sharpness: 2000)
-        XCTAssertEqual(result.state, .ok, "a second of good readings")
+        result = run(&monitor, from: result.end, for: 0.7, focus: 1, sharpness: 2000)
+        XCTAssertEqual(result.state, .pausedFocus, "1.3 s of good readings")
+        result = run(&monitor, from: result.end, for: 0.5, focus: 1, sharpness: 2000)
+        XCTAssertEqual(result.state, .ok, "over 1.5 s of good readings")
     }
 
-    func testARealPhoneMoveStillPausesAfterTwoSecondsAndResumesAfterOne() {
+    func testARealPhoneMoveStillPausesAfterThreeSecondsAndResumesAfterOne() {
         var monitor = RunMonitor()
         var result = run(&monitor, from: 0, for: 3)
         XCTAssertEqual(result.state, .ok)
-        result = run(&monitor, from: result.end, for: 1.8, shift: 0.15)
-        XCTAssertEqual(result.state, .ok, "1.8 s is not enough")
-        result = run(&monitor, from: result.end, for: 1.5, shift: 0.15)
+        result = run(&monitor, from: result.end, for: 2.5, shift: 0.25)
+        XCTAssertEqual(result.state, .ok, "2.5 s is not enough")
+        result = run(&monitor, from: result.end, for: 1.5, shift: 0.25)
         XCTAssertEqual(result.state, .pausedAlignment)
         result = run(&monitor, from: result.end, for: 0.6, shift: 0)
         XCTAssertEqual(result.state, .pausedAlignment, "under a second back")

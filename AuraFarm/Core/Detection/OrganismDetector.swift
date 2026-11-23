@@ -54,8 +54,8 @@ struct OrganismDetector {
         }
     }
 
-    /// Xcode compiles `SoilDetector.mlpackage` into `SoilDetector.mlmodelc` in the bundle.
-    static let modelName = "SoilDetector"
+    /// Xcode compiles `SoilDetectorV3.mlpackage` into `SoilDetectorV3.mlmodelc` in the bundle.
+    static let modelName = DetectorModel.v3.resourceName
 
     /// A box covering more of the frame than this is thrown away before anything counts it.
     ///
@@ -78,13 +78,6 @@ struct OrganismDetector {
 
     /// The side of the square the model was trained and exported at.
     static let inputSide = 512
-
-    /// What the model's class slots mean. The head is one wider than the dataset's five
-    /// organisms and slot 0 is no-object: a query that lands there is the model saying it
-    /// found nothing. Read off the checkpoint's behaviour rather than its metadata, which
-    /// carries no names: Nematode dominates a set of nematodes, Volvox dominates a clip of
-    /// Volvox, and neither holds under any other reading.
-    static let classNames = ["no-object", "Arcellinida", "Digononta", "Euglenoid", "Nematode", "Volvox"]
 
     /// How sure the model has to be before a query counts as a find.
     ///
@@ -116,8 +109,8 @@ struct OrganismDetector {
     private final class Flag { var done = false }
     private let layoutReported = Flag()
 
-    /// With no arguments this is V1 with today's behaviour.
-    init(model kind: DetectorModel = .v1, computeUnits: MLComputeUnits = .all) throws {
+    /// With no arguments this is V3, the only model the app ships.
+    init(model kind: DetectorModel = .v3, computeUnits: MLComputeUnits = .all) throws {
         guard let url = Bundle.main.url(forResource: kind.resourceName, withExtension: "mlmodelc")
         else { throw Failure.notInTheBundle }
         let configuration = MLModelConfiguration()
@@ -142,10 +135,10 @@ struct OrganismDetector {
     /// - Parameter crop: a square in frame pixels, origin at the top left; only it is squashed to
     ///   the model's input, and the boxes come back as shares of the WHOLE frame. nil feeds the
     ///   whole frame, as the model was trained.
-    /// The class names of `kind`: V1's are fixed; V2's are read from the model's metadata
-    /// ("classes", comma separated) and checked against the scores' width.
+    /// The class names of `kind`, read from the model's metadata ("classes", comma separated)
+    /// and checked against the scores' width.
     static func names(for kind: DetectorModel, in network: MLModel) -> [String] {
-        guard kind == .v2 else { return Self.classNames }
+        let builtIn = kind.builtInClassNames
         let width = network.modelDescription.outputDescriptionsByName[kind.scoresOutput]?
             .multiArrayConstraint?.shape.last?.intValue
         let metadata = network.modelDescription.metadata[.creatorDefinedKey] as? [String: String]
@@ -159,7 +152,7 @@ struct OrganismDetector {
                     + "(\(fromModel?.count ?? 0) names, scores \(width ?? 0) wide); using the built-in list"
             )
         #endif
-        return DetectorModel.v2ClassNames
+        return builtIn
     }
 
     func detections(in image: CGImage, crop: CGRect? = nil) throws -> [Detection] {
@@ -255,9 +248,12 @@ struct OrganismDetector {
         return "shape [\(shape)] strides [\(strides)] type \(array.dataType.rawValue)"
     }
 
-    /// V1's path: logits and V1's class names. What the existing callers and tests use.
+    /// The logit path: scores that need a sigmoid, under the caller's class names. No model
+    /// the app ships takes it, V3's graph ending in a sigmoid, but the decode still has to do
+    /// it right and the tests go through here.
     static func decode(
-        logits: MLMultiArray, boxes: MLMultiArray, minimumConfidence: Float = leastConfidence
+        logits: MLMultiArray, boxes: MLMultiArray, classNames: [String],
+        minimumConfidence: Float = leastConfidence
     ) -> [Detection] {
         decode(
             scores: logits, boxes: boxes, classNames: classNames, scoresAreProbabilities: false,

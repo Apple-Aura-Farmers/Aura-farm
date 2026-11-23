@@ -47,6 +47,10 @@ struct GuideRowFields: Equatable {
     var areaAheadShare: Double?
     var predictedEdgeAlong: Double?
     var expectedEdgeAsk = false
+    var lineCrossings = 0
+    var lineAlong: Double?
+    var spotLimitReason = ""
+    var slipTiltDegrees: Double?
 }
 
 /// How the preview shows the box, measured from the live preview layer on the main thread.
@@ -150,6 +154,11 @@ final class GuideDryRun {
     var asksEdges = true {
         didSet { if asksEdges != oldValue { reset() } }
     }
+    /// The columns follow the cover slip's tilt ("Columns follow the slip's tilt"); changing it
+    /// starts the guide afresh.
+    var followsSlipTilt = true {
+        didSet { if followsSlipTilt != oldValue { reset() } }
+    }
     /// The cover slip's shape ("Cover slip"); changing it starts the guide afresh.
     var coverSlip = CoverSlipShape.square {
         didSet { if coverSlip != oldValue { reset() } }
@@ -210,6 +219,17 @@ final class GuideDryRun {
         axes.guideFields(
             forTrackerPosition: step.position,
             pointsPerField: geometry?.pointsPerField ?? max(step.boxSide, 1))
+    }
+
+    /// The tracker position change (frame px) that moves the guide's position by `fields`: the
+    /// inverse of `guidePosition(for:)`. nil when the axes are degenerate.
+    func trackerOffset(forGuideFields fields: CGPoint, boxSide: Double) -> CGPoint? {
+        let perField = geometry?.pointsPerField ?? max(boxSide, 1)
+        guard
+            let frame = axes.frameVector(
+                ofScreenVector: CGPoint(x: Double(fields.x) * perField, y: Double(fields.y) * perField))
+        else { return nil }
+        return CGPoint(x: -frame.x, y: -frame.y)
     }
 
     /// Feeds one lab step; returns the CSV fields and the info for the screen.
@@ -305,7 +325,8 @@ final class GuideDryRun {
             boxSharpness: step.boxStats.sharpness, quadAheadAway: quads?.aheadAway,
             quadAheadToward: quads?.aheadToward, quadBehindAway: quads?.behindAway,
             quadBehindToward: quads?.behindToward, stillSeconds: indicators.stillSeconds,
-            edgeLine: edgeLine, edgeLineHeading: lastEdgeHeading)
+            edgeLine: edgeLine, edgeLineHeading: lastEdgeHeading,
+            frameHandedness: axes.determinant < 0 ? -1 : 1)
         lastReading = guideReading
         lastGuidePosition = position
         let result: GuideStep
@@ -396,6 +417,9 @@ final class GuideDryRun {
             }
             return PredictedTrailLine(kind: segment.kind, from: from, to: to)
         }
+        let steer = result.instruction.stageSteer(
+            target: dx.flatMap { x in dy.map { CGPoint(x: x, y: $0) } },
+            heading: guide.heading ?? lastHeading)
         return GuideDryRunResult(
             fields: GuideRowFields(
                 viewClass: viewClass.rawValue, state: result.stateName,
@@ -415,11 +439,21 @@ final class GuideDryRun {
                 countingActive: guide.countingActive, column: guide.columnNumber,
                 lineAccept: result.edge.lineAccept, areaAheadShare: result.edge.areaAheadShare,
                 predictedEdgeAlong: result.edge.predictedEdgeAlong,
-                expectedEdgeAsk: result.edge.expectedEdgeAsk),
+                expectedEdgeAsk: result.edge.expectedEdgeAsk,
+                lineCrossings: result.edge.lineCrossings, lineAlong: result.edge.lineAlong,
+                spotLimitReason: result.edge.spotLimitReason,
+                slipTiltDegrees: result.edge.slipTiltDegrees),
             info: SlideMovementInfo.Guide(
                 isOn: true, instruction: result.instruction.debugText, state: result.stateName,
-                targetDx: dx, targetDy: dy, viewClass: viewClass.rawValue, captures: captures,
-                captureCount: captureCount, edgeCount: edgeCount, isFinished: result.isFinished,
+                targetDx: dx, targetDy: dy, steerDx: steer.map { Double($0.x) },
+                steerDy: steer.map { Double($0.y) },
+                headingDx: (guide.heading ?? lastHeading).map { Double($0.x) },
+                headingDy: (guide.heading ?? lastHeading).map { Double($0.y) },
+                holdsForPicture: result.instruction == .refocus
+                    || result.instruction == .nothingToFollow || viewClass == .blurry,
+                viewClass: viewClass.rawValue,
+                captures: captures, captureCount: captureCount, edgeCount: edgeCount,
+                isFinished: result.isFinished,
                 wrongWayCount: wrongWayCount, nudgeCount: nudgeCount,
                 edgeReachedCount: edgeReachedCount, axesLine: axesLine,
                 axesDiffer: differs, showsStageLimitHint: showsHint,
@@ -523,6 +557,7 @@ final class GuideDryRun {
         var thresholds = GuidedSweepThresholds()
         thresholds.fullCoverSlip = fullCoverSlip
         thresholds.asksEdges = asksEdges
+        thresholds.followsSlipTilt = followsSlipTilt
         thresholds.squareCoverSlip = coverSlip == .square
         thresholds.alignment.spotMode = spotMode
         thresholds.columnSpacingFields = coverageStep

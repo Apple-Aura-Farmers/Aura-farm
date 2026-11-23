@@ -8,6 +8,10 @@ import Foundation
 struct AlignmentCheck {
     var thresholds: AlignmentThresholds
 
+    /// The confirmed field circle, once there is one: the loss is then geometry only, against
+    /// this circle, with the `confirmedLost*` limits. nil before: the `lost*` limits.
+    var confirmedCircle: FieldCircle?
+
     private var passingSince: Double?
     private var failingSince: Double?
     private var lastPassingCircle: FieldCircle?
@@ -32,7 +36,8 @@ struct AlignmentCheck {
     /// circle that passed, so a shifted but still tidy circle is lost too.
     var isLost: Bool {
         guard let failingSince, let lastSeconds else { return false }
-        return lastSeconds - failingSince >= thresholds.lostSeconds - 1e-9
+        let seconds = confirmedCircle == nil ? thresholds.lostSeconds : thresholds.confirmedLostSeconds
+        return lastSeconds - failingSince >= seconds - 1e-9
     }
 
     /// The score now against about `trendSeconds` ago; steady within the dead band, or while
@@ -76,6 +81,17 @@ struct AlignmentCheck {
     /// Whether one reading is outside the looser limits.
     private func fails(_ reading: AlignmentReading) -> Bool {
         guard reading.found, let circle = reading.circle else { return true }
+        if let confirmed = confirmedCircle, confirmed.radius > 0 {
+            let shift =
+                hypot(
+                    Double(circle.centre.x - confirmed.centre.x),
+                    Double(circle.centre.y - confirmed.centre.y)) / confirmed.radius
+            return reading.borderTouchShare > thresholds.lostMaxBorderTouchShare
+                || (reading.roundness ?? 0) < thresholds.confirmedLostMinRoundness
+                || shift > thresholds.confirmedLostCentreShiftShareOfRadius
+                || abs(circle.radius - confirmed.radius) / confirmed.radius
+                    > thresholds.confirmedLostRadiusChange
+        }
         if (reading.roundness ?? 0) < thresholds.lostMinRoundness
             || (reading.evenness ?? 0) < thresholds.lostMinEvenness
             || (reading.glareRatio ?? 1) > thresholds.lostMaxGlareRatio

@@ -65,6 +65,9 @@ struct GuideReading: Equatable {
     /// The heading the edge line was measured along (screen unit vector); nil when not known. A
     /// line measured along another heading than the route's current one is ignored.
     var edgeLineHeading: CGPoint?
+    /// +1 when the frame's axes map to the guide's screen axes without a mirror, -1 with one: the
+    /// edge line's angle is measured in frame axes, so a mirror turns its sign round.
+    var frameHandedness: Double = 1
 
     /// The detail in the two quarters of the box ahead along the heading over the detail in the two
     /// behind (the `quad_*` columns): near 0 when the area ahead is empty. nil when any quarter or
@@ -127,6 +130,14 @@ struct EdgeDiagnostics: Equatable {
     var predictedEdgeAlong: Double?
     /// "Edge should be here. Confirm?" is showing.
     var expectedEdgeAsk = false
+    /// How many times the current edge line was passed without confirming, and its slide position
+    /// along the leg; nil without a line being counted.
+    var lineCrossings = 0
+    var lineAlong: Double?
+    /// Why the current leg target is limited (`spot_limit_reason`); empty when it is not.
+    var spotLimitReason = ""
+    /// The angle the columns follow (the left edge's tilt, guide axes); nil for straight columns.
+    var slipTiltDegrees: Double?
 }
 
 /// The helper's answer about an edge, in full-cover-slip mode.
@@ -214,6 +225,28 @@ enum GuideInstruction: Equatable {
     case refocus
     case slowDown
     case finished
+
+    /// The vector (fields, guide axes) an automated stage should move the view by, or nil for
+    /// "do not move". Direction-only instructions give a unit vector when there is no target.
+    func stageSteer(target: CGPoint?, heading: CGPoint?) -> CGPoint? {
+        func unit(_ v: CGPoint?) -> CGPoint? {
+            guard let v else { return nil }
+            let length = hypot(Double(v.x), Double(v.y))
+            return length > 0 ? CGPoint(x: v.x / length, y: v.y / length) : nil
+        }
+        switch self {
+        case .move, .tooFar, .otherWay, .aligned, .holding:
+            return target
+        case .travel(let direction), .farAway(let direction), .lineLead(let direction, _),
+            .edgeGoBack(let direction), .stillNoDetail(let direction), .checkEdge(let direction),
+            .edgeBehind(let direction), .missedSpot(let direction):
+            return target ?? unit(direction)
+        case .lineAhead, .notAnEdge:
+            return target ?? unit(heading)
+        default:
+            return nil
+        }
+    }
 
     /// One short line in plain words, for the lab.
     var debugText: String {

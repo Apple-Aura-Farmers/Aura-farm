@@ -31,12 +31,12 @@ enum RunMonitorState: Equatable {
 struct RunMonitorThresholds {
     // Alignment, GEOMETRY ONLY: the sample's content would trip evenness and glare.
     /// The circle's centre moved this share of its radius from the confirmed one.
-    var lostCentreShiftShareOfRadius: Double = 0.12
+    var lostCentreShiftShareOfRadius: Double = 0.18
     /// The circle's radius changed by this share.
-    var lostRadiusChange: Double = 0.10
-    var lostMinRoundness: Double = 0.75
+    var lostRadiusChange: Double = 0.15
+    var lostMinRoundness: Double = 0.70
     /// Lost (a clipped circle, no circle, or the limits above) for this long without a break.
-    var lostSeconds: Double = 2.0
+    var lostSeconds: Double = 3.0
     /// Back: within these of the confirmed circle, for `backSeconds`.
     var backCentreShiftShareOfRadius: Double = 0.06
     var backRadiusChange: Double = 0.05
@@ -47,7 +47,29 @@ struct RunMonitorThresholds {
     var pauseBelowShareOfBaseline: Double = 0.6
     var pauseSeconds: Double = 2.5
     var resumeAtShareOfBaseline: Double = 0.8
-    var resumeSeconds: Double = 1.0
+    /// PLACEHOLDER: raised from 1.0 after Run 6, where blurry views resumed too early.
+    var resumeSeconds: Double = 1.5
+    /// This share of the readings since the picture became sharp must be sharp and still: one
+    /// reading that flickers to blurry does not start the count again. PLACEHOLDER.
+    var resumeGoodShare: Double = 0.8
+    /// A pause for focus also needs box sharpness at this share of its recent peak. The view
+    /// hardly changes during a pause, so sharpness there is comparable. (The index is not: one
+    /// noisy reading of 0.728 against a baseline of 0.324 could never be reached again.)
+    /// PLACEHOLDER: in the 22 Nov runs' 12 pauses the blurry part read 0.3 of the sharp part.
+    var resumeShareOfSharpnessPeak: Double = 0.5
+    /// The peak looks back this far, so one that cannot be reached again is forgotten.
+    var peakWindowSeconds: Double = 10
+    /// Sharpness is the median of this many readings, so one spike is not a peak.
+    var peakSmoothing = 5
+    /// And only of readings this recent: after a gap (dark, lost, moving) older ones would come
+    /// back as a fresh peak. Long enough for `peakSmoothing` readings at a slow frame rate.
+    var smoothingSeconds: Double = 2
+    /// `peakIndex` ignores the first part of a pause: the picture is still settling. PLACEHOLDER.
+    var peakIgnoreSeconds: Double = 0.5
+    /// Hint "try the other way": this long into the pause, under `hintOtherWayShare` of the
+    /// starting index, and the peak never rose above it. PLACEHOLDER.
+    var hintOtherWaySeconds: Double = 3.0
+    var hintOtherWayShare: Double = 0.8
     /// With no baseline from setup: the median of this many seconds of eligible readings.
     var baselineSeconds: Double = 3.0
     /// A real defocus: detail lost while STILL. The readings with detail this far back give the
@@ -120,6 +142,9 @@ struct RunMonitor {
     private var sharpnessHistory: [(seconds: Double, value: Double)] = []
     private var referenceClock = 0.0
     private var lastUpdateSeconds: Double?
+    /// The latest focus index of a view with detail; nil once older than the gap. While paused
+    /// it stands in on the frames between readings.
+    private var lastIndex: (seconds: Double, value: Double)?
     /// When the last focus reading arrived, for the gap guard.
     private var lastFocusReadingAt: Double?
     /// The median of `sharpnessHistory`, once it spans `referenceMinimumSeconds`; for the CSV.
@@ -128,6 +153,22 @@ struct RunMonitor {
     private(set) var sharpnessShare: Double?
     /// Why the run is paused: "index_and_sharpness", "detail_lost" or "alignment"; empty while ok.
     private(set) var pauseCause = ""
+    /// While paused for focus: the latest reading counts as sharp (moving or not). The dial's
+    /// green zone and the resume both go by this.
+    private(set) var isSharp = false
+    /// The highest focus index among still detail readings in this pause (not the first
+    /// `peakIgnoreSeconds`), for the CSV and the hint; nil outside a pause or before one.
+    private(set) var peakIndex: Double?
+    /// Set on the update that ended a pause for focus by itself: the numbers for the CSV.
+    private(set) var resumeNote = ""
+    private var latestIndex: Double?
+    private var startIndex: Double?
+    private var pauseStartedAt: Double?
+    private var goodCount = 0
+    private var readingCount = 0
+    /// The latest still readings' box sharpness in this pause, and the medians with detail.
+    private var recentSharpness: [(seconds: Double, value: Double)] = []
+    private var sharpnessPeaks: [(seconds: Double, value: Double)] = []
 
     init(thresholds: RunMonitorThresholds = RunMonitorThresholds()) {
         self.thresholds = thresholds
@@ -148,6 +189,7 @@ struct RunMonitor {
     ) -> RunMonitorState {
         if let last = lastUpdateSeconds, state == .ok { referenceClock += min(max(seconds - last, 0), 1) }
         lastUpdateSeconds = seconds
+        resumeNote = ""
         if let alignment { updateAlignment(alignment, confirmedCircle, seconds) }
         defer { if state == .ok { pauseCause = "" } }
         guard state != .pausedAlignment else {
@@ -171,17 +213,72 @@ struct RunMonitor {
     /// bump, not an edge. For the CSV.
     var isStillOnset: Bool { stillOnset && state != .pausedAlignment }
 
+    /// While paused for focus: which way to turn, from how the index has moved since the pause.
+    var focusHint: String? {
+        guard state == .pausedFocus, !isSharp, let began = pauseStartedAt,
+            let now = lastUpdateSeconds
+        else { return nil }
+        if !isNearSharpnessPeak { return "Turned past focus: turn back a little" }
+        guard let start = startIndex, let current = latestIndex else { return nil }
+        if now - began >= thresholds.hintOtherWaySeconds,
+            current < thresholds.hintOtherWayShare * start, (peakIndex ?? 0) <= start
+        {
+            return "Try turning the other way"
+        }
+        return nil
+    }
+
+    /// The box is about as sharp as it has recently been in this pause; true without a peak.
+    private var isNearSharpnessPeak: Bool {
+        guard let peak = sharpnessPeaks.map(\.value).max(),
+            let current = Self.median(recentSharpness.map(\.value))
+        else { return true }
+        return current >= thresholds.resumeShareOfSharpnessPeak * peak
+    }
+
+    private mutating func beginFocusPause(_ now: Double) {
+        endFocusPause()
+        pauseStartedAt = now
+        startIndex = latestIndex
+    }
+
+    private mutating func endFocusPause() {
+        pauseStartedAt = nil
+        startIndex = nil
+        peakIndex = nil
+        isSharp = false
+        lastIndex = nil
+        recentSharpness = []
+        sharpnessPeaks = []
+    }
+
     /// "Resume anyway": back to running at once, and the baseline measured again from the next
     /// `baselineSeconds` of eligible readings. For a pause for focus only; the sharpness reference
     /// is kept.
     mutating func resumeManually() {
         guard state == .pausedFocus else { return }
         state = .ok
+        endFocusPause()
         pauseCause = ""
         stretch = nil
         stillOnset = false
         onsetSince = nil
         setFocusBaseline(nil)
+    }
+
+    /// The picture stalled blurry for long enough that the caller says so: the same pause for
+    /// focus as the monitor's own, which resumes by the same rules. Does nothing unless running.
+    @discardableResult
+    mutating func pauseForStall() -> Bool {
+        guard state == .ok else { return false }
+        state = .pausedFocus
+        beginFocusPause(lastUpdateSeconds ?? 0)
+        pauseCause = "stall"
+        clearFocusCounts()
+        stretch = nil
+        stillOnset = false
+        onsetSince = nil
+        return true
     }
 
     /// Sets the focus index the run is compared with (from setup's focus step), or nil to
@@ -255,6 +352,40 @@ struct RunMonitor {
     private mutating func clearFocusCounts() {
         lowSince = nil
         highSince = nil
+        goodCount = 0
+        readingCount = 0
+    }
+
+    /// One reading of a focus pause. It ends once the picture has been sharp and still for
+    /// `resumeSeconds`, allowing for the odd bad reading (`resumeGoodShare`). True when it ended.
+    private mutating func judgeResume(good: Bool, _ now: Double) -> Bool {
+        if good, highSince == nil {
+            highSince = now
+            goodCount = 0
+            readingCount = 0
+        }
+        guard let since = highSince else { return false }
+        readingCount += 1
+        if good { goodCount += 1 }
+        guard Double(goodCount) >= thresholds.resumeGoodShare * Double(readingCount) else {
+            highSince = nil
+            return false
+        }
+        return good && now - since >= thresholds.resumeSeconds - 1e-9
+    }
+
+    /// The pause's sharpness and its peak: medians of still readings; the peak only of readings
+    /// with detail, within the window. A moving reading is smeared and says nothing.
+    private mutating func updateSharpnessPeak(
+        _ sharpness: Double?, hasDetail: Bool, isStill: Bool, _ now: Double
+    ) {
+        guard state == .pausedFocus, isStill, let sharpness else { return }
+        recentSharpness = (recentSharpness + [(now, sharpness)]).suffix(thresholds.peakSmoothing)
+        if hasDetail, recentSharpness.count == thresholds.peakSmoothing,
+            let value = Self.median(recentSharpness.map(\.value))
+        {
+            sharpnessPeaks.append((now, value))
+        }
     }
 
     private mutating func updateFocus(
@@ -262,9 +393,19 @@ struct RunMonitor {
         _ isStill: Bool, _ now: Double
     ) {
         focusLow = false
+        isSharp = false
+        // The index is read a few times a second: between readings the latest one stands, but
+        // none older than the gap.
+        if let last = lastIndex, now - last.seconds > thresholds.focusReadingGapSeconds {
+            lastIndex = nil
+        }
+        // On every reading, so a gap without sharpness ages them too.
+        sharpnessPeaks.removeAll { now - $0.seconds > thresholds.peakWindowSeconds }
+        recentSharpness.removeAll { now - $0.seconds > thresholds.smoothingSeconds }
         let hasDetail = tracking == .tracking && (viewClass == .sample || viewClass == .thin)
         // Dark is neither: it ends a stretch without starting one.
         if tracking == .paused || viewClass == .blank || viewClass == .blurry {
+            updateSharpnessPeak(sharpness, hasDetail: false, isStill: isStill, now)
             updateStretch(sharpness, isStill, now)
             return
         }
@@ -272,61 +413,86 @@ struct RunMonitor {
         stillOnset = false
         onsetSince = nil
         guard hasDetail else {
-            clearFocusCounts()
+            missReading(now)
             return
         }
         detailHistory.append((now, isStill, sharpness))
         detailHistory.removeAll { now - $0.seconds > thresholds.stillOnsetLookbackSeconds }
         updateReference(sharpness)
+        if state == .pausedFocus {
+            // Sharp: against the baseline (or the run's own sharpness before the pause), and
+            // about as sharp as this view has been. Without a baseline, detail is enough.
+            if let index { lastIndex = (now, index) }
+            updateSharpnessPeak(sharpness, hasDetail: true, isStill: isStill, now)
+            let baseline = focusBaseline ?? 0
+            let share = lastIndex.map { baseline > 0 ? $0.value / baseline : 1 }
+            let indexBack =
+                baseline <= 0 || (share ?? 0) >= thresholds.resumeAtShareOfBaseline
+            let sharpBack = sharpnessShare.map { $0 >= thresholds.sharpnessResumeShare } ?? false
+            isSharp = (indexBack || sharpBack) && isNearSharpnessPeak
+            let sharpnessLow = sharpnessShare.map { $0 < thresholds.sharpnessPauseShare } ?? true
+            focusLow =
+                isStill && baseline > 0 && sharpnessLow
+                && (share ?? 1) < thresholds.pauseBelowShareOfBaseline
+            if isStill, let index {
+                latestIndex = index
+                if startIndex == nil { startIndex = index }
+                if let began = pauseStartedAt, now - began >= thresholds.peakIgnoreSeconds {
+                    peakIndex = max(peakIndex ?? index, index)
+                }
+            }
+            if judgeResume(good: isSharp && isStill, now) {
+                resumeNote = String(
+                    format: "index=%.3f peak=%.3f share=%.2f", lastIndex?.value ?? -1,
+                    peakIndex ?? -1, share ?? 1)
+                state = .ok
+                endFocusPause()
+                clearFocusCounts()
+            }
+            return
+        }
         guard isStill else {
             clearFocusCounts()
             return
         }
+        if let index { latestIndex = index }
         let baseline = focusBaseline ?? 0
-        var share = 1.0
-        if baseline > 0 {
-            // Not measured on this frame (the caller reads it a few times a second): the counts
-            // run on by time, neither added to nor cleared.
-            guard let index else { return }
-            if let last = lastFocusReadingAt, now - last > thresholds.focusReadingGapSeconds {
-                clearFocusCounts()
-            }
-            lastFocusReadingAt = now
-            share = index / baseline
-        } else if state != .pausedFocus {
+        guard baseline > 0 else {
             if let index { collectBaseline(index, now) }
             return
         }
-        // Without a baseline a pause for focus resumes on detail plus stillness alone (share 1).
+        // Not measured on this frame (the caller reads it a few times a second): the counts
+        // run on by time, neither added to nor cleared.
+        guard let index else { return }
+        if let last = lastFocusReadingAt, now - last > thresholds.focusReadingGapSeconds {
+            clearFocusCounts()
+        }
+        lastFocusReadingAt = now
         // Both signals must say blurry. Before the reference exists the second is not checked.
         let sharpnessLow = sharpnessShare.map { $0 < thresholds.sharpnessPauseShare } ?? true
-        focusLow = baseline > 0 && share < thresholds.pauseBelowShareOfBaseline && sharpnessLow
-        switch state {
-        case .ok:
-            lowSince = focusLow ? (lowSince ?? now) : nil
-            if let lowSince, now - lowSince >= thresholds.pauseSeconds - 1e-9 {
-                state = .pausedFocus
-                pauseCause = "index_and_sharpness"
-                clearFocusCounts()
-            }
-        case .pausedFocus:
-            let sharpBack = sharpnessShare.map { $0 >= thresholds.sharpnessResumeShare } ?? false
-            let back = share >= thresholds.resumeAtShareOfBaseline || sharpBack
-            highSince = back ? (highSince ?? now) : nil
-            if let highSince, now - highSince >= thresholds.resumeSeconds - 1e-9 {
-                state = .ok
-                clearFocusCounts()
-            }
-        case .pausedAlignment:
-            break
+        focusLow = index / baseline < thresholds.pauseBelowShareOfBaseline && sharpnessLow
+        lowSince = focusLow ? (lowSince ?? now) : nil
+        if let lowSince, now - lowSince >= thresholds.pauseSeconds - 1e-9 {
+            state = .pausedFocus
+            beginFocusPause(now)
+            pauseCause = "index_and_sharpness"
+            clearFocusCounts()
         }
+    }
+
+    /// A reading that says nothing about focus: it ends a low count; in a focus pause it counts
+    /// as not sharp.
+    private mutating func missReading(_ now: Double) {
+        guard state == .pausedFocus else { return clearFocusCounts() }
+        lowSince = nil
+        _ = judgeResume(good: false, now)
     }
 
     /// A reading without detail: the first of a stretch fixes what it is judged against (the
     /// detail readings just before); every reading re-checks the drop, as the stretch's median
     /// changes. Held for `pauseSeconds` it pauses for focus.
     private mutating func updateStretch(_ sharpness: Double?, _ isStill: Bool, _ now: Double) {
-        clearFocusCounts()
+        missReading(now)
         if stretch == nil {
             let before = detailHistory.filter {
                 now - $0.seconds <= thresholds.stillOnsetLookbackSeconds
@@ -351,6 +517,7 @@ struct RunMonitor {
         onsetSince = onsetSince ?? now
         if let onsetSince, now - onsetSince >= thresholds.pauseSeconds - 1e-9 {
             state = .pausedFocus
+            beginFocusPause(now)
             pauseCause = "detail_lost"
             self.onsetSince = nil
         }

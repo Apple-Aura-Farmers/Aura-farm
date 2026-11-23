@@ -27,9 +27,10 @@ struct GuideRunRecord: Codable, Equatable {
     var classNames: [String]
     var framesCounted: Int
     var framesSkippedByReason: [String: Int]
-    /// The model the counts came from ("v1" or "v2"; `DetectorModel.rawValue`) and the boxes the
-    /// guards dropped as the eyepiece disc and as too big. Earlier records have none: V1, 0, 0.
-    var detectorModel = DetectorModel.v1.rawValue
+    /// The model the counts came from (`DetectorModel.rawValue`) and the boxes the guards
+    /// dropped as the eyepiece disc and as too big. Records written before this field name "v1"
+    /// or "v2", models the app no longer ships, and they keep those names.
+    var detectorModel = DetectorModel.v3.rawValue
     var discDrops = 0
     var bigDrops = 0
     /// The hardware the model ran on (`DetectorUnits.rawValue`: "ne" or "gpu"). Earlier records ran
@@ -51,6 +52,12 @@ struct GuideRunRecord: Codable, Equatable {
     var edges: [RunMapEdge] = []
     var mapMapping = ScreenMapping.asIs.rawValue
     var mapMirrored = false
+    /// Who moved the slide: "terraloka" or "manual". For the Terraloka Stage, the objective
+    /// ("40x" or "100x") and how it covered the slide ("followGuide" or "presetPath"). Earlier
+    /// records were manual.
+    var stage = "manual"
+    var objective: String?
+    var pathMode: String?
     /// Seconds spent in each heat mode (`HeatMode.csvName`: "normal", "cool_down", "too_hot").
     /// Earlier records have none.
     var heatSeconds: [String: Double] = [:]
@@ -61,6 +68,19 @@ struct GuideRunRecord: Codable, Equatable {
     /// in it, in seconds. Earlier records have none.
     var lensVideoFile: String?
     var lensVideoScanStartSeconds: Double?
+
+    /// One plain line for the results: "Terraloka Stage · 100x · Follow the guide", or
+    /// "Manual Stage".
+    var stageLine: String {
+        guard stage == "terraloka" else { return "Manual Stage" }
+        let path =
+            switch pathMode {
+            case "followGuide": "Follow the guide"
+            case "presetPath": "Fixed sweep"
+            default: nil as String?
+            }
+        return (["Terraloka Stage"] + [objective, path].compactMap { $0 }).joined(separator: " · ")
+    }
 
     /// The share of the edge span the columns reach; nil unless the span is known and positive.
     static func coverageShare(columns: Int, step: Double, edgeSpanFields: Double?) -> Double? {
@@ -124,7 +144,7 @@ extension GuideRunRecord {
             framesCounted: try c.decode(Int.self, forKey: .framesCounted),
             framesSkippedByReason: try c.decode([String: Int].self, forKey: .framesSkippedByReason),
             detectorModel: try c.decodeIfPresent(String.self, forKey: .detectorModel)
-                ?? DetectorModel.v1.rawValue,
+                ?? "v1",
             discDrops: try c.decodeIfPresent(Int.self, forKey: .discDrops) ?? 0,
             bigDrops: try c.decodeIfPresent(Int.self, forKey: .bigDrops) ?? 0,
             detectorUnits: try c.decodeIfPresent(String.self, forKey: .detectorUnits)
@@ -137,6 +157,9 @@ extension GuideRunRecord {
             mapMapping: try c.decodeIfPresent(String.self, forKey: .mapMapping)
                 ?? ScreenMapping.asIs.rawValue,
             mapMirrored: try c.decodeIfPresent(Bool.self, forKey: .mapMirrored) ?? false,
+            stage: try c.decodeIfPresent(String.self, forKey: .stage) ?? "manual",
+            objective: try c.decodeIfPresent(String.self, forKey: .objective),
+            pathMode: try c.decodeIfPresent(String.self, forKey: .pathMode),
             heatSeconds: try c.decodeIfPresent([String: Double].self, forKey: .heatSeconds) ?? [:],
             modelRateCap: try c.decodeIfPresent(Double.self, forKey: .modelRateCap))
         lensVideoFile = try c.decodeIfPresent(String.self, forKey: .lensVideoFile)

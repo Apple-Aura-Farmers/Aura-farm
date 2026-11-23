@@ -18,7 +18,7 @@ final class GuidedScanReleaseTests: XCTestCase {
         let release = LabSettings.releaseDefaults
         XCTAssertEqual(release.spotMode, .briefTouch)
         XCTAssertEqual(release.coverageStep, 1.6)
-        XCTAssertEqual(release.detectorModelName, DetectorModel.v2.rawValue)
+        XCTAssertEqual(release.detectorModelName, DetectorModel.v3.rawValue)
         XCTAssertEqual(release.detectorUnitsName, DetectorUnits.neuralEngine.rawValue)
         XCTAssertEqual(release.cameraRateName, CameraRate.fps20.rawValue)
         XCTAssertTrue(release.cropsToEyepiece)

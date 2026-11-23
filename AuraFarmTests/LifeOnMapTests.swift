@@ -105,13 +105,16 @@ final class LifeOnMapTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(OrganismPalette.colours.count, 8)
         let keys = OrganismPalette.colours.map { "\($0.red)-\($0.green)-\($0.blue)" }
         XCTAssertEqual(Set(keys).count, keys.count)
-        for label in ["Volvox", "Nematode", "Euglenoid", "Arcellinida", "Digononta"] {
+        // The first of V3's classes, which are the ones with a colour of their own: there are
+        // more classes than colours, so the rest share the neutral grey.
+        let coloured = ["Amoeba", "Arcellinida", "Ceratium", "Closterium", "Digononta"]
+        for label in coloured {
             XCTAssertEqual(OrganismPalette.colour(for: label), OrganismPalette.colour(for: label))
             XCTAssertNotNil(OrganismPalette.index(for: label), label)
         }
-        let known = ["Volvox", "Nematode", "Euglenoid", "Arcellinida", "Digononta"]
-            .compactMap(OrganismPalette.index(for:))
+        let known = coloured.compactMap(OrganismPalette.index(for:))
         XCTAssertEqual(Set(known).count, known.count, "every type has its own colour")
+        XCTAssertNil(OrganismPalette.index(for: "background"), "the background slot is not a type")
     }
 
     func testATypeBeyondThePaletteIsNeutralGrey() {

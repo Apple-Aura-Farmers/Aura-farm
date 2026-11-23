@@ -5,7 +5,7 @@ import SwiftUI
 /// Numbers from the simulator say nothing about a phone — the simulator has no Neural Engine
 /// and runs the model on the Mac. Run this on the phone itself.
 struct DetectorBenchmarkView: View {
-    @State private var model = DetectorModel.v1
+    @State private var model = DetectorModel.v3
     @State private var hardware = DetectorBenchmark.Hardware.all
     @State private var runs = 30
     @State private var outcome: DetectorBenchmark.Outcome?

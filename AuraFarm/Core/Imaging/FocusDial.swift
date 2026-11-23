@@ -32,6 +32,24 @@ struct FocusDialReading: Equatable {
 
     /// A short word for the CSV.
     var csvSide: String { isWrongWay ? "wrong_way" : side.rawValue }
+
+    /// The reading with its green zone decided by the run monitor, so the dial is green exactly
+    /// when the pause is about to end: the needle moves into or out of the zone to match.
+    func matching(isSharp: Bool) -> FocusDialReading {
+        var copy = self
+        let sign: Double = offset > 0 ? 1 : -1
+        if isSharp {
+            copy.offset = sign * min(abs(offset), greenHalfWidth * 0.8)
+            copy.isGreen = true
+            copy.isWrongWay = false
+            copy.message = "Sharp ✓ Hold still"
+        } else {
+            copy.offset = sign * max(abs(offset), min(greenHalfWidth + 0.08, 1))
+            copy.isGreen = false
+            if isGreen { copy.message = "Not sharp yet. Keep turning slowly" }
+        }
+        return copy
+    }
 }
 
 /// A two-sided gauge for the Z knob. Sharpness alone cannot say which side of focus the knob is

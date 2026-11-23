@@ -48,14 +48,17 @@ final class GuidedScanSetupTests: XCTestCase {
     }
 
     func testAlignShowsTheWholePictureWithNoCircleNoCropAndNoDarkening() {
-        for stage in [GuidedScanSetupStage.align, .focus, .field] {
+        for stage in [GuidedScanSetupStage.align, .field] {
             let look = stage.treatment
             XCTAssertFalse(look.centres, "\(stage) is not cropped before the field is confirmed")
             XCTAssertFalse(look.darkensOutside)
             XCTAssertFalse(look.drawsTargetOutline)
         }
-        XCTAssertTrue(GuidedScanSetupStage.stage.treatment.centres, "from the lab's stage step")
-        XCTAssertTrue(GuidedScanSetupStage.ready.treatment.centres)
+        // From the moment the field is confirmed the picture is zoomed and the outside dark.
+        for stage in [GuidedScanSetupStage.focus, .stage, .ready] {
+            XCTAssertTrue(stage.treatment.centres, "\(stage)")
+            XCTAssertTrue(stage.treatment.darkensOutside, "\(stage)")
+        }
         XCTAssertFalse(GuidedScanSetupStage.allCases.contains { $0.treatment.drawsTargetOutline })
     }
 
@@ -111,7 +114,7 @@ final class GuidedScanSetupTests: XCTestCase {
             XCTAssertEqual(lab.mappingName, "rotateRight")
             XCTAssertEqual(lab.coverageStep, 0.8)
             XCTAssertEqual(lab.spotMode, .briefTouch)
-            XCTAssertEqual(lab.detectorModelName, DetectorModel.v2.rawValue)
+            XCTAssertEqual(lab.detectorModelName, DetectorModel.v3.rawValue)
             XCTAssertEqual(lab.cameraRateName, CameraRate.fps20.rawValue)
             XCTAssertFalse(lab.guideDryRun)
         }

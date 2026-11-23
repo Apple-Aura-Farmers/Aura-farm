@@ -31,6 +31,7 @@
         @AppStorage("slideLab.trackSparse") private var tracksSparse = true
         @AppStorage("slideLab.fullCoverSlip") private var fullCoverSlip = true
         @AppStorage("slideLab.askEdges") private var asksEdges = true
+        @AppStorage("slideLab.followSlipTilt") private var followsSlipTilt = true
         @AppStorage("slideLab.showLifeOnMap") private var showsLifeOnMap = true
         // The guided scan page's knob rule, for other microscopes. See `KnobRule`.
         @AppStorage("slideLab.knobSwap") private var swapsKnobs = false
@@ -43,7 +44,7 @@
         @AppStorage("slideLab.countOrganisms") private var countsOrganisms = true
         @AppStorage("slideLab.showDetections") private var showsDetections = false
         @AppStorage("slideLab.cropEyepiece") private var cropsToEyepiece = true
-        @AppStorage("slideLab.detectorModel") private var detectorModelName = DetectorModel.v2.rawValue
+        @AppStorage("slideLab.detectorModel") private var detectorModelName = DetectorModel.v3.rawValue
         @AppStorage("slideLab.detectorUnits") private var detectorUnitsName = DetectorUnits.neuralEngine
             .rawValue
         @AppStorage("slideLab.cameraRate") private var cameraRateName = CameraRate.fps20.rawValue
@@ -52,12 +53,61 @@
         @AppStorage("slideLab.modelRateCap") private var modelRateCap = true
         @AppStorage("slideLab.recordLensVideo") private var recordsLensVideo = false
         @State private var noteText = ""
+        // Automated stage (Terraloka BLE stage in place of the knobs).
+        @State private var autoStage: AutoStageDriver?
+        /// "How will the slide move?" card, shown until a choice is made.
+        @State private var needsMovementChoice = true
+        @State private var isShowingStageSheet = false
+        /// Waiting for the stage's Bluetooth connection; setup is held while it does, if it
+        /// has not got past Align.
+        @State private var isWaitingForStage = false
+        @State private var holdsSetupForStage = false
 
         // Recorded video.
         @State private var selectedVideo: URL?
         @State private var startMinutes = 0.0
 
         private var mapping: ScreenMapping { ScreenMapping(rawValue: mappingName) ?? .asIs }
+
+        /// Turns the Terraloka stage in or out; with it off the lab behaves as it always has. Turning
+        /// it on opens the "Automated stage" sheet, which starts it.
+        private func setAutomatedStage(_ on: Bool) {
+            if on {
+                needsMovementChoice = false
+                if autoStage == nil { isShowingStageSheet = true }
+            } else if let driver = autoStage {
+                driver.deactivate()
+                autoStage = nil
+                endWaitingForStage()
+            }
+        }
+
+        /// The connection is made, or the automated stage was cancelled: setup goes on.
+        private func endWaitingForStage() {
+            isWaitingForStage = false
+            if holdsSetupForStage {
+                holdsSetupForStage = false
+                model.setSetupHeld(false)
+            }
+        }
+
+        private func startAutomatedStage(_ objective: StageObjective, _ pathMode: StagePathMode) {
+            guard autoStage == nil else { return }
+            let driver = AutoStageDriver(engine: model)
+            driver.objective = objective
+            driver.chunkDegrees = objective.defaultChunk
+            driver.pathMode = pathMode
+            driver.guideIsStraightened = straightens && centresField
+            driver.activate(restoringAsksEdges: asksEdges)
+            autoStage = driver
+            // Setup waits for the connection; a lab already past Align is not sent back.
+            isWaitingForStage = true
+            if model.setupInfo.step == .align {
+                holdsSetupForStage = true
+                model.setSetupHeld(true)
+            }
+        }
+
         private var spotMode: SpotConfirmMode { spotModeName == "holdStill" ? .holdStill : .briefTouch }
 
         var body: some View {
@@ -67,6 +117,23 @@
                 }
                 .pickerStyle(.segmented)
                 .padding()
+
+                if needsMovementChoice, mode == .live {
+                    MovementChoiceCard(
+                        onManual: { needsMovementChoice = false },
+                        onAutomated: { setAutomatedStage(true) })
+                }
+                if isWaitingForStage, let autoStage, mode == .live {
+                    StageConnectingCard(
+                        client: autoStage.client.status, backTitle: "Cancel",
+                        onRetry: { autoStage.client.connect() },
+                        onBack: { setAutomatedStage(false) }
+                    )
+                    .padding(.horizontal)
+                }
+                if let autoStage, mode == .live {
+                    AutoStagePanel(driver: autoStage, setupStep: model.setupInfo.step)
+                }
 
                 switch mode {
                 case .live: liveBody
@@ -79,7 +146,29 @@
             .modifier(
                 LabSettingsSync(model: model) { if mode == .live { model.start() } }
             )
-            .onDisappear { model.stop() }
+            .onDisappear {
+                model.stop()
+                setAutomatedStage(false)
+            }
+            .sheet(isPresented: $isShowingStageSheet) {
+                AutomatedStageSheet(onStart: startAutomatedStage)
+            }
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Toggle(
+                        "Automated stage",
+                        isOn: Binding(get: { autoStage != nil }, set: { setAutomatedStage($0) })
+                    )
+                    .toggleStyle(.button)
+                    .font(.footnote)
+                }
+            }
+            .onChange(of: autoStage?.client.status) { _, status in
+                if status == .connected, isWaitingForStage { endWaitingForStage() }
+            }
+            .onChange(of: straightens && centresField) { _, value in
+                autoStage?.guideIsStraightened = value
+            }
             .onChange(of: mode) { _, newMode in
                 if newMode == .live { model.start() } else { model.stop() }
             }
@@ -110,7 +199,8 @@
                         // Uncropped until the field is confirmed, and when the toggle is off.
                         let isCentred =
                             centresField && model.isAnalyzing
-                            && (model.setupInfo.step == .stage || model.setupInfo.step == .done)
+                            && (model.setupInfo.step == .focus || model.setupInfo.step == .stage
+                                || model.setupInfo.step == .done)
                         let display =
                             isCentred
                             ? FramePreviewConverter.displayTransform(
@@ -132,7 +222,10 @@
                                 SlideMovementOverlays(
                                     model: model, mapping: mapping, mirrored: mirrored,
                                     previewLayer: previewLayer, display: display, centred: isCentred,
-                                    onTapTrail: { isShowingTrail = true })
+                                    onTapTrail: { isShowingTrail = true },
+                                    onEmptyArea: autoStage?.canConfirmEmptyArea == true
+                                        ? { autoStage?.confirmEmptyArea() } : nil,
+                                    automatedStage: autoStage != nil)
                             } else {
                                 startingCard
                             }
@@ -374,6 +467,7 @@
                 Toggle("Track sparse sample", isOn: $tracksSparse)
                 Toggle("Full cover slip (line edges)", isOn: $fullCoverSlip)
                 Toggle("Ask me to confirm edges", isOn: $asksEdges)
+                Toggle("Columns follow the slip's tilt", isOn: $followsSlipTilt)
                 Toggle("Show life on map", isOn: $showsLifeOnMap)
                 Toggle("Record lens video", isOn: $recordsLensVideo)
                 Toggle("Swap knobs", isOn: $swapsKnobs)
@@ -589,4 +683,72 @@
     }
 
     #Preview("Cover slip setting") { CoverSlipPreview() }
+
+    /// The top-of-screen question that replaces the old dialog: not modal, so nothing can drop it.
+    private struct MovementChoiceCard: View {
+        var onManual: () -> Void
+        var onAutomated: () -> Void
+
+        var body: some View {
+            VStack(spacing: 8) {
+                Text("How will the slide move?").font(.subheadline.bold())
+                HStack {
+                    Button("Manual knobs", action: onManual).buttonStyle(.bordered)
+                    Button("Automated stage", action: onAutomated).buttonStyle(.borderedProminent)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+            .background(.thinMaterial)
+        }
+    }
+
+    /// The one place the objective and the path mode are chosen; both start from the last choice.
+    private struct AutomatedStageSheet: View {
+        var onStart: (StageObjective, StagePathMode) -> Void
+        @Environment(\.dismiss) private var dismiss
+        @AppStorage("slideLab.stageObjective") private var objectiveName = StageObjective.x40.rawValue
+        @AppStorage("slideLab.stagePathMode") private var pathModeName = StagePathMode.followGuide.rawValue
+
+        var body: some View {
+            NavigationStack {
+                Form {
+                    Picker(
+                        "Objective",
+                        selection: Binding(
+                            get: { StageObjective(rawValue: objectiveName) ?? .x40 },
+                            set: { objectiveName = $0.rawValue })
+                    ) {
+                        ForEach(StageObjective.allCases, id: \.self) { Text($0.title).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    Picker(
+                        "Path",
+                        selection: Binding(
+                            get: { StagePathMode(rawValue: pathModeName) ?? .followGuide },
+                            set: { pathModeName = $0.rawValue })
+                    ) {
+                        ForEach(StagePathMode.allCases, id: \.self) { Text($0.title).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                }
+                .navigationTitle("Automated stage")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") { dismiss() }
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Start") {
+                            onStart(
+                                StageObjective(rawValue: objectiveName) ?? .x40,
+                                StagePathMode(rawValue: pathModeName) ?? .followGuide)
+                            dismiss()
+                        }
+                    }
+                }
+            }
+            .presentationDetents([.medium])
+        }
+    }
 #endif

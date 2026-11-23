@@ -6,7 +6,8 @@ struct SnapshotTrigger {
     /// Edge reasons worth a frame when they first show.
     static let reasons: Set<String> = [
         "side_imbalance", "corner", "corner_rejected", "halves_too_close", "vouched",
-        "line_attached", "line_confirmed", "edge_behind", "user_yes", "user_no", "user_mark",
+        "line_attached", "line_confirmed", "edge_behind", "edge_question_repeat", "user_yes", "user_no",
+        "user_mark",
     ]
 
     private var reason = ""

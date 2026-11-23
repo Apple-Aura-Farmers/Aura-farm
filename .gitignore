@@ -62,3 +62,7 @@ testbuild/
 
 # Derived data from a one-off build check, the same as testbuild/.
 build-check/
+
+# App Store listing images, rebuilt from the simulator and the brand assets rather than kept
+# in history: the set runs to tens of megabytes.
+appstore-screenshots/

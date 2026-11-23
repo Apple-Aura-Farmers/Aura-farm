@@ -180,4 +180,48 @@ final class AlignmentCheckTests: XCTestCase {
         _ = feed(&check, disc(cx: 85), from: time, seconds: 1.5)
         XCTAssertTrue(check.isLost)
     }
+
+    // MARK: Once the field is confirmed: geometry only, looser, held longer
+
+    private let confirmed = FieldCircle(centre: CGPoint(x: 80.5 * 8, y: 45.5 * 8), radius: 35 * 8)
+
+    private func confirmedCheck() -> (AlignmentCheck, Double) {
+        var check = AlignmentCheck()
+        let time = feed(&check, disc(), from: 0, seconds: 2)
+        check.confirmedCircle = confirmed
+        return (check, time)
+    }
+
+    func testTurningFocusSwingingEvennessAndGlareIsNotLostOnceTheFieldIsConfirmed() {
+        var (check, time) = confirmedCheck()
+        let uneven = disc(modify: { x, _, level in x >= 80 ? level / 2 : level })
+        let glare = disc(modify: { x, y, level in x < 75 && y < 40 ? 255 : level })
+        for _ in 0..<5 {
+            time = feed(&check, uneven, from: time, seconds: 2)
+            time = feed(&check, glare, from: time, seconds: 2)
+        }
+        XCTAssertFalse(check.isLost)
+    }
+
+    func testAShiftOfQuarterRadiusIsLostAfterThreeSecondsButNotTwoAndAHalf() {
+        var (check, time) = confirmedCheck()
+        // 7 cells = 56 px of 280: 0.2 r, over 0.18 and under what a loose check would shrug at.
+        let shifted = disc(cx: 87)
+        time = feed(&check, shifted, from: time, seconds: 2.5)
+        XCTAssertFalse(check.isLost, "held 2.4 s")
+        _ = feed(&check, shifted, from: time, seconds: 0.6)
+        XCTAssertTrue(check.isLost, "held 3.0 s")
+    }
+
+    func testAShiftUnderTheNewLimitIsNotLostBeforeTheFieldIsConfirmedItIsTheOldTenth() {
+        // Not confirmed: the old 0.10 r limit and 2 s apply (5 cells = 0.14 r).
+        var check = AlignmentCheck()
+        var time = feed(&check, disc(), from: 0, seconds: 2)
+        time = feed(&check, disc(cx: 85), from: time, seconds: 2.1)
+        XCTAssertTrue(check.isLost)
+        // Confirmed: the same 0.14 r shift is inside 0.18.
+        var (confirmedCheck, start) = self.confirmedCheck()
+        start = feed(&confirmedCheck, disc(cx: 85), from: start, seconds: 6)
+        XCTAssertFalse(confirmedCheck.isLost)
+    }
 }
