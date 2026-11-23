@@ -61,7 +61,9 @@ struct ScanOutcomeView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background { backdrop }
             .overlay(alignment: .topLeading) {
-                Button { dismiss() } label: {
+                Button {
+                    dismiss()
+                } label: {
                     Image(systemName: "chevron.backward").font(.title3).frame(width: 36, height: 36)
                 }
                 .buttonStyle(.glass)
@@ -88,7 +90,8 @@ struct ScanOutcomeView: View {
             succeeded
             ? Color(red: 0x11 / 255, green: 0x1B / 255, blue: 0x16 / 255)
             : Color(red: 0x1D / 255, green: 0x0E / 255, blue: 0x0B / 255)
-        return base
+        return
+            base
             .overlay(alignment: .top) {
                 Ellipse()
                     .fill(

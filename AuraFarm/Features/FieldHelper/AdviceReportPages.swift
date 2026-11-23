@@ -295,7 +295,9 @@ private struct SummaryPage: View {
             HStack(alignment: .top, spacing: 0) {
                 detail("Sampled Date", day(report.sampledAt))
                 detail("Report Date", day(report.generatedAt))
-                detail("Water state", [report.moisture, report.cropStage].compactMap { $0 }.joined(separator: " · "))
+                detail(
+                    "Water state",
+                    [report.moisture, report.cropStage].compactMap { $0 }.joined(separator: " · "))
             }
         }
         .padding(.vertical, 10)
@@ -333,10 +335,13 @@ private struct SummaryPage: View {
         var parts: [String] = []
         if let total = report.totalCount {
             parts.append(
-                "\(total == 1 ? "1 organism was" : "\(total) organisms were") counted across \(report.framesKept) frames.")
+                "\(total == 1 ? "1 organism was" : "\(total) organisms were") counted across \(report.framesKept) frames."
+            )
         }
         parts.append(contentsOf: report.reasons.filter { !$0.localizedCaseInsensitiveContains("counted") })
-        if !report.confidence.isEmpty { parts.append("\(report.levelTitle), with \(report.confidence.lowercased()) confidence.") }
+        if !report.confidence.isEmpty {
+            parts.append("\(report.levelTitle), with \(report.confidence.lowercased()) confidence.")
+        }
         if let previous = report.previousComparable {
             parts.append(
                 "The current sample was compared with the sample of \(day(previous.date)), taken in the same water state."
@@ -422,12 +427,13 @@ private struct SummaryPage: View {
                 Text(intro)
                     .font(Style.body(11))
                     .fixedSize(horizontal: false, vertical: true)
-                let cells = slots.map { name in
-                    AnyView(
-                        report.education?.items.first(where: { $0.name == name }).map {
-                            AnyView(measurementCard($0))
-                        } ?? AnyView(missingCard(name)))
-                } + [AnyView(fertilizerCard)]
+                let cells =
+                    slots.map { name in
+                        AnyView(
+                            report.education?.items.first(where: { $0.name == name }).map {
+                                AnyView(measurementCard($0))
+                            } ?? AnyView(missingCard(name)))
+                    } + [AnyView(fertilizerCard)]
                 ForEach(0..<2, id: \.self) { row in
                     HStack(alignment: .top, spacing: 8) {
                         ForEach(0..<3, id: \.self) { column in cells[row * 3 + column] }
