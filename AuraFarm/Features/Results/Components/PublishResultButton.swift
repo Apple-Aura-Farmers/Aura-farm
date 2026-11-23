@@ -14,7 +14,7 @@ struct PublishResultButton: View {
         case preparing
         /// The sweep cannot become a report, with the reason to show.
         case cannotPublish(String)
-        case ready(SoilReport)
+        case ready(SoilReport, [OrganismPicture])
     }
 
     var body: some View {
@@ -26,12 +26,13 @@ struct PublishResultButton: View {
                 Text(reason)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
-            case .ready(let report):
+            case .ready(let report, let pictures):
                 PublishButton(title: "Publish result") {
                     guard let uploader = SoilResultUploader() else {
                         throw SoilResultUploader.Failure.notConfigured
                     }
-                    try await uploader.upload(report, from: sweep.manifest?.details)
+                    try await uploader.upload(
+                        report, pictures: pictures, from: sweep.manifest?.details)
                 }
             }
         }
@@ -43,11 +44,11 @@ struct PublishResultButton: View {
         guard case .preparing = step else { return }
         let sweep = sweep
         let built = await Task.detached(priority: .userInitiated) {
-            Result { try SoilReportExporter.report(for: sweep) }
+            Result { (try SoilReportExporter.report(for: sweep), OrganismPictures.of(sweep)) }
         }.value
         switch built {
-        case .success(let report):
-            step = .ready(report)
+        case .success(let (report, pictures)):
+            step = .ready(report, pictures)
         case .failure(let error):
             step = .cannotPublish(error.localizedDescription)
         }

@@ -52,6 +52,9 @@ struct LabSetupInfo: Equatable {
     var stage: StageAxesProgress?
     var stageAxes: StageAxes?
     var monitor = RunMonitorInfo()
+    /// The focus step was finished in this setup (not skipped). The automated stage does not
+    /// calibrate before it.
+    var focusFound = false
 }
 
 /// The focus meter's value, published on every analyzed frame; a value of its own so only
@@ -110,6 +113,13 @@ final class LabSetupSession {
     private var latestAlignment = AlignmentReading()
     private var focusIndexes: [(seconds: Double, value: Double)] = []
     private var focusWasFocused = false
+    /// See `LabSetupInfo.focusFound`.
+    private var focusFound = false
+    /// Since when a focus already found has read well below its peak again.
+    private var focusFadedSince: Double?
+    /// A found focus that stays under `FocusThresholds.passedFraction` of its peak this long, before
+    /// it is confirmed, is lost: the focus guide starts afresh. PLACEHOLDER.
+    static let focusFadedSeconds = 1.0
     /// Alignment was lost after it passed: the field is learned again, and a focus already found
     /// before the loss stays found when focus comes round again.
     private var resumingAfterLoss = false
@@ -182,6 +192,7 @@ final class LabSetupSession {
         confirmedFieldCircle = nil
         resumingAfterLoss = false
         focusWasFocused = false
+        focusFound = false
         stageAxes = nil
         focusIndexes = []
         info = LabSetupInfo(step: .align, frameSize: info.frameSize)
@@ -280,6 +291,13 @@ final class LabSetupSession {
             square = box
             if let sharpness = FrameAnalyzer.stats(of: buffer, in: box, step: 4)?.sharpness {
                 focusReading = focus.update(sharpness: sharpness, seconds: seconds)
+                if focusHasFaded(focusReading, seconds) {
+                    // The knob was turned away again, or (after an alignment loss) the picture is
+                    // not the one that was found sharp: found no longer.
+                    resetFocus()
+                    stepConfirmed = false
+                    focusReading = focus.update(sharpness: sharpness, seconds: seconds)
+                }
                 focusWasFocused = focusReading?.state == .focused
                 // The dial follows from the start, so it knows the side once it shows: after
                 // the peak has been passed once.
@@ -314,8 +332,11 @@ final class LabSetupSession {
             alignment.reset()
             resumingAfterLoss = true
             focusReading = nil
-        } else if flow.update(focused: focusReading?.state == .focused && canAdvance) {
+        } else if flow.update(
+            focused: focusReading?.state == .focused && focusFadedSince == nil && canAdvance)
+        {
             stepConfirmed = false
+            focusFound = true
             monitor.setFocusBaseline(median(focusIndexes.map(\.value)))
             // Tracking starts afresh for the stage step: the picture is sharper than the anchor
             // the field step left.
@@ -326,11 +347,25 @@ final class LabSetupSession {
             isAlignmentPassed: alignment.isPassed, focus: focusReading, focusDial: dialReading,
             focusSquare: square,
             resumeStep: flow.resumeStep)
+        info.focusFound = focusFound
         return info
     }
 
     /// The step may move on: always in the lab, after the person's confirmation on the page.
     private var canAdvance: Bool { !isHeld && (!confirmsSteps || stepConfirmed) }
+
+    /// A focus that was found has read well below its peak for `focusFadedSeconds`.
+    private func focusHasFaded(_ reading: FocusReading?, _ seconds: Double) -> Bool {
+        guard let reading, reading.state == .focused,
+            reading.level < focus.thresholds.passedFraction
+        else {
+            focusFadedSince = nil
+            return false
+        }
+        let since = focusFadedSince ?? seconds
+        focusFadedSince = since
+        return seconds - since >= Self.focusFadedSeconds - 1e-9
+    }
 
     private static func newSetupDial() -> FocusDial {
         FocusDial(
@@ -339,6 +374,7 @@ final class LabSetupSession {
 
     private func resetFocus() {
         focus.reset()
+        focusFadedSince = nil
         focusDial = Self.newSetupDial()
     }
 
@@ -350,6 +386,7 @@ final class LabSetupSession {
         stageAxes = nil
         referenceCircle = lastPassingCircle
         confirmedFieldCircle = nil
+        focusFound = false
     }
 
     /// Focus is about to run (the field was confirmed): a focus found before an alignment loss
@@ -445,6 +482,7 @@ final class LabSetupSession {
                         featureCells: step.tracking.featureCells)))
         }
         info.step = flow.step
+        info.focusFound = focusFound
         info.frameSize = step.frameSize
         info.resumeStep = flow.resumeStep
         info.stage = flow.step == .stage || flow.step == .done ? progress : nil

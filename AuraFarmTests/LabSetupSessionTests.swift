@@ -115,10 +115,62 @@ final class LabSetupSessionTests: XCTestCase {
         XCTAssertEqual(session.info.focus?.state, .focused)
         XCTAssertEqual(session.step, .focus, "focused, but waiting for the person")
         XCTAssertNil(session.focusBaseline)
+        XCTAssertFalse(session.info.focusFound)
         session.confirmStep()
         feed(texturedFrame(80), for: 0.3, from: time, session: session, pipeline: pipeline)
         XCTAssertEqual(session.step, .stage)
         XCTAssertNotNil(session.focusBaseline)
+        XCTAssertTrue(session.info.focusFound)
+        session.redo()
+        XCTAssertFalse(session.info.focusFound, "asked for again after a redo")
+    }
+
+    /// The panel must not stay up over a picture that was turned out of focus again.
+    func testAFoundFocusThatFadesBeforeItIsConfirmedIsLostAndCanBeFoundAgain() {
+        let pipeline = makePipeline()
+        let session = LabSetupSession()
+        var time = reachFocus(session: session, pipeline: pipeline)
+        session.confirmsSteps = true
+        func sweep() {
+            for amplitude in [30.0, 60, 80, 80, 80, 20, 20, 20, 80, 80] {
+                time = feed(
+                    texturedFrame(amplitude), for: 0.4, from: time, session: session,
+                    pipeline: pipeline)
+            }
+            time = feed(texturedFrame(80), for: 3, from: time, session: session, pipeline: pipeline)
+        }
+        sweep()
+        XCTAssertEqual(session.info.focus?.state, .focused)
+        time = feed(texturedFrame(20), for: 0.5, from: time, session: session, pipeline: pipeline)
+        session.confirmStep()
+        time = feed(texturedFrame(20), for: 0.2, from: time, session: session, pipeline: pipeline)
+        XCTAssertEqual(session.step, .focus, "a tap on a blurry picture does not move on")
+        time = feed(texturedFrame(20), for: 1.5, from: time, session: session, pipeline: pipeline)
+        XCTAssertNotEqual(session.info.focus?.state, .focused)
+        sweep()
+        XCTAssertEqual(session.info.focus?.state, .focused, "found again")
+        XCTAssertEqual(session.step, .focus, "the early tap was forgotten")
+        session.confirmStep()
+        feed(texturedFrame(80), for: 0.3, from: time, session: session, pipeline: pipeline)
+        XCTAssertEqual(session.step, .stage)
+    }
+
+    func testFocusIsNotFoundWhenItWasSkipped() {
+        let skipping = LabSetupSession(skippingAlignAndFocus: true)
+        let pipeline = makePipeline()
+        var time = feed(discFrame(), for: 1.0, from: 0, session: skipping, pipeline: pipeline)
+        for _ in 0..<40 where pipeline.fieldState.mask == nil {
+            time = feed(discFrame(), for: 0.2, from: time, session: skipping, pipeline: pipeline)
+        }
+        pipeline.confirmField()
+        feed(discFrame(), for: 0.5, from: time, session: skipping, pipeline: pipeline)
+        XCTAssertEqual(skipping.step, .stage)
+        XCTAssertFalse(skipping.info.focusFound)
+
+        let session = LabSetupSession()
+        session.skipEverything()
+        XCTAssertEqual(session.step, .done)
+        XCTAssertFalse(session.info.focusFound)
     }
 
     func testFocusFinishingSetsTheBaselineAndMovesOnToTheStage() {

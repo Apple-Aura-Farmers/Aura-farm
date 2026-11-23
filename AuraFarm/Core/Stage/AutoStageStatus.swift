@@ -8,6 +8,8 @@ enum AutoStageAlert: Equatable {
     case disconnected
     case emptyCapReached
     case calibrationFailed(String)
+    /// Setup went past the focus step: the person confirms the picture is sharp first.
+    case focusFirst
 
     /// A short name for the CSV (`alert_<kind>`) and for telling one alert from another.
     var kind: String {
@@ -17,6 +19,7 @@ enum AutoStageAlert: Equatable {
         case .disconnected: "disconnected"
         case .emptyCapReached: "empty_cap_reached"
         case .calibrationFailed: "calibration_failed"
+        case .focusFirst: "focus_first"
         }
     }
 
@@ -28,6 +31,7 @@ enum AutoStageAlert: Equatable {
         case .disconnected: "The Terraloka Stage disconnected. Reconnecting…"
         case .emptyCapReached: "Still no sample after crossing. Keep going or end this column?"
         case .calibrationFailed(let reason): "Calibration didn't work. \(reason)"
+        case .focusFirst: "Turn the focus knob until the picture is sharp, then calibrate."
         }
     }
 }
@@ -80,6 +84,10 @@ struct AutoStageStatus: Equatable {
             status.title = connectionText(client)
         case .waitingForStageStep:
             status.title = "Getting ready to calibrate…"
+        case .waitingForFocus:
+            status.title = "Focus the microscope first"
+            status.detail = "The stage can only measure itself in a sharp picture."
+            status.needsPerson = .focusFirst
         case .warmingUp(let index, let count, let title):
             status.title = "Warming up the stage (\(index) of \(count)): \(title)"
         case .calibrating(let axis, _):

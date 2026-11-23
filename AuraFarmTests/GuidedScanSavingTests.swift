@@ -49,6 +49,71 @@ final class GuidedScanSavingTests: XCTestCase {
         XCTAssertTrue(sweep.frameURLs.isEmpty)
     }
 
+    /// A record with three organisms, and a run folder with the pictures of the first two.
+    private func runWithPictures(in runs: URL) throws -> (record: GuideRunRecord, folder: URL) {
+        var record = record
+        record.organisms = (1...3).map {
+            RunMapOrganism(
+                label: $0 == 2 ? "Nematode" : "Volvox", x: 0, y: 0, column: 1, seconds: 1,
+                image: "organism-00\($0).jpg")
+        }
+        let folder = runs.appending(path: "run-20261123-100000-organisms")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        for i in 1...2 {
+            try Data("picture \(i)".utf8).write(to: folder.appending(path: "organism-00\(i).jpg"))
+        }
+        return (record, folder)
+    }
+
+    func testTheOrganismPicturesAreKeptWithTheSweepAndNamedInItsReport() throws {
+        let runs = directory.appending(path: "elsewhere-runs")
+        let (record, folder) = try runWithPictures(in: runs)
+        let sweeps = directory.appending(path: "sweeps")
+        let name = try GuidedScanSaver.save(
+            details: details, record: record, movementCSV: nil, organisms: folder, in: sweeps)
+        // The run's own folder may go: the sweep keeps its pictures.
+        try FileManager.default.removeItem(at: runs)
+        let sweep = try XCTUnwrap(SweepLibrary.sweeps(in: sweeps).first { $0.name == name })
+        XCTAssertTrue(sweep.frameURLs.isEmpty, "pictures are not frames")
+
+        let pictures = OrganismPictures.of(sweep, runs: runs)
+        let id = SoilReportExporter.reportID(for: sweep).uuidString.lowercased()
+        XCTAssertEqual(
+            pictures.map(\.image),
+            [
+                .init(taxon: "Volvox", path: "\(id)/organism-001.jpg"),
+                .init(taxon: "Nematode", path: "\(id)/organism-002.jpg"),
+            ], "the third organism has no picture on the phone")
+        XCTAssertEqual(try pictures.map { try Data(contentsOf: $0.file) }.first, Data("picture 1".utf8))
+        XCTAssertEqual(
+            try SoilReportExporter.report(for: sweep).organismImages, pictures.map(\.image))
+        XCTAssertNil(try XCTUnwrap(GuidedScanSaver.runRecord(in: sweep.url)).organisms[2].image)
+    }
+
+    func testASweepSavedBeforeItKeptItsPicturesFindsThoseOfItsRun() throws {
+        let runs = directory.appending(path: "elsewhere-runs")
+        let (record, folder) = try runWithPictures(in: runs)
+        try GuideRunRecord.encoder().encode(record).write(
+            to: runs.appending(path: "run-20261123-100000.json"))
+        var other = record
+        other.started = record.started.addingTimeInterval(-900)
+        try GuideRunRecord.encoder().encode(other).write(
+            to: runs.appending(path: "run-20261123-094500.json"))
+        let sweeps = directory.appending(path: "sweeps")
+        let name = try GuidedScanSaver.save(
+            details: details, record: record, movementCSV: nil, in: sweeps)
+        let sweep = try XCTUnwrap(SweepLibrary.sweeps(in: sweeps).first { $0.name == name })
+        XCTAssertEqual(
+            OrganismPictures.of(sweep, runs: runs).map(\.file.path),
+            ["organism-001.jpg", "organism-002.jpg"].map { folder.appending(path: $0).path })
+    }
+
+    func testASweepWithNoPicturesSendsNone() throws {
+        let sweep = try savedSweep()
+        XCTAssertTrue(OrganismPictures.of(sweep, runs: directory.appending(path: "none")).isEmpty)
+        XCTAssertNil(try SoilReportExporter.report(for: sweep).organismImages)
+    }
+
     func testTheLensVideoIsLinkedIntoTheSweepAndNamedInItsRecord() throws {
         let video = directory.appending(path: "lens-test.mov")
         try Data("video".utf8).write(to: video)

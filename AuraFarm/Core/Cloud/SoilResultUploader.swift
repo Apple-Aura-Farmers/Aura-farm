@@ -15,6 +15,8 @@ struct SoilResultUploader {
         /// No row in `soil_samples` has this `sample_code`, and the sweep names no plot to
         /// register one against: it was recorded before plots could be chosen.
         case noSuchSample(code: String)
+        /// The result is in the records, but some of its pictures are not.
+        case picturesNotSent(missing: Int, of: Int, reason: String)
 
         var errorDescription: String? {
             switch self {
@@ -25,6 +27,10 @@ struct SoilResultUploader {
                     No sample is registered as \(code), and this test names no plot, \
                     so one cannot be registered for it. Run the test again from a farm plot.
                     """
+            case .picturesNotSent(let missing, let total, let reason):
+                return
+                    "The result was sent, but \(missing) of its \(total) pictures were not. "
+                    + "Try again to send them. (\(reason))"
             }
         }
     }
@@ -52,6 +58,62 @@ struct SoilResultUploader {
             .upsert(ResultRow(report: report, sampleID: sampleID))
             .execute()
         try await replaceCounts(of: report)
+    }
+
+    /// The private storage the organism pictures go in. Made by supabase/organism-images.sql.
+    static let pictureBucket = "organism-images"
+    /// How many pictures are sent at once.
+    static let picturesAtOnce = 4
+
+    /// Files the report, then sends its pictures. The result goes first, so a picture that fails
+    /// costs the picture and not the count; sending again replaces what is already there.
+    /// - Parameter progress: how many pictures are sent so far, on the main actor.
+    func upload(
+        _ report: SoilReport, pictures: [OrganismPicture], from details: SampleDetails? = nil,
+        progress: @MainActor @escaping (Int) -> Void = { _ in }
+    ) async throws {
+        try await upload(report, from: details)
+        let bucket = client.storage.from(Self.pictureBucket)
+        try await Self.send(pictures, progress: progress) { picture in
+            try await bucket.upload(
+                picture.image.path, data: Data(contentsOf: picture.file),
+                options: FileOptions(contentType: "image/jpeg", upsert: true))
+        }
+    }
+
+    /// Sends every picture, a few at a time. One that fails does not stop the others; when any
+    /// failed, says how many and why the first one did.
+    static func send(
+        _ pictures: [OrganismPicture], atOnce: Int = picturesAtOnce,
+        progress: @MainActor @escaping (Int) -> Void = { _ in },
+        with sendOne: @escaping @Sendable (OrganismPicture) async throws -> Void
+    ) async throws {
+        var waiting = pictures[...]
+        var sent = 0
+        var problems: [String] = []
+        await withTaskGroup(of: String?.self) { group in
+            func next() {
+                guard let picture = waiting.popFirst() else { return }
+                group.addTask {
+                    do {
+                        try await sendOne(picture)
+                        return nil
+                    } catch {
+                        return error.localizedDescription
+                    }
+                }
+            }
+            for _ in 0..<max(atOnce, 1) { next() }
+            while let result = await group.next() {
+                if let problem = result { problems.append(problem) } else { sent += 1 }
+                await progress(sent)
+                next()
+            }
+        }
+        if let reason = problems.first {
+            throw Failure.picturesNotSent(
+                missing: problems.count, of: pictures.count, reason: reason)
+        }
     }
 
     /// Rewrites this result's rows in `microorganisms`.

@@ -89,8 +89,8 @@ final class GuidedScanSetupTests: XCTestCase {
     }
 
     #if DEBUG
-        /// The page's settings are the lab's own; only three differ.
-        func testThePageOverridesOnlyTheGuideTheCoverageAndTheDetections() {
+        /// The page's settings are the lab's own; only four differ.
+        func testThePageOverridesOnlyTheGuideTheCoverageTheDetectionsAndTheSkip() {
             var lab = LabSettings()
             lab.mappingName = ScreenMapping.rotateLeft.rawValue
             lab.skipsAlignFocus = true
@@ -103,10 +103,11 @@ final class GuidedScanSetupTests: XCTestCase {
             expected.guideDryRun = true
             expected.coverageStep = 1.6
             expected.showsDetections = false
+            expected.skipsAlignFocus = false
             XCTAssertEqual(page, expected)
             XCTAssertTrue(page.guideDryRun)
             XCTAssertEqual(page.mappingName, lab.mappingName)
-            XCTAssertEqual(page.skipsAlignFocus, true)
+            XCTAssertFalse(page.skipsAlignFocus, "a real test always aligns and focuses")
         }
 
         func testTheLabsDefaultsAreTheOnesTheLabViewHadAtHead() {
