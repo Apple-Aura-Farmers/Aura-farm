@@ -9,6 +9,7 @@ struct NewTestView: View {
 
     @Environment(\.dismiss) private var dismiss
     @FocusState private var focus: Field?
+    @State private var isShowingPreparation = false
 
     private enum Field {
         case note
@@ -47,8 +48,8 @@ struct NewTestView: View {
                 // The guide fixes the amounts the sample records, so it stays one tap
                 // from the only screen that opens a test.
                 Section {
-                    NavigationLink {
-                        SamplePrepView()
+                    Button {
+                        isShowingPreparation = true
                     } label: {
                         Label("How to prepare the sample", systemImage: "testtube.2")
                     }
@@ -62,6 +63,11 @@ struct NewTestView: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Close", systemImage: "xmark") { dismiss() }
                 }
+            }
+            // The operator makes the slide themselves here, so the flow includes the section
+            // for it and its bar counts three.
+            .sheet(isPresented: $isShowingPreparation) {
+                PreparationFlow(preparingSample: true) { isShowingPreparation = false }
             }
             .safeAreaInset(edge: .bottom) {
                 Button(action: start) {
