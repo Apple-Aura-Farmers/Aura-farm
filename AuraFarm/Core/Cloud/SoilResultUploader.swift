@@ -102,7 +102,7 @@ struct SoilResultUploader {
             .from("soil_samples")
             .insert(
                 SampleRow(
-                    code: code, plotID: plotID, location: details?.location,
+                    code: code, plotID: plotID, place: details?.location,
                     collectedAt: recordedAt)
             )
             .select("id")
@@ -121,6 +121,9 @@ struct SampleRow: Encodable {
     var id = UUID()
     var code: String
     var plotID: UUID
+    /// The plot's middle as well-known text. `location` is a PostGIS column, so the line of
+    /// text a sample shows the helper is not something it accepts: it parses geometry, and
+    /// anything else comes back as "parse error, invalid geometry".
     var location: String?
     var collectedAt: Date
 
@@ -130,6 +133,19 @@ struct SampleRow: Encodable {
         case plotID = "plot_id"
         case location
         case collectedAt = "collected_at"
+    }
+
+    /// `place` is what `Plot.locationDescription` wrote. A plot whose middle cannot be read
+    /// back out of it sends no location: the plot it is filed under carries the land anyway.
+    init(id: UUID = UUID(), code: String, plotID: UUID, place: String?, collectedAt: Date) {
+        self.id = id
+        self.code = code
+        self.plotID = plotID
+        self.location =
+            place
+            .flatMap(GeoPoint.init(locationDescription:))
+            .map(PlotBoundary.wellKnownText(for:))
+        self.collectedAt = collectedAt
     }
 }
 

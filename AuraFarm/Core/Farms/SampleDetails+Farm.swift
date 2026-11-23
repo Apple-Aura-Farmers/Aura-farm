@@ -16,6 +16,23 @@ extension Plot {
     }
 }
 
+extension GeoPoint {
+    /// Reads back a place written by `Plot.locationDescription`.
+    ///
+    /// A sample keeps its plot's middle as that one line of text, and the records want a
+    /// point, so the line has to be read as numbers again. Only what that property writes is
+    /// accepted: two decimal numbers, latitude first. nil for anything else, including the
+    /// empty line a plot with no corners leaves.
+    init?(locationDescription line: String) {
+        let parts = line.split(separator: ",")
+        guard parts.count == 2,
+            let latitude = Double(parts[0].trimmingCharacters(in: .whitespaces)),
+            let longitude = Double(parts[1].trimmingCharacters(in: .whitespaces))
+        else { return nil }
+        self.init(latitude: latitude, longitude: longitude)
+    }
+}
+
 extension SampleDetails {
     /// Fills in everything a sample takes from its plot, so none of it is typed.
     ///
