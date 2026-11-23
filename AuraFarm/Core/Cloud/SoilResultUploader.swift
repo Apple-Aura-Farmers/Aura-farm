@@ -12,8 +12,8 @@ struct SoilResultUploader {
     enum Failure: LocalizedError {
         /// Config/Local.xcconfig names no project, so this build has no backend.
         case notConfigured
-        /// No row in `soil_samples` has this `sample_code`. The helper typed a code that the
-        /// collector never registered, or typed it differently.
+        /// No row in `soil_samples` has this `sample_code`, and the sweep names no plot to
+        /// register one against: it was recorded before plots could be chosen.
         case noSuchSample(code: String)
 
         var errorDescription: String? {
@@ -21,7 +21,10 @@ struct SoilResultUploader {
             case .notConfigured:
                 return "This build is not set up to send tests."
             case .noSuchSample(let code):
-                return "No sample is registered as \(code)."
+                return """
+                    No sample is registered as \(code), and this test names no plot, \
+                    so one cannot be registered for it. Run the test again from a farm plot.
+                    """
             }
         }
     }
@@ -31,14 +34,19 @@ struct SoilResultUploader {
         self.client = client
     }
 
-    /// Files the report against the sample whose `sample_code` the helper entered.
+    /// Files the report against the sample whose `sample_code` the helper entered, registering
+    /// that sample on the first test sent for it.
+    ///
+    /// `details` is what the helper filled in before the sweep; the plot and location it
+    /// carries are what a new `soil_samples` row needs, and the report itself does not carry
+    /// them. Without it only an already registered sample can be filed against.
     ///
     /// Writes with upsert rather than insert, because the report's id is stable for a sweep:
     /// sending the same sweep twice updates its row instead of making a second one, which is
     /// what a helper retrying on a bad connection needs.
-    func upload(_ report: SoilReport) async throws {
+    func upload(_ report: SoilReport, from details: SampleDetails? = nil) async throws {
         let code = report.sample.sampleID.trimmingCharacters(in: .whitespacesAndNewlines)
-        let sampleID = try await sampleID(forCode: code)
+        let sampleID = try await sampleID(forCode: code, from: details, at: report.sample.recordedAt)
         try await client
             .from("soil_results")
             .upsert(ResultRow(report: report, sampleID: sampleID))
@@ -63,8 +71,20 @@ struct SoilResultUploader {
         try await client.from("microorganisms").insert(rows).execute()
     }
 
-    /// The primary key of the sample bearing this code.
-    private func sampleID(forCode code: String) async throws -> UUID {
+    /// The primary key of the sample bearing this code, registering the sample if the records
+    /// do not have it yet.
+    ///
+    /// Nothing else in the app writes `soil_samples`, so without this a test could only ever
+    /// be sent for a sample somebody had registered by hand in the dashboard.
+    ///
+    /// Selected before inserting rather than upserted, because the code is the helper's own
+    /// label and nothing in the records makes it unique: an upsert would need a conflict
+    /// target this table may not have.
+    private func sampleID(
+        forCode code: String,
+        from details: SampleDetails?,
+        at recordedAt: Date
+    ) async throws -> UUID {
         struct Row: Decodable { var id: UUID }
         let rows: [Row] =
             try await client
@@ -74,8 +94,42 @@ struct SoilResultUploader {
             .limit(1)
             .execute()
             .value
-        guard let first = rows.first else { throw Failure.noSuchSample(code: code) }
+        if let first = rows.first { return first.id }
+
+        guard let plotID = details?.plotID else { throw Failure.noSuchSample(code: code) }
+        let registered: [Row] =
+            try await client
+            .from("soil_samples")
+            .insert(
+                SampleRow(
+                    code: code, plotID: plotID, location: details?.location,
+                    collectedAt: recordedAt)
+            )
+            .select("id")
+            .execute()
+            .value
+        guard let first = registered.first else { throw Failure.noSuchSample(code: code) }
         return first.id
+    }
+}
+
+/// One row of `soil_samples`: the soil the microscope tests are of.
+///
+/// `collected_by` is not sent. The column defaults to whoever is signed in, which is the
+/// helper registering the sample.
+struct SampleRow: Encodable {
+    var id = UUID()
+    var code: String
+    var plotID: UUID
+    var location: String?
+    var collectedAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case code = "sample_code"
+        case plotID = "plot_id"
+        case location
+        case collectedAt = "collected_at"
     }
 }
 

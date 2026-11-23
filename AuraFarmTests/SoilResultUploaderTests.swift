@@ -33,6 +33,21 @@ final class SoilResultUploaderTests: XCTestCase {
         )
     }
 
+    func testTheRegisteredSampleIsNamedTheWayThePostgresTableIs() throws {
+        let row = SampleRow(
+            code: "Pak Wayan", plotID: UUID(), location: "-8.54000, 115.12000",
+            collectedAt: Date(timeIntervalSince1970: 1_793_000_000))
+
+        let json =
+            try JSONSerialization.jsonObject(with: JSONEncoder().encode(row)) as? [String: Any]
+
+        // collected_by is left out on purpose: the column defaults to whoever is signed in.
+        XCTAssertEqual(
+            Set(json?.keys ?? [:].keys),
+            ["id", "sample_code", "plot_id", "location", "collected_at"]
+        )
+    }
+
     func testTheRowRepeatsWhatTheManagerFiltersOnAndLeavesTheRestInTheReport() throws {
         let row = ResultRow(report: report(), sampleID: UUID())
 

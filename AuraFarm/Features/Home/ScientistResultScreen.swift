@@ -276,7 +276,7 @@ struct ScientistResultScreen: View {
             guard let uploader = SoilResultUploader() else {
                 throw SoilResultUploader.Failure.notConfigured
             }
-            try await uploader.upload(report)
+            try await uploader.upload(report, from: sweep.manifest?.details)
             upload = .sent
         } catch {
             upload = .failed(error.localizedDescription)
