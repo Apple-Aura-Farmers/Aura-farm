@@ -289,4 +289,51 @@ final class StageZigzagTests: XCTestCase {
         guard case .finished(let reason)? = actions.last else { return XCTFail("did not finish") }
         XCTAssertTrue(reason.hasPrefix("edge at the start of column 2"))
     }
+
+    // MARK: Progress
+
+    func testProgressRisesToOneAndEndsOnlyWhenThePathDoes() throws {
+        let map = mapping()
+        var zigzag = StageZigzag(plan: try XCTUnwrap(StageZigzagPlan(mapping: map)), chunkDegrees: 3)
+        XCTAssertEqual(zigzag.progress, StageZigzagProgress())
+        var angles = (x: 90, y: 90)
+        var event: StageZigzagEvent?
+        var last = 0.0
+        var firstTotal = 0
+        run: for _ in 0..<50_000 {
+            guard let action = zigzag.next(angles: angles, event: event) else { break }
+            event = nil
+            XCTAssertGreaterThanOrEqual(zigzag.progress.fraction, last)
+            last = zigzag.progress.fraction
+            if zigzag.progress.column == 1, firstTotal == 0 {
+                firstTotal = zigzag.progress.totalColumns
+            }
+            switch action {
+            case .moveTo(let servo, let angle):
+                if servo == .x { angles.x = angle } else { angles.y = angle }
+                event = .settled
+            case .dwell: event = .dwellDone
+            case .finished: break run
+            default: break
+            }
+            if !zigzag.isFinished { XCTAssertLessThan(last, 1) }
+        }
+        XCTAssertTrue(zigzag.isFinished)
+        XCTAssertEqual(zigzag.progress.fraction, 1)
+        XCTAssertEqual(
+            Double(firstTotal), Double(zigzag.column), accuracy: 2)
+        XCTAssertEqual(zigzag.progress.totalColumns, zigzag.column)
+    }
+
+    func testProgressStaysAtZeroOnTheWayToTheCornerAndJumpsToOneWhenAnEdgeEndsThePath() throws {
+        let map = mapping()
+        var zigzag = StageZigzag(plan: try XCTUnwrap(StageZigzagPlan(mapping: map)), chunkDegrees: 3)
+        _ = zigzag.next(angles: (90, 90), event: nil)
+        XCTAssertEqual(zigzag.progress.fraction, 0)
+        XCTAssertEqual(zigzag.progress.text, "Moving to the start corner")
+        var angles = (x: 90, y: 90)
+        zigzag = StageZigzag(plan: try XCTUnwrap(StageZigzagPlan(mapping: map)), chunkDegrees: 3)
+        _ = simulate(&zigzag, angles: &angles, edge: { column, dwell, _ in column == 3 && dwell == 1 })
+        XCTAssertEqual(zigzag.progress.fraction, 1)
+    }
 }

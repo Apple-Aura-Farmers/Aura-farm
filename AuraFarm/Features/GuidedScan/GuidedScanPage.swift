@@ -579,6 +579,8 @@ struct GuidedScanPage: View {
             if let driver, isTerraloka {
                 StageRunStatusCard(
                     status: driver.status, isPaused: driver.phase == .paused,
+                    progress: driver.pathMode == .presetPath
+                        ? driver.presetProgress ?? StageZigzagProgress() : nil,
                     actions: driver.status.needsPerson.map { alertActions($0, driver) } ?? [],
                     onPause: { driver.pause() }, onResume: { driver.resume() })
             } else {

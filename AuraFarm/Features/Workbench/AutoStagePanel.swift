@@ -61,6 +61,9 @@
                         Text(String(format: "Dwell %.1f s", driver.dwellSeconds)).font(.footnote)
                     }
                 }
+                if driver.pathMode == .presetPath, let progress = driver.presetProgress {
+                    StageProgressBar(progress: progress)
+                }
                 if driver.presetEdgePrompt {
                     HStack {
                         Text("Edge?").font(.footnote.bold())

@@ -101,6 +101,8 @@ final class AutoStageDriver {
     private var lastTracked: (position: CGPoint, at: Date)?
     // The preset zig-zag.
     private var zigzag: StageZigzag?
+    /// How far the preset path has come; nil before it starts and while following the guide.
+    private(set) var presetProgress: StageZigzagProgress?
     private var presetEvent: StageZigzagEvent?
     private var presetAwaitingSettle = false
     private var presetFinished = false
@@ -308,6 +310,7 @@ final class AutoStageDriver {
         guard new != pathMode else { return }
         pathMode = new
         zigzag = nil
+        presetProgress = nil
         presetFinished = false
         presetEvent = nil
         presetAwaitingSettle = false
@@ -1025,6 +1028,9 @@ final class AutoStageDriver {
         }
         guard !inFlight, Date().timeIntervalSince(lastSettledAt) >= 0.3 else { return }
         for _ in 0..<6 {
+            defer {
+                if let now = zigzag?.progress, now != presetProgress { presetProgress = now }
+            }
             let event = presetEvent
             presetEvent = nil
             var trackedPosition: CGPoint?
@@ -1078,6 +1084,7 @@ final class AutoStageDriver {
                 engine.setExternalCounting(active: false, column: column)
             case .finished(let reason):
                 presetFinished = true
+                presetProgress = zigzag?.progress
                 zigzag = nil
                 countingColumn = nil
                 engine.setExternalCounting(active: false, column: 0)

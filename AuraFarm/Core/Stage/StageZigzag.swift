@@ -66,6 +66,21 @@ enum StageZigzagAction: Equatable {
     case swapped(dx: Double, dy: Double)
 }
 
+/// How far the preset path has come, for a progress bar.
+struct StageZigzagProgress: Equatable {
+    /// 0 to 1; never falls during a path.
+    var fraction = 0.0
+    /// 0 on the way to the start corner.
+    var column = 0
+    /// An estimate: from the degrees left across and the size of a column step.
+    var totalColumns = 0
+
+    var text: String {
+        guard column > 0 else { return "Moving to the start corner" }
+        return "Column \(column) of about \(totalColumns) · \(Int((fraction * 100).rounded(.down)))%"
+    }
+}
+
 /// The zig-zag as a state machine: walk to the start corner, then for each column walk the leg
 /// servo with a dwell every `stepFields` of picture travel, and at the end of a leg walk the
 /// step servo across and turn round. No move is longer than `chunkDegrees`. The caller sends
@@ -88,6 +103,7 @@ struct StageZigzag {
     private(set) var column = 0
     private(set) var spot = 0
     private(set) var isFinished = false
+    private(set) var progress = StageZigzagProgress()
     private(set) var lowEdge: Int?
     private(set) var highEdge: Int?
 
@@ -143,13 +159,56 @@ struct StageZigzag {
         angles: (x: Int, y: Int), event: StageZigzagEvent?, tracked: CGPoint? = nil
     ) -> StageZigzagAction? {
         self.tracked = tracked
-        if checkFirstColumn(angles) { return queue.removeFirst() }
+        defer { updateProgress(angles) }
+        if checkFirstColumn(angles) {
+            progress = StageZigzagProgress()
+            return queue.removeFirst()
+        }
         if !started {
             started = true
             approach(angles)
         }
         if let event { handle(event, angles) }
         return queue.isEmpty ? nil : queue.removeFirst()
+    }
+
+    // MARK: Progress
+
+    /// By degrees: the columns behind are the step servo's way across, and the current column
+    /// counts for the share of its leg that is walked. An estimate, as a column's width varies
+    /// with the picture; an edge can also end the path early.
+    private mutating func updateProgress(_ angles: (x: Int, y: Int)) {
+        guard !isFinished else {
+            progress.fraction = 1
+            progress.totalColumns = column
+            return
+        }
+        guard column > 0 else { return }
+        let far = plan.stepStartsHigh ? 0 : 180
+        let start = plan.stepStartsHigh ? 180 : 0
+        // A column step is made of whole moves; from column 3 on, the steps so far say more.
+        let chunk = Double(chunkDegrees)
+        var width = (Double(columnFallbackDegrees) / chunk).rounded(.up) * chunk
+        // Between columns the step counts as the finished column's own share.
+        let crossing = stage == .stepMove
+        let across = crossing ? anchorAngle : angle(of: plan.stepServo, angles)
+        let left = Double(abs(far - across))
+        let sofar = abs(across - start)
+        if column >= 3, sofar > 0 { width = Double(sofar) / Double(column - 1) }
+        var walked = 1.0
+        if !crossing {
+            let range = bounds()
+            let leg = angle(of: plan.legServo, angles)
+            let span = max(range.high - range.low, 1)
+            let done = direction > 0 ? leg - range.low : range.high - leg
+            walked = min(max(Double(done) / Double(span), 0), 1)
+        }
+        let columnsLeft = (left / width).rounded(.up)
+        let total = Double(column) + columnsLeft
+        progress.column = column
+        progress.totalColumns = Int(total)
+        let fraction = (Double(column - 1) + walked) / total
+        progress.fraction = min(max(progress.fraction, fraction), 0.99)
     }
 
     // MARK: First-column direction check

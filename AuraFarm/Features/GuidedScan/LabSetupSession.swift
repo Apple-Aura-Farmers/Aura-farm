@@ -451,7 +451,9 @@ final class LabSetupSession {
                     target: baseline, goodShare: RunMonitorThresholds().resumeAtShareOfBaseline,
                     startsUnknown: true)
             }
+            // Green exactly when the monitor counts the view as sharp, so the two never disagree.
             dial = runDial?.update(value: index, seconds: seconds)
+                .matching(isSharp: monitor.isSharp)
         } else {
             runDial = nil
         }

@@ -186,11 +186,28 @@ struct StagePathChoiceView: View {
     }
 }
 
+/// How far the preset path has come.
+struct StageProgressBar: View {
+    var progress: StageZigzagProgress
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ProgressView(value: progress.fraction)
+            Text(progress.text).font(.caption).foregroundStyle(.secondary)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Sweep progress")
+        .accessibilityValue(progress.text)
+    }
+}
+
 /// The running scan in Terraloka mode: what the stage is doing, Pause / Resume, and a banner
 /// when the person is needed.
 struct StageRunStatusCard: View {
     var status: AutoStageStatus
     var isPaused: Bool
+    /// The Fixed sweep's progress; nil hides the bar.
+    var progress: StageZigzagProgress?
     var actions: [(title: String, run: () -> Void)]
     var onPause: () -> Void
     var onResume: () -> Void
@@ -225,6 +242,9 @@ struct StageRunStatusCard: View {
                 } else {
                     Button("Pause", action: onPause).buttonStyle(.bordered).tint(.white)
                 }
+            }
+            if let progress {
+                StageProgressBar(progress: progress)
             }
         }
         .stageCard()
