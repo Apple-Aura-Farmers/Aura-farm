@@ -24,6 +24,8 @@ struct LiveCountFrameLog: Equatable {
     var units = ""
     /// "Volvox id=7 slide=(12,-40) column=2", one per organism counted on this frame.
     var counted: [String] = []
+    /// The model's output layout, on the first decode only.
+    var outputLayout: String?
     /// For a result that arrived after its frame: when that frame was taken (run seconds),
     /// and where the detection's time went, in milliseconds.
     var frameSeconds: Double?
@@ -73,10 +75,16 @@ final class LiveCountSession {
     var cropsToEyepiece = true
     var minimumConfidence = OrganismDetector.leastConfidence
     /// Which model counts. Change it with `setModel` only.
-    private(set) var model = DetectorModel.v2
-    /// The hardware it runs on: the Neural Engine by default, for power per inference. Change
-    /// it with `setUnits` only.
-    private(set) var units = DetectorUnits.neuralEngine
+    private(set) var model = DetectorModel.v3
+    /// The hardware it runs on (`defaultUnits` until changed). Change it with `setUnits` only.
+    private(set) var units = LiveCountSession.defaultUnits
+    /// The Neural Engine in Release, for power per inference. Debug builds use the graphics chip,
+    /// which skips the Neural Engine's long first-load preparation after every reinstall.
+    #if DEBUG
+        static let defaultUnits = DetectorUnits.graphics
+    #else
+        static let defaultUnits = DetectorUnits.neuralEngine
+    #endif
     /// Called on the detector queue after a result is in the count, so the screen need not
     /// wait for the next analysed frame.
     var onResult: (() -> Void)?
@@ -89,7 +97,7 @@ final class LiveCountSession {
     private var loaded: OrganismDetector?
     private var loadingGeneration: Int?
     private var generation = 0
-    private var wanted = (model: DetectorModel.v2, units: DetectorUnits.neuralEngine)
+    private var wanted = (model: DetectorModel.v3, units: LiveCountSession.defaultUnits)
     private var loadFailure: String?
     private var loadMilliseconds: Double?
     /// When the detector last ran, on the run's clock.
@@ -191,7 +199,7 @@ final class LiveCountSession {
         lock.lock()
         let names = loaded?.classNames
         lock.unlock()
-        let all = names ?? (model == .v1 ? OrganismDetector.classNames : DetectorModel.v2ClassNames)
+        let all = names ?? model.builtInClassNames
         return (minimumConfidence, cropsToEyepiece, Array(all.dropFirst()))
     }
 
@@ -419,6 +427,7 @@ final class LiveCountSession {
         log.preMilliseconds = output.timing.preMilliseconds
         log.inferMilliseconds = output.timing.inferMilliseconds
         log.decodeMilliseconds = output.timing.decodeMilliseconds
+        log.outputLayout = output.timing.outputLayout
         log.tallyTotal = counterState.tallyTotal
         log.mapTotal = counterState.helperTotal
         log.model = model.rawValue

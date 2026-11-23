@@ -41,7 +41,8 @@ final class GuidedScanSession {
             column: overlay.column, lastColumn: overlay.lastColumn,
             slipHeightFields: model.guideInfo.slipHeightFields,
             sideInsetFields: model.guideInfo.sideInsetFields,
-            captureCount: model.overlayState.captureCount, isFinished: overlay.isFinished)
+            captureCount: model.overlayState.captureCount, isFinished: overlay.isFinished,
+            isTooHot: model.heatMode == .tooHot)
         let shown = presenter.present(input)
         if shown != display { display = shown }
         // The CSV's knob_words column: what the person was told, when it changes.

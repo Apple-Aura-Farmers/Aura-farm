@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-/// One farm, where the plot is chosen: the plots on the map and a row for each. The soil
+/// One farm, where the plot is chosen: a row for each plot. The soil
 /// measurements, tests and advice are on the page of the plot opened from here, because they
 /// are different for each plot.
 struct FarmDetailView: View {
@@ -32,7 +32,8 @@ struct FarmDetailView: View {
         Group {
             if let farm {
                 details(for: farm)
-                    .navigationTitle(farm.name)
+                    .navigationTitle(farm.farmerName)
+                    .navigationSubtitle(farm.plots.count == 1 ? "1 plot" : "\(farm.plots.count) plots")
                     .toolbar {
                         ToolbarItem(placement: .topBarTrailing) {
                             Button("Edit") { presented = .editFarm }
@@ -65,37 +66,21 @@ struct FarmDetailView: View {
             }
         }
         .navigationBarTitleDisplayMode(.inline)
+        // The tab bar is for browsing and adding plots; inside one farmer it is just in the way.
+        .toolbar(.hidden, for: .tabBar)
         .auraBackground()
     }
 
     private func details(for farm: Farm) -> some View {
         List {
             Group {
-                if !farm.allCorners.isEmpty {
-                    Section {
-                        LandMapView(outlines: farm.plots.map(\.corners), isInteractive: true)
-                            .id(farm.allCorners)
-                            .frame(height: 260)
-                            .listRowInsets(EdgeInsets())
-                    }
-                }
-
-                Section("Farm") {
-                    LabeledContent("Farmer", value: farm.farmerName)
-                    if let area = farm.areaSquareMetres {
-                        LabeledContent(
-                            "Total area", value: LandGeometry.areaDescription(squareMetres: area))
-                    }
-                    LabeledContent("Added") {
-                        Text(farm.createdAt, format: .dateTime.day().month().year())
-                    }
-                }
-
                 plots(of: farm)
 
             }
-            .listRowBackground(Color.auraRow)
+            .listRowBackground(RoundedRectangle(cornerRadius: 16).fill(Color.auraRow))
+            .listRowSeparator(.hidden)
         }
+        .listRowSpacing(12)
     }
 
     private func plots(of farm: Farm) -> some View {
@@ -124,13 +109,8 @@ struct FarmDetailView: View {
             } label: {
                 Label("Add a plot", systemImage: "plus")
             }
-        } header: {
-            Text("Plots")
         } footer: {
-            Text(
-                farm.plots.isEmpty
-                    ? "Mark each piece of this farmer's land as its own plot."
-                    : "Choose a plot for its soil measurements, lab results and advice.")
+            if farm.plots.isEmpty { Text("Mark each piece of this farmer's land as its own plot.") }
         }
     }
 

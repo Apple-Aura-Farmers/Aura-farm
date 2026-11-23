@@ -39,6 +39,8 @@ struct OrganismDetector {
         var preMilliseconds = 0.0
         var inferMilliseconds = 0.0
         var decodeMilliseconds = 0.0
+        /// The scores' and boxes' shape, strides and type; set on the first decode only.
+        var outputLayout: String?
         var totalMilliseconds: Double { preMilliseconds + inferMilliseconds + decodeMilliseconds }
     }
 
@@ -52,8 +54,8 @@ struct OrganismDetector {
         }
     }
 
-    /// Xcode compiles `SoilDetector.mlpackage` into `SoilDetector.mlmodelc` in the bundle.
-    static let modelName = "SoilDetector"
+    /// Xcode compiles `SoilDetectorV3.mlpackage` into `SoilDetectorV3.mlmodelc` in the bundle.
+    static let modelName = DetectorModel.v3.resourceName
 
     /// A box covering more of the frame than this is thrown away before anything counts it.
     ///
@@ -76,13 +78,6 @@ struct OrganismDetector {
 
     /// The side of the square the model was trained and exported at.
     static let inputSide = 512
-
-    /// What the model's class slots mean. The head is one wider than the dataset's five
-    /// organisms and slot 0 is no-object: a query that lands there is the model saying it
-    /// found nothing. Read off the checkpoint's behaviour rather than its metadata, which
-    /// carries no names: Nematode dominates a set of nematodes, Volvox dominates a clip of
-    /// Volvox, and neither holds under any other reading.
-    static let classNames = ["no-object", "Arcellinida", "Digononta", "Euglenoid", "Nematode", "Volvox"]
 
     /// How sure the model has to be before a query counts as a find.
     ///
@@ -110,9 +105,12 @@ struct OrganismDetector {
     private let context = CIContext(options: [.useSoftwareRenderer: false])
     /// One square buffer, reused: a frame is squashed into it before every prediction.
     private let square: CVPixelBuffer
+    /// Whether the output layout has been reported yet; a class so the struct can stay immutable.
+    private final class Flag { var done = false }
+    private let layoutReported = Flag()
 
-    /// With no arguments this is V1 with today's behaviour.
-    init(model kind: DetectorModel = .v1, computeUnits: MLComputeUnits = .all) throws {
+    /// With no arguments this is V3, the only model the app ships.
+    init(model kind: DetectorModel = .v3, computeUnits: MLComputeUnits = .all) throws {
         guard let url = Bundle.main.url(forResource: kind.resourceName, withExtension: "mlmodelc")
         else { throw Failure.notInTheBundle }
         let configuration = MLModelConfiguration()
@@ -137,10 +135,10 @@ struct OrganismDetector {
     /// - Parameter crop: a square in frame pixels, origin at the top left; only it is squashed to
     ///   the model's input, and the boxes come back as shares of the WHOLE frame. nil feeds the
     ///   whole frame, as the model was trained.
-    /// The class names of `kind`: V1's are fixed; V2's are read from the model's metadata
-    /// ("classes", comma separated) and checked against the scores' width.
+    /// The class names of `kind`, read from the model's metadata ("classes", comma separated)
+    /// and checked against the scores' width.
     static func names(for kind: DetectorModel, in network: MLModel) -> [String] {
-        guard kind == .v2 else { return Self.classNames }
+        let builtIn = kind.builtInClassNames
         let width = network.modelDescription.outputDescriptionsByName[kind.scoresOutput]?
             .multiArrayConstraint?.shape.last?.intValue
         let metadata = network.modelDescription.metadata[.creatorDefinedKey] as? [String: String]
@@ -154,7 +152,7 @@ struct OrganismDetector {
                     + "(\(fromModel?.count ?? 0) names, scores \(width ?? 0) wide); using the built-in list"
             )
         #endif
-        return DetectorModel.v2ClassNames
+        return builtIn
     }
 
     func detections(in image: CGImage, crop: CGRect? = nil) throws -> [Detection] {
@@ -223,6 +221,12 @@ struct OrganismDetector {
         guard let scores = output.featureValue(for: kind.scoresOutput)?.multiArrayValue,
             let boxes = output.featureValue(for: "boxes")?.multiArrayValue
         else { return ([], timing) }
+        if !layoutReported.done {
+            layoutReported.done = true
+            let text = "scores \(Self.describe(scores)); boxes \(Self.describe(boxes))"
+            timing.outputLayout = text
+            print("DETECTOR \(kind.resourceName) output layout: \(text)")
+        }
         var found = Self.decode(
             scores: scores, boxes: boxes, classNames: classNames,
             scoresAreProbabilities: kind.scoresAreProbabilities,
@@ -237,9 +241,19 @@ struct OrganismDetector {
         return (found, timing)
     }
 
-    /// V1's path: logits and V1's class names. What the existing callers and tests use.
+    /// "shape [1,300,24] strides [9600,32,1] float16", for the log.
+    static func describe(_ array: MLMultiArray) -> String {
+        let shape = array.shape.map(\.stringValue).joined(separator: ",")
+        let strides = array.strides.map(\.stringValue).joined(separator: ",")
+        return "shape [\(shape)] strides [\(strides)] type \(array.dataType.rawValue)"
+    }
+
+    /// The logit path: scores that need a sigmoid, under the caller's class names. No model
+    /// the app ships takes it, V3's graph ending in a sigmoid, but the decode still has to do
+    /// it right and the tests go through here.
     static func decode(
-        logits: MLMultiArray, boxes: MLMultiArray, minimumConfidence: Float = leastConfidence
+        logits: MLMultiArray, boxes: MLMultiArray, classNames: [String],
+        minimumConfidence: Float = leastConfidence
     ) -> [Detection] {
         decode(
             scores: logits, boxes: boxes, classNames: classNames, scoresAreProbabilities: false,
@@ -253,6 +267,92 @@ struct OrganismDetector {
     /// the middle and the size, counted from the top left; everything downstream counts from the
     /// bottom left, as Vision did.
     static func decode(
+        scores: MLMultiArray, boxes: MLMultiArray, classNames: [String],
+        scoresAreProbabilities: Bool, minimumConfidence: Float = leastConfidence
+    ) -> [Detection] {
+        if let found = decodeByRows(
+            scores: scores, boxes: boxes, classNames: classNames,
+            scoresAreProbabilities: scoresAreProbabilities, minimumConfidence: minimumConfidence)
+        {
+            return found
+        }
+        return decodeGeneral(
+            scores: scores, boxes: boxes, classNames: classNames,
+            scoresAreProbabilities: scoresAreProbabilities, minimumConfidence: minimumConfidence)
+    }
+
+    /// One element of `raw` as a Double: Float32 and Double straight, Float16 widened exactly.
+    @inline(__always)
+    private static func element(_ raw: UnsafeRawBufferPointer, _ type: MLMultiArrayDataType, _ n: Int)
+        -> Double
+    {
+        switch type {
+        case .float32: return Double(raw.loadUnaligned(fromByteOffset: n * 4, as: Float.self))
+        case .double: return raw.loadUnaligned(fromByteOffset: n * 8, as: Double.self)
+        default: return Double(halfToFloat(raw.loadUnaligned(fromByteOffset: n * 2, as: UInt16.self)))
+        }
+    }
+
+    /// The fast path: both arrays [1, queries, width] with an innermost stride of 1, whatever the
+    /// row and batch strides. Each row is read in place, a box only for a query that passes.
+    /// nil when the layout is anything else, so `decodeGeneral` takes it.
+    private static func decodeByRows(
+        scores: MLMultiArray, boxes: MLMultiArray, classNames: [String],
+        scoresAreProbabilities: Bool, minimumConfidence: Float
+    ) -> [Detection]? {
+        let scoreShape = scores.shape.map(\.intValue)
+        let boxShape = boxes.shape.map(\.intValue)
+        let scoreStrides = scores.strides.map(\.intValue)
+        let boxStrides = boxes.strides.map(\.intValue)
+        let supported: Set<MLMultiArrayDataType> = [.float32, .float16, .double]
+        guard scoreShape.count == 3, boxShape.count == 3, scoreShape[0] == 1, boxShape[0] == 1,
+            scoreShape[2] > 1, boxShape[1] >= scoreShape[1], boxShape[2] >= 4,
+            scoreStrides[2] == 1, boxStrides[2] == 1,
+            supported.contains(scores.dataType), supported.contains(boxes.dataType)
+        else { return nil }
+        let queries = scoreShape[1]
+        let classes = scoreShape[2]
+        let scoreType = scores.dataType
+        let boxType = boxes.dataType
+        var found: [Detection] = []
+        scores.withUnsafeBytes { scoreRaw in
+            boxes.withUnsafeBytes { boxRaw in
+                for query in 0..<queries {
+                    let row = query * scoreStrides[1]
+                    var best = -Float.greatestFiniteMagnitude
+                    var bestClass = 1
+                    for klass in 1..<classes {
+                        let value = Float(element(scoreRaw, scoreType, row + klass))
+                        if value > best {
+                            best = value
+                            bestClass = klass
+                        }
+                    }
+                    let confidence = scoresAreProbabilities ? best : 1 / (1 + exp(-best))
+                    guard confidence >= minimumConfidence else { continue }
+
+                    let at = query * boxStrides[1]
+                    let centreX = element(boxRaw, boxType, at)
+                    let centreY = element(boxRaw, boxType, at + 1)
+                    let width = element(boxRaw, boxType, at + 2)
+                    let height = element(boxRaw, boxType, at + 3)
+                    let box = CGRect(
+                        x: centreX - width / 2, y: 1 - (centreY + height / 2), width: width,
+                        height: height)
+                    guard !coversWholeFrame(box) else { continue }
+                    found.append(
+                        Detection(
+                            label: bestClass < classNames.count
+                                ? classNames[bestClass] : "class\(bestClass)",
+                            confidence: confidence, box: box))
+                }
+            }
+        }
+        return found
+    }
+
+    /// The general path for any layout: every value copied out through its strides first.
+    static func decodeGeneral(
         scores: MLMultiArray, boxes: MLMultiArray, classNames: [String],
         scoresAreProbabilities: Bool, minimumConfidence: Float = leastConfidence
     ) -> [Detection] {

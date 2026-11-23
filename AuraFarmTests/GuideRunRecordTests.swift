@@ -20,6 +20,21 @@ final class GuideRunRecordTests: XCTestCase {
         XCTAssertEqual(try GuideRunRecord.decoder().decode(GuideRunRecord.self, from: data), original)
     }
 
+    func testTheLensVideoFieldsSurviveARoundTripAndOldRecordsHaveNone() throws {
+        var original = record()
+        original.lensVideoFile = "lens-20261119-120000.mov"
+        original.lensVideoScanStartSeconds = 41.5
+        let data = try GuideRunRecord.encoder().encode(original)
+        let back = try GuideRunRecord.decoder().decode(GuideRunRecord.self, from: data)
+        XCTAssertEqual(back, original)
+        XCTAssertEqual(back.lensVideoFile, "lens-20261119-120000.mov")
+        XCTAssertEqual(back.lensVideoScanStartSeconds, 41.5)
+        let plain = try GuideRunRecord.decoder().decode(
+            GuideRunRecord.self, from: GuideRunRecord.encoder().encode(record()))
+        XCTAssertNil(plain.lensVideoFile)
+        XCTAssertNil(plain.lensVideoScanStartSeconds)
+    }
+
     func testEveryFinishReasonHasItsCardTitle() {
         XCTAssertEqual(record(.endedByHelper).title, "Ended early")
         XCTAssertEqual(record(.stageLimit).title, "Stage limit")

@@ -54,11 +54,12 @@ struct AutoStageStatus: Equatable {
     ///   - hasConnected: the stage has been connected at least once this test, so a link that is
     ///     down now is a disconnection and not the first attempt.
     ///   - focusPaused: the run monitor holds the run for focus.
+    ///   - tooHot: the phone is too hot to count, so the stage waits.
     ///   - dwelling: the preset path is standing at a spot.
     static func make(
         phase: AutoStageDriver.Phase, restartNotice: String?, presetEdgePrompt: Bool,
         pathMode: StagePathMode, client: StageBLEClient.Status, focusPaused: Bool,
-        dwelling: Bool = false, hasConnected: Bool = true
+        dwelling: Bool = false, hasConnected: Bool = true, tooHot: Bool = false
     ) -> AutoStageStatus {
         if let restartNotice {
             return AutoStageStatus(
@@ -129,6 +130,9 @@ struct AutoStageStatus: Equatable {
             status.title = "Waiting for focus"
             status.detail = nil
             status.needsPerson = .focusPause
+        } else if running, tooHot {
+            status.title = HelperInstruction.tooHot.text
+            status.detail = "The stage waits and carries on by itself."
         }
         return status
     }

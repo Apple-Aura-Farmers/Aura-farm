@@ -285,7 +285,7 @@ final class LabSetupSessionTests: XCTestCase {
         time = feed(darkFrame(), for: 1.0, from: time, session: session, pipeline: pipeline)
         XCTAssertEqual(session.step, .focus, "a 1 s dip does not go back")
         time = feed(discFrame(), for: 0.5, from: time, session: session, pipeline: pipeline)
-        time = feed(darkFrame(), for: 2.2, from: time, session: session, pipeline: pipeline)
+        time = feed(darkFrame(), for: 3.2, from: time, session: session, pipeline: pipeline)
         XCTAssertEqual(session.step, .align)
         XCTAssertEqual(session.info.resumeStep, .field)
         time = feed(discFrame(), for: 2.0, from: time, session: session, pipeline: pipeline)
@@ -302,7 +302,8 @@ final class LabSetupSessionTests: XCTestCase {
         let pipeline = makePipeline()
         let session = LabSetupSession()
         var time = reachFocus(session: session, pipeline: pipeline)
-        // One half 30% darker: fails passing (0.75) but not the looser limit (0.65).
+        // One half 30% darker: fails passing (0.75); once the field is confirmed evenness and
+        // glare no longer count at all.
         let uneven = SyntheticFrame.make(width: 1280, height: 720) { x, y in
             hypot(Double(x) - 640, Double(y) - 360) <= 300 ? (x >= 640 ? 140 : 200) : 10
         }
@@ -311,13 +312,26 @@ final class LabSetupSessionTests: XCTestCase {
         XCTAssertNil(session.info.resumeStep)
     }
 
+    func testAShiftOfQuarterRadiusInFocusGoesBackAfterThreeSecondsNotTwoAndAHalf() {
+        let shifted = SyntheticFrame.make(width: 1280, height: 720) { x, y in
+            hypot(Double(x) - 715, Double(y) - 360) <= 300 ? 200 : 10  // 75 px = 0.25 r
+        }
+        for (hold, goesBack) in [(2.5, false), (3.2, true)] {
+            let pipeline = makePipeline()
+            let session = LabSetupSession()
+            var time = reachFocus(session: session, pipeline: pipeline)
+            time = feed(shifted, for: hold, from: time, session: session, pipeline: pipeline)
+            XCTAssertEqual(session.step == .align, goesBack, "held \(hold) s")
+        }
+    }
+
     func testALossInFieldGoesBackToAlignAndReturnsToFieldWithARedetect() {
         let pipeline = makePipeline()
         let session = LabSetupSession(skippingAlignAndFocus: true)
         var time = feed(discFrame(), for: 1.0, from: 0, session: session, pipeline: pipeline)
         XCTAssertEqual(session.step, .field)
         XCTAssertGreaterThan(progress(pipeline), 0, "the mask is being learned")
-        time = feed(darkFrame(), for: 3.0, from: time, session: session, pipeline: pipeline)
+        time = feed(darkFrame(), for: 4.0, from: time, session: session, pipeline: pipeline)
         XCTAssertEqual(session.step, .align)
         XCTAssertEqual(session.info.resumeStep, .field)
         time = feed(discFrame(), for: 2.0, from: time, session: session, pipeline: pipeline)

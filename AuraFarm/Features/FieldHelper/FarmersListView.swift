@@ -22,7 +22,20 @@ struct FarmersListView: View {
         NavigationStack {
             searchableList
                 .auraBackground()
-                .navigationTitle("Farmers")
+                .navigationTitle(isSearch ? "" : "Farmers")
+                // The search tab hides the navigation bar while the field is in use, so its title
+                // is drawn in the content instead.
+                .safeAreaInset(edge: .top, spacing: 0) {
+                    if isSearch {
+                        Text("Farmers")
+                            .font(.largeTitle.bold())
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 20)
+                            .padding(.top, 8)
+                            .accessibilityAddTraits(.isHeader)
+                    }
+                }
+                .navigationBarTitleDisplayMode(isSearch ? .inline : .automatic)
                 .navigationDestination(for: Farm.ID.self) { id in
                     FarmDetailView(farmID: id)
                 }
@@ -63,8 +76,10 @@ struct FarmersListView: View {
                     }
                 }
             }
-            .listRowBackground(Color.auraRow)
+            .listRowBackground(RoundedRectangle(cornerRadius: 16).fill(Color.auraRow))
+            .listRowSeparator(.hidden)
         }
+        .listRowSpacing(12)
         .animation(.snappy, value: shown.map(\.id))
         .refreshable { await store.pull() }
         .overlay { emptyState }

@@ -37,6 +37,9 @@ struct GuidedScanPage: View {
     // The lab's own display settings.
     @AppStorage("slideLab.centreField") private var centresField = true
     @AppStorage("slideLab.straighten") private var straightens = true
+    /// Records the camera's frames in the background; read when the camera starts, so changing it
+    /// here starts or stops the recording from that point.
+    @AppStorage("guidedScan.recordLensVideo") private var recordsVideo = true
 
     var body: some View {
         scanBody
@@ -71,12 +74,15 @@ struct GuidedScanPage: View {
             .modifier(
                 LabSettingsSync(
                     model: model,
-                    transform: { $0.forGuidedScan(coverage: coverage.rawValue) },
+                    transform: {
+                        $0.forGuidedScan(coverage: coverage.rawValue, recordsVideo: recordsVideo)
+                    },
                     onReady: {
                         // Align and focus wait for a Confirm tap, like the field review.
                         model.setConfirmsSetupSteps(true)
                         // Setup waits until a mode is chosen (and the stage is connected).
                         model.setSetupHeld(true)
+                        model.setKeepsScreenAwake(true)
                         model.start()
                     })
             )
@@ -87,7 +93,6 @@ struct GuidedScanPage: View {
                 model.stop()
                 model.setFinishesOnlyOnRequest(false)
                 driver?.deactivate()
-                UIApplication.shared.isIdleTimerDisabled = false
             }
             .onChange(of: driver?.client.status) { _, status in
                 guard status == .connected, !stageConnected else { return }
@@ -176,6 +181,7 @@ struct GuidedScanPage: View {
                 Spacer()
                 if !isSetupHeld {
                     Menu("More", systemImage: "ellipsis.circle") {
+                        Button("Skip setup", systemImage: "forward.end") { model.skipSetup() }
                         Button("Redo setup", systemImage: "arrow.counterclockwise") {
                             model.redoSetup()
                         }
@@ -372,9 +378,25 @@ struct GuidedScanPage: View {
                         passed: model.setupInfo.isAlignmentPassed) : nil)
             if stage == .ready {
                 CoverageChoiceView(coverage: $coverage)
+                recordVideoToggle
                 bigButton("Start scan", action: startScan)
             }
         }
+    }
+
+    private var recordVideoToggle: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Toggle("Record video of the sample", isOn: $recordsVideo)
+            Text("Uses about 60 MB a minute.").font(.caption).foregroundStyle(.secondary)
+        }
+        .padding(12)
+        .background(.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 14))
+    }
+
+    private func calibrationCard(_ driver: AutoStageDriver) -> some View {
+        StageCalibrationCard(
+            status: driver.status, isPaused: driver.phase == .paused,
+            onRetry: { driver.recalibrate() }, onResume: { driver.resume() })
     }
 
     @ViewBuilder
@@ -383,11 +405,13 @@ struct GuidedScanPage: View {
             let status = driver.status
             switch stage {
             case .stage:
-                StageCalibrationCard(
-                    status: status, isPaused: driver.phase == .paused,
-                    onRetry: { driver.recalibrate() }, onResume: { driver.resume() })
+                calibrationCard(driver)
+            case .ready where !driver.isCalibrated:
+                // "Skip setup" jumps over the stage step: the stage measures itself here.
+                calibrationCard(driver)
             case .ready:
                 StagePathChoiceView(pathMode: $pathChoice, coverage: $coverage, objective: objective)
+                recordVideoToggle
                 let isConnected = driver.client.status == .connected
                 bigButton("Start scan", isEnabled: isConnected, action: startScan)
                 if !isConnected {
@@ -469,7 +493,6 @@ struct GuidedScanPage: View {
             driver = stageDriver
             stageConnected = false
             stageMode = .terraloka(objective)
-            UIApplication.shared.isIdleTimerDisabled = true
             model.logEvent("stage_choice", detail: "terraloka")
         case nil: break
         }
@@ -481,7 +504,6 @@ struct GuidedScanPage: View {
         driver = nil
         stageConnected = false
         stageMode = .undecided
-        UIApplication.shared.isIdleTimerDisabled = false
     }
 
     /// Ends the stage's session (END: home) and lets go of it; `then` runs a moment later so END
@@ -489,7 +511,6 @@ struct GuidedScanPage: View {
     private func closeStage(then finish: @escaping () -> Void) {
         guard let driver else { return finish() }
         driver.endSession()
-        UIApplication.shared.isIdleTimerDisabled = false
         Task {
             try? await Task.sleep(for: .milliseconds(500))
             driver.deactivate()
@@ -611,7 +632,9 @@ struct GuidedScanPage: View {
     private func save(_ record: GuideRunRecord) {
         let csv = model.summaryItems.first { $0.pathExtension == "csv" }
         do {
-            let name = try GuidedScanSaver.save(details: details, record: record, movementCSV: csv)
+            let video = model.summaryItems.first { $0.pathExtension == "mov" }
+            let name = try GuidedScanSaver.save(
+                details: details, record: record, movementCSV: csv, lensVideo: video)
             model.stop()
             closeStage {
                 onSaved(name)

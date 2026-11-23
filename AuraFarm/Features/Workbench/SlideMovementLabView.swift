@@ -31,6 +31,7 @@
         @AppStorage("slideLab.trackSparse") private var tracksSparse = true
         @AppStorage("slideLab.fullCoverSlip") private var fullCoverSlip = true
         @AppStorage("slideLab.askEdges") private var asksEdges = true
+        @AppStorage("slideLab.followSlipTilt") private var followsSlipTilt = true
         @AppStorage("slideLab.showLifeOnMap") private var showsLifeOnMap = true
         // The guided scan page's knob rule, for other microscopes. See `KnobRule`.
         @AppStorage("slideLab.knobSwap") private var swapsKnobs = false
@@ -43,11 +44,14 @@
         @AppStorage("slideLab.countOrganisms") private var countsOrganisms = true
         @AppStorage("slideLab.showDetections") private var showsDetections = false
         @AppStorage("slideLab.cropEyepiece") private var cropsToEyepiece = true
-        @AppStorage("slideLab.detectorModel") private var detectorModelName = DetectorModel.v2.rawValue
+        @AppStorage("slideLab.detectorModel") private var detectorModelName = DetectorModel.v3.rawValue
         @AppStorage("slideLab.detectorUnits") private var detectorUnitsName = DetectorUnits.neuralEngine
             .rawValue
         @AppStorage("slideLab.cameraRate") private var cameraRateName = CameraRate.fps20.rawValue
         @AppStorage("slideLab.confidence") private var confidence = 0.3
+        @AppStorage("slideLab.heatAdaptive") private var heatAdaptive = true
+        @AppStorage("slideLab.modelRateCap") private var modelRateCap = true
+        @AppStorage("slideLab.recordLensVideo") private var recordsLensVideo = false
         @State private var noteText = ""
         // Automated stage (Terraloka BLE stage in place of the knobs).
         @State private var autoStage: AutoStageDriver?
@@ -255,6 +259,7 @@
                 if let record = model.runSummary {
                     RunSummaryCard(
                         record: record, shareItems: model.summaryItems,
+                        videoNote: model.lensVideoNote,
                         onDone: { model.dismissSummary() }
                     )
                     .presentationDetents([.medium, .large])
@@ -462,7 +467,9 @@
                 Toggle("Track sparse sample", isOn: $tracksSparse)
                 Toggle("Full cover slip (line edges)", isOn: $fullCoverSlip)
                 Toggle("Ask me to confirm edges", isOn: $asksEdges)
+                Toggle("Columns follow the slip's tilt", isOn: $followsSlipTilt)
                 Toggle("Show life on map", isOn: $showsLifeOnMap)
+                Toggle("Record lens video", isOn: $recordsLensVideo)
                 Toggle("Swap knobs", isOn: $swapsKnobs)
                 Toggle("Reverse X", isOn: $reversesKnobX)
                 Toggle("Reverse Y", isOn: $reversesKnobY)
@@ -509,6 +516,8 @@
                 Toggle("Count organisms", isOn: $countsOrganisms)
                 Toggle("Show detections", isOn: $showsDetections)
                 Toggle("Crop to eyepiece circle", isOn: $cropsToEyepiece)
+                Toggle("Heat-adaptive mode", isOn: $heatAdaptive)
+                Toggle("Cap model at 5 a second", isOn: $modelRateCap)
                 VStack(alignment: .leading) {
                     Text("Confidence \(confidence, specifier: "%.2f")").font(.caption)
                     Slider(value: $confidence, in: 0.1...0.6, step: 0.05)

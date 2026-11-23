@@ -27,9 +27,10 @@ struct GuideRunRecord: Codable, Equatable {
     var classNames: [String]
     var framesCounted: Int
     var framesSkippedByReason: [String: Int]
-    /// The model the counts came from ("v1" or "v2"; `DetectorModel.rawValue`) and the boxes the
-    /// guards dropped as the eyepiece disc and as too big. Earlier records have none: V1, 0, 0.
-    var detectorModel = DetectorModel.v1.rawValue
+    /// The model the counts came from (`DetectorModel.rawValue`) and the boxes the guards
+    /// dropped as the eyepiece disc and as too big. Records written before this field name "v1"
+    /// or "v2", models the app no longer ships, and they keep those names.
+    var detectorModel = DetectorModel.v3.rawValue
     var discDrops = 0
     var bigDrops = 0
     /// The hardware the model ran on (`DetectorUnits.rawValue`: "ne" or "gpu"). Earlier records ran
@@ -57,6 +58,16 @@ struct GuideRunRecord: Codable, Equatable {
     var stage = "manual"
     var objective: String?
     var pathMode: String?
+    /// Seconds spent in each heat mode (`HeatMode.csvName`: "normal", "cool_down", "too_hot").
+    /// Earlier records have none.
+    var heatSeconds: [String: Double] = [:]
+    /// The cap on the model's runs a second in force (5), or nil when the lab turned it off.
+    /// Earlier records have none.
+    var modelRateCap: Double?
+    /// The lens video saved with this run (a file in the sweep's folder) and where "Start scan" falls
+    /// in it, in seconds. Earlier records have none.
+    var lensVideoFile: String?
+    var lensVideoScanStartSeconds: Double?
 
     /// One plain line for the results: "Terraloka Stage · 100x · Follow the guide", or
     /// "Manual Stage".
@@ -133,7 +144,7 @@ extension GuideRunRecord {
             framesCounted: try c.decode(Int.self, forKey: .framesCounted),
             framesSkippedByReason: try c.decode([String: Int].self, forKey: .framesSkippedByReason),
             detectorModel: try c.decodeIfPresent(String.self, forKey: .detectorModel)
-                ?? DetectorModel.v1.rawValue,
+                ?? "v1",
             discDrops: try c.decodeIfPresent(Int.self, forKey: .discDrops) ?? 0,
             bigDrops: try c.decodeIfPresent(Int.self, forKey: .bigDrops) ?? 0,
             detectorUnits: try c.decodeIfPresent(String.self, forKey: .detectorUnits)
@@ -148,6 +159,11 @@ extension GuideRunRecord {
             mapMirrored: try c.decodeIfPresent(Bool.self, forKey: .mapMirrored) ?? false,
             stage: try c.decodeIfPresent(String.self, forKey: .stage) ?? "manual",
             objective: try c.decodeIfPresent(String.self, forKey: .objective),
-            pathMode: try c.decodeIfPresent(String.self, forKey: .pathMode))
+            pathMode: try c.decodeIfPresent(String.self, forKey: .pathMode),
+            heatSeconds: try c.decodeIfPresent([String: Double].self, forKey: .heatSeconds) ?? [:],
+            modelRateCap: try c.decodeIfPresent(Double.self, forKey: .modelRateCap))
+        lensVideoFile = try c.decodeIfPresent(String.self, forKey: .lensVideoFile)
+        lensVideoScanStartSeconds = try c.decodeIfPresent(
+            Double.self, forKey: .lensVideoScanStartSeconds)
     }
 }

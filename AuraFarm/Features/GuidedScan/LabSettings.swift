@@ -14,6 +14,8 @@ struct LabSettings: Equatable {
     var tracksSparse = true
     var fullCoverSlip = true
     var asksEdges = true
+    /// Columns follow the cover slip's tilt once the left edge is confirmed with a known angle.
+    var followsSlipTilt = true
     var showsLifeOnMap = true
     var coverSlipName = CoverSlipShape.square.rawValue
     var skipsAlignFocus = false
@@ -23,9 +25,16 @@ struct LabSettings: Equatable {
     var showsDetections = false
     var cropsToEyepiece = true
     var confidence = 0.3
-    var detectorModelName = DetectorModel.v2.rawValue
+    var detectorModelName = DetectorModel.v3.rawValue
     var detectorUnitsName = DetectorUnits.neuralEngine.rawValue
     var cameraRateName = CameraRate.fps20.rawValue
+    /// Heat-adaptive mode (see `HeatPolicy`): on by default; the lab can turn it off to compare.
+    var heatAdaptive = true
+    /// Caps the model at `LiveCountThresholds.maxModelRunsPerSecond` runs a second. On by default.
+    var modelRateCap = true
+    /// Records the camera's frames to Documents/LensVideos. Off in the lab; the guided scan's own
+    /// switch decides there.
+    var recordsLensVideo = false
 
     /// What the guided scan uses in Release, where there is no lab to store settings: the
     /// lab's own defaults, except the three that are the chosen ones (rotate 90 degrees left,
@@ -43,8 +52,9 @@ struct LabSettings: Equatable {
 
     /// The guided scan page's settings: the lab's own, with the guide on, the operator's
     /// coverage and no detection boxes. Nothing else differs.
-    func forGuidedScan(coverage: Double) -> LabSettings {
+    func forGuidedScan(coverage: Double, recordsVideo: Bool = false) -> LabSettings {
         var copy = self
+        copy.recordsLensVideo = recordsVideo
         copy.guideDryRun = true
         copy.coverageStep = coverage
         copy.showsDetections = false
@@ -58,6 +68,7 @@ struct LabSettings: Equatable {
         model.setTracksSparse(tracksSparse)
         model.setFullCoverSlip(fullCoverSlip)
         model.setAsksEdges(asksEdges)
+        model.setFollowsSlipTilt(followsSlipTilt)
         model.setShowsLifeOnMap(showsLifeOnMap)
         model.setCoverSlip(CoverSlipShape(rawValue: coverSlipName) ?? .square)
         model.setFieldRegion(FieldRegionMode(rawValue: fieldRegionName) ?? .auto)
@@ -69,11 +80,14 @@ struct LabSettings: Equatable {
         model.setShowsDetections(showsDetections)
         model.setCropsToEyepiece(cropsToEyepiece)
         model.setMinimumConfidence(Float(confidence))
-        model.setDetectorModel(DetectorModel(rawValue: detectorModelName) ?? .v2)
+        model.setDetectorModel(DetectorModel(rawValue: detectorModelName) ?? .v3)
         model.setDetectorUnits(DetectorUnits(rawValue: detectorUnitsName) ?? .neuralEngine)
         model.setCameraRate(CameraRate(rawValue: cameraRateName) ?? .fps20)
         model.setGuideDryRun(guideDryRun)
         model.setScreenMapping(mapping, mirrored: mirrored)
+        model.setHeatAdaptive(heatAdaptive)
+        model.setModelRateCap(modelRateCap)
+        model.setRecordsLensVideo(recordsLensVideo)
     }
 
     /// The lab's `.onChange` handlers: only what changed is handed over.
@@ -89,6 +103,7 @@ struct LabSettings: Equatable {
         if tracksSparse != old.tracksSparse { model.setTracksSparse(tracksSparse) }
         if fullCoverSlip != old.fullCoverSlip { model.setFullCoverSlip(fullCoverSlip) }
         if asksEdges != old.asksEdges { model.setAsksEdges(asksEdges) }
+        if followsSlipTilt != old.followsSlipTilt { model.setFollowsSlipTilt(followsSlipTilt) }
         if showsLifeOnMap != old.showsLifeOnMap { model.setShowsLifeOnMap(showsLifeOnMap) }
         if coverSlipName != old.coverSlipName {
             model.setCoverSlip(CoverSlipShape(rawValue: coverSlipName) ?? .square)
@@ -100,7 +115,7 @@ struct LabSettings: Equatable {
         if cropsToEyepiece != old.cropsToEyepiece { model.setCropsToEyepiece(cropsToEyepiece) }
         if confidence != old.confidence { model.setMinimumConfidence(Float(confidence)) }
         if detectorModelName != old.detectorModelName {
-            model.setDetectorModel(DetectorModel(rawValue: detectorModelName) ?? .v2)
+            model.setDetectorModel(DetectorModel(rawValue: detectorModelName) ?? .v3)
         }
         if detectorUnitsName != old.detectorUnitsName {
             model.setDetectorUnits(DetectorUnits(rawValue: detectorUnitsName) ?? .neuralEngine)
@@ -108,6 +123,9 @@ struct LabSettings: Equatable {
         if cameraRateName != old.cameraRateName {
             model.setCameraRate(CameraRate(rawValue: cameraRateName) ?? .fps20)
         }
+        if heatAdaptive != old.heatAdaptive { model.setHeatAdaptive(heatAdaptive) }
+        if modelRateCap != old.modelRateCap { model.setModelRateCap(modelRateCap) }
+        if recordsLensVideo != old.recordsLensVideo { model.setRecordsLensVideo(recordsLensVideo) }
         if mappingName != old.mappingName || mirrored != old.mirrored {
             model.setScreenMapping(mapping, mirrored: mirrored)
         }
@@ -133,6 +151,7 @@ struct LabSettingsSync: ViewModifier {
         @AppStorage("slideLab.trackSparse") private var tracksSparse = true
         @AppStorage("slideLab.fullCoverSlip") private var fullCoverSlip = true
         @AppStorage("slideLab.askEdges") private var asksEdges = true
+        @AppStorage("slideLab.followSlipTilt") private var followsSlipTilt = true
         @AppStorage("slideLab.showLifeOnMap") private var showsLifeOnMap = true
         @AppStorage("slideLab.coverSlipShape") private var coverSlipName = CoverSlipShape.square.rawValue
         @AppStorage("slideLab.skipAlignFocus") private var skipsAlignFocus = false
@@ -142,10 +161,13 @@ struct LabSettingsSync: ViewModifier {
         @AppStorage("slideLab.showDetections") private var showsDetections = false
         @AppStorage("slideLab.cropEyepiece") private var cropsToEyepiece = true
         @AppStorage("slideLab.confidence") private var confidence = 0.3
-        @AppStorage("slideLab.detectorModel") private var detectorModelName = DetectorModel.v2.rawValue
+        @AppStorage("slideLab.detectorModel") private var detectorModelName = DetectorModel.v3.rawValue
         @AppStorage("slideLab.detectorUnits") private var detectorUnitsName = DetectorUnits
             .neuralEngine.rawValue
         @AppStorage("slideLab.cameraRate") private var cameraRateName = CameraRate.fps20.rawValue
+        @AppStorage("slideLab.heatAdaptive") private var heatAdaptive = true
+        @AppStorage("slideLab.modelRateCap") private var modelRateCap = true
+        @AppStorage("slideLab.recordLensVideo") private var recordsLensVideo = false
     #endif
 
     private var settings: LabSettings {
@@ -155,13 +177,15 @@ struct LabSettingsSync: ViewModifier {
                     mappingName: mappingName, mirrored: mirrored, fieldRegionName: fieldRegionName,
                     hopAgreement: hopAgreement, showsSees: showsSees, guideDryRun: guideDryRun,
                     pausesOnMonitor: pausesOnMonitor, tracksSparse: tracksSparse,
-                    fullCoverSlip: fullCoverSlip, asksEdges: asksEdges,
+                    fullCoverSlip: fullCoverSlip, asksEdges: asksEdges, followsSlipTilt: followsSlipTilt,
                     showsLifeOnMap: showsLifeOnMap, coverSlipName: coverSlipName,
                     skipsAlignFocus: skipsAlignFocus, spotModeName: spotModeName,
                     coverageStep: coverageStep, countsOrganisms: countsOrganisms,
                     showsDetections: showsDetections, cropsToEyepiece: cropsToEyepiece,
                     confidence: confidence, detectorModelName: detectorModelName,
-                    detectorUnitsName: detectorUnitsName, cameraRateName: cameraRateName))
+                    detectorUnitsName: detectorUnitsName, cameraRateName: cameraRateName,
+                    heatAdaptive: heatAdaptive, modelRateCap: modelRateCap,
+                    recordsLensVideo: recordsLensVideo))
         #else
             // No lab in Release: the chosen defaults.
             transform(LabSettings.releaseDefaults)

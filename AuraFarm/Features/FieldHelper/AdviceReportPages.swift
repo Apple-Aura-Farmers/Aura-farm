@@ -20,10 +20,11 @@ enum AdviceReportPages {
     enum Layout { case compact, split }
 
     static func titles(for report: AdviceReport) -> [String] {
-        var titles = ["Field summary"]
+        // Without a microscope test the summary has nothing to say, so the report starts with the soil.
+        var titles = report.hasTest ? ["Field summary"] : []
         if report.education != nil { titles.append("Your soil measurements") }
         titles.append("What to do next")
-        if layout(for: report) == .split { titles.append("Trends and notes") }
+        if report.hasTest, layout(for: report) == .split { titles.append("Trends and notes") }
         return titles
     }
 
@@ -72,7 +73,7 @@ enum AdviceReportPages {
     /// A rough measure, in points, of the steps table and the extras, to decide if they fit on one
     /// page. Worked out from rendered pages; the page has about 718 points.
     static func layout(for report: AdviceReport) -> Layout {
-        if report.hasTrend { return .split }
+        if report.hasTest, report.hasTrend { return .split }
         let steps = CGFloat(report.recommendation.steps.count)
         let items = (report.education?.items.count ?? 0)
         let fertilizer: CGFloat = report.education?.fertilizer == nil ? 0 : 36
@@ -599,7 +600,7 @@ private struct MeasurementsPage: View {
     private var intro: String {
         var text =
             "Recorded by the field helper, separately from the microscope. Each reading is placed against provisional standards for flooded rice, not graded."
-        if let updated = report.soilUpdatedAt { text += " Updated \(day(updated))." }
+        if let updated = report.soilUpdatedAt { text += " Measured \(day(updated))." }
         return text
     }
 
@@ -788,7 +789,7 @@ private struct NextStepsPage: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            if layout == .compact {
+            if layout == .compact, report.hasTest {
                 TrendBlock(report: report, chartHeight: 0)
             }
             if let education = report.education { AboutBlock(education: education) }

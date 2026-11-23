@@ -151,6 +151,40 @@ final class RunMonitorTests: XCTestCase {
         XCTAssertEqual(monitor.state, .pausedFocus, "half the readings are blurry")
     }
 
+    /// Readings ten times a second with the index measured on every third (the run's own rate).
+    @discardableResult
+    private func feedSparse(
+        focus: Double, sharpness: Double, for duration: Double
+    ) -> RunMonitorState {
+        for i in 0..<Int((duration * 10).rounded()) where monitor.state == .pausedFocus {
+            feed(focus: i % 3 == 0 ? focus : nil, sharpness: sharpness, for: 0.1)
+        }
+        return monitor.state
+    }
+
+    func testAPauseEndsWhenTheIndexIsReadOnlyAFewTimesASecond() {
+        monitor.setFocusBaseline(0.324)
+        feed(focus: 0.1, sharpness: 300, for: 2.6)
+        XCTAssertEqual(monitor.state, .pausedFocus)
+        XCTAssertEqual(feedSparse(focus: 0.5, sharpness: 2000, for: 1.4), .pausedFocus)
+        XCTAssertTrue(monitor.isSharp, "also on the frames between readings")
+        XCTAssertEqual(feedSparse(focus: 0.5, sharpness: 2000, for: 0.4), .ok)
+    }
+
+    func testAPauseDoesNotEndOnAnIndexReadingThatIsTooOld() {
+        monitor.setFocusBaseline(0.324)
+        feed(focus: 0.1, sharpness: 300, for: 2.6)
+        feed(focus: 0.5, sharpness: 2000, for: 0.1)
+        XCTAssertEqual(feed(sharpness: 2000, for: 4), .pausedFocus)
+        XCTAssertFalse(monitor.isSharp)
+    }
+
+    func testALowIndexReadOnlyAFewTimesASecondStillPauses() {
+        withBaseline()
+        for i in 0..<30 { feed(focus: i % 3 == 0 ? 0.5 : nil, for: 0.1) }
+        XCTAssertEqual(monitor.state, .pausedFocus)
+    }
+
     func testABlurryViewIsNeverSharpWhateverItsIndex() {
         monitor.setFocusBaseline(0.324)
         feed(focus: 0.1, for: 2.6)
@@ -209,23 +243,29 @@ final class RunMonitorTests: XCTestCase {
         XCTAssertEqual(feed(focus: 0.1, for: 2.0), .ok)
     }
 
-    func testACentreShiftOfPointFifteenRadiiForTwoSecondsPausesAndBackWithinPointZeroSixResumes() {
-        let shifted = reading(shift: 0.15)
-        XCTAssertEqual(feed(alignment: shifted, for: 2.0), .ok, "spanning 1.9 s")
-        XCTAssertEqual(feed(alignment: shifted, for: 0.1), .pausedAlignment, "spanning 2.0 s")
-        XCTAssertEqual(monitor.circleShift ?? 0, 0.15, accuracy: 1e-6)
+    func testACentreShiftOfPointTwoFiveRadiiForThreeSecondsPausesAndBackWithinPointZeroSixResumes() {
+        let shifted = reading(shift: 0.25)
+        XCTAssertEqual(feed(alignment: shifted, for: 3.0), .ok, "spanning 2.9 s")
+        XCTAssertEqual(feed(alignment: shifted, for: 0.1), .pausedAlignment, "spanning 3.0 s")
+        XCTAssertEqual(monitor.circleShift ?? 0, 0.25, accuracy: 1e-6)
         // 0.08 is better but not back (limit 0.06).
         XCTAssertEqual(feed(alignment: reading(shift: 0.08), for: 3), .pausedAlignment)
         XCTAssertEqual(feed(alignment: reading(shift: 0.05), for: 1.0), .pausedAlignment)
         XCTAssertEqual(feed(alignment: reading(shift: 0.05), for: 0.1), .ok)
     }
 
+    func testAShiftHeldOnlyTwoAndAHalfSecondsDoesNotPause() {
+        XCTAssertEqual(feed(alignment: reading(shift: 0.25), for: 2.5), .ok)
+        // 0.15 is under the new 0.18 limit however long.
+        XCTAssertEqual(feed(alignment: reading(shift: 0.15), for: 6), .ok)
+    }
+
     func testARadiusChangeAClippedCircleOrNoCircleAlsoPauses() {
-        XCTAssertEqual(feed(alignment: reading(radiusChange: 0.12), for: 2.1), .pausedAlignment)
+        XCTAssertEqual(feed(alignment: reading(radiusChange: 0.2), for: 3.1), .pausedAlignment)
         monitor.reset()
-        XCTAssertEqual(feed(alignment: reading(clipped: true), for: 2.1), .pausedAlignment)
+        XCTAssertEqual(feed(alignment: reading(clipped: true), for: 3.1), .pausedAlignment)
         monitor.reset()
-        XCTAssertEqual(feed(alignment: reading(found: false), for: 2.1), .pausedAlignment)
+        XCTAssertEqual(feed(alignment: reading(found: false), for: 3.1), .pausedAlignment)
         monitor.reset()
         XCTAssertEqual(feed(alignment: reading(shift: 0.1, radiusChange: 0.08), for: 5), .ok)
     }
@@ -234,7 +274,7 @@ final class RunMonitorTests: XCTestCase {
         withBaseline()
         feed(focus: 0.4, for: 2.6)
         XCTAssertEqual(monitor.state, .pausedFocus)
-        XCTAssertEqual(feed(alignment: reading(shift: 0.3), focus: 0.4, for: 2.1), .pausedAlignment)
+        XCTAssertEqual(feed(alignment: reading(shift: 0.3), focus: 0.4, for: 3.1), .pausedAlignment)
         // Focus is not judged while alignment is paused, and starts counting again afterwards.
         XCTAssertEqual(feed(alignment: reading(), focus: 1.0, for: 1.1), .ok)
     }
@@ -300,7 +340,7 @@ final class RunMonitorTests: XCTestCase {
         XCTAssertFalse(monitor.isFocusLow, "not eligible")
         feed(focus: 0.5, for: 0.1)
         XCTAssertTrue(monitor.isFocusLow)
-        XCTAssertEqual(feed(alignment: reading(shift: 0.3), focus: 0.5, for: 2.1), .pausedAlignment)
+        XCTAssertEqual(feed(alignment: reading(shift: 0.3), focus: 0.5, for: 3.1), .pausedAlignment)
         XCTAssertFalse(monitor.isFocusLow, "alignment wins")
         feed(focus: 1.0, for: 0.1)
     }
@@ -421,7 +461,7 @@ final class RunMonitorTests: XCTestCase {
     }
 
     func testAlignmentPauseSaysSoInTheCsv() {
-        feed(alignment: reading(shift: 0.3), for: 2.1)
+        feed(alignment: reading(shift: 0.3), for: 3.1)
         XCTAssertEqual(monitor.state, .pausedAlignment)
         XCTAssertEqual(monitor.pauseCause, "alignment")
     }

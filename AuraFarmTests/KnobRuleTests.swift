@@ -118,9 +118,12 @@ final class KnobRuleTests: XCTestCase {
         XCTAssertTrue(KnobRule.xAxisIsVertical(CGPoint(x: 0.2, y: 0.98)))
     }
 
-    func testTheKnobWordsColumnIsLastBeforeTheFocusPauseAndStageAngleColumns() {
+    func testTheKnobWordsColumnIsFollowedOnlyByTheHeatAndLensVideoColumns() {
+        // `heat_mode` and `screen_brightness` (performance step 3), the lens video's two, then
+        // the line crossing columns, the spot limit and slip tilt columns, and last the focus
+        // pause's two and the stage's two servo angles.
         XCTAssertEqual(
-            Array(MovementLog.header.suffix(5)),
-            ["knob_words", "focus_peak", "focus_hint", "stage_angle_x", "stage_angle_y"])
+            Array(MovementLog.header.suffix(13).prefix(5)),
+            ["knob_words", "heat_mode", "screen_brightness", "lens_recording", "video_drops"])
     }
 }

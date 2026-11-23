@@ -26,7 +26,7 @@ final class GuidedScanSavingTests: XCTestCase {
         var record = GuideRunRecord.previewForTests
         record.countsByLabel = ["Volvox": 3, "Nematode": 2]
         record.totalCount = 5
-        record.detectorModel = DetectorModel.v2.rawValue
+        record.detectorModel = DetectorModel.v3.rawValue
         return record
     }
 
@@ -47,6 +47,32 @@ final class GuidedScanSavingTests: XCTestCase {
         XCTAssertFalse(manifest.stoppedEarly)
         XCTAssertEqual(manifest.details, details)
         XCTAssertTrue(sweep.frameURLs.isEmpty)
+    }
+
+    func testTheLensVideoIsLinkedIntoTheSweepAndNamedInItsRecord() throws {
+        let video = directory.appending(path: "lens-test.mov")
+        try Data("video".utf8).write(to: video)
+        var withVideo = record
+        withVideo.lensVideoFile = "lens-test.mov"
+        withVideo.lensVideoScanStartSeconds = 12
+        let name = try GuidedScanSaver.save(
+            details: details, record: withVideo, movementCSV: nil, lensVideo: video, in: directory)
+        let folder = directory.appending(path: name)
+        XCTAssertEqual(try Data(contentsOf: folder.appending(path: "lens-test.mov")), Data("video".utf8))
+        XCTAssertEqual(GuidedScanSaver.runRecord(in: folder)?.lensVideoFile, "lens-test.mov")
+        XCTAssertEqual(GuidedScanSaver.runRecord(in: folder)?.lensVideoScanStartSeconds, 12)
+    }
+
+    func testAVideoThatCannotBeKeptIsNotNamedInTheRecord() throws {
+        var withVideo = record
+        withVideo.lensVideoFile = "lens-gone.mov"
+        withVideo.lensVideoScanStartSeconds = 12
+        let name = try GuidedScanSaver.save(
+            details: details, record: withVideo, movementCSV: nil,
+            lensVideo: directory.appending(path: "missing.mov"), in: directory)
+        let saved = GuidedScanSaver.runRecord(in: directory.appending(path: name))
+        XCTAssertNil(saved?.lensVideoFile)
+        XCTAssertNil(saved?.lensVideoScanStartSeconds)
     }
 
     func testItNeverReportsNoFramesWereKept() throws {
@@ -79,7 +105,7 @@ final class GuidedScanSavingTests: XCTestCase {
         let sweep = try savedSweep()
         let report = try SoilReportExporter.report(for: sweep)
         XCTAssertEqual(report.capture.frameCount, 0)
-        XCTAssertEqual(report.capture.detectorModel, "SoilDetectorV2")
+        XCTAssertEqual(report.capture.detectorModel, "SoilDetectorV3")
         XCTAssertNil(report.panoramaJPEG)
         XCTAssertEqual(report.organisms.map(\.taxon), ["Volvox", "Nematode"])
         XCTAssertEqual(report.organisms.map(\.count), [3, 2])

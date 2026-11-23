@@ -208,6 +208,9 @@ struct MovementLogRow: Equatable {
     var iso: Double?
     var thermalState = ""
     var batteryLevel: Double?
+    /// The heat mode ("normal", "cool_down", "too_hot") and the screen's brightness (0 to 1).
+    var heatMode = ""
+    var screenBrightness: Double?
     /// The focus pause's second signal: the rolling box-sharpness reference, the latest sharpness
     /// over it, and why the run is paused ("index_and_sharpness", "detail_lost", "alignment").
     var sharpnessRef: Double?
@@ -238,6 +241,19 @@ struct MovementLogRow: Equatable {
     /// The words the guided scan page showed on this row ("Bottom knob towards you"); empty in
     /// the lab, which shows none.
     var knobWords = ""
+    /// Whether the lens video was being recorded on this row, and the running count of frames the
+    /// video left out because the writer was busy (the scan analysed them all the same).
+    var lensRecording = false
+    var videoDrops: Int?
+    /// How many times the edge line being followed was passed without confirming, and its slide
+    /// position along the leg (empty without one).
+    var lineCrossings = 0
+    var lineAlong: Double?
+    /// Why the current leg target is limited: line, loop_location, tilted_prediction,
+    /// flat_prediction, fitted_prediction or empty_ahead; empty when it is not.
+    var spotLimitReason = ""
+    /// The tilt the columns follow, in degrees; nil (empty) for straight columns.
+    var slipTiltDegrees: Double?
 }
 
 enum MovementLog {
@@ -278,8 +294,10 @@ enum MovementLog {
         "sharpness_ref", "sharpness_share", "pause_cause", "det_frame_seconds", "det_pre_ms",
         "det_infer_ms", "det_decode_ms",
         "line_accept", "area_ahead_share", "predicted_edge_along", "expected_edge_ask",
-        "camera_drops", "knob_words", "focus_peak", "focus_hint",
-        "stage_angle_x", "stage_angle_y",
+        "camera_drops", "knob_words", "heat_mode", "screen_brightness", "lens_recording",
+        "video_drops", "line_crossings", "line_along", "spot_limit_reason",
+        "slip_tilt_deg",
+        "focus_peak", "focus_hint", "stage_angle_x", "stage_angle_y",
     ]
 
     static func csv(_ rows: [MovementLogRow]) -> String {
@@ -358,7 +376,11 @@ enum MovementLog {
             number(row.detDecodeMs, 1),
             row.lineAccept, number(row.areaAheadShare, 3), number(row.predictedEdgeAlong, 3),
             row.lineState.isEmpty ? "" : (row.expectedEdgeAsk ? "1" : "0"),
-            row.cameraDrops.map(String.init) ?? "", row.knobWords,
+            row.cameraDrops.map(String.init) ?? "", row.knobWords, row.heatMode,
+            number(row.screenBrightness, 2),
+            row.lensRecording ? "1" : "0", row.videoDrops.map(String.init) ?? "",
+            row.lineAlong == nil ? "" : String(row.lineCrossings), number(row.lineAlong, 3),
+            row.spotLimitReason, number(row.slipTiltDegrees, 2),
             number(row.focusPeak, 3), row.focusHint,
             row.stageAngleX.map(String.init) ?? "", row.stageAngleY.map(String.init) ?? "",
         ]

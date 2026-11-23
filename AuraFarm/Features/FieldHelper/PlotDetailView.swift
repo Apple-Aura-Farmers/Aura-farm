@@ -7,10 +7,9 @@
 
 import SwiftUI
 
-/// One plot of a farm, with everything known about it in one place: where it is and how big,
-/// what the field helper has recorded about its soil, the tests the microscope operator has
-/// taken on it, and what to do next. Each plot has its own, so a test or a reading on one
-/// plot never speaks for another.
+/// One plot of a farm, as the tests taken on it: a row for each day with something recorded,
+/// newest first, each saying what was measured that day. A day opens to its results and advice;
+/// the plus button adds a measurement.
 struct PlotDetailView: View {
     /// Looked up in the store each time, so the page shows changes made anywhere else.
     let farmID: UUID
@@ -19,44 +18,50 @@ struct PlotDetailView: View {
     @Environment(FarmStore.self) private var store
     /// The tests taken on this plot, newest first. nil while they are being read from disk.
     @State private var tests: [FarmTest]?
+    @State private var isEditingOutline = false
 
     private var farm: Farm? { store.farms.first { $0.id == farmID } }
+
+    /// One day's worth of what was recorded on the plot.
+    private struct Day: Identifiable {
+        let date: Date
+        let entries: [SoilMeasurements]
+        let test: FarmTest?
+        var id: Date { date }
+
+        /// What was measured, as the chips under the date.
+        var tags: [String] {
+            let soil = entries.first
+            var tags: [String] = []
+            if soil?.npkHealth != nil { tags.append("NPK") }
+            if test != nil { tags.append("Biodiversity") }
+            if soil?.ph != nil { tags.append("pH") }
+            if soil?.organicCarbonPercent != nil { tags.append("SOC") }
+            if soil?.fertilizerSummary != nil { tags.append("Fertilizer") }
+            return tags
+        }
+    }
+
+    private func days(of plot: Plot) -> [Day] {
+        let calendar = Calendar.current
+        let log = plot.soilLog.filter { !$0.isEmpty }
+        let dates = Set(log.map { calendar.startOfDay(for: $0.measuredAt) })
+            .union((tests ?? []).map { calendar.startOfDay(for: $0.result.recordedAt) })
+        return dates.sorted(by: >).map { date in
+            Day(
+                date: date,
+                entries: log.filter { calendar.isDate($0.measuredAt, inSameDayAs: date) }
+                    .sorted { $0.updatedAt > $1.updatedAt },
+                test: tests?.first { calendar.isDate($0.result.recordedAt, inSameDayAs: date) })
+        }
+    }
 
     var body: some View {
         Group {
             if let farm, let plot = farm.plots.first(where: { $0.id == plotID }) {
-                details(for: plot, in: farm)
+                list(for: plot, in: farm)
                     .navigationTitle(farm.title(of: plot))
-            } else {
-                ContentUnavailableView("This plot is no longer here", systemImage: "leaf")
-            }
-        }
-        .navigationBarTitleDisplayMode(.inline)
-        .auraBackground()
-    }
-
-    private func details(for plot: Plot, in farm: Farm) -> some View {
-        List {
-            Group {
-                if !plot.corners.isEmpty {
-                    Section {
-                        LandMapView(corners: plot.corners, isInteractive: true)
-                            .id(plot.corners)
-                            .frame(height: 260)
-                            .listRowInsets(EdgeInsets())
-                    }
-                }
-
-                Section("Plot") {
-                    LabeledContent("Farmer", value: farm.farmerName)
-                    if !plot.name.isEmpty {
-                        LabeledContent("Name", value: plot.name)
-                    }
-                    if let area = plot.areaSquareMetres {
-                        LabeledContent(
-                            "Total area", value: LandGeometry.areaDescription(squareMetres: area))
-                    }
-                    NavigationLink {
+                    .navigationDestination(isPresented: $isEditingOutline) {
                         LandOutlineEditorView(
                             corners: plot.corners,
                             neighbours: store.farms.neighbours(excluding: plot.id),
@@ -64,24 +69,120 @@ struct PlotDetailView: View {
                         ) { corners in
                             replace(plot, with: corners, in: farm)
                         }
+                    }
+                    .toolbar {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            NavigationLink {
+                                SoilMeasurementsView(farmID: farmID, plotID: plot.id)
+                            } label: {
+                                Label("Add measurement", systemImage: "plus")
+                            }
+                        }
+                    }
+            } else {
+                ContentUnavailableView("This plot is no longer here", systemImage: "leaf")
+            }
+        }
+        .navigationBarTitleDisplayMode(.large)
+        .auraBackground()
+    }
+
+    private func list(for plot: Plot, in farm: Farm) -> some View {
+        let days = days(of: plot)
+        return List {
+            Group {
+                if !plot.corners.isEmpty {
+                    LandMapView(corners: plot.corners, isInteractive: true)
+                        .id(plot.corners)
+                        .frame(height: 200)
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                        .overlay(alignment: .topTrailing) {
+                            Button {
+                                isEditingOutline = true
+                            } label: {
+                                Image(systemName: "pencil")
+                                    .font(.headline)
+                                    .padding(10)
+                                    .glassEffect(.regular.interactive(), in: .circle)
+                            }
+                            .buttonStyle(.plain)
+                            .padding(8)
+                            .accessibilityLabel("Edit plot outline")
+                        }
+                        .listRowInsets(EdgeInsets())
+                }
+                if tests != nil {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Tests")
+                            .font(.title3.bold())
+                        Text(days.count == 1 ? "1 test" : "\(days.count) tests")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets(top: 12, leading: 4, bottom: 8, trailing: 4))
+                }
+                if tests == nil {
+                    ProgressView()
+                } else if days.isEmpty {
+                    Text("Nothing measured yet. Tap + to add a measurement.")
+                        .foregroundStyle(.secondary)
+                }
+                ForEach(days) { day in
+                    NavigationLink {
+                        SoilMeasurementsView(
+                            farmID: farmID, plotID: plot.id, entryID: day.entries.first?.id,
+                            day: day.date)
                     } label: {
-                        Label("Edit outline", systemImage: "square.dashed")
+                        row(for: day)
+                    }
+                    .swipeActions {
+                        if !day.entries.isEmpty {
+                            Button(role: .destructive) {
+                                Task {
+                                    for entry in day.entries {
+                                        await store.deleteSoil(entry.id, for: plot, in: farm)
+                                    }
+                                }
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                        }
                     }
                 }
-
-                soilSection(for: plot)
-
-                labResultsSection
-
-                adviceSection(for: plot, in: farm)
             }
-            .listRowBackground(Color.auraRow)
+            .listRowBackground(RoundedRectangle(cornerRadius: 16).fill(Color.auraRow))
+            .listRowSeparator(.hidden)
         }
+        .listRowSpacing(12)
         .task(id: plot.id) {
             tests = await Task.detached(priority: .userInitiated) {
                 FarmTests.load(for: plot, in: farm)
             }.value
         }
+    }
+
+    private func row(for day: Day) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(
+                Calendar.current.isDateInToday(day.date)
+                    ? "Today" : day.date.formatted(date: .abbreviated, time: .omitted)
+            )
+            .font(.headline)
+            ChipFlow(spacing: 6) {
+                ForEach(day.tags, id: \.self) { tag in
+                    Text(tag)
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .fixedSize()
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 1)
+                        .background(Color(.tertiarySystemFill), in: .capsule)
+                }
+            }
+        }
+        .padding(.vertical, 4)
     }
 
     private func replace(_ plot: Plot, with corners: [GeoPoint], in farm: Farm) {
@@ -90,121 +191,6 @@ struct PlotDetailView: View {
         changed.plots[index].corners = corners
         store.update(changed)
         store.publish(changed)
-    }
-
-    // MARK: Soil measurements
-
-    /// What the field helper has recorded: only the values that are filled in.
-    private func soilSection(for plot: Plot) -> some View {
-        Section {
-            if let soil = plot.soil, !soil.isEmpty {
-                ForEach(soil.rows) { row in
-                    SoilMeasurementRow(row: row)
-                }
-            } else {
-                Text("Nothing recorded yet.")
-                    .foregroundStyle(.secondary)
-            }
-            NavigationLink {
-                SoilMeasurementsView(farmID: farmID, plotID: plot.id)
-            } label: {
-                Label(
-                    plot.soil?.isEmpty == false ? "Edit measurements" : "Add measurements",
-                    systemImage: "square.and.pencil")
-            }
-        } header: {
-            Text("Soil measurements")
-        } footer: {
-            if let soil = plot.soil, !soil.isEmpty {
-                Text(
-                    "Updated \(soil.updatedAt.formatted(date: .abbreviated, time: .omitted)). "
-                        + "Tap a value for what it means. The standards and guidance are placeholders and have not been reviewed by an agronomist."
-                )
-            }
-        }
-    }
-
-    // MARK: Lab results
-
-    private var labResultsSection: some View {
-        Section {
-            if let tests {
-                if tests.isEmpty {
-                    Text("No tests on this plot yet.")
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(tests) { test in
-                        NavigationLink {
-                            SoilResultScreen(sweep: test.sweep)
-                        } label: {
-                            row(for: test)
-                        }
-                    }
-                }
-            } else {
-                ProgressView()
-            }
-        } header: {
-            Text("Lab results")
-        } footer: {
-            Text("Tests the microscope operator takes on this plot show here.")
-        }
-    }
-
-    /// One test: how much soil life it saw, when, and how sure that is. The band is never shown
-    /// without its confidence; the reasons are one tap away on the full result.
-    private func row(for test: FarmTest) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: test.estimate.level.systemImage)
-                .font(.title2)
-                .foregroundStyle(test.estimate.level.tint)
-                .frame(width: 32)
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(test.estimate.level.title)
-                    .font(.headline)
-                Text(
-                    test.result.recordedAt.formatted(date: .abbreviated, time: .shortened)
-                        + " · \(test.result.moisture.label)"
-                )
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                Text(detail(of: test))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .accessibilityElement(children: .combine)
-    }
-
-    private func detail(of test: FarmTest) -> String {
-        var parts: [String] = []
-        if let total = test.result.totalCount {
-            parts.append(total == 1 ? "1 organism" : "\(total) organisms")
-        }
-        parts.append("\(test.estimate.confidence.label) confidence")
-        return parts.joined(separator: " · ")
-    }
-
-    // MARK: What to do next
-
-    /// Advice for the plot's most recent counted test, written with the plot's soil measurements.
-    @ViewBuilder
-    private func adviceSection(for plot: Plot, in farm: Farm) -> some View {
-        if let latest = tests?.first {
-            FarmAdvice(farm: farm, plot: plot, test: latest, history: tests ?? [])
-                // A new test, or different soil measurements, is new advice, so a fresh view model
-                // for it. It then shows the saved advice if that still fits, and writes it again
-                // if it doesn't.
-                .id(AdviceKey(test: latest.id, soil: SoilInputs(plot.soil)))
-        } else if tests?.isEmpty == true {
-            Section {
-                Text("Advice shows here once the microscope operator has tested this plot.")
-                    .foregroundStyle(.secondary)
-            } header: {
-                Text("What to do next")
-            }
-        }
     }
 }
 
@@ -216,25 +202,30 @@ private struct AdviceKey: Hashable {
 
 /// "What to do next" for one test, and a way to export it. Owns the view model so it survives
 /// redraws.
-private struct FarmAdvice: View {
+struct FarmAdvice: View {
     @State private var viewModel: SoilResultViewModel
     private let farm: Farm
     private let plot: Plot
-    private let test: FarmTest
+    /// nil when no microscope test has been taken, and the advice is from the soil alone.
+    private let test: FarmTest?
     /// Every counted test of this farm, for the report's trend.
     private let history: [FarmTest]
-    private let testedOn: Date
+    private let testedOn: Date?
     private let usesSoil: Bool
 
-    init(farm: Farm, plot: Plot, test: FarmTest, history: [FarmTest]) {
+    init(farm: Farm, plot: Plot, test: FarmTest?, soil: SoilMeasurements?, history: [FarmTest]) {
         self.farm = farm
         self.plot = plot
         self.test = test
         self.history = history
-        testedOn = test.result.recordedAt
-        usesSoil = SoilInputs(plot.soil) != nil
-        var result = test.result
-        result.soil = plot.soil
+        testedOn = test?.result.recordedAt
+        usesSoil = SoilInputs(soil) != nil
+        var result =
+            test?.result
+            ?? SoilResult.soilOnly(
+                soil ?? SoilMeasurements(), recordedAt: soil?.measuredAt ?? Date(),
+                sampleID: farm.farmerName)
+        result.soil = soil
         _viewModel = State(wrappedValue: SoilResultViewModel(result: result))
     }
 
@@ -242,12 +233,13 @@ private struct FarmAdvice: View {
         Group {
             WhatToDoNextSection(
                 viewModel: viewModel,
-                footer: "From the microscope test on "
-                    + "\(testedOn.formatted(date: .abbreviated, time: .omitted))"
-                    + (usesSoil
-                        ? ", with the soil measurements above."
-                        : " only.")
+                footer: testedOn.map {
+                    "From the microscope test on "
+                        + "\($0.formatted(date: .abbreviated, time: .omitted))"
+                        + (usesSoil ? ", with the soil measurements above." : " only.")
+                } ?? "From the soil measurements above only. A microscope test will add to it."
             )
+            .id(SoilMeasurementsView.adviceID)
             exportSection
         }
     }
@@ -273,7 +265,7 @@ private struct FarmAdvice: View {
                 }
             } footer: {
                 Text(
-                    "A field report of this test, the soil measurements, the fertilizer and the advice above, to share or print."
+                    "A field report of the soil measurements, the microscope test if there is one, the fertilizer and the advice above, to share or print."
                 )
             }
         }
@@ -296,4 +288,46 @@ private struct FarmAdvice: View {
         PlotDetailView(farmID: farm.id, plotID: farm.plots[0].id)
     }
     .environment(FarmStore(fileURL: nil, farms: [farm]))
+}
+
+/// Lays its children left to right and starts a new line when one no longer fits, so a chip
+/// is moved down whole rather than broken across lines.
+private struct ChipFlow: Layout {
+    var spacing: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        arrange(in: proposal.width ?? .infinity, subviews).size
+    }
+
+    func placeSubviews(
+        in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()
+    ) {
+        let placed = arrange(in: bounds.width, subviews)
+        for (subview, origin) in zip(subviews, placed.origins) {
+            subview.place(
+                at: CGPoint(x: bounds.minX + origin.x, y: bounds.minY + origin.y),
+                proposal: .unspecified)
+        }
+    }
+
+    private func arrange(in width: CGFloat, _ subviews: Subviews) -> (origins: [CGPoint], size: CGSize) {
+        var origins: [CGPoint] = []
+        var x: CGFloat = 0
+        var y: CGFloat = 0
+        var rowHeight: CGFloat = 0
+        var widest: CGFloat = 0
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x > 0, x + size.width > width {
+                x = 0
+                y += rowHeight + spacing
+                rowHeight = 0
+            }
+            origins.append(CGPoint(x: x, y: y))
+            x += size.width + spacing
+            rowHeight = max(rowHeight, size.height)
+            widest = max(widest, x - spacing)
+        }
+        return (origins, CGSize(width: widest, height: y + rowHeight))
+    }
 }

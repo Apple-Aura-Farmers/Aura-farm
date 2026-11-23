@@ -38,6 +38,57 @@ final class EdgePredictionRouteTests: XCTestCase {
         XCTAssertEqual(Double(three.first?.position.y ?? 0), 0.6, accuracy: 0.3, "\(three)")
     }
 
+    // MARK: Step 3: limits from column 2, and more room after a top or bottom edge
+
+    /// Runs a 4.6 wide slip from y = -5 to 3 and notes, per state, the targets and limit reasons.
+    private func limits(
+        width: Double = 4.6, until stop: String
+    ) -> [String: (ys: [Double], reasons: Set<String>)] {
+        let drop = SimulatedDrop(circles: [], rects: [CGRect(x: 0, y: -5, width: width, height: 8)])
+        let sim = GuideSimulator(drop: drop, start: CGPoint(x: 1.5, y: -1))
+        sim.useFullCoverSlip()
+        var seen: [String: (ys: [Double], reasons: Set<String>)] = [:]
+        _ = sim.run(until: { step in
+            var entry = seen[step.stateName] ?? ([], [])
+            if let y = step.target?.y, step.edge.spotLimitReason != "empty_ahead" {
+                entry.ys.append(Double(y))
+            }
+            if !step.edge.spotLimitReason.isEmpty { entry.reasons.insert(step.edge.spotLimitReason) }
+            seen[step.stateName] = entry
+            return step.stateName == stop
+        })
+        return seen
+    }
+
+    func testColumnTwoStopsAtColumnOnesTopEdgePlusTheMarginWithoutATwoPointFit() throws {
+        let seen = limits(until: "column 3 down")
+        let two = try XCTUnwrap(seen["column 2 up"])
+        // The simulator's edge lines read 0 degrees: a known angle, so the provisional limit is the
+        // tilted one (here level); an unknown or over-12-degree angle gives "flat_prediction"
+        // (see SlipTiltTests).
+        XCTAssertTrue(two.reasons.contains("tilted_prediction"), "\(two.reasons)")
+        XCTAssertFalse(two.reasons.contains("fitted_prediction"))
+        // Moving up: no ordinary target above -5.0 + 0.6; the edge itself is only sought.
+        let ordinary = two.ys.filter { $0 > -4.99 }
+        XCTAssertGreaterThanOrEqual(ordinary.min() ?? 0, -4.4 - 0.05, "\(two.ys)")
+    }
+
+    func testWithATwoPointTrustedFitTheFittedLimitIsUsedAsBefore() throws {
+        let seen = limits(until: "column 5 down")
+        let four = try XCTUnwrap(seen["column 4 up"])
+        XCTAssertTrue(four.reasons.contains("fitted_prediction"), "\(four.reasons)")
+        XCTAssertFalse(four.reasons.contains("flat_prediction"))
+    }
+
+    func testWithAKnownEyepieceTheNextColumnStartsItsRadiusPlusMarginInFromABottomEdge() {
+        let drop = SimulatedDrop(circles: [], rects: [CGRect(x: 0, y: 0, width: 6, height: 9)])
+        let sim = GuideSimulator(drop: drop, start: CGPoint(x: 3, y: 4.5))
+        sim.useFullCoverSlip { $0.eyepieceRadiusFields = 1.4 }
+        let result = sim.run(until: { $0.stateName.hasPrefix("column 3") })
+        let two = column(2, in: result)
+        XCTAssertEqual(Double(two.first?.position.y ?? 0), 9.0 - 1.55, accuracy: 0.3, "\(two)")
+    }
+
     // MARK: Part C: predicted edges
 
     /// Five columns on a 4.6 x 2.4 slip: column 4 (up) has two top points and column 5 (down) two

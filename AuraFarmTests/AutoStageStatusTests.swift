@@ -6,12 +6,12 @@ final class AutoStageStatusTests: XCTestCase {
     private func status(
         _ phase: AutoStageDriver.Phase, restartNotice: String? = nil, edge: Bool = false,
         client: StageBLEClient.Status = .connected, focusPaused: Bool = false,
-        dwelling: Bool = false, hasConnected: Bool = true
+        dwelling: Bool = false, hasConnected: Bool = true, tooHot: Bool = false
     ) -> AutoStageStatus {
         AutoStageStatus.make(
             phase: phase, restartNotice: restartNotice, presetEdgePrompt: edge,
             pathMode: .followGuide, client: client, focusPaused: focusPaused,
-            dwelling: dwelling, hasConnected: hasConnected)
+            dwelling: dwelling, hasConnected: hasConnected, tooHot: tooHot)
     }
 
     private var everyPhase: [AutoStageDriver.Phase] {
@@ -29,6 +29,16 @@ final class AutoStageStatusTests: XCTestCase {
         for phase in everyPhase {
             XCTAssertFalse(status(phase).title.isEmpty, "\(phase)")
         }
+    }
+
+    func testTooHotIsSaidOnlyWhileTheStageRunsAndFocusComesFirst() {
+        let hot = status(.following, tooHot: true)
+        XCTAssertEqual(hot.title, HelperInstruction.tooHot.text)
+        XCTAssertNil(hot.needsPerson, "it carries on by itself")
+        XCTAssertEqual(status(.presetPath(column: 2, spot: 1), tooHot: true).title, hot.title)
+        XCTAssertEqual(status(.paused, tooHot: true).title, "Paused")
+        XCTAssertEqual(
+            status(.following, focusPaused: true, tooHot: true).needsPerson, .focusPause)
     }
 
     func testARestartNeedsThePerson() {

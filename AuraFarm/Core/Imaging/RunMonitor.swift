@@ -31,12 +31,12 @@ enum RunMonitorState: Equatable {
 struct RunMonitorThresholds {
     // Alignment, GEOMETRY ONLY: the sample's content would trip evenness and glare.
     /// The circle's centre moved this share of its radius from the confirmed one.
-    var lostCentreShiftShareOfRadius: Double = 0.12
+    var lostCentreShiftShareOfRadius: Double = 0.18
     /// The circle's radius changed by this share.
-    var lostRadiusChange: Double = 0.10
-    var lostMinRoundness: Double = 0.75
+    var lostRadiusChange: Double = 0.15
+    var lostMinRoundness: Double = 0.70
     /// Lost (a clipped circle, no circle, or the limits above) for this long without a break.
-    var lostSeconds: Double = 2.0
+    var lostSeconds: Double = 3.0
     /// Back: within these of the confirmed circle, for `backSeconds`.
     var backCentreShiftShareOfRadius: Double = 0.06
     var backRadiusChange: Double = 0.05
@@ -96,6 +96,10 @@ struct RunMonitorThresholds {
     /// A pause also ends when box sharpness is back to this share of the reference for
     /// `resumeSeconds`. PLACEHOLDER.
     var sharpnessResumeShare: Double = 0.8
+    /// The focus index is read a few times a second. If none has arrived for longer than this,
+    /// the counts are cleared when the next one does, so a countdown cannot carry across a long
+    /// gap (tracking lost for a while). PLACEHOLDER: three times the reading interval.
+    var focusReadingGapSeconds: Double = 1.0
 }
 
 /// A run of readings without detail, judged against the detail readings just before it.
@@ -138,6 +142,11 @@ struct RunMonitor {
     private var sharpnessHistory: [(seconds: Double, value: Double)] = []
     private var referenceClock = 0.0
     private var lastUpdateSeconds: Double?
+    /// The latest focus index of a view with detail; nil once older than the gap. While paused
+    /// it stands in on the frames between readings.
+    private var lastIndex: (seconds: Double, value: Double)?
+    /// When the last focus reading arrived, for the gap guard.
+    private var lastFocusReadingAt: Double?
     /// The median of `sharpnessHistory`, once it spans `referenceMinimumSeconds`; for the CSV.
     private(set) var sharpnessReference: Double?
     /// The latest box sharpness over the reference; nil without either.
@@ -238,6 +247,7 @@ struct RunMonitor {
         startIndex = nil
         peakIndex = nil
         isSharp = false
+        lastIndex = nil
         recentSharpness = []
         sharpnessPeaks = []
     }
@@ -384,6 +394,11 @@ struct RunMonitor {
     ) {
         focusLow = false
         isSharp = false
+        // The index is read a few times a second: between readings the latest one stands, but
+        // none older than the gap.
+        if let last = lastIndex, now - last.seconds > thresholds.focusReadingGapSeconds {
+            lastIndex = nil
+        }
         // On every reading, so a gap without sharpness ages them too.
         sharpnessPeaks.removeAll { now - $0.seconds > thresholds.peakWindowSeconds }
         recentSharpness.removeAll { now - $0.seconds > thresholds.smoothingSeconds }
@@ -407,17 +422,18 @@ struct RunMonitor {
         if state == .pausedFocus {
             // Sharp: against the baseline (or the run's own sharpness before the pause), and
             // about as sharp as this view has been. Without a baseline, detail is enough.
+            if let index { lastIndex = (now, index) }
             updateSharpnessPeak(sharpness, hasDetail: true, isStill: isStill, now)
             let baseline = focusBaseline ?? 0
+            let share = lastIndex.map { baseline > 0 ? $0.value / baseline : 1 }
             let indexBack =
-                baseline <= 0
-                || index.map { $0 / baseline >= thresholds.resumeAtShareOfBaseline } ?? false
+                baseline <= 0 || (share ?? 0) >= thresholds.resumeAtShareOfBaseline
             let sharpBack = sharpnessShare.map { $0 >= thresholds.sharpnessResumeShare } ?? false
             isSharp = (indexBack || sharpBack) && isNearSharpnessPeak
             let sharpnessLow = sharpnessShare.map { $0 < thresholds.sharpnessPauseShare } ?? true
             focusLow =
                 isStill && baseline > 0 && sharpnessLow
-                && index.map { $0 / baseline < thresholds.pauseBelowShareOfBaseline } ?? false
+                && (share ?? 1) < thresholds.pauseBelowShareOfBaseline
             if isStill, let index {
                 latestIndex = index
                 if startIndex == nil { startIndex = index }
@@ -427,8 +443,8 @@ struct RunMonitor {
             }
             if judgeResume(good: isSharp && isStill, now) {
                 resumeNote = String(
-                    format: "index=%.3f peak=%.3f share=%.2f", index ?? -1, peakIndex ?? -1,
-                    baseline > 0 ? (index ?? 0) / baseline : 1)
+                    format: "index=%.3f peak=%.3f share=%.2f", lastIndex?.value ?? -1,
+                    peakIndex ?? -1, share ?? 1)
                 state = .ok
                 endFocusPause()
                 clearFocusCounts()
@@ -445,10 +461,13 @@ struct RunMonitor {
             if let index { collectBaseline(index, now) }
             return
         }
-        guard let index else {
+        // Not measured on this frame (the caller reads it a few times a second): the counts
+        // run on by time, neither added to nor cleared.
+        guard let index else { return }
+        if let last = lastFocusReadingAt, now - last > thresholds.focusReadingGapSeconds {
             clearFocusCounts()
-            return
         }
+        lastFocusReadingAt = now
         // Both signals must say blurry. Before the reference exists the second is not checked.
         let sharpnessLow = sharpnessShare.map { $0 < thresholds.sharpnessPauseShare } ?? true
         focusLow = index / baseline < thresholds.pauseBelowShareOfBaseline && sharpnessLow

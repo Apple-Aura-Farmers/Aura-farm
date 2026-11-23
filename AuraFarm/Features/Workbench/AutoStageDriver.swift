@@ -100,6 +100,7 @@ final class AutoStageDriver {
     /// The latest tracked guide position (raw), and when it was seen.
     private var lastTracked: (position: CGPoint, at: Date)?
     // The preset zig-zag.
+    private var edgeAnswer = StageEdgeAnswer()
     private var zigzag: StageZigzag?
     /// How far the preset path has come; nil before it starts and while following the guide.
     private(set) var presetProgress: StageZigzagProgress?
@@ -340,6 +341,9 @@ final class AutoStageDriver {
         engine.logEvent("objective_\(new.title)")
         if mapping != nil { recalibrate() }
     }
+
+    /// The servos are measured: the stage can start.
+    var isCalibrated: Bool { mapping != nil }
 
     /// After a failure, or to measure again at the stage step.
     func recalibrate() {
@@ -860,6 +864,13 @@ final class AutoStageDriver {
             walkBackStep()
             return
         }
+        // The model does not count while the phone is too hot: the stage waits, so no part of the
+        // slide goes by uncounted. A move on its way finishes.
+        if engine.heatMode == .tooHot {
+            stallWatch = StageStallWatch()
+            noSampleSince = nil
+            return
+        }
         if let zigzag {
             self.zigzag?.boostLeg = stuckWatch.extraDegrees(for: zigzag.plan.legServo)
             self.zigzag?.boostStep = stuckWatch.extraDegrees(for: zigzag.plan.stepServo)
@@ -872,7 +883,7 @@ final class AutoStageDriver {
         AutoStageStatus.make(
             phase: phase, restartNotice: restartNotice, presetEdgePrompt: presetEdgePrompt,
             pathMode: pathMode, client: client.status, focusPaused: isFocusPaused,
-            dwelling: isDwelling, hasConnected: hasConnected)
+            dwelling: isDwelling, hasConnected: hasConnected, tooHot: engine.heatMode == .tooHot)
     }
 
     private var isFocusPaused: Bool {
@@ -1012,7 +1023,7 @@ final class AutoStageDriver {
         let monitor = engine.setupInfo.monitor
         if stallWatch.update(
             now: Date(), holds: engine.guideInfo.holdsForPicture, moved: movedForStall,
-            focusIndex: monitor.focusIndex, baseline: monitor.focusBaseline)
+            focusIndex: monitor.recentFocusIndex, baseline: monitor.focusBaseline)
         {
             engine.requestFocusPause()
             lastMove = "Focus pause (stall)"
@@ -1235,6 +1246,16 @@ final class AutoStageDriver {
         phase = .following
     }
 
+    /// With edge questions off there is nobody to answer. The guide still asks two of them ("Edge
+    /// should be here" and a line passed again and again), so the stage says yes itself.
+    private func answerEdgeItself() {
+        guard !asksEdgeQuestions,
+            let id = edgeAnswer.update(questionID: engine.overlayState.questionID, now: Date())
+        else { return }
+        engine.answerEdge(.yes, questionID: id)
+        engine.logEvent("edge_auto_yes", detail: "question=\(id)")
+    }
+
     private func follow() {
         if inFlight, Date().timeIntervalSince(moveSentAt) > 5 {
             // The reply never came (or the move was to the angle it is already at).
@@ -1250,7 +1271,7 @@ final class AutoStageDriver {
         let monitor = engine.setupInfo.monitor
         if stallWatch.update(
             now: Date(), holds: engine.guideInfo.holdsForPicture, moved: movedForStall,
-            focusIndex: monitor.focusIndex, baseline: monitor.focusBaseline)
+            focusIndex: monitor.recentFocusIndex, baseline: monitor.focusBaseline)
         {
             engine.requestFocusPause()
             lastMove = "Focus pause (stall)"
@@ -1263,8 +1284,10 @@ final class AutoStageDriver {
                 lastSettledAt = Date()
             }
             phase = .waitingForEdgeAnswer
+            answerEdgeItself()
             return
         }
+        edgeAnswer.questionGone()
         if phase == .waitingForEdgeAnswer { phase = .following }
         let guideOff = "turn on Guide dry run"
         guard engine.guideInfo.isOn else {

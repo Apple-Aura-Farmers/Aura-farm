@@ -46,10 +46,17 @@ final class ScriptedRoute {
     /// Seconds the slide has been still in a row, as the indicators count them.
     private var stillRun = 0.0
 
-    init(fullCoverSlip: Bool = false, asksEdges: Bool = false) {
+    /// +1, or -1 for a frame that maps to the guide's axes with a mirror.
+    var frameHandedness = 1.0
+
+    init(
+        fullCoverSlip: Bool = false, asksEdges: Bool = false,
+        configure: (inout GuidedSweepThresholds) -> Void = { _ in }
+    ) {
         var thresholds = GuidedSweepThresholds()
         thresholds.fullCoverSlip = fullCoverSlip
         thresholds.asksEdges = asksEdges
+        configure(&thresholds)
         guide = GuidedSweep(thresholds: thresholds)
     }
     var seconds = 0.0
@@ -77,7 +84,7 @@ final class ScriptedRoute {
             boxSharpness: frame.box, quadAheadAway: frame.aheadAway,
             quadAheadToward: frame.aheadToward, quadBehindAway: frame.behindAway,
             quadBehindToward: frame.behindToward, stillSeconds: stillRun, edgeLine: frame.line,
-            edgeLineHeading: frame.lineHeading)
+            edgeLineHeading: frame.lineHeading, frameHandedness: frameHandedness)
     }
 
     func feed(_ frame: Frame = Frame(), move: CGPoint = .zero, times: Int = 1) {

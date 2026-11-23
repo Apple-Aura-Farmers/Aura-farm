@@ -10,18 +10,18 @@ extension FarmStore {
         do {
             let records = try await uploader.fetch()
             // The plots table knows nothing about soil, so a plot read back carries none. Its
-            // soil comes from its own table, and failing that from what this phone already
-            // holds, rather than the pull quietly wiping measurements nobody published.
+            // measurements come from their own table, and failing that from what this phone
+            // already holds, rather than the pull quietly wiping measurements nobody published.
             let soil = try await SoilMeasurementUploader()?.fetch() ?? [:]
             let held = Dictionary(
-                self.farms.flatMap(\.plots).map { ($0.id, $0.soil) },
+                self.farms.flatMap(\.plots).map { ($0.id, $0.soilLog) },
                 uniquingKeysWith: { first, _ in first })
             merge(
                 records.map { farm in
                     var farm = farm
                     for index in farm.plots.indices {
                         let id = farm.plots[index].id
-                        farm.plots[index].soil = soil[id] ?? held[id] ?? nil
+                        farm.plots[index].soilLog = soil[id] ?? held[id] ?? []
                     }
                     return farm
                 })
@@ -65,19 +65,49 @@ extension FarmStore {
         }
     }
 
-    /// Keeps what the helper measured on one plot, on the phone first and in the records after.
+    /// Keeps one measurement on a plot, replacing the one with the same id, on the phone first and
+    /// in the records after. One with nothing in it is not kept, and takes the old one away.
     ///
     /// The phone is written to whether or not the sending works, because the measurement is
     /// the helper's own reading and losing it to a bad connection would be the worse half.
-    func saveSoil(_ soil: SoilMeasurements?, for plot: Plot, in farm: Farm) async {
+    func saveSoil(_ soil: SoilMeasurements, for plot: Plot, in farm: Farm) async {
+        await changeSoilLog(of: plot, in: farm, sending: soil.isUnrecorded ? nil : soil, removing: soil.id) {
+            $0.removeAll { $0.id == soil.id }
+            if !soil.isUnrecorded { $0.append(soil) }
+        }
+    }
+
+    /// Takes one measurement off a plot.
+    func deleteSoil(_ id: UUID, for plot: Plot, in farm: Farm) async {
+        await changeSoilLog(of: plot, in: farm, sending: nil, removing: id) {
+            $0.removeAll { $0.id == id }
+        }
+    }
+
+    /// Records that a scientist has been asked to look at a plot. The asking lives on the newest
+    /// measurement, so a plot with none gets an empty one to hold it.
+    func alertScientist(for plot: Plot, in farm: Farm) async {
+        var newest = plot.soilLog.max { $0.measuredAt < $1.measuredAt } ?? SoilMeasurements()
+        newest.scientistAlertedAt = Date()
+        await saveSoil(newest, for: plot, in: farm)
+    }
+
+    private func changeSoilLog(
+        of plot: Plot, in farm: Farm, sending soil: SoilMeasurements?, removing id: UUID,
+        _ change: (inout [SoilMeasurements]) -> Void
+    ) async {
         var changed = farm
         guard let index = changed.plots.firstIndex(where: { $0.id == plot.id }) else { return }
-        changed.plots[index].soil = soil
+        change(&changed.plots[index].soilLog)
         update(changed)
 
         guard let uploader = SoilMeasurementUploader() else { return }
         do {
-            try await uploader.upload(soil, forPlot: plot.id, inFarm: farm.id)
+            if let soil {
+                try await uploader.upload(soil, forPlot: plot.id, inFarm: farm.id)
+            } else {
+                try await uploader.delete(id)
+            }
             report(nil)
         } catch {
             report(error.localizedDescription)
