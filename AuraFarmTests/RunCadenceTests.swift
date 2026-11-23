@@ -58,7 +58,7 @@ final class RunCadenceTests: XCTestCase {
         XCTAssertEqual(Double(result.alignmentReads), 10, accuracy: 1, "about one a second")
     }
 
-    func testARealFocusLossStillPausesAfterTwoAndAHalfSecondsAndResumesAfterOne() {
+    func testARealFocusLossStillPausesAfterTwoAndAHalfSecondsAndResumesAfterOneAndAHalf() {
         var monitor = RunMonitor()
         monitor.setFocusBaseline(1)
         var result = run(&monitor, from: 0, for: 8)
@@ -70,8 +70,10 @@ final class RunCadenceTests: XCTestCase {
         XCTAssertEqual(result.state, .pausedFocus)
         result = run(&monitor, from: result.end, for: 0.6, focus: 1, sharpness: 2000)
         XCTAssertEqual(result.state, .pausedFocus, "under a second of good readings")
-        result = run(&monitor, from: result.end, for: 0.8, focus: 1, sharpness: 2000)
-        XCTAssertEqual(result.state, .ok, "a second of good readings")
+        result = run(&monitor, from: result.end, for: 0.7, focus: 1, sharpness: 2000)
+        XCTAssertEqual(result.state, .pausedFocus, "1.3 s of good readings")
+        result = run(&monitor, from: result.end, for: 0.5, focus: 1, sharpness: 2000)
+        XCTAssertEqual(result.state, .ok, "over 1.5 s of good readings")
     }
 
     func testARealPhoneMoveStillPausesAfterThreeSecondsAndResumesAfterOne() {

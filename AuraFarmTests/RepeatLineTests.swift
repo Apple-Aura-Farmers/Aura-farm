@@ -254,7 +254,7 @@ final class RepeatLineTests: XCTestCase {
 
     func testTheCsvColumnsAreAppendedAndTheBackWordsSayTheLine() {
         XCTAssertEqual(
-            Array(MovementLog.header.suffix(4)),
+            Array(MovementLog.header.suffix(8).prefix(4)),
             ["line_crossings", "line_along", "spot_limit_reason", "slip_tilt_deg"])
         XCTAssertEqual(
             HelperInstruction.make(

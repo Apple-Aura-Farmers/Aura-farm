@@ -107,6 +107,8 @@ class ScanEngine: NSObject {
     @ObservationIgnored private let sessionQueue = DispatchQueue(label: "slidelab.session")
     @ObservationIgnored let analysisQueue = DispatchQueue(label: "slidelab.analysis")
     @ObservationIgnored private var confirmsSetupSteps = false
+    /// Setup is held where it is (see `LabSetupSession.isHeld`).
+    @ObservationIgnored private var setupHeld = false
     @ObservationIgnored private var isConfigured = false
     @ObservationIgnored private var device: AVCaptureDevice?
 
@@ -125,8 +127,26 @@ class ScanEngine: NSObject {
     @ObservationIgnored private var lastCountingActive = false
     @ObservationIgnored private var lastCountFrameSize = CGSize.zero
     @ObservationIgnored private var runStartedAt: Date?
+    /// The automated stage's servo angles, for the CSV (analysis queue; nil without the stage).
+    @ObservationIgnored private var stageAngles: (x: Int, y: Int)?
+    /// Who moves the slide in this run, for the run record (analysis queue).
+    @ObservationIgnored private var runStageInfo: (stage: String, objective: String?, pathMode: String?) = (
+        "manual", nil, nil
+    )
+    /// The tracker's latest position, frame px (analysis queue).
+    @ObservationIgnored private var lastTrackerPosition = CGPoint.zero
+    /// The run's name: its JSON, map and organisms folder all carry it. Set when the guide resets.
+    @ObservationIgnored private var runStamp = ScanEngine.stamp()
     @ObservationIgnored private var runStartSeconds = 0.0
     @ObservationIgnored private var runFinalized = false
+    /// See `setFinishesOnlyOnRequest` (analysis queue).
+    @ObservationIgnored private var finishesOnlyOnRequest = false
+    /// `endRun` asked for the end, now or after the column (analysis queue).
+    @ObservationIgnored private var endRequested = false
+    /// The run is still going: its path grows and it is not finalized yet.
+    private var runIsOpen: Bool {
+        !dryRun.isFinished || (finishesOnlyOnRequest && !endRequested)
+    }
     @ObservationIgnored private var snapshotTrigger = SnapshotTrigger()
     @ObservationIgnored var snapshotRequested = false
     /// A tap on an edge button waiting for the next logged row: it names the row, saves a
@@ -138,6 +158,12 @@ class ScanEngine: NSObject {
     @ObservationIgnored private var lastPublishedStep = LabSetupStep.align
     @ObservationIgnored private var pausesOnMonitorFlag = true
     @ObservationIgnored var pendingEventName = ""
+    @ObservationIgnored private var pendingEventDetail = ""
+    @ObservationIgnored private var queuedEvents: [(name: String, detail: String)] = []
+    /// The column of an external counting path (see `setExternalCounting`); nil when off.
+    @ObservationIgnored private var externalColumn: Int?
+    /// The side of the registration box (frame px) on the last analysed frame.
+    @ObservationIgnored private var lastBoxSide = 1.0
     @ObservationIgnored private var latestGuide: GuideRowFields?
     @ObservationIgnored private var latestGuideInfo = SlideMovementInfo.Guide()
     @ObservationIgnored private var guideCaptured: [CGPoint] = []
@@ -318,6 +344,23 @@ class ScanEngine: NSObject {
         analysisQueue.async { [weak self] in self?.setup.confirmsSteps = confirms }
     }
 
+    /// Holds setup where it is, or lets it go on. While held no step advances and confirmation
+    /// taps are ignored; the camera and the overlays carry on. Off by default.
+    func setSetupHeld(_ held: Bool) {
+        // On the analysis queue, like the reads in `beginSetup` and `confirmField`, so a
+        // release is never seen half-way.
+        analysisQueue.async { [weak self] in
+            self?.setupHeld = held
+            self?.setup.isHeld = held
+        }
+    }
+
+    /// On: the run ends only when `endRun` asks for it, not when the guide's own plan finishes
+    /// (the automated stage's fixed sweep covers its own range). Off by default.
+    func setFinishesOnlyOnRequest(_ on: Bool) {
+        analysisQueue.async { [weak self] in self?.finishesOnlyOnRequest = on }
+    }
+
     /// The person tapped Confirm on the align or focus step.
     func confirmSetupStep() {
         analysisQueue.async { [weak self] in self?.setup.confirmStep() }
@@ -344,12 +387,85 @@ class ScanEngine: NSObject {
     }
 
     /// The helper says the stage cannot go further: the guide turns and remembers the limit.
-    /// Written to the movement CSV as the event "stage_limit". Ignored unless the guide is on.
-    func stageLimit() {
+    /// Written to the movement CSV as the event "stage_limit" ("stage_limit_auto" when the
+    /// automated stage pressed it, "blind_edge" when it ended a column after crossing an empty
+    /// patch). Ignored unless the guide is on.
+    func stageLimit(cause: StageLimitCause = .manual) {
         analysisQueue.async { [weak self] in
             guard let self, self.guideEnabled else { return }
             self.dryRun.stageLimitPressed = true
-            self.pendingEventName = "stage_limit"
+            self.pendingEventName = cause.eventName
+        }
+    }
+
+    /// Writes `name` as the event of the next movement row (with `detail` as its event_detail).
+    /// While nothing is being recorded the event waits (at most 50) and goes on the first rows
+    /// once recording starts, oldest first.
+    func logEvent(_ name: String, detail: String = "") {
+        analysisQueue.async { [weak self] in
+            guard let self else { return }
+            if self.logging {
+                self.pendingEventName = name
+                self.pendingEventDetail = detail
+            } else if self.queuedEvents.count < 50 {
+                self.queuedEvents.append((name, detail))
+            }
+        }
+    }
+
+    /// Switches organism counting on for a path that is not the guide's (the automated stage's
+    /// preset zig-zag), with the column number; off with `active: false`. Overrides the guide
+    /// route's own counting and column while it is on.
+    func setExternalCounting(active: Bool, column: Int) {
+        analysisQueue.async { [weak self] in self?.externalColumn = active ? column : nil }
+    }
+
+    /// The stage crossed `guideFields` (current guide fields) without the tracker seeing it: at
+    /// the next frame with detail the position jumps by that much and the tracker anchors there.
+    func addBlindMove(guideFields: CGPoint) {
+        analysisQueue.async { [weak self] in
+            guard let self,
+                let offset = self.dryRun.trackerOffset(
+                    forGuideFields: guideFields, boxSide: self.lastBoxSide)
+            else { return }
+            self.pipeline.requestReanchor(addingOffset: offset)
+        }
+    }
+
+    /// Who moves the slide, for the run record: "manual", or "terraloka" with its objective and
+    /// path mode. Set before the scan starts.
+    func setRunStage(stage: String, objective: String?, pathMode: String?) {
+        analysisQueue.async { [weak self] in self?.runStageInfo = (stage, objective, pathMode) }
+    }
+
+    /// The automated stage's angles for the CSV's `stage_angle_x` / `stage_angle_y`; nil clears them.
+    func setStageAngles(_ angles: (x: Int, y: Int)?) {
+        analysisQueue.async { [weak self] in self?.stageAngles = angles }
+    }
+
+    /// The tracker's position now (frame px). Call from the main queue.
+    func trackerPosition() -> CGPoint {
+        analysisQueue.sync { lastTrackerPosition }
+    }
+
+    /// Puts the tracker's position back to `saved` (frame px) after the stage was walked back
+    /// to where it was: the blind re-anchor adds the difference on the next frame.
+    func restoreTrackerPosition(to saved: CGPoint) {
+        analysisQueue.async { [weak self] in
+            guard let self else { return }
+            let current = self.lastTrackerPosition
+            self.pipeline.requestReanchor(
+                addingOffset: CGPoint(x: saved.x - current.x, y: saved.y - current.y))
+        }
+    }
+
+    /// The focus baseline is measured again from the next readings; the monitor's state stays.
+    func requestFocusBaselineRemeasure() {
+        analysisQueue.async { [weak self] in
+            guard let self, self.setup.step == .done else { return }
+            self.setup.remeasureFocusBaseline()
+            let info = self.setup.info
+            DispatchQueue.main.async { self.setupInfo = info }
         }
     }
 
@@ -397,12 +513,54 @@ class ScanEngine: NSObject {
         }
     }
 
+    /// The tracker anchors on the next tracked frame with the position kept (see
+    /// `SlideTracker.requestReanchor`).
+    func requestTrackerReanchor() {
+        analysisQueue.async { [weak self] in self?.pipeline.requestReanchor() }
+    }
+
+    /// Pauses the run for focus, as the run monitor would, for a stall it did not catch. Written to
+    /// the CSV as the event "focus_pause_stall". Nothing happens if it is already paused.
+    func requestFocusPause() {
+        analysisQueue.async { [weak self] in
+            guard let self, self.setup.requestFocusPause() else { return }
+            self.pendingEventName = "focus_pause_stall"
+            let info = self.setup.info
+            DispatchQueue.main.async { self.setupInfo = info }
+        }
+    }
+
+    /// The automated stage measured the axes: the stage step is done with them.
+    func completeStage(with axes: StageAxes) {
+        analysisQueue.async { [weak self] in
+            guard let self, self.setup.step == .stage else { return }
+            self.setup.completeStage(with: axes)
+            self.lastPublishedStep = .done
+            self.clearTrackingDisplay()
+            self.resetGuide()
+            let info = self.setup.info
+            DispatchQueue.main.async { self.setupInfo = info }
+        }
+    }
+
+    /// Called on the main thread with the guide position, the tracking state and the time of every
+    /// analysed frame while the setup step is stage or done (the automated stage measures from it).
+    @ObservationIgnored var onGuideSample: ((CGPoint, TrackingState, Double) -> Void)? {
+        didSet {
+            let handler = onGuideSample
+            analysisQueue.async { [weak self] in self?.guideSampleHandler = handler }
+        }
+    }
+    /// Analysis queue's copy of `onGuideSample`.
+    @ObservationIgnored private var guideSampleHandler: ((CGPoint, TrackingState, Double) -> Void)?
+
     /// Starts the setup of a session, on the analysis queue: at align, or at field when
     /// skipping, which learns the eyepiece mask afresh from the next frame.
     private func beginSetup() {
         let skips = skipsAlignAndFocus
         setup = LabSetupSession(skippingAlignAndFocus: skips)
         setup.confirmsSteps = confirmsSetupSteps
+        setup.isHeld = setupHeld
         pipeline.resetPosition()
         if skips { pipeline.redetectField() }
         clearTrackingDisplay()
@@ -510,7 +668,7 @@ class ScanEngine: NSObject {
     /// The person confirmed the learned field: tracking starts.
     func confirmField() {
         analysisQueue.async { [weak self] in
-            guard let self else { return }
+            guard let self, !self.setupHeld else { return }
             self.pipeline.confirmField()
             self.clearTrackingDisplay()
         }
@@ -557,6 +715,7 @@ class ScanEngine: NSObject {
         analysisQueue.async { [weak self] in
             guard let self, self.logging else { return }
             self.logging = false
+            self.queuedEvents = []
             let url = Self.write(self.rows, test: self.currentTest)
             let items = (url.map { [$0] } ?? []) + self.snapshots.urls
             let count = self.rows.count
@@ -578,6 +737,19 @@ class ScanEngine: NSObject {
             guard let self, self.guideEnabled else { return }
             self.dryRun.userEdge(feedback, seconds: self.lastFrameSeconds)
             self.pendingEdgeFeedback = feedback
+        }
+    }
+
+    /// What pressed "Stage limit", for the movement CSV's event name.
+    enum StageLimitCause {
+        case manual, auto, blindEdge
+
+        var eventName: String {
+            switch self {
+            case .manual: "stage_limit"
+            case .auto: "stage_limit_auto"
+            case .blindEdge: "blind_edge"
+            }
         }
     }
 
@@ -699,12 +871,14 @@ class ScanEngine: NSObject {
         lastEdgeReachedCount = 0
         pendingEdgeQuestionID = nil
         // A new run: counting, its snapshots and the summary start afresh.
-        live.begin(stamp: Self.stamp())
+        runStamp = Self.stamp()
+        live.begin(stamp: runStamp)
         live.setCounting(false)
         lastCountingActive = false
         lastCountInfo = LiveCountInfo()
         runStartedAt = nil
         runFinalized = false
+        endRequested = false
         DispatchQueue.main.async { [weak self] in
             self?.countInfo = LiveCountInfo()
             self?.runSummary = nil
@@ -812,12 +986,15 @@ class ScanEngine: NSObject {
             guard let self, self.guideEnabled else { return }
             switch action {
             case .now:
+                self.endRequested = true
                 self.dryRun.endNow()
                 self.pendingEventName = "end_now"
             case .afterColumn:
+                self.endRequested = true
                 self.dryRun.endAfterColumn()
                 self.pendingEventName = self.dryRun.isFinished ? "end_now" : "end_after_column"
             case .cancel:
+                self.endRequested = false
                 self.dryRun.cancelEnd()
                 self.pendingEventName = "end_cancelled"
             }
@@ -1108,6 +1285,14 @@ class ScanEngine: NSObject {
         logged.sharpnessRef = monitor?.sharpnessReference
         logged.sharpnessShare = monitor?.sharpnessShare
         logged.pauseCause = monitor?.pauseCause ?? ""
+        logged.focusPeak = monitor?.focusPeak
+        logged.focusHint = monitor?.focusHint ?? ""
+        logged.stageAngleX = stageAngles?.x
+        logged.stageAngleY = stageAngles?.y
+        if let note = monitor?.resumedNote, !note.isEmpty, pendingEventName.isEmpty {
+            pendingEventName = "focus_resumed"
+            pendingEventDetail = note
+        }
         logged.focusDialOffset = monitor?.dial?.offset
         logged.focusDialSide = monitor?.dial?.csvSide ?? ""
         logged.quadAheadAway = guide?.quadAheadAway
@@ -1175,28 +1360,33 @@ class ScanEngine: NSObject {
             organisms: live.counter.map.entries.map {
                 RunMapOrganism(
                     label: $0.label, x: Double($0.fields.x), y: Double($0.fields.y),
-                    column: $0.column, seconds: $0.firstSeenSeconds)
+                    column: $0.column, seconds: $0.firstSeenSeconds,
+                    image: live.cropFile(forEntry: $0.id))
             },
             path: RunMapContent.thinned(runPath), edges: runMapEdges(),
             mapMapping: dryRun.mapping.rawValue, mapMirrored: dryRun.mirrored,
+            stage: runStageInfo.stage, objective: runStageInfo.objective,
+            pathMode: runStageInfo.pathMode,
             heatSeconds: heat.secondsByMode,
             modelRateCap: modelRateCap ? countThresholds.maxModelRunsPerSecond : nil)
+        let stamp = runStamp
         // The route is over, so the video is too; the file is finished before the record names it.
         finishLensVideo { [self] result in
             var record = record
             let video = lensVideoForRun(result)
             record.lensVideoFile = video?.lastPathComponent
             record.lensVideoScanStartSeconds = video == nil ? nil : lensScanStartOffset
-            publishRun(record, spots: spots, video: video, result: result)
+            publishRun(record, stamp: stamp, spots: spots, video: video, result: result)
         }
     }
 
     /// Writes the run record and the CSV and shows the summary card. Analysis queue only.
     private func publishRun(
-        _ record: GuideRunRecord, spots: Int, video: URL?, result: LensRecorder.Result?
+        _ record: GuideRunRecord, stamp: String, spots: Int, video: URL?, result: LensRecorder.Result?
     ) {
         var items: [URL] = []
-        if let json = Self.writeRun(record) { items.append(json) }
+        if let json = Self.writeRun(record, stamp: stamp) { items.append(json) }
+        if let pictures = Self.organismsExport(stamp: stamp) { items.append(pictures) }
         if logging, var last = rows.last {
             // Video events still waiting (the finished one lands here) get a row each.
             for event in lensEvents {
@@ -1215,7 +1405,9 @@ class ScanEngine: NSObject {
         let note = Self.lensVideoNote(for: result)
         DispatchQueue.main.async { [weak self] in
             // The map as a picture, shared with the JSON and the CSV.
-            if let data = RunMapExport.pngData(for: record), let png = Self.writeMapPNG(data) {
+            if let data = RunMapExport.pngData(for: record),
+                let png = Self.writeMapPNG(data, stamp: stamp)
+            {
                 items.append(png)
             }
             self?.lensVideoNote = note
@@ -1240,11 +1432,11 @@ class ScanEngine: NSObject {
     }
 
     /// Documents/SlideLab/Runs/run-<timestamp>-map.png, next to the run's JSON.
-    private static func writeMapPNG(_ data: Data) -> URL? {
+    private static func writeMapPNG(_ data: Data, stamp: String) -> URL? {
         let folder = DetectionSnapshotWriter.documents.appending(path: "SlideLab/Runs")
         do {
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-            let url = folder.appending(path: "run-\(stamp())-map.png")
+            let url = folder.appending(path: "run-\(stamp)-map.png")
             try data.write(to: url, options: .atomic)
             return url
         } catch {
@@ -1252,12 +1444,34 @@ class ScanEngine: NSObject {
         }
     }
 
+    /// The run's organism pictures for sharing: the folder zipped next to it as
+    /// run-<stamp>-organisms.zip (a folder alone does not share well), or the folder itself if
+    /// zipping fails. nil when the run saved no picture.
+    private static func organismsExport(stamp: String) -> URL? {
+        let folder = OrganismCropWriter.folder(stamp: stamp)
+        guard let files = try? FileManager.default.contentsOfDirectory(atPath: folder.path),
+            !files.isEmpty
+        else { return nil }
+        var zipped: URL?
+        var failure: NSError?
+        // `.forUploading` hands over a zip of the folder, valid only inside the block.
+        NSFileCoordinator().coordinate(
+            readingItemAt: folder, options: .forUploading, error: &failure
+        ) { zip in
+            let target = folder.deletingLastPathComponent()
+                .appending(path: "run-\(stamp)-organisms.zip")
+            try? FileManager.default.removeItem(at: target)
+            if (try? FileManager.default.copyItem(at: zip, to: target)) != nil { zipped = target }
+        }
+        return zipped ?? folder
+    }
+
     /// Documents/SlideLab/Runs/run-<timestamp>.json, which the Files app shows.
-    private static func writeRun(_ record: GuideRunRecord) -> URL? {
+    private static func writeRun(_ record: GuideRunRecord, stamp: String) -> URL? {
         let folder = DetectionSnapshotWriter.documents.appending(path: "SlideLab/Runs")
         do {
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-            let url = folder.appending(path: "run-\(stamp()).json")
+            let url = folder.appending(path: "run-\(stamp).json")
             try GuideRunRecord.encoder().encode(record).write(to: url, options: .atomic)
             return url
         } catch {
@@ -1356,8 +1570,14 @@ extension ScanEngine: AVCaptureVideoDataOutputSampleBufferDelegate {
             }
         }
 
+        if let handler = guideSampleHandler, setup.step == .stage || setup.step == .done {
+            let sample = (dryRun.guidePosition(for: step), step.tracking.trackingState)
+            DispatchQueue.main.async { handler(sample.0, sample.1, time) }
+        }
         if let image = step.thumbnail { thumbnailThrottle.offer(image) }
         latestPositionFields = step.positionFields
+        lastBoxSide = step.boxSide
+        lastTrackerPosition = step.position
         indicators.update(
             shake: step.shake, anchorOffset: step.usedOffset,
             positionFields: step.positionFields, isLost: step.isLost, event: step.event,
@@ -1390,12 +1610,13 @@ extension ScanEngine: AVCaptureVideoDataOutputSampleBufferDelegate {
                 heat.resetTimes()
                 live.prepare()
             }
-            if dryRun.countingActive != lastCountingActive {
-                lastCountingActive = dryRun.countingActive
+            let countingOn = externalColumn != nil || dryRun.countingActive
+            if countingOn != lastCountingActive {
+                lastCountingActive = countingOn
                 live.setCounting(lastCountingActive)
             }
             lastCountFrameSize = step.frameSize
-            if dryRun.countingActive {
+            if countingOn {
                 let reason = LiveOrganismCounter.skipReason(
                     tracking: step.tracking.trackingState,
                     isGhostOrSparseSkip: step.reading == "ghost" || step.reading == "sparse_skip",
@@ -1412,10 +1633,10 @@ extension ScanEngine: AVCaptureVideoDataOutputSampleBufferDelegate {
                         frameShift: step.tracking.frameShift),
                     trackerPosition: step.position, frameSize: step.frameSize,
                     fieldCircle: step.fieldState?.mask.flatMap { FieldCircle(fitting: $0) },
-                    seconds: time - runStartSeconds, column: dryRun.column,
+                    seconds: time - runStartSeconds, column: externalColumn ?? dryRun.column,
                     fieldSide: step.boxSide)
             }
-            publishCount(isActive: dryRun.countingActive, frameSize: step.frameSize)
+            publishCount(isActive: countingOn, frameSize: step.frameSize)
             let path = edgeLine.map { $0.isCandidate ? $0.path : [] }
             let lineState = dryRun.lineState
             DispatchQueue.main.async { [edgeLineState] in
@@ -1468,7 +1689,7 @@ extension ScanEngine: AVCaptureVideoDataOutputSampleBufferDelegate {
         if step.event != .none { lastEventName = step.eventName }
 
         trail.append(step.positionFields)
-        if guideEnabled, !dryRun.isFinished {
+        if guideEnabled, runIsOpen {
             runPath.append(step.positionFields)
             // Keeps every other point when it gets long: the path stays whole and small.
             if runPath.count > 4 * RunMapContent.maxPathPoints {
@@ -1539,6 +1760,7 @@ extension ScanEngine: AVCaptureVideoDataOutputSampleBufferDelegate {
             logged.cameraFps = Double(frameTimes.count)
             logged.cameraDrops = lateFrameDrops
             logged.knobWords = helperWords
+            if externalColumn != nil { logged.countingActive = true }
             logged.lensRecording = lensRecorder.map { !$0.isStopped } ?? false
             logged.videoDrops = lensVideoDrops
             logged.exposureMs = device.map { $0.exposureDuration.seconds * 1000 }
@@ -1583,12 +1805,22 @@ extension ScanEngine: AVCaptureVideoDataOutputSampleBufferDelegate {
                 pendingEventName = event.name
                 logged.eventDetail = event.detail
             }
+            if pendingEventName.isEmpty, !queuedEvents.isEmpty {
+                let queued = queuedEvents.removeFirst()
+                pendingEventName = queued.name
+                pendingEventDetail = queued.detail
+            }
+            if step.event == .blindReanchor, logged.eventDetail.isEmpty {
+                logged.eventDetail = "blind"
+            }
             if !pendingEventName.isEmpty { logged.event = pendingEventName }
+            if !pendingEventDetail.isEmpty { logged.eventDetail = pendingEventDetail }
             rows.append(logged)
             onRowLogged?(logged, time)
         }
         pendingEventName = ""
-        if guideEnabled, dryRun.isFinished, !runFinalized {
+        pendingEventDetail = ""
+        if guideEnabled, !runIsOpen, !runFinalized {
             runFinalized = true
             finalizeRun(seconds: time)
         }

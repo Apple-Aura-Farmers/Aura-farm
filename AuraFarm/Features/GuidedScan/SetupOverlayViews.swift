@@ -280,6 +280,8 @@ struct FocusMeter: View {
 struct StageOverlay: View {
     var showsIndicator = true
     var progress: StageAxesProgress?
+    /// The automated stage measures the tilt: no knob instructions, no Skip.
+    var automated = false
     var onSkip: () -> Void = {}
 
     private var isDone: Bool { progress?.step == .done }
@@ -298,21 +300,26 @@ struct StageOverlay: View {
         VStack(spacing: 8) {
             if showsIndicator { SetupStepIndicator(step: .stage) }
             Spacer()
-            ProgressView(
-                value: min((progress?.travelFields ?? 0) / StageAxesThresholds().minTravelFields, 1)
-            )
-            .tint(tone)
-            .opacity(progress?.nothingToFollow == true ? 0.3 : 1)
-            .padding(.horizontal, 24)
-            Text(String(format: "%.1f fields", progress?.travelFields ?? 0))
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(.white)
-            SetupLine(text: progress?.message ?? StageAxesCalibration.waitXMessage, tone: tone)
-            if let hint = progress?.hint { SetupLine(text: hint, tone: .white) }
-            Button("Skip", action: onSkip)
-                .buttonStyle(.borderedProminent)
-                .tint(.gray)
-                .font(.caption)
+            if automated {
+                SetupLine(text: "The automated stage measures the tilt: no knob turning needed", tone: .white)
+            } else {
+                ProgressView(
+                    value: min(
+                        (progress?.travelFields ?? 0) / StageAxesThresholds().minTravelFields, 1)
+                )
+                .tint(tone)
+                .opacity(progress?.nothingToFollow == true ? 0.3 : 1)
+                .padding(.horizontal, 24)
+                Text(String(format: "%.1f fields", progress?.travelFields ?? 0))
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.white)
+                SetupLine(text: progress?.message ?? StageAxesCalibration.waitXMessage, tone: tone)
+                if let hint = progress?.hint { SetupLine(text: hint, tone: .white) }
+                Button("Skip", action: onSkip)
+                    .buttonStyle(.borderedProminent)
+                    .tint(.gray)
+                    .font(.caption)
+            }
         }
         .padding(8)
     }
@@ -362,6 +369,8 @@ struct PausedOverlay: View {
     var mapper: (any FrameToView)?
     /// "Resume anyway", shown while paused for focus.
     var onResumeAnyway: (() -> Void)?
+    /// "In focus – empty area", shown under "Resume anyway" while paused for focus; nil hides it.
+    var onEmptyArea: (() -> Void)?
 
     var body: some View {
         if let reason = monitor.state.pauseReason {
@@ -386,6 +395,9 @@ struct PausedOverlay: View {
                     if reason == .focus, let dial = monitor.dial {
                         FocusDialView(reading: dial)
                         SetupLine(text: dial.message, tone: dial.isGreen ? .green : .orange)
+                        if let hint = monitor.focusHint {
+                            SetupLine(text: hint, tone: .white)
+                        }
                     } else if !GuideInstruction.paused(reason).helperText.isEmpty {
                         SetupLine(text: GuideInstruction.paused(reason).helperText, tone: .orange)
                     }
@@ -394,6 +406,11 @@ struct PausedOverlay: View {
                             .buttonStyle(.borderedProminent)
                             .tint(.orange)
                             .foregroundStyle(.black)
+                    }
+                    if reason == .focus, let onEmptyArea {
+                        Button("In focus – empty area", action: onEmptyArea)
+                            .buttonStyle(.bordered)
+                            .tint(.orange)
                     }
                     Spacer()
                 }
@@ -434,10 +451,16 @@ struct LiveSetupOverlay: View {
     var model: ScanEngine
     var previewLayer: AVCaptureVideoPreviewLayer?
     var showsIndicator = true
+    /// The automated stage measures the stage step itself.
+    var automatedStage = false
+    /// The picture's display transform (centred and zoomed from the focus step on), so the focus
+    /// square lands on the picture.
+    var display = CGAffineTransform.identity
 
     var body: some View {
         let info = model.setupInfo
-        let mapper = FramePreviewConverter(layer: previewLayer, frameSize: info.frameSize)
+        let mapper = FramePreviewConverter(
+            layer: previewLayer, frameSize: info.frameSize, display: display)
         switch info.step {
         case .align: AlignOverlay(info: info, mapper: mapper)
         case .focus:
@@ -446,7 +469,7 @@ struct LiveSetupOverlay: View {
                 dial: model.focusMeter.dial, mapper: mapper)
         case .stage:
             StageOverlay(
-                showsIndicator: showsIndicator, progress: info.stage,
+                showsIndicator: showsIndicator, progress: info.stage, automated: automatedStage,
                 onSkip: { model.skipStage() })
         case .field, .done: EmptyView()
         }

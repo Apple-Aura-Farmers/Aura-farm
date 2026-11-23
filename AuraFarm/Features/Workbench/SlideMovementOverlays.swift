@@ -26,6 +26,10 @@
         /// The picture is shown as the field's square: everything outside the circle is dark.
         var centred = false
         var onTapTrail: () -> Void = {}
+        /// "In focus – empty area" on the focus-pause banner; nil (the default) hides the button.
+        var onEmptyArea: (() -> Void)?
+        /// The automated stage is on: the lab's stage step needs no knob turning.
+        var automatedStage = false
 
         var body: some View {
             ZStack {
@@ -35,7 +39,9 @@
                 LiveFieldCard(model: model)
                 if model.setupInfo.step == .align || model.setupInfo.step == .focus {
                     // Steps 1 and 2: nothing is learned or tracked yet.
-                    LiveSetupOverlay(model: model, previewLayer: previewLayer)
+                    LiveSetupOverlay(
+                        model: model, previewLayer: previewLayer, automatedStage: automatedStage,
+                        display: display)
                 } else if model.fieldInfo.awaitingReview {
                     FieldReview(
                         info: model.fieldInfo,
@@ -51,7 +57,9 @@
                     // Step 4: the axes are measured from the guide's own position, so the
                     // geometry is hosted even with the dry run off.
                     GuideGeometryHost(model: model, previewLayer: previewLayer, display: display)
-                    LiveSetupOverlay(model: model, previewLayer: previewLayer)
+                    LiveSetupOverlay(
+                        model: model, previewLayer: previewLayer, automatedStage: automatedStage,
+                        display: display)
                 } else {
                     if model.guideDryRun {
                         GuideGeometryHost(model: model, previewLayer: previewLayer, display: display)
@@ -80,7 +88,7 @@
                         mapper: FramePreviewConverter(
                             layer: previewLayer, frameSize: model.fieldInfo.frameSize,
                             display: display),
-                        onResumeAnyway: { model.resumeFocusAnyway() })
+                        onResumeAnyway: { model.resumeFocusAnyway() }, onEmptyArea: onEmptyArea)
                     VStack {
                         HStack(alignment: .top) {
                             // The picture stays clear while the guide is drawing on it.

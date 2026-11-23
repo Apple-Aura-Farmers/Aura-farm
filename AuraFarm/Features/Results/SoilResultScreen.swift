@@ -134,6 +134,7 @@ private struct SoilResultContent: View {
             if let runRecord {
                 Section("Run map") {
                     RunMapPanel(record: runRecord)
+                    Text(runRecord.stageLine).font(.footnote).foregroundStyle(.secondary)
                     // The microscope video kept with the run, to share or save to Photos.
                     if let file = runRecord.lensVideoFile, let folder = viewModel.result.sweep?.url,
                         FileManager.default.fileExists(atPath: folder.appending(path: file).path)

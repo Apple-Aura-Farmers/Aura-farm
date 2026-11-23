@@ -77,6 +77,7 @@ struct SlideMovementStep {
         case .hop: "hop"
         case .lost: "lost"
         case .regained: "regained"
+        case .reanchor, .blindReanchor: "reanchor"
         }
     }
 
@@ -187,6 +188,11 @@ final class SlideMovementPipeline {
     func setStartPicture() { tracker.setReferencePicture() }
 
     func clearStartPicture() { tracker.clearReferencePicture() }
+
+    /// The next tracked frame becomes the anchor with the position kept (see `SlideTracker`).
+    func requestReanchor(addingOffset offset: CGPoint? = nil) {
+        tracker.requestReanchor(addingOffset: offset)
+    }
 
     /// - Parameters:
     ///   - seconds: the frame's time, used to ration the agreement measurement and to time

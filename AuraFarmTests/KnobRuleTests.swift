@@ -120,9 +120,10 @@ final class KnobRuleTests: XCTestCase {
 
     func testTheKnobWordsColumnIsFollowedOnlyByTheHeatAndLensVideoColumns() {
         // `heat_mode` and `screen_brightness` (performance step 3), the lens video's two, then
-        // the line crossing columns and the spot limit and slip tilt columns.
+        // the line crossing columns, the spot limit and slip tilt columns, and last the focus
+        // pause's two and the stage's two servo angles.
         XCTAssertEqual(
-            Array(MovementLog.header.suffix(9).prefix(5)),
+            Array(MovementLog.header.suffix(13).prefix(5)),
             ["knob_words", "heat_mode", "screen_brightness", "lens_recording", "video_drops"])
     }
 }

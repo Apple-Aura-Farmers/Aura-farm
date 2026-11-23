@@ -62,6 +62,12 @@ enum GuidedScanSetupStage: Equatable, CaseIterable {
         number.map { "Step \($0) of \(Self.stepCount): \(title)" } ?? "Ready"
     }
 
+    /// The indicator with the Terraloka Stage's own name for step 4.
+    func indicator(automatedStage: Bool) -> String {
+        guard automatedStage, self == .stage else { return indicator }
+        return "Step 4 of \(Self.stepCount): Stage calibration"
+    }
+
     /// One plain sentence.
     var sentence: String {
         switch self {
@@ -79,9 +85,9 @@ enum GuidedScanSetupStage: Equatable, CaseIterable {
     /// field is confirmed; before that the whole camera picture is shown, with no target.
     var treatment: GuidedScanPictureTreatment {
         switch self {
-        case .align, .field, .focus:
+        case .align, .field:
             GuidedScanPictureTreatment(centres: false, darkensOutside: false, drawsTargetOutline: false)
-        case .stage, .ready:
+        case .focus, .stage, .ready:
             GuidedScanPictureTreatment(centres: true, darkensOutside: true, drawsTargetOutline: false)
         }
     }

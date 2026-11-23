@@ -315,6 +315,7 @@
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
+				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "Bluetooth connects to the Terraloka stage that moves the sample under the microscope.";
 				INFOPLIST_KEY_NSCameraUsageDescription = "The camera looks through the microscope to check image quality and record soil samples.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Your location centres the map and lets you drop a dot where you are standing, to mark out a farmer's land.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Saves the recorded microscope video to your photos when you choose Save Video.";
@@ -372,6 +373,7 @@
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
+				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "Bluetooth connects to the Terraloka stage that moves the sample under the microscope.";
 				INFOPLIST_KEY_NSCameraUsageDescription = "The camera looks through the microscope to check image quality and record soil samples.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Your location centres the map and lets you drop a dot where you are standing, to mark out a farmer's land.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Saves the recorded microscope video to your photos when you choose Save Video.";

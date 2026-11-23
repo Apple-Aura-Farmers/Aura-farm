@@ -14,6 +14,12 @@ enum GuidedScanCoverage: Double, CaseIterable, Identifiable {
         }
     }
 
+    /// The coverage the Terraloka Stage recommends: at 100x a field is small, so every 2nd column
+    /// keeps the scan short; at 40x every column is affordable.
+    static func recommended(for objective: StageObjective) -> GuidedScanCoverage {
+        objective == .x100 ? .everySecondColumn : .everyColumn
+    }
+
     var detail: String {
         switch self {
         case .everySecondColumn: "Faster. Covers about half of the slide."

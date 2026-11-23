@@ -49,13 +49,186 @@ final class RunMonitorTests: XCTestCase {
         XCTAssertEqual(feed(focus: 0.5, for: 0.1), .pausedFocus, "spanning 2.5 s")
     }
 
-    func testItResumesAtEightyPercentForOneSecond() {
+    func testItResumesAtEightyPercentForOneAndAHalfSeconds() {
         withBaseline()
         feed(focus: 0.5, for: 2.6)
         XCTAssertEqual(monitor.state, .pausedFocus)
         XCTAssertEqual(feed(focus: 0.7, for: 3), .pausedFocus, "70% is not enough")
-        XCTAssertEqual(feed(focus: 0.85, for: 1.0), .pausedFocus, "spanning 0.9 s")
-        XCTAssertEqual(feed(focus: 0.85, for: 0.1), .ok, "spanning 1.0 s at 85%")
+        XCTAssertEqual(feed(focus: 0.85, for: 1.4), .pausedFocus, "spanning 1.3 s")
+        XCTAssertEqual(feed(focus: 0.85, for: 0.2), .ok, "spanning 1.5 s at 85%")
+    }
+
+    /// A pause for focus with baseline 1.0: still detail readings at `start` begin it by
+    /// falling to `low`, so the pause starts with `start` as its index.
+    private func pauseAt(_ low: Double) {
+        withBaseline()
+        feed(focus: 1.0, for: 0.5)
+        feed(focus: low, for: 2.6)
+        XCTAssertEqual(monitor.state, .pausedFocus)
+    }
+
+    func testANoisyIndexPeakDoesNotKeepASharpViewPaused() {
+        monitor.setFocusBaseline(0.324)
+        feed(focus: 0.1, sharpness: 100, for: 2.6)
+        XCTAssertEqual(monitor.state, .pausedFocus)
+        feed(focus: 0.728, sharpness: 200, for: 0.7)
+        feed(focus: 0.1, sharpness: 120, for: 0.6)
+        // 117% of the baseline and as sharp as it has been: the index's own peak is noise.
+        XCTAssertEqual(feed(focus: 0.38, sharpness: 200, for: 2.2), .ok)
+    }
+
+    func testRun6AViewFarLessSharpThanThePauseHasSeenDoesNotResume() {
+        monitor.setFocusBaseline(0.324)
+        feed(focus: 0.1, sharpness: 300, for: 2.6)
+        feed(focus: 0.5, sharpness: 2000, for: 1.0)
+        XCTAssertEqual(feed(focus: 0.38, sharpness: 600, for: 5), .pausedFocus)
+        XCTAssertFalse(monitor.isSharp)
+        XCTAssertEqual(feed(focus: 0.5, sharpness: 1900, for: 2.2), .ok)
+    }
+
+    func testASharpnessPeakThatCannotBeReachedAgainIsForgotten() {
+        monitor.setFocusBaseline(0.324)
+        feed(focus: 0.1, sharpness: 300, for: 2.6)
+        feed(focus: 0.5, sharpness: 2000, for: 1.0)
+        XCTAssertEqual(feed(focus: 0.4, sharpness: 600, for: 8), .pausedFocus)
+        XCTAssertEqual(feed(focus: 0.4, sharpness: 600, for: 5), .ok)
+    }
+
+    /// Sharpness from before a gap must not come back as a fresh peak after it.
+    private func gapThenLessSharp(
+        _ gapSeconds: Double, viewClass: ViewClass = .dark, still: Bool = true
+    ) {
+        monitor.setFocusBaseline(0.324)
+        feed(focus: 0.1, sharpness: 300, for: 2.6)
+        feed(focus: 0.5, sharpness: 2000, for: 0.9)
+        XCTAssertEqual(monitor.state, .pausedFocus)
+        feed(focus: 0.1, sharpness: 2000, viewClass: viewClass, still: still, for: gapSeconds)
+        XCTAssertEqual(monitor.state, .pausedFocus)
+    }
+
+    func testASharpnessPeakDoesNotComeBackAfterADarkGap() {
+        gapThenLessSharp(12)
+        feed(focus: 0.4, sharpness: 600, for: 0.3)
+        XCTAssertNil(monitor.focusHint)
+        XCTAssertEqual(feed(focus: 0.4, sharpness: 600, for: 1.5), .ok)
+    }
+
+    func testASharpnessPeakDoesNotComeBackAfterAMovingGap() {
+        gapThenLessSharp(12, viewClass: .sample, still: false)
+        feed(focus: 0.4, sharpness: 600, for: 0.3)
+        XCTAssertNil(monitor.focusHint)
+        XCTAssertEqual(feed(focus: 0.4, sharpness: 600, for: 1.5), .ok)
+    }
+
+    func testAGapShorterThanThePeakWindowDoesNotExtendThePeak() {
+        gapThenLessSharp(6)
+        // The peak is still recent, so it counts, but only until its own ten seconds are over.
+        XCTAssertEqual(feed(focus: 0.4, sharpness: 600, for: 2.5), .pausedFocus)
+        XCTAssertEqual(monitor.focusHint, "Turned past focus: turn back a little")
+        XCTAssertEqual(feed(focus: 0.4, sharpness: 600, for: 3.6), .ok)
+    }
+
+    func testOneSpikeOfSharpnessIsNotAPeak() {
+        monitor.setFocusBaseline(0.324)
+        feed(focus: 0.1, sharpness: 300, for: 2.6)
+        feed(focus: 0.1, sharpness: 300, for: 1.0)
+        feed(focus: 0.1, sharpness: 9000, for: 0.1)
+        XCTAssertEqual(feed(focus: 0.4, sharpness: 600, for: 2.0), .ok)
+    }
+
+    func testOneBlurryReadingDoesNotStartTheResumeAgainButManyDo() {
+        monitor.setFocusBaseline(0.324)
+        feed(focus: 0.1, for: 2.6)
+        feed(focus: 0.5, for: 1.0)
+        feed(focus: 0.5, viewClass: .blurry, for: 0.1)
+        XCTAssertEqual(feed(focus: 0.5, for: 0.6), .ok)
+        feed(focus: 0.1, for: 2.6)
+        XCTAssertEqual(monitor.state, .pausedFocus)
+        for _ in 0..<10 {
+            feed(focus: 0.5, for: 0.2)
+            feed(focus: 0.5, viewClass: .blurry, for: 0.2)
+        }
+        XCTAssertEqual(monitor.state, .pausedFocus, "half the readings are blurry")
+    }
+
+    /// Readings ten times a second with the index measured on every third (the run's own rate).
+    @discardableResult
+    private func feedSparse(
+        focus: Double, sharpness: Double, for duration: Double
+    ) -> RunMonitorState {
+        for i in 0..<Int((duration * 10).rounded()) where monitor.state == .pausedFocus {
+            feed(focus: i % 3 == 0 ? focus : nil, sharpness: sharpness, for: 0.1)
+        }
+        return monitor.state
+    }
+
+    func testAPauseEndsWhenTheIndexIsReadOnlyAFewTimesASecond() {
+        monitor.setFocusBaseline(0.324)
+        feed(focus: 0.1, sharpness: 300, for: 2.6)
+        XCTAssertEqual(monitor.state, .pausedFocus)
+        XCTAssertEqual(feedSparse(focus: 0.5, sharpness: 2000, for: 1.4), .pausedFocus)
+        XCTAssertTrue(monitor.isSharp, "also on the frames between readings")
+        XCTAssertEqual(feedSparse(focus: 0.5, sharpness: 2000, for: 0.4), .ok)
+    }
+
+    func testAPauseDoesNotEndOnAnIndexReadingThatIsTooOld() {
+        monitor.setFocusBaseline(0.324)
+        feed(focus: 0.1, sharpness: 300, for: 2.6)
+        feed(focus: 0.5, sharpness: 2000, for: 0.1)
+        XCTAssertEqual(feed(sharpness: 2000, for: 4), .pausedFocus)
+        XCTAssertFalse(monitor.isSharp)
+    }
+
+    func testALowIndexReadOnlyAFewTimesASecondStillPauses() {
+        withBaseline()
+        for i in 0..<30 { feed(focus: i % 3 == 0 ? 0.5 : nil, for: 0.1) }
+        XCTAssertEqual(monitor.state, .pausedFocus)
+    }
+
+    func testABlurryViewIsNeverSharpWhateverItsIndex() {
+        monitor.setFocusBaseline(0.324)
+        feed(focus: 0.1, for: 2.6)
+        XCTAssertEqual(feed(focus: 0.5, viewClass: .blurry, for: 15), .pausedFocus)
+        XCTAssertFalse(monitor.isSharp)
+    }
+
+    func testTheDialIsGreenExactlyWhenTheMonitorCountsTheViewAsSharp() {
+        var dial = FocusDial(target: 1, goodShare: 0.8, startsUnknown: true)
+        let indexGreen = dial.update(value: 0.95, seconds: 0)
+        XCTAssertTrue(indexGreen.isGreen)
+        let blurry = indexGreen.matching(isSharp: false)
+        XCTAssertFalse(blurry.isGreen)
+        XCTAssertGreaterThan(abs(blurry.offset), blurry.greenHalfWidth)
+        XCTAssertEqual(blurry.message, "Not sharp yet. Keep turning slowly")
+        let sharp = dial.update(value: 0.3, seconds: 0.1).matching(isSharp: true)
+        XCTAssertTrue(sharp.isGreen)
+        XCTAssertFalse(sharp.isWrongWay)
+        XCTAssertLessThan(abs(sharp.offset), sharp.greenHalfWidth)
+        XCTAssertEqual(sharp.message, "Sharp ✓ Hold still")
+    }
+
+    func testHintTurnedPastFocusGoesOnceSharpAgain() {
+        withBaseline()
+        feed(focus: 0.4, sharpness: 300, for: 2.6)
+        feed(focus: 0.7, sharpness: 2000, for: 1.0)
+        XCTAssertNil(monitor.focusHint)
+        feed(focus: 0.5, sharpness: 500, for: 0.5)
+        XCTAssertEqual(monitor.focusHint, "Turned past focus: turn back a little")
+        feed(focus: 0.9, sharpness: 1900, for: 0.5)
+        XCTAssertEqual(monitor.state, .pausedFocus)
+        XCTAssertNil(monitor.focusHint, "never beside a green dial")
+    }
+
+    func testHintTryTurningTheOtherWay() {
+        withBaseline()
+        feed(focus: 0.5, for: 2.6)  // starts at 0.5
+        feed(focus: 0.3, for: 2.0)
+        XCTAssertNil(monitor.focusHint, "under 3 s into the pause")
+        feed(focus: 0.3, for: 1.5)
+        XCTAssertEqual(monitor.focusHint, "Try turning the other way")
+        // A peak above the start takes that hint away.
+        feed(focus: 0.9, for: 0.2)
+        XCTAssertNotEqual(monitor.focusHint, "Try turning the other way")
     }
 
     func testReadingsOnBlankOrBlurryViewClassesAreIgnored() {
@@ -145,7 +318,7 @@ final class RunMonitorTests: XCTestCase {
         withBaseline()
         feed(focus: 0.5, for: 2.6)
         XCTAssertEqual(feed(focus: 1.0, still: false, for: 5), .pausedFocus)
-        XCTAssertEqual(feed(focus: 1.0, for: 1.1), .ok)
+        XCTAssertEqual(feed(focus: 1.0, for: 1.6), .ok)
     }
 
     func testTheBaselineIgnoresMovingReadings() {
@@ -218,15 +391,15 @@ final class RunMonitorTests: XCTestCase {
         feed(sharpness: 60, tracking: .paused, for: 2.6)
         XCTAssertEqual(monitor.state, .pausedFocus)
         XCTAssertEqual(feed(focus: 0.9, sharpness: 400, still: false, for: 3), .pausedFocus)
-        XCTAssertEqual(feed(focus: 0.9, sharpness: 400, for: 0.9), .pausedFocus, "spanning 0.8 s")
-        XCTAssertEqual(feed(focus: 0.9, sharpness: 400, for: 0.2), .ok)
+        XCTAssertEqual(feed(focus: 0.9, sharpness: 400, for: 1.4), .pausedFocus, "spanning 1.3 s")
+        XCTAssertEqual(feed(focus: 0.9, sharpness: 400, for: 0.3), .ok)
     }
 
     func testWithoutABaselineAStillOnsetPausesAndDetailPlusStillResumes() {
         feed(focus: 1.0, sharpness: 400, for: 0.6)
         XCTAssertNil(monitor.focusBaseline)
         XCTAssertEqual(feed(sharpness: 60, tracking: .paused, for: 2.6), .pausedFocus)
-        XCTAssertEqual(feed(focus: 0.2, sharpness: 400, for: 1.2), .ok)
+        XCTAssertEqual(feed(focus: 0.2, sharpness: 400, for: 1.7), .ok)
     }
 
     // MARK: Two-signal focus pause (Phase 2s-D part C), numbers from the 17 Nov device runs
@@ -256,15 +429,15 @@ final class RunMonitorTests: XCTestCase {
         feed(focus: 0.08, sharpness: 585, for: 60)
         XCTAssertEqual(monitor.state, .pausedFocus, "still blurry: stays paused")
         XCTAssertEqual(feed(focus: 0.08, sharpness: 1600, for: 3), .pausedFocus, "0.71 of the reference")
-        XCTAssertEqual(feed(focus: 0.08, sharpness: 1900, for: 0.9), .pausedFocus, "spanning 0.8 s")
-        XCTAssertEqual(feed(focus: 0.08, sharpness: 1900, for: 0.2), .ok, "0.85 of the reference")
+        XCTAssertEqual(feed(focus: 0.08, sharpness: 1900, for: 1.4), .pausedFocus, "spanning 1.3 s")
+        XCTAssertEqual(feed(focus: 0.08, sharpness: 1900, for: 0.3), .ok, "0.85 of the reference")
     }
 
     func testSharpnessBackAtEightyPercentOfTheReferenceResumes() {
         monitor.setFocusBaseline(0.222)
         feed(focus: 0.3, sharpness: 2240, for: 8)
         feed(focus: 0.08, sharpness: 585, for: 3)
-        XCTAssertEqual(feed(focus: 0.08, sharpness: 1900, for: 1.2), .ok)
+        XCTAssertEqual(feed(focus: 0.08, sharpness: 1900, for: 1.7), .ok)
         XCTAssertEqual(monitor.pauseCause, "")
     }
 

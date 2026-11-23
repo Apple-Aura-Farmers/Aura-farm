@@ -52,6 +52,12 @@ struct GuideRunRecord: Codable, Equatable {
     var edges: [RunMapEdge] = []
     var mapMapping = ScreenMapping.asIs.rawValue
     var mapMirrored = false
+    /// Who moved the slide: "terraloka" or "manual". For the Terraloka Stage, the objective
+    /// ("40x" or "100x") and how it covered the slide ("followGuide" or "presetPath"). Earlier
+    /// records were manual.
+    var stage = "manual"
+    var objective: String?
+    var pathMode: String?
     /// Seconds spent in each heat mode (`HeatMode.csvName`: "normal", "cool_down", "too_hot").
     /// Earlier records have none.
     var heatSeconds: [String: Double] = [:]
@@ -62,6 +68,19 @@ struct GuideRunRecord: Codable, Equatable {
     /// in it, in seconds. Earlier records have none.
     var lensVideoFile: String?
     var lensVideoScanStartSeconds: Double?
+
+    /// One plain line for the results: "Terraloka Stage · 100x · Follow the guide", or
+    /// "Manual Stage".
+    var stageLine: String {
+        guard stage == "terraloka" else { return "Manual Stage" }
+        let path =
+            switch pathMode {
+            case "followGuide": "Follow the guide"
+            case "presetPath": "Fixed sweep"
+            default: nil as String?
+            }
+        return (["Terraloka Stage"] + [objective, path].compactMap { $0 }).joined(separator: " · ")
+    }
 
     /// The share of the edge span the columns reach; nil unless the span is known and positive.
     static func coverageShare(columns: Int, step: Double, edgeSpanFields: Double?) -> Double? {
@@ -138,6 +157,9 @@ extension GuideRunRecord {
             mapMapping: try c.decodeIfPresent(String.self, forKey: .mapMapping)
                 ?? ScreenMapping.asIs.rawValue,
             mapMirrored: try c.decodeIfPresent(Bool.self, forKey: .mapMirrored) ?? false,
+            stage: try c.decodeIfPresent(String.self, forKey: .stage) ?? "manual",
+            objective: try c.decodeIfPresent(String.self, forKey: .objective),
+            pathMode: try c.decodeIfPresent(String.self, forKey: .pathMode),
             heatSeconds: try c.decodeIfPresent([String: Double].self, forKey: .heatSeconds) ?? [:],
             modelRateCap: try c.decodeIfPresent(Double.self, forKey: .modelRateCap))
         lensVideoFile = try c.decodeIfPresent(String.self, forKey: .lensVideoFile)

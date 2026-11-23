@@ -1,0 +1,274 @@
+// Phase 1 / Test 2: two servos, one at a time (servo X on pin 9, servo Z on pin 11), Arduino Uno.
+// Uno runs from the Mac's USB. Servos run from the HW-131 rail (separate power, shared ground).
+// Only one servo ever has a signal: each move finishes, settles, switches off and rests
+// before the next move (on either servo) starts.
+// The Uno measures the servo rail on A0 (through 3 x 1k resistors in series) and never moves
+// a servo while the rail is below MIN_RAIL_V.
+// The stock Uno bootloader erases the reset reason, so restarts are tracked with a boot log
+// saved in EEPROM instead. Opening the Serial Monitor restarts the Uno (that one is expected).
+
+#include <Servo.h>
+#include <EEPROM.h>
+
+// ---------------- Settings ----------------
+const int  NUM_SERVOS = 2;
+const int  SERVO_PINS[NUM_SERVOS]  = {9, 11};
+const char SERVO_NAMES[NUM_SERVOS] = {'X', 'Z'};
+const int  RAIL_PIN = A0;       // + rail -> 3 x 1k in series -> A0
+
+const int MIN_ANGLE    = 30;    // sweep range (deg)
+const int MAX_ANGLE    = 150;
+const int START_ANGLE  = 90;    // first position after boot
+const int STEP_DEG     = 2;     // move 2 deg ...
+const int STEP_MS      = 20;    // ... every 20 ms
+const int SETTLE_MS    = 300;   // hold after reaching target, before signal off
+const int GAP_MS       = 500;   // rest with signal off after every move (also between servos)
+const int BOOT_WAIT_MS = 500;   // pause after boot before first attach
+const int CYCLES       = 200;   // 1 cycle = X: MIN->MAX->MIN, then Z: MIN->MAX->MIN
+
+const int PULSE_MIN_US = 500;   // pulse width at 0 deg (typical SG90)
+const int PULSE_MAX_US = 2400;  // pulse width at 180 deg
+
+const float MIN_RAIL_V   = 4.5; // servos never move below this rail voltage
+const float UNO_5V       = 5.0; // Uno's own 5V (the A0 measuring reference)
+const int   RAIL_WAIT_MS = 2000;
+
+const int LOG_SIZE = 10;        // boots kept in the saved boot log
+
+// ---------------- State ----------------
+Servo servos[NUM_SERVOS];
+int  currentAngle[NUM_SERVOS] = {START_ANGLE, START_ANGLE};  // last commanded angle per servo
+int  cycle = 0;
+bool done = false;
+
+struct BootLog {
+  uint16_t magic;
+  uint16_t boots;
+  uint16_t cycle[LOG_SIZE];
+};
+const uint16_t LOG_MAGIC = 0x5432;  // Test 2 boot log
+BootLog bootLog;
+
+// ---------------- Helpers ----------------
+void stamp() {
+  Serial.print('[');
+  Serial.print(millis() / 1000.0, 3);
+  Serial.print(F(" s] "));
+}
+
+float readRail() {
+  return analogRead(RAIL_PIN) * (UNO_5V / 1023.0);
+}
+
+int angleToUs(int angle) {
+  return PULSE_MIN_US + (long)(PULSE_MAX_US - PULSE_MIN_US) * angle / 180;
+}
+
+void printServo(int i) {
+  Serial.print(F("servo "));
+  Serial.print(SERVO_NAMES[i]);
+  Serial.print(F(" (pin "));
+  Serial.print(SERVO_PINS[i]);
+  Serial.print(')');
+}
+
+// ---------------- Saved boot log (EEPROM) ----------------
+void saveLog() {
+  EEPROM.put(0, bootLog);
+}
+
+void printLog() {
+  Serial.println(F("---- saved boot log (oldest first) ----"));
+  uint16_t first = bootLog.boots > LOG_SIZE ? bootLog.boots - LOG_SIZE + 1 : 1;
+  for (uint16_t b = first; b <= bootLog.boots; b++) {
+    Serial.print(F("boot "));
+    Serial.print(b);
+    Serial.print(F(" | reached cycle "));
+    Serial.print(bootLog.cycle[b % LOG_SIZE]);
+    Serial.print('/');
+    Serial.println(CYCLES);
+  }
+  Serial.println(F("(send any key to reprint, 'c' to clear)"));
+  Serial.println(F("---------------------------------------"));
+}
+
+// Any key reprints the boot log, 'c' clears it first.
+void checkSerial() {
+  bool any = false, clear = false;
+  while (Serial.available()) {
+    char c = Serial.read();
+    if (c == 'c' || c == 'C') clear = true;
+    if (c != '\n' && c != '\r') any = true;
+  }
+  if (!any) return;
+  if (clear) {
+    memset(&bootLog, 0, sizeof(bootLog));
+    bootLog.magic = LOG_MAGIC;
+    bootLog.boots = 1;  // keep only the current boot
+    bootLog.cycle[1] = cycle;
+    saveLog();
+    Serial.println(F("Boot log cleared."));
+  }
+  printLog();
+}
+
+// ---------------- Rail check ----------------
+// Blocks (all servo signals off) until the servo rail is at least MIN_RAIL_V.
+void waitForRail() {
+  float v = readRail();
+  while (v < MIN_RAIL_V) {
+    stamp();
+    Serial.print(F("WAIT | servo rail "));
+    Serial.print(v, 2);
+    Serial.print(F(" V is below "));
+    Serial.print(MIN_RAIL_V, 1);
+    Serial.println(F(" V, servos will not move. Check servo power."));
+    delay(RAIL_WAIT_MS);
+    checkSerial();
+    v = readRail();
+  }
+}
+
+// ---------------- Servo ----------------
+// Start the signal at this servo's last commanded angle so it does not twitch.
+void servoOn(int i) {
+  servos[i].writeMicroseconds(angleToUs(currentAngle[i]));
+  servos[i].attach(SERVO_PINS[i], PULSE_MIN_US, PULSE_MAX_US);
+}
+
+// Stop the signal and hold the line low (no pulses = servo idle).
+void servoOff(int i) {
+  servos[i].detach();
+  digitalWrite(SERVO_PINS[i], LOW);
+}
+
+void logMove(int i, const __FlashStringHelper* phase, int target,
+             const __FlashStringHelper* railLabel, float rail) {
+  stamp();
+  Serial.print(F("T2 cycle "));
+  Serial.print(cycle);
+  Serial.print('/');
+  Serial.print(CYCLES);
+  Serial.print(F(" | "));
+  printServo(i);
+  Serial.print(F(" | -> "));
+  Serial.print(target);
+  Serial.print(F(" deg | "));
+  Serial.print(phase);
+  Serial.print(F(" | "));
+  Serial.print(railLabel);
+  Serial.print(rail, 2);
+  Serial.print(F(" V"));
+  if (rail < MIN_RAIL_V) Serial.print(F(" LOW"));
+  Serial.println();
+}
+
+// One full move of one servo: rail check, signal on, small steps to target, settle,
+// signal off, rest. Records the lowest rail voltage seen while the servo is driven.
+void moveTo(int i, int target) {
+  waitForRail();
+  float minRail = readRail();
+  logMove(i, F("start"), target, F("rail "), minRail);
+
+  servoOn(i);
+  while (currentAngle[i] != target) {
+    delay(STEP_MS);
+    currentAngle[i] += constrain(target - currentAngle[i], -STEP_DEG, STEP_DEG);
+    servos[i].writeMicroseconds(angleToUs(currentAngle[i]));
+    minRail = min(minRail, readRail());
+  }
+  unsigned long t0 = millis();
+  while (millis() - t0 < (unsigned long)SETTLE_MS) {
+    minRail = min(minRail, readRail());
+    delay(5);
+  }
+  servoOff(i);
+
+  logMove(i, F("end"), target, F("min rail "), minRail);
+  delay(GAP_MS);
+}
+
+// ---------------- Main ----------------
+void setup() {
+  for (int i = 0; i < NUM_SERVOS; i++) {
+    pinMode(SERVO_PINS[i], OUTPUT);
+    digitalWrite(SERVO_PINS[i], LOW);
+  }
+  Serial.begin(115200);
+
+  // Record this boot in the saved boot log.
+  EEPROM.get(0, bootLog);
+  if (bootLog.magic != LOG_MAGIC) {
+    memset(&bootLog, 0, sizeof(bootLog));
+    bootLog.magic = LOG_MAGIC;
+  }
+  bootLog.boots++;
+  bootLog.cycle[bootLog.boots % LOG_SIZE] = 0;
+  saveLog();
+
+  Serial.println();
+  Serial.println(F("=== Phase 1 / Test 2: two servos, one at a time (Arduino Uno) ==="));
+  Serial.print(F("Servos X (pin 9), Z (pin 11) | range "));
+  Serial.print(MIN_ANGLE);
+  Serial.print('-');
+  Serial.print(MAX_ANGLE);
+  Serial.print(F(" deg | step "));
+  Serial.print(STEP_DEG);
+  Serial.print(F(" deg / "));
+  Serial.print(STEP_MS);
+  Serial.print(F(" ms | settle "));
+  Serial.print(SETTLE_MS);
+  Serial.print(F(" ms | gap "));
+  Serial.print(GAP_MS);
+  Serial.print(F(" ms | cycles "));
+  Serial.println(CYCLES);
+  Serial.print(F("Servo rail now: "));
+  Serial.print(readRail(), 2);
+  Serial.print(F(" V (servos move only at "));
+  Serial.print(MIN_RAIL_V, 1);
+  Serial.println(F(" V or more)"));
+  printLog();
+
+  // Attach the servos one at a time, GAP_MS apart, each after a rail check.
+  delay(BOOT_WAIT_MS);
+  for (int i = 0; i < NUM_SERVOS; i++) {
+    waitForRail();
+    stamp();
+    Serial.print(F("startup | "));
+    printServo(i);
+    Serial.print(F(" | attach at "));
+    Serial.print(START_ANGLE);
+    Serial.print(F(" deg (one direct jump, position unknown) | rail "));
+    Serial.print(readRail(), 2);
+    Serial.println(F(" V"));
+    servoOn(i);
+    delay(SETTLE_MS);
+    servoOff(i);
+    delay(GAP_MS);
+  }
+}
+
+void loop() {
+  checkSerial();
+  if (done) {
+    delay(100);
+    return;
+  }
+
+  cycle++;
+  for (int i = 0; i < NUM_SERVOS; i++) {
+    moveTo(i, MAX_ANGLE);
+    moveTo(i, MIN_ANGLE);
+  }
+
+  bootLog.cycle[bootLog.boots % LOG_SIZE] = cycle;
+  saveLog();
+
+  if (cycle >= CYCLES) {
+    done = true;
+    stamp();
+    Serial.print(F("TEST 2 DONE: "));
+    Serial.print(CYCLES);
+    Serial.println(F(" cycles, no restart during this boot"));
+  }
+}

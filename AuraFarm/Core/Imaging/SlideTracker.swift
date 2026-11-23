@@ -42,6 +42,12 @@ final class SlideTracker {
     /// Set when detail went; the first frame with detail again re-anchors.
     private var resumeAfterBlind = false
     private var readingIndex = 0
+    private var reanchorRequested = false
+    /// A distance crossed blind (frame px, position change) to add at the next frame.
+    private var blindOffset: CGPoint?
+    /// The blind distance was added on a frame that could not be registered: anchor on the next
+    /// frame with detail instead of matching the held (pre-crossing) picture.
+    private var anchorOnNextDetail = false
     private var blankMatch: PictureMatchCheck
     private(set) var blankReturnsMatched = 0
     private(set) var blankReturnsUnmatched = 0
@@ -116,10 +122,31 @@ final class SlideTracker {
         ghostRun = 0
         lastGoodShake = nil
         readingIndex = 0
+        reanchorRequested = false
+        blindOffset = nil
+        anchorOnNextDetail = false
         blankMatch.reset()
         blankReturnsMatched = 0
         blankReturnsUnmatched = 0
         clearReferencePicture()
+    }
+
+    /// The next tracked frame becomes the anchor and the position carries on from where it is:
+    /// a usable offset (measured or predicted) is committed as a hop, and when tracking is lost
+    /// the odometer rebases at the last known position and trusts the next reading again. The
+    /// reading's event is "reanchor". For callers that move the view in steps (the automated
+    /// stage), so every step starts from zero offset.
+    ///
+    /// With `addingOffset` (a stretch crossed blind, frame px as a position change): on the next
+    /// frame with detail the position is rebased, the offset is added, tracking is trusted again,
+    /// a pending blank-return match is dropped and that frame becomes the anchor. The event is
+    /// "reanchor" and the log row's event_detail says "blind".
+    func requestReanchor(addingOffset offset: CGPoint? = nil) {
+        if let offset {
+            blindOffset = offset
+        } else {
+            reanchorRequested = true
+        }
     }
 
     /// Remembers the box as it is at the next tracked frame, with the position then, so the
@@ -362,6 +389,25 @@ final class SlideTracker {
             // Lost again while matching: abandon the check; the held anchor stays.
             blankMatch.reset()
         }
+        if let blind = blindOffset {
+            // A stretch crossed blind: the position moves on this frame, detail or not, so
+            // whatever the caller marks at the same time (an edge, a stage limit) is placed after
+            // the crossing. The anchor is this frame when it can be registered, else the next one
+            // that can.
+            blindOffset = nil
+            reanchorRequested = false
+            resumeAfterBlind = false
+            blankMatch.reset()
+            odometer.recover()
+            odometer.skip(by: blind)
+            outcome.event = .blindReanchor
+            if anchor != nil, detail.hasDetail, !outcome.isGhost {
+                anchorOn(buffer)
+            } else {
+                anchorOnNextDetail = true
+            }
+            return outcome
+        }
         guard let held = anchor else {
             // No anchor yet: anchor on this frame. Not a lost reading.
             anchorOn(buffer)
@@ -373,6 +419,14 @@ final class SlideTracker {
         // A ghost frame changes nothing: no anchor reading, no chain, no odometer.
         guard !outcome.isGhost else { return outcome }
 
+        if anchorOnNextDetail {
+            // After a blind crossing the held picture is from before it: start afresh here.
+            anchorOnNextDetail = false
+            resumeAfterBlind = false
+            blankMatch.reset()
+            anchorOn(buffer)
+            return outcome
+        }
         let boxSide = Self.side(of: box, frameSize: frameSize)
         if resumeAfterBlind {
             let measured = measureAnchorOffset(held: held, current: buffer)
@@ -426,6 +480,30 @@ final class SlideTracker {
         outcome.chain = consistency.chain
         outcome.chainGap = consistency.lastChainGap
         outcome.usedOffset = verdict.offset
+        if reanchorRequested {
+            if odometer.isLost {
+                reanchorRequested = false
+                odometer.recover()
+                outcome.event = .reanchor
+                anchorOn(buffer)
+                return outcome
+            }
+            // Only a trusted offset is committed: one beyond the trust limit is an unreliable
+            // match, and committing it would put a wrong point in the position. Such a reading
+            // goes through the normal path (towards lost) and the request waits.
+            if let used = outcome.usedOffset,
+                odometer.isTrusted(
+                    used, frameSize: frameSize,
+                    referenceSide: box.map { Double(min($0.width, $0.height)) })
+            {
+                reanchorRequested = false
+                odometer.commit(offset: used)
+                outcome.event = .reanchor
+                anchorOn(buffer)
+                return outcome
+            }
+            // No usable offset on this frame: the request waits for the next one.
+        }
         var committing: CGPoint?
         if case .predicted(let predicted) = verdict, consistency.mustCommit {
             // Predictions have stood in for too long: trust them as a hop.
