@@ -38,10 +38,17 @@ extension ScanEngine {
             return
         }
         lensRecorder = nil
+        lensFinishing.append(recorder)
         // The file is finished even if the engine has gone: only the bookkeeping is weak.
         recorder.finish { [weak self] result in
             guard let self else { return }
             self.analysisQueue.async {
+                self.lensFinishing.removeAll { $0 === recorder }
+                // Discarded while it was being closed: the recorder deleted the file itself.
+                guard !recorder.isDiscarded else {
+                    then?(nil)
+                    return
+                }
                 if self.lensRecorder == nil { self.lensResult = result }
                 self.lensEvents.append(
                     (
@@ -52,6 +59,23 @@ extension ScanEngine {
                 DispatchQueue.main.async { self.lensVideoNote = note }
                 then?(result)
             }
+        }
+    }
+
+    /// Throws the recording away: the one in progress is ended and its file deleted, with any
+    /// still being closed, and what an earlier one came to is forgotten, so nothing can attach it
+    /// to a later run (a manual look saves nothing). Safe to call twice.
+    func discardLensVideo() {
+        analysisQueue.async { [self] in
+            lensFinishing.forEach { $0.discard() }
+            let kept = lensResult?.url
+            lensResult = nil
+            lensScanStartOffset = nil
+            if let kept { try? FileManager.default.removeItem(at: kept) }
+            guard let recorder = lensRecorder else { return }
+            lensRecorder = nil
+            recorder.discard()
+            lensEvents.append(("lens_video_discarded", recorder.url.lastPathComponent))
         }
     }
 

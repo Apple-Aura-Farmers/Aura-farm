@@ -140,6 +140,6 @@ final class GuideRunRecordTests: XCTestCase {
         XCTAssertEqual(decoded.stage, "manual")
         XCTAssertNil(decoded.objective)
         XCTAssertNil(decoded.pathMode)
-        XCTAssertEqual(decoded.stageLine, "Manual Stage")
+        XCTAssertEqual(decoded.stageLine, "Mechanical Stage")
     }
 }

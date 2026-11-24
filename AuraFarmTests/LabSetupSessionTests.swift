@@ -155,6 +155,22 @@ final class LabSetupSessionTests: XCTestCase {
         XCTAssertEqual(session.step, .stage)
     }
 
+    /// "Skip setup", manual, then a switch to autonomous: the stage can still be measured.
+    func testTheStageStepReopensAfterSkipSetupAndTakesTheMeasuredAxes() throws {
+        let session = LabSetupSession()
+        session.skipEverything()
+        session.reopenStage()
+        XCTAssertEqual(session.step, .stage)
+        XCTAssertEqual(session.info.step, .stage)
+        let axes = try XCTUnwrap(
+            StageAxes(xDirection: CGPoint(x: 1, y: 0.1), yDirection: CGPoint(x: 0, y: 1)))
+        session.completeStage(with: axes)
+        XCTAssertEqual(session.step, .done)
+        XCTAssertEqual(session.info.step, .done)
+        XCTAssertEqual(session.stageAxes, axes)
+        XCTAssertTrue(session.skipsAllChecks)
+    }
+
     func testFocusIsNotFoundWhenItWasSkipped() {
         let skipping = LabSetupSession(skippingAlignAndFocus: true)
         let pipeline = makePipeline()

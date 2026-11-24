@@ -74,6 +74,7 @@ struct StageModeChoiceView: View {
 
     @Binding var selection: Option?
     @Binding var objective: StageObjective
+    @Binding var control: StageControlMode
     var onContinue: () -> Void
 
     var body: some View {
@@ -84,7 +85,7 @@ struct StageModeChoiceView: View {
                 badge: nil, isSelected: selection == .terraloka
             ) { selection = .terraloka }
             StageOptionRow(
-                title: "Manual Stage", subtitle: "You turn the knobs, guided step by step.",
+                title: "Mechanical Stage", subtitle: "You turn the knobs, guided step by step.",
                 badge: nil, isSelected: selection == .manual
             ) { selection = .manual }
             if selection == .terraloka {
@@ -93,6 +94,14 @@ struct StageModeChoiceView: View {
                     ForEach(StageObjective.allCases, id: \.self) { Text($0.title).tag($0) }
                 }
                 .pickerStyle(.segmented)
+                StageOptionRow(
+                    title: "Autonomous", subtitle: "The stage scans the slide by itself.",
+                    badge: "Recommended", isSelected: control == .autonomous
+                ) { control = .autonomous }
+                StageOptionRow(
+                    title: "Manual", subtitle: "You steer with arrows. Look only, nothing is saved.",
+                    badge: nil, isSelected: control == .manual
+                ) { control = .manual }
             }
             if selection != nil { bigButton("Continue", action: onContinue) }
         }
@@ -137,6 +146,8 @@ struct StageCalibrationCard: View {
     var onResume: () -> Void = {}
     /// The person says the picture is sharp.
     var onFocused: () -> Void = {}
+    /// Before the run: give up measuring and steer by hand instead; nil hides it.
+    var onBackToManual: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -153,6 +164,9 @@ struct StageCalibrationCard: View {
                 Button("Retry", action: onRetry).buttonStyle(.borderedProminent)
             } else if isPaused {
                 Button("Resume", action: onResume).buttonStyle(.borderedProminent)
+            }
+            if let onBackToManual {
+                Button("Back to manual", action: onBackToManual).buttonStyle(.bordered).tint(.white)
             }
         }
         .stageCard()
@@ -217,6 +231,12 @@ struct StageRunStatusCard: View {
     var actions: [(title: String, run: () -> Void)]
     var onPause: () -> Void
     var onResume: () -> Void
+    /// Paused: the person may steer by hand (Move manually), and with a saved position the
+    /// way on is Go back and resume, not a plain Resume.
+    var canMoveManually = false
+    var onMoveManually: () -> Void = {}
+    var hasSavedPosition = false
+    var onGoBack: () -> Void = {}
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -244,7 +264,18 @@ struct StageRunStatusCard: View {
                 }
                 Spacer()
                 if isPaused {
-                    Button("Resume", action: onResume).buttonStyle(.borderedProminent)
+                    VStack(alignment: .trailing, spacing: 6) {
+                        if hasSavedPosition {
+                            Button("Go back and resume", action: onGoBack)
+                                .buttonStyle(.borderedProminent)
+                        } else {
+                            Button("Resume", action: onResume).buttonStyle(.borderedProminent)
+                        }
+                        if canMoveManually {
+                            Button("Move manually", action: onMoveManually)
+                                .buttonStyle(.bordered).tint(.white)
+                        }
+                    }
                 } else {
                     Button("Pause", action: onPause).buttonStyle(.bordered).tint(.white)
                 }

@@ -34,6 +34,10 @@ struct GuidedScanPage: View {
     @State private var driver: AutoStageDriver?
     @State private var stageConnected = false
     @State private var pathChoice = StagePathMode.followGuide
+    /// Autonomous or manual with the Terraloka Stage; Autonomous every time the page opens.
+    @State private var controlChoice = StageControlMode.autonomous
+    @State private var isConfirmingSwitch = false
+    @State private var isConfirmingLook = false
     @AppStorage("slideLab.stageObjective") private var lastObjectiveName = StageObjective.x40.rawValue
     // The lab's own display settings.
     @AppStorage("slideLab.centreField") private var centresField = true
@@ -52,6 +56,8 @@ struct GuidedScanPage: View {
                     Button("Close", systemImage: "xmark") {
                         if hasStarted {
                             isConfirmingLeave = true
+                        } else if isManualSession {
+                            isConfirmingLook = true
                         } else {
                             // Before Start scan too: END clears a warm-up path the stage
                             // still holds and sends it home.
@@ -59,6 +65,26 @@ struct GuidedScanPage: View {
                         }
                     }
                 }
+            }
+            .confirmationDialog(
+                "Leave this look?", isPresented: $isConfirmingLook, titleVisibility: .visible
+            ) {
+                Button("Leave", role: .destructive) { closeStage { dismiss() } }
+                Button("Stay", role: .cancel) {}
+            } message: {
+                Text("Nothing is saved.")
+            }
+            .confirmationDialog(
+                "Switch to autonomous?", isPresented: $isConfirmingSwitch, titleVisibility: .visible
+            ) {
+                Button("Switch") { driver?.switchToAutonomous(nil) }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text(
+                    driver?.isCalibrated == true
+                        ? "You then choose the path and start."
+                        : "The stage goes to its centre, warms up and calibrates. You then choose the path and start."
+                )
             }
             .confirmationDialog(
                 "Stop this scan?", isPresented: $isConfirmingLeave, titleVisibility: .visible
@@ -76,7 +102,9 @@ struct GuidedScanPage: View {
                 LabSettingsSync(
                     model: model,
                     transform: {
-                        $0.forGuidedScan(coverage: coverage.rawValue, recordsVideo: recordsVideo)
+                        $0.forGuidedScan(
+                            coverage: coverage.rawValue,
+                            recordsVideo: recordsVideo && !isManualSession)
                     },
                     onReady: {
                         // Align and focus wait for a Confirm tap, like the field review.
@@ -94,6 +122,14 @@ struct GuidedScanPage: View {
                 model.stop()
                 model.setFinishesOnlyOnRequest(false)
                 driver?.deactivate()
+            }
+            .onChange(of: isConfirmingSwitch || isConfirmingLook || isConfirmingLeave) { _, open in
+                if open { driver?.handReleaseAll() }
+            }
+            .onChange(of: isManualSession) { _, manual in
+                // A manual look saves nothing: the recording so far goes, and a later
+                // autonomous run records afresh (the settings sync starts it).
+                if manual, !hasStarted { model.discardLensVideo() }
             }
             .onChange(of: driver?.client.status) { _, status in
                 guard status == .connected, !stageConnected else { return }
@@ -155,10 +191,12 @@ struct GuidedScanPage: View {
                 .accessibilityValue(showsDetections ? "On" : "Off")
                 Menu {
                     ForEach(
-                        EndRunMenu.items(
-                            columnInProgress: model.runControl.columnInProgress
-                                && !isFixedSweep,
-                            endingAfterColumn: endsAfterColumn), id: \.title
+                        isAwayFromPath
+                            ? EndRunMenu.awayItems
+                            : EndRunMenu.items(
+                                columnInProgress: model.runControl.columnInProgress
+                                    && !isFixedSweep,
+                                endingAfterColumn: endsAfterColumn), id: \.title
                     ) { item in
                         Button(item.title, role: item == .endNow ? .destructive : nil) {
                             chooseEnd(item)
@@ -273,10 +311,11 @@ struct GuidedScanPage: View {
             case .ready:
                 darkOutside(info, converter, isCentred)
                 GuideGeometryHost(model: model, previewLayer: previewLayer, display: display)
+                // The eye button, or the organisms seen while steering by hand (not counted).
+                if showsDetections || model.handHold == .on {
+                    LiveDetectionBoxes(model: model, converter: converter)
+                }
                 if hasStarted {
-                    if showsDetections {
-                        LiveDetectionBoxes(model: model, converter: converter)
-                    }
                     LiveGuideOverlay(
                         state: model.overlayState, plain: true,
                         hidesMark: session.display?.questionID != nil)
@@ -345,7 +384,8 @@ struct GuidedScanPage: View {
             switch stageMode {
             case .undecided:
                 StageModeChoiceView(
-                    selection: $modeChoice, objective: $objective, onContinue: continueFromChoice)
+                    selection: $modeChoice, objective: $objective, control: $controlChoice,
+                    onContinue: continueFromChoice)
             case .terraloka where !stageConnected:
                 StageConnectingCard(
                     client: driver?.client.status ?? .idle,
@@ -391,13 +431,65 @@ struct GuidedScanPage: View {
         StageCalibrationCard(
             status: driver.status, isPaused: driver.phase == .paused,
             onRetry: { driver.recalibrate() }, onResume: { driver.resume() },
-            onFocused: { driver.focusIsSharp() })
+            onFocused: { driver.focusIsSharp() },
+            onBackToManual: driver.canBackToManual ? { driver.backToManual() } : nil)
+    }
+
+    /// A manual session: look only. The pad, and the ways to carry on or switch.
+    @ViewBuilder
+    private func manualCards(_ driver: AutoStageDriver) -> some View {
+        switch driver.phase {
+        case .byHand:
+            StageHandPad(driver: driver, isCompact: true)
+            manualFooter(driver)
+        case .paused:
+            VStack(alignment: .leading, spacing: 10) {
+                if let notice = driver.restartNotice {
+                    Text(notice).font(.subheadline)
+                }
+                switch driver.manualProblem {
+                case .oldPath?:
+                    Text("The stage still holds an old path. Go to centre clears it.")
+                        .font(.subheadline)
+                    bigButton("Go to centre") { driver.goToCentre() }
+                case .noAnswer?:
+                    Text("The stage did not answer").font(.subheadline)
+                    bigButton("Retry") { driver.continueManually() }
+                case nil:
+                    bigButton("Continue") { driver.continueManually() }
+                }
+                bigButton("Switch to autonomous", isProminent: false) { isConfirmingSwitch = true }
+                    .disabled(!driver.canSwitchToAutonomous)
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.black.opacity(0.78), in: RoundedRectangle(cornerRadius: 20))
+        case .disconnected:
+            StageRunStatusCard(
+                status: driver.status, isPaused: false,
+                actions: alertActions(.disconnected, driver), onPause: {}, onResume: {})
+        default:
+            StageCalibrationCard(
+                status: AutoStageStatus(title: "Getting the stage ready…"), onRetry: {})
+        }
+    }
+
+    private func manualFooter(_ driver: AutoStageDriver) -> some View {
+        VStack(spacing: 8) {
+            Text("Look only. Nothing is saved.").font(.subheadline).foregroundStyle(.secondary)
+            bigButton("Switch to autonomous", isProminent: false, isEnabled: driver.canSwitchToAutonomous) {
+                isConfirmingSwitch = true
+            }
+        }
     }
 
     @ViewBuilder
     private var terralokaSetupCards: some View {
         if let driver {
             let status = driver.status
+            if driver.controlMode == .manual, stage == .stage || stage == .ready {
+                manualCards(driver)
+            } else {
             switch stage {
             case .stage:
                 calibrationCard(driver)
@@ -412,6 +504,9 @@ struct GuidedScanPage: View {
                 if !isConnected {
                     Text("Waiting for the stage to reconnect…")
                         .font(.subheadline).foregroundStyle(.secondary)
+                }
+                if driver.canBackToManual {
+                    bigButton("Back to manual", isProminent: false) { driver.backToManual() }
                 }
             default:
                 if status.needsPerson == .disconnected {
@@ -428,6 +523,7 @@ struct GuidedScanPage: View {
                             reading: model.setupInfo.alignment,
                             passed: model.setupInfo.isAlignmentPassed) : nil)
             }
+            }
         }
     }
 
@@ -436,6 +532,18 @@ struct GuidedScanPage: View {
     private var isTerraloka: Bool {
         if case .terraloka = stageMode { return true }
         return false
+    }
+
+    /// A look with the Terraloka Stage's arrows: nothing is counted and nothing is saved.
+    private var isManualSession: Bool { isTerraloka && driver?.controlMode == .manual }
+
+    /// The stage is steered by hand, coming back, or a saved position waits.
+    private var isAwayFromPath: Bool {
+        guard let driver else { return false }
+        switch driver.phase {
+        case .byHand, .returningFromHand, .checkingFocus: return true
+        default: return driver.handSaved != nil
+        }
     }
 
     /// The Fixed sweep: the stage's own columns, not the guide's.
@@ -454,6 +562,7 @@ struct GuidedScanPage: View {
         switch stageMode {
         case .undecided: "Start"
         case .terraloka where !stageConnected: "Connecting"
+        case .terraloka where isManualSession && (stage == .stage || stage == .ready): "Manual"
         default: stage.indicator(automatedStage: isTerraloka)
         }
     }
@@ -476,6 +585,7 @@ struct GuidedScanPage: View {
             lastObjectiveName = objective.rawValue
             coverage = GuidedScanCoverage.recommended(for: objective)
             let stageDriver = AutoStageDriver(engine: model)
+            stageDriver.controlMode = controlChoice
             stageDriver.objective = objective
             stageDriver.chunkDegrees = objective.defaultChunk
             stageDriver.requiresRunStart = true
@@ -488,7 +598,8 @@ struct GuidedScanPage: View {
             driver = stageDriver
             stageConnected = false
             stageMode = .terraloka(objective)
-            model.logEvent("stage_choice", detail: "terraloka")
+            model.logEvent(
+                "stage_choice", detail: controlChoice == .manual ? "terraloka_manual" : "terraloka")
         case nil: break
         }
     }
@@ -539,12 +650,14 @@ struct GuidedScanPage: View {
     }
 
     private func bigButton(
-        _ title: String, isEnabled: Bool = true, action: @escaping () -> Void
+        _ title: String, isProminent: Bool = true, isEnabled: Bool = true,
+        action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
             Text(title).font(.title2.bold()).frame(maxWidth: .infinity, minHeight: 56)
         }
         .buttonStyle(.borderedProminent)
+        .tint(isProminent ? nil : .gray)
         .disabled(!isEnabled)
     }
 
@@ -561,6 +674,7 @@ struct GuidedScanPage: View {
     /// Begins the scan: logging is on for every guided scan (the movement CSV and the run
     /// record), then Mark start, as the lab's buttons do.
     private func startScan() {
+        if driver?.controlMode == .manual { return }  // a look never becomes a run
         details.recordedAt = .now
         if let driver, case .terraloka = stageMode {
             driver.setPathMode(pathChoice)
@@ -593,13 +707,22 @@ struct GuidedScanPage: View {
     /// The instruction card, in space of its own. The speed is the lab's bar on the picture.
     private var scanBottom: some View {
         VStack(spacing: 8) {
-            if let driver, isTerraloka {
+            if let driver, isTerraloka, driver.phase == .byHand {
+                // The pad takes the status card's place; the organisms show as not counted.
+                StageHandPad(driver: driver, isCompact: true)
+                Button("Go back and resume") { driver.goBackAndResume() }
+                    .buttonStyle(.borderedProminent).controlSize(.large)
+            } else if let driver, isTerraloka {
                 StageRunStatusCard(
                     status: driver.status, isPaused: driver.phase == .paused,
                     progress: driver.pathMode == .presetPath
                         ? driver.presetProgress ?? StageZigzagProgress() : nil,
                     actions: driver.status.needsPerson.map { alertActions($0, driver) } ?? [],
-                    onPause: { driver.pause() }, onResume: { driver.resume() })
+                    onPause: { driver.pause() }, onResume: { driver.resume() },
+                    canMoveManually: driver.canMoveByHand,
+                    onMoveManually: { driver.beginHandControl() },
+                    hasSavedPosition: driver.handSaved != nil && driver.canGoBack,
+                    onGoBack: { driver.goBackAndResume() })
             } else {
                 manualScanCard
             }

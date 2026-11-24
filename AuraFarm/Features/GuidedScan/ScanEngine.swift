@@ -256,6 +256,8 @@ class ScanEngine: NSObject {
     @ObservationIgnored var recordsLensVideo = false
     @ObservationIgnored var cameraRunning = false
     @ObservationIgnored var lensScanStartOffset: Double?
+    /// Recordings that were ended and whose files are still being closed.
+    @ObservationIgnored var lensFinishing: [LensRecorder] = []
     @ObservationIgnored var lensEvents: [(name: String, detail: String)] = []
     @ObservationIgnored var lastCapturedSeconds = 0.0
 
@@ -550,6 +552,16 @@ class ScanEngine: NSObject {
             self.pendingEventName = "focus_pause_stall"
             let info = self.setup.info
             DispatchQueue.main.async { self.setupInfo = info }
+        }
+    }
+
+    /// The guide starts afresh at the done step, as `skipStage` does: the stage moved by hand and
+    /// the route's positions are stale.
+    func restartGuide() {
+        analysisQueue.async { [weak self] in
+            guard let self, self.setup.step == .done else { return }
+            self.clearTrackingDisplay()
+            self.resetGuide()
         }
     }
 

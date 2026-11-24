@@ -253,7 +253,9 @@ final class LabSetupSession {
     /// Back to the stage step to be measured again, as a normal start would: the old axes and
     /// the monitor's pauses are gone; the focus baseline and focusFound are kept.
     func reopenStage() {
-        guard flow.step == .done, !skipsAllChecks else { return }
+        // After "Skip setup" too: skipsAllChecks stays true, so no focus or alignment pause comes
+        // back, and the stage step does not watch alignment.
+        guard flow.step == .done else { return }
         flow.reopenStage()
         calibration.reset()
         stageAxes = nil
@@ -490,7 +492,7 @@ final class LabSetupSession {
             if moved.step == .done {
                 stageAxes = calibration.result
                 flow.update(stageMeasured: true)
-            } else {
+            } else if !skipsAllChecks {
                 watchAlignment(reading, tracking: tracking, seconds: seconds)
             }
         case .done:

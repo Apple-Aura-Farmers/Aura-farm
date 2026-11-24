@@ -110,6 +110,9 @@
                     if driver.canMoveByHand {
                         Button("Move manually") { driver.beginHandControl() }
                     }
+                    if driver.canBackToManual {
+                        Button("Back to manual") { driver.backToManual() }
+                    }
                     if driver.canGoBack, !isManual {
                         Button("Go back and resume") { driver.goBackAndResume() }
                     }

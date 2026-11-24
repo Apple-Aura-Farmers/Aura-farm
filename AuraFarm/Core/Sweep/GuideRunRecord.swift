@@ -70,9 +70,9 @@ struct GuideRunRecord: Codable, Equatable {
     var lensVideoScanStartSeconds: Double?
 
     /// One plain line for the results: "Terraloka Stage · 100x · Follow the guide", or
-    /// "Manual Stage".
+    /// "Mechanical Stage".
     var stageLine: String {
-        guard stage == "terraloka" else { return "Manual Stage" }
+        guard stage == "terraloka" else { return "Mechanical Stage" }
         let path =
             switch pathMode {
             case "followGuide": "Follow the guide"

@@ -186,6 +186,10 @@ final class AutoStageDriver {
     private var manualStarted = false
     private var manualPreparing = false
     private var manualStageSkipped = false
+    /// Y has moved 20 degrees or more since manual began or the last reminder was dismissed:
+    /// "Check focus". Angles only.
+    private(set) var handFocusReminder = false
+    private var focusReminderBaseY = 90
     /// After "Switch to autonomous": the person says the picture is sharp before it calibrates.
     private var needsSharpTap = false
     private var loop: Task<Void, Never>?
@@ -431,7 +435,13 @@ final class AutoStageDriver {
         objective = new
         chunkDegrees = max(new.defaultChunk, new.minChunk)
         engine.logEvent("objective_\(new.title)")
-        if mapping != nil { recalibrate() }
+        if controlMode == .manual {
+            // The measurement was for the other lens: gone, but the manual session goes on.
+            mapping = nil
+            mappingSummary = ""
+        } else if mapping != nil {
+            recalibrate()
+        }
     }
 
     /// "It's sharp": calibrate although setup's focus step was skipped.
@@ -701,6 +711,7 @@ final class AutoStageDriver {
     // MARK: Calibration
 
     private func calibrate() async {
+        guard controlMode == .autonomous else { return }  // went back to manual before it began
         isCalibrating = true
         cancelSweep = false
         defer { isCalibrating = false }
@@ -782,7 +793,7 @@ final class AutoStageDriver {
                         found.axes.tiltDegrees, found.axes.skewDegrees))
                 mappingSummary += " (lab tilt step skipped: automated stage axes)"
             }
-            phase = .calibrated(summary: mappingSummary)
+            if controlMode == .autonomous { phase = .calibrated(summary: mappingSummary) }
         }
     }
 
@@ -911,6 +922,8 @@ final class AutoStageDriver {
     /// Pause / End session / disconnect during the warm-up or calibration: measure again on Resume.
     private func stopSweep() {
         collecting = nil
+        // Went back to manual: the manual phase stands, and so does any mapping.
+        if controlMode == .manual { return }
         mapping = nil
         mappingSummary = ""
         if !userPaused, client.status == .connected {
@@ -931,6 +944,7 @@ final class AutoStageDriver {
 
     private func fail(_ message: String) {
         collecting = nil
+        if controlMode == .manual { return }  // a wound-down measurement says nothing now
         phase = .failed(message)
     }
 
@@ -1584,6 +1598,7 @@ extension AutoStageDriver {
             }
             let saved = handState?.saved ?? reported
             engine.logEvent("hand_start", detail: "\(saved.x),\(saved.y)")
+            dismissHandFocusReminder()
             engine.setHandHold(.on)
             stallWatch = StageStallWatch()
             hand.reset()
@@ -1624,7 +1639,14 @@ extension AutoStageDriver {
         hand.reset()
     }
 
+    /// "OK" on the reminder: Y counts from where it is now.
+    func dismissHandFocusReminder() {
+        handFocusReminder = false
+        focusReminderBaseY = angleY
+    }
+
     private func handTick() {
+        if abs(angleY - focusReminderBaseY) >= 20 { handFocusReminder = true }
         if inFlight, Date().timeIntervalSince(moveSentAt) > 5 {
             inFlight = false
             lastSettledAt = Date()
@@ -1803,12 +1825,16 @@ extension AutoStageDriver {
     /// What a manual session does each tick. It never looks at a mapping, the tracker or the
     /// picture: the board's angles and limits are all it uses.
     fileprivate func manualTick(_ step: LabSetupStep) {
+        // A measurement winding down must not be overwritten (or overwrite) a manual phase.
+        guard !isCalibrating else { return }
         if phase == .disconnected {
             phase = manualStarted && step == .done ? .paused : .waitingForStageStep
         }
         guard step == .stage || step == .done else {
             // Setup went back (Redo setup): the arrow lets go, the hold ends, setup runs again.
             manualStageSkipped = false
+            mapping = nil  // the old measurement is stale once setup goes back
+            mappingSummary = ""
             if phase != .waitingForStageStep || manualStarted {
                 releaseHandArrow()
                 engine.setHandHold(.off)
@@ -1819,7 +1845,7 @@ extension AutoStageDriver {
             return
         }
         if step == .stage {
-            if !manualStageSkipped {
+            if !manualStageSkipped, mapping == nil {
                 manualStageSkipped = true
                 engine.skipStage()  // no stage axes to measure: the identity
             }
@@ -1899,6 +1925,7 @@ extension AutoStageDriver {
             handLimitLogged = nil
             manualStarted = true
             inFlight = false
+            dismissHandFocusReminder()
             engine.logEvent("control_manual_start", detail: "\(angleX),\(angleY)")
             phase = .byHand
         }
@@ -1916,23 +1943,67 @@ extension AutoStageDriver {
             && (phase == .byHand || phase == .paused)
     }
 
-    /// The stage goes to its centre, warms up and calibrates like a normal start, then moves by
-    /// itself. Nothing moves before the person says the picture is sharp.
-    func switchToAutonomous(_ path: StagePathMode) {
+    /// Before the run: back from autonomous to manual (a measurement in progress is cancelled).
+    var canBackToManual: Bool {
+        guard controlMode == .autonomous, !runBegun, !pathStarted else { return false }
+        switch phase {
+        case .readyToStart, .calibrated, .waitingForFocus, .failed, .warmingUp, .calibrating,
+            .paused:
+            return true
+        default: return false
+        }
+    }
+
+    func backToManual() {
+        guard canBackToManual else { return }
+        cancelSweep = true
+        finishWaiter(false)
+        if client.status == .connected { client.send(.stop) }
+        inFlight = false
+        needsSharpTap = false
+        sessionEnded = false  // and its END is sent again when it ends
+        controlMode = .manual
+        manualStarted = false
+        manualStageSkipped = false  // a reopened stage step is skipped again
+        manualProblem = nil
+        engine.logEvent("control_back_manual")
+        phase = .waitingForStageStep  // manualTick takes it from here, once a measurement is over
+    }
+
+    /// Switch to autonomous. Not calibrated yet: the stage goes to its centre, warms up and
+    /// calibrates like a normal start, after the person says the picture is sharp. Calibrated
+    /// already (this test measured once): nothing is measured again. `path` nil leaves the path
+    /// to be chosen later.
+    func switchToAutonomous(_ path: StagePathMode?) {
         guard canSwitchToAutonomous else { return }
         releaseHandArrow()
-        engine.setHandHold(.off)
         stallWatch = StageStallWatch()
+        userPaused = false  // a Pause in manual does not hold the run back
         controlMode = .autonomous
         manualStarted = false
         manualProblem = nil
         restartNotice = nil
         savedAngles = nil
         handNote = ""
-        pathMode = path
-        engine.logEvent("control_switch_autonomous", detail: path.rawValue)
-        engine.reopenStage()
-        needsSharpTap = true
-        phase = .waitingForFocus
+        if let path { pathMode = path }
+        guard mapping != nil else {
+            engine.setHandHold(.off)
+            engine.logEvent("control_switch_autonomous", detail: path?.rawValue ?? "")
+            engine.reopenStage()
+            needsSharpTap = true
+            phase = .waitingForFocus
+            return
+        }
+        engine.logEvent("control_switch_autonomous", detail: "calibrated")
+        engine.restartGuide()
+        if requiresRunStart, !runBegun {
+            engine.setHandHold(.off)
+            phase = .readyToStart
+        } else {
+            // As after a hand return: the focus is checked, then the path goes on.
+            engine.setHandHold(.checkingFocus)
+            checkingSince = Date()
+            phase = .checkingFocus
+        }
     }
 }

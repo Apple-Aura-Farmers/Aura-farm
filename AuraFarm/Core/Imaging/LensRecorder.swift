@@ -34,6 +34,7 @@ final class LensRecorder: @unchecked Sendable {
     private var drops = 0
     private var origin: Double?
     private var finished = false
+    private var discarded = false
     private var failure: (reason: String, outOfSpace: Bool)?
     private var result: Result?
     // Writer queue only.
@@ -66,6 +67,23 @@ final class LensRecorder: @unchecked Sendable {
     /// True once the writer failed or the recording was finished.
     var isStopped: Bool { lock.withLock { finished || failure != nil } }
 
+    /// The recording is not wanted: its file is deleted once it is finished (now, if it already
+    /// is). The recorder keeps itself alive until then, whoever else lets go of it.
+    func discard() {
+        let ending = lock.withLock { () -> Bool in
+            discarded = true
+            return finished
+        }
+        guard ending else { return finish { _ in } }
+        // Already being closed (the writer must not be finished twice): `complete` deletes it, or
+        // it is closed and goes now.
+        queue.async { [self] in
+            if result != nil { try? FileManager.default.removeItem(at: url) }
+        }
+    }
+
+    var isDiscarded: Bool { lock.withLock { discarded } }
+
     /// Hands a frame to the writer's queue and returns at once.
     func offer(_ sampleBuffer: CMSampleBuffer) {
         let seconds = CMSampleBufferGetPresentationTimeStamp(sampleBuffer).seconds
@@ -93,6 +111,7 @@ final class LensRecorder: @unchecked Sendable {
         lock.withLock { finished = true }
         queue.async { [self] in
             if let result {
+                if isDiscarded { try? FileManager.default.removeItem(at: url) }
                 completion(result)
                 return
             }
@@ -200,6 +219,7 @@ final class LensRecorder: @unchecked Sendable {
             url: url, duration: lastSeconds - firstSeconds, framesWritten: written,
             videoDrops: videoDrops, failure: failed?.reason, outOfSpace: failed?.outOfSpace ?? false)
         self.result = result
+        if isDiscarded { try? FileManager.default.removeItem(at: url) }
         completion(result)
     }
 }
