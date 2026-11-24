@@ -19,6 +19,7 @@ struct GuidedScanPage: View {
     @State private var session = GuidedScanSession()
     @State private var coverage = GuidedScanCoverage.everySecondColumn
     @State private var hasStarted = false
+    @State private var manualPaused = false
     @State private var previewLayer: AVCaptureVideoPreviewLayer?
     @State private var isConfirmingLeave = false
     /// "Ending after this column" is on; shown at once, then kept in step with the engine.
@@ -34,6 +35,10 @@ struct GuidedScanPage: View {
     @State private var driver: AutoStageDriver?
     @State private var stageConnected = false
     @State private var pathChoice = StagePathMode.followGuide
+    /// The operator pressed Start Aligning on the first screen after choosing the stage.
+    @State private var startedAligning = false
+    /// Continue was pressed on the alignment instructions; the live alignment screen follows.
+    @State private var alignIntroDone = false
     @AppStorage("slideLab.stageObjective") private var lastObjectiveName = StageObjective.x40.rawValue
     // The lab's own display settings.
     @AppStorage("slideLab.centreField") private var centresField = true
@@ -44,21 +49,25 @@ struct GuidedScanPage: View {
 
     var body: some View {
         scanBody
-            .navigationTitle("Guided scan")
+            .overlay { operatorScreen.ignoresSafeArea() }
+            // The run is done: a moment of loading, then the page saves and the results open.
+            .overlay {
+                if hasStarted, model.runControl.isFinished {
+                    OperatorLoadingScreen().ignoresSafeArea().transition(.opacity)
+                }
+            }
+            .animation(.easeOut(duration: 0.3), value: model.runControl.isFinished)
+            #if DEBUG
+                .overlay(alignment: .topTrailing) {
+                    if showsOperatorScreen { debugMenu }
+                }
+            #endif
+            .navigationTitle(showsOperatorScreen ? "" : "Guided scan")
             .navigationBarTitleDisplayMode(.inline)
             .navigationBarBackButtonHidden(true)
+            .toolbarBackground(showsOperatorScreen ? .hidden : .automatic, for: .navigationBar)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Close", systemImage: "xmark") {
-                        if hasStarted {
-                            isConfirmingLeave = true
-                        } else {
-                            // Before Start scan too: END clears a warm-up path the stage
-                            // still holds and sends it home.
-                            closeStage { dismiss() }
-                        }
-                    }
-                }
+                ToolbarItem(placement: .cancellationAction) { closeButton }
             }
             .confirmationDialog(
                 "Stop this scan?", isPresented: $isConfirmingLeave, titleVisibility: .visible
@@ -109,6 +118,81 @@ struct GuidedScanPage: View {
             }
     }
 
+    #if DEBUG
+        /// For testing the screens with no microscope: the operator screens hide the More menu,
+        /// so this walks the intro screens and skips the camera checks (alignment and focus
+        /// can't pass without a real picture).
+        private var debugMenu: some View {
+            Menu("Debug", systemImage: "ladybug") {
+                Button("Next screen", systemImage: "forward") {
+                    if !startedAligning {
+                        startedAligning = true
+                    } else if !alignIntroDone {
+                        alignIntroDone = true
+                    } else {
+                        model.confirmSetupStep()
+                    }
+                }
+                Button("Skip setup", systemImage: "forward.end") {
+                    startedAligning = true
+                    alignIntroDone = true
+                    model.skipSetup()
+                }
+            }
+            .padding(10).background(.thinMaterial, in: Capsule())
+            .padding(.trailing, 16).padding(.top, 60)
+        }
+    #endif
+
+    private var closeButton: some View {
+        Button("Close", systemImage: "xmark") {
+            if hasStarted {
+                isConfirmingLeave = true
+            } else {
+                // Before Start scan too: END clears a warm-up path the stage
+                // still holds and sends it home.
+                closeStage { dismiss() }
+            }
+        }
+    }
+
+    /// Start, Alignment and Focus use the operator's full-screen designs once the stage is
+    /// chosen (and, for the Terraloka Stage, connected). The field and the stage's own
+    /// calibration keep the page's views.
+    private var showsOperatorScreen: Bool {
+        guard !hasStarted, stageMode != .undecided, !isSetupHeld else { return false }
+        return !startedAligning || stage == .align || stage == .focus
+    }
+
+    @ViewBuilder
+    private var operatorScreen: some View {
+        if showsOperatorScreen {
+            Group {
+                if !startedAligning {
+                    OperatorStartScreen { startedAligning = true }
+                } else if stage == .align, !alignIntroDone {
+                    OperatorAlignIntro { alignIntroDone = true }
+                } else if stage == .align {
+                    OperatorAlignScreen(model: model)
+                        // Good alignment moves on by itself after a moment on green.
+                        .task(id: model.setupInfo.isAlignmentPassed) {
+                            guard model.setupInfo.isAlignmentPassed else { return }
+                            try? await Task.sleep(for: .seconds(1))
+                            model.confirmSetupStep()
+                        }
+                } else {
+                    OperatorFocusScreen(model: model)
+                        .task(id: model.setupInfo.focus?.state == .focused) {
+                            guard model.setupInfo.focus?.state == .focused else { return }
+                            try? await Task.sleep(for: .seconds(1.5))
+                            model.confirmSetupStep()
+                        }
+                }
+            }
+            .transition(.opacity)
+        }
+    }
+
     /// The lab's own step, named for a helper.
     private var stage: GuidedScanSetupStage { .current(step: model.setupInfo.step) }
 
@@ -116,12 +200,20 @@ struct GuidedScanPage: View {
     /// bar, and the instruction card in space of its own that nothing is drawn over.
     private var scanBody: some View {
         ScanLayoutView {
-            // Above the picture for touches too, whatever the picture does.
-            topLine.zIndex(1)
+            // Above the picture for touches too, whatever the picture does. The operator
+            // screens draw their own chrome over the picture.
+            if !showsOperatorScreen { topLine.zIndex(1) }
         } picture: {
             picture
         } bottom: {
-            bottom
+            if !showsOperatorScreen { bottom }
+        }
+        // The Field Helper's warm glow while scanning, kept dark like the rest of the page.
+        .background {
+            if hasStarted {
+                Color.clear.auraBackground().environment(\.colorScheme, .dark)
+                    .ignoresSafeArea()
+            }
         }
         .background(.black)
         .foregroundStyle(.white)
@@ -142,36 +234,30 @@ struct GuidedScanPage: View {
     private var topLine: some View {
         HStack {
             if hasStarted {
-                Text(LiveCountInfo.organisms(model.countInfo.total)).bold()
-                    .lineLimit(1).minimumScaleFactor(0.7)
-                Spacer()
-                Text(columnText).bold()
-                Button {
-                    showsDetections.toggle()
-                } label: {
-                    Image(systemName: showsDetections ? "eye.fill" : "eye")
-                }
-                .accessibilityLabel("Show detections")
-                .accessibilityValue(showsDetections ? "On" : "Off")
-                Menu {
-                    ForEach(
-                        EndRunMenu.items(
-                            columnInProgress: model.runControl.columnInProgress
-                                && !isFixedSweep,
-                            endingAfterColumn: endsAfterColumn), id: \.title
-                    ) { item in
-                        Button(item.title, role: item == .endNow ? .destructive : nil) {
-                            chooseEnd(item)
+                VStack(spacing: 14) {
+                    ZStack {
+                        VStack(spacing: 2) {
+                            Text("\(details.sampleID) • Field \(details.field)").bold()
+                            Text(details.recordedAt.formatted(date: .abbreviated, time: .omitted))
+                                .font(.subheadline).foregroundStyle(.secondary)
+                        }
+                        HStack {
+                            Spacer()
+                            Button {
+                                showsDetections.toggle()
+                            } label: {
+                                Image(systemName: showsDetections ? "eye.fill" : "eye")
+                                    .font(.title2)
+                            }
+                            .accessibilityLabel("Show detections")
+                            .accessibilityValue(showsDetections ? "On" : "Off")
                         }
                     }
-                } label: {
-                    Text(EndRunMenu.label(endingAfterColumn: endsAfterColumn))
-                        .lineLimit(1).minimumScaleFactor(0.7)
+                    if let columns = columnProgress {
+                        OperatorColumnBlocks(done: columns.done, total: columns.total)
+                    }
                 }
-                .buttonStyle(.bordered).controlSize(.small).tint(.white)
-                .disabled(model.runControl.isFinished)
             } else {
-                Text(setupTitle).bold().lineLimit(1).minimumScaleFactor(0.7)
                 Spacer()
                 if !isSetupHeld {
                     Menu("More", systemImage: "ellipsis.circle") {
@@ -199,6 +285,12 @@ struct GuidedScanPage: View {
                     for: model.fieldInfo, layer: previewLayer, viewSize: proxy.size,
                     stage: straightens ? (model.setupInfo.stageAxes ?? .identity) : .identity)
                 : .identity
+            let converter = FramePreviewConverter(
+                layer: previewLayer, frameSize: model.fieldInfo.frameSize, display: display)
+            let zooms = hasStarted || (showsOperatorScreen && stage == .focus)
+            let round = zooms ? learnedRect(model.fieldInfo, converter) : nil
+            // Scanning and focusing show the round view big enough to see clearly, with room round it.
+            let zoom = round.map { min(max(proxy.size.width * 0.8 / $0.width, 0.5), 2.5) }
             ZStack {
                 CameraPreview(
                     session: model.session,
@@ -211,6 +303,18 @@ struct GuidedScanPage: View {
                 // and its view must not catch taps meant for the top bar above it.
                 .allowsHitTesting(false)
                 .transformEffect(display)
+                // Scanning shows only the circle the field step found; the screen's background
+                // shows round it.
+                .mask {
+                    if let round {
+                        ZStack {
+                            Circle().frame(width: round.width, height: round.height)
+                                .position(x: round.midX, y: round.midY)
+                        }
+                    } else {
+                        Rectangle()
+                    }
+                }
                 if model.isAnalyzing {
                     overlays(display: display, isCentred: isCentred)
                 } else {
@@ -218,12 +322,31 @@ struct GuidedScanPage: View {
                 }
             }
             .frame(width: proxy.size.width, height: proxy.size.height)
+            .scaleEffect(zooms ? zoom ?? 1 : 1, anchor: zooms ? round.map {
+                UnitPoint(x: $0.midX / proxy.size.width, y: $0.midY / proxy.size.height)
+            } ?? .center : .center)
+            .offset(x: zooms ? round.map { proxy.size.width / 2 - $0.midX } ?? 0 : 0,
+                    y: zooms ? round.map { proxy.size.height / 2 - $0.midY } ?? 0 : 0)
+            // Clip after the zoom, so the ring round the view is not cut off.
             .clipShape(Rectangle())
             .contentShape(Rectangle())
         }
         .frame(maxWidth: .infinity)
-        .aspectRatio(1, contentMode: .fit)
+        // A nil ratio makes a GeometryReader square, so the full screen asks for the screen's ratio.
+        .aspectRatio(
+            isFullScreenCamera ? UIScreen.main.bounds.width / UIScreen.main.bounds.height : 1,
+            contentMode: .fit)
+        .ignoresSafeArea(isFullScreenCamera ? .all : [])
         .clipped()
+        // The same preview layer, filled instead of fitted: no second camera view is made.
+        .onChange(of: isFullScreenCamera) { _, full in
+            previewLayer?.videoGravity = full ? .resizeAspectFill : .resizeAspect
+        }
+    }
+
+    /// The live alignment screen: the page's camera picture fills the screen.
+    private var isFullScreenCamera: Bool {
+        showsOperatorScreen && startedAligning && alignIntroDone && (stage == .align || stage == .focus)
     }
 
     /// What is drawn on the picture at each step: only what the lab draws there. Align draws
@@ -237,16 +360,19 @@ struct GuidedScanPage: View {
         ZStack {
             switch stage {
             case .align:
-                if model.setupInfo.isAlignmentPassed, !isSetupHeld {
+                if model.setupInfo.isAlignmentPassed, !isSetupHeld, !showsOperatorScreen {
                     confirmPanel(
                         question: "Is the phone aligned?",
                         detail: "The whole round view is in the picture, round and evenly lit.")
                 }
             case .focus:
                 darkOutside(info, converter, isCentred)
-                LiveSetupOverlay(
-                    model: model, previewLayer: previewLayer, showsIndicator: false, display: display)
-                if model.setupInfo.focus?.state == .focused {
+                if !showsOperatorScreen {
+                    LiveSetupOverlay(
+                        model: model, previewLayer: previewLayer, showsIndicator: false,
+                        display: display)
+                }
+                if model.setupInfo.focus?.state == .focused, !showsOperatorScreen {
                     confirmPanel(
                         question: "Is the picture sharp?",
                         detail: "Best focus found. Keep the knob still and confirm.")
@@ -254,7 +380,7 @@ struct GuidedScanPage: View {
             case .field:
                 LiveFieldOutlines(
                     model: model, previewLayer: previewLayer, display: display,
-                    darkensOutside: false)
+                    darkensOutside: true)
                 LiveFieldCard(model: model)
                 if info.awaitingReview {
                     FieldReview(
@@ -271,32 +397,49 @@ struct GuidedScanPage: View {
                     model: model, previewLayer: previewLayer, showsIndicator: false,
                     automatedStage: isTerraloka, display: display)
             case .ready:
-                darkOutside(info, converter, isCentred)
+                if !hasStarted { darkOutside(info, converter, isCentred) }
                 GuideGeometryHost(model: model, previewLayer: previewLayer, display: display)
                 if hasStarted {
                     if showsDetections {
                         LiveDetectionBoxes(model: model, converter: converter)
                     }
-                    LiveGuideOverlay(
-                        state: model.overlayState, plain: true,
-                        hidesMark: session.display?.questionID != nil)
-                    EdgeLineOverlay(state: model.edgeLineState, mapper: converter)
+                    // The ring and its arrow (below) are the guide here, so the lab's cross, rings
+                    // and edge line only show with the eye on.
+                    if showsDetections {
+                        LiveGuideOverlay(
+                            state: model.overlayState, plain: true,
+                            hidesMark: session.display?.questionID != nil)
+                        EdgeLineOverlay(state: model.edgeLineState, mapper: converter)
+                    }
                     PausedOverlay(
                         monitor: model.setupInfo.monitor, mapper: converter,
                         onResumeAnyway: nil)
-                    // The lab's speed bar, where the lab draws it: bottom left of the picture.
-                    VStack {
-                        Spacer()
-                        HStack {
-                            LiveSpeedMeter(model: model).frame(width: 140)
-                            Spacer()
-                        }
-                    }
-                    .padding(8)
-                    .allowsHitTesting(false)
+                    OperatorScanRing(
+                        circle: learnedRect(info, converter), phase: scanPhase, showsArrow: !isTerraloka,
+                        fraction: columnProgress.map { Double($0.done) / Double($0.total) } ?? 0,
+                        direction: model.overlayState.model?.arrowDirection)
                 }
             }
         }
+    }
+
+    /// The learned round view as a rectangle in the picture's space, nil until it is found.
+    private func learnedRect(
+        _ info: SlideMovementInfo.Field, _ converter: FramePreviewConverter?
+    ) -> CGRect? {
+        // The engine clears the field while setup runs, so the focus step brings its own circle.
+        guard let converter,
+            let c = info.state?.mask.flatMap({ FieldCircle(fitting: $0) })
+                ?? model.setupInfo.focusCircle
+        else { return nil }
+        let box = converter.layerRect(
+            of: CGRect(
+                x: c.centre.x - c.radius, y: c.centre.y - c.radius,
+                width: c.radius * 2, height: c.radius * 2))
+        // A circle, never an oval: a sheared picture makes the bounding box uneven.
+        let r = Path(ellipseIn: box).applying(converter.display).boundingRect
+        let side = min(r.width, r.height)
+        return CGRect(x: r.midX - side / 2, y: r.midY - side / 2, width: side, height: side)
     }
 
     /// The align and focus confirmation, over the top of the picture like the field review's.
@@ -590,22 +733,103 @@ struct GuidedScanPage: View {
         }
     }
 
-    /// The instruction card, in space of its own. The speed is the lab's bar on the picture.
+    private var scanPhase: OperatorScanPhase {
+        if model.runControl.isFinished { return .complete }
+        return model.speedState.status == .tooFast ? .slowDown : .moving
+    }
+
+    /// Finished columns of all columns, for the blocks: from the stage's own progress on the
+    /// fixed sweep, otherwise from "Column 3 of 9".
+    private var columnProgress: (done: Int, total: Int)? {
+        let numbers = columnText.split { !$0.isNumber }.compactMap { Int($0) }
+        var counts: (column: Int, total: Int)?
+        if isFixedSweep, let p = driver?.presetProgress, p.totalColumns > 0 {
+            counts = (p.column, p.totalColumns)
+        } else if numbers.count == 2, numbers[1] > 0 {
+            counts = (numbers[0], numbers[1])
+        }
+        guard let counts else { return nil }
+        let done = model.runControl.isFinished ? counts.total : max(counts.column - 1, 0)
+        return (min(done, counts.total), counts.total)
+    }
+
+    private var isPaused: Bool {
+        isTerraloka ? driver?.phase == .paused : manualPaused
+    }
+
+    private func togglePause() {
+        if let driver, isTerraloka {
+            isPaused ? driver.resume() : driver.pause()
+        } else {
+            // shortcut: the engine has no plain pause for the manual stage, so this uses its
+            // focus pause (the guide waits); upgrade when the engine gets a real one.
+            manualPaused ? model.resumeFocusAnyway() : model.requestFocusPause()
+            manualPaused.toggle()
+        }
+    }
+
+    /// The words under the picture, or the card when the stage or the edge question needs the
+    /// person; then Stop, Pause and End run, always there.
     private var scanBottom: some View {
-        VStack(spacing: 8) {
-            if let driver, isTerraloka {
+        VStack(spacing: 18) {
+            if let driver, isTerraloka, let alert = driver.status.needsPerson {
                 StageRunStatusCard(
-                    status: driver.status, isPaused: driver.phase == .paused,
-                    progress: driver.pathMode == .presetPath
-                        ? driver.presetProgress ?? StageZigzagProgress() : nil,
-                    actions: driver.status.needsPerson.map { alertActions($0, driver) } ?? [],
+                    status: driver.status, isPaused: driver.phase == .paused, progress: nil,
+                    actions: alertActions(alert, driver),
                     onPause: { driver.pause() }, onResume: { driver.resume() })
-            } else {
+            } else if !isTerraloka, session.display?.questionID != nil {
                 manualScanCard
+            } else {
+                Text(scanMessage).font(.callout).multilineTextAlignment(.center)
+                    .frame(maxWidth: 260)
             }
+            Button { isConfirmingLeave = true } label: {
+                Image(systemName: "stop.fill").font(.title3)
+                    .frame(width: 44, height: 44)
+                    .overlay(Circle().stroke(.white, lineWidth: 3).frame(width: 52, height: 52))
+            }
+            .padding(.vertical, 6)
+            .accessibilityLabel("Stop")
+            HStack(spacing: 28) {
+                Button(action: togglePause) {
+                    Label(isPaused ? "Resume" : "Pause",
+                        systemImage: isPaused ? "play.fill" : "pause.fill")
+                }
+                .tint(.auraGreen)
+                Menu {
+                    ForEach(
+                        EndRunMenu.items(
+                            columnInProgress: model.runControl.columnInProgress && !isFixedSweep,
+                            endingAfterColumn: endsAfterColumn), id: \.title
+                    ) { item in
+                        Button(item.title, role: item == .endNow ? .destructive : nil) {
+                            chooseEnd(item)
+                        }
+                    }
+                } label: {
+                    Label(EndRunMenu.label(endingAfterColumn: endsAfterColumn),
+                        systemImage: "flag.checkered")
+                        .padding(.horizontal, 14).padding(.vertical, 8)
+                        .background(Color.auraGreen, in: Capsule())
+                        .foregroundStyle(.black)
+                }
+                .disabled(model.runControl.isFinished)
+            }
+            .font(.callout.weight(.medium))
         }
         .padding(.horizontal)
         .padding(.bottom, 8)
+    }
+
+    private var scanMessage: String {
+        switch scanPhase {
+        case .complete: "Detection complete"
+        case .slowDown: "Slow down"
+        case .moving:
+            isTerraloka
+                ? "The stage is moving the slide for you"
+                : session.display?.card?.text ?? "Keep moving the microscope slide to the forward"
+        }
     }
 
     private var manualScanCard: some View {

@@ -16,6 +16,8 @@ struct FieldReview: View {
         ZStack {
             if let circle, let converter {
                 adjuster(circle: circle, converter: converter)
+            } else if let learned = info.circle, let converter {
+                ring(learned, converter)
             }
             VStack {
                 Spacer()
@@ -77,16 +79,20 @@ struct FieldReview: View {
 
     /// The circle drawn on the preview, with a drag that moves it. Frame pixels become preview
     /// points, and back, through the preview layer.
+    private func ring(_ circle: FieldCircle, _ converter: FramePreviewConverter) -> some View {
+        let radius = converter.viewRadius(of: circle)
+        return Circle()
+            .stroke(Color.auraGreen, style: StrokeStyle(lineWidth: 4, lineCap: .round, dash: [2, 9]))
+            .frame(width: radius * 2, height: radius * 2)
+            .position(converter.viewPoint(of: circle.centre))
+            .allowsHitTesting(false)
+    }
+
     private func adjuster(circle: FieldCircle, converter: FramePreviewConverter)
         -> some View
     {
         let centre = converter.viewPoint(of: circle.centre)
-        let radius = converter.viewRadius(of: circle)
-        return Circle()
-            .stroke(.white, style: StrokeStyle(lineWidth: 2, dash: [6, 4]))
-            .frame(width: radius * 2, height: radius * 2)
-            .position(centre)
-            .allowsHitTesting(false)
+        return ring(circle, converter)
             .overlay {
                 Color.clear
                     .contentShape(Rectangle())
