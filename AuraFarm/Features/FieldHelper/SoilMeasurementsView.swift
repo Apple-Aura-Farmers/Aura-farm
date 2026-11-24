@@ -115,6 +115,7 @@ struct SoilMeasurementsView: View {
                 }
                 .listRowBackground(Color.auraRow)
             }
+            .listSectionSpacing(12)
             .safeAreaInset(edge: .bottom) {
                 if labTests?.isEmpty == false || SoilInputs(draft) != nil {
                     Button {
@@ -149,6 +150,7 @@ struct SoilMeasurementsView: View {
                 } label: {
                     BiodiversityRow(test: latest, others: (labTests?.count ?? 1) - 1)
                 }
+                .auraCardRow()
             } else if labTests == nil {
                 ProgressView()
             } else {
@@ -263,7 +265,8 @@ struct BiodiversityRow: View {
                 EmptyView()
             } currentValueLabel: {
                 Text(test.result.totalCount ?? 0, format: .number)
-                    .font(.footnote)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(test.estimate.level.tint)
             }
             .gaugeStyle(.accessoryCircularCapacity)
             .tint(test.estimate.level.tint)
@@ -273,7 +276,7 @@ struct BiodiversityRow: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(test.estimate.level.title)
-                    .font(.headline)
+                    .font(.body)
                 Text("Confidence: \(test.estimate.confidence.label)")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
@@ -290,7 +293,7 @@ struct BiodiversityRow: View {
                     .accessibilityLabel("\(others) more tests")
             }
         }
-        .padding(.vertical, 6)
+        .padding(.vertical, 12)
     }
 }
 

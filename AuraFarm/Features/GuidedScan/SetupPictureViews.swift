@@ -39,13 +39,14 @@ struct FieldOutlines: View {
                         width: circle.radius * 2, height: circle.radius * 2))
                 outside.addPath(Path(ellipseIn: box).applying(converter.display))
                 context.fill(outside, with: .color(.black), style: FillStyle(eoFill: true))
-            } else {
+            } else if !darkensOutside {
                 for rect in info.state?.mask?.eyepieceRects() ?? [] {
                     context.fill(
                         Path(converter.viewRect(of: rect)), with: .color(.red.opacity(0.35)))
                 }
             }
-            if let rect = info.registrationRect {
+            // Circle-only view: the yellow box stays measured, just not shown.
+            if !darkensOutside, let rect = info.registrationRect {
                 var outline = Path()
                 outline.addLines(converter.viewPolygon(of: rect))
                 outline.closeSubpath()
