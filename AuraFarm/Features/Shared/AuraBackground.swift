@@ -20,6 +20,10 @@ extension Color {
     static let auraRow = Color(
         light: Color(red: 0xF2 / 255, green: 0xE8 / 255, blue: 0xCC / 255).opacity(0.8),
         dark: Color(red: 118 / 255, green: 118 / 255, blue: 128 / 255).opacity(0.24))
+    /// The Results design's semi-transparent card: rgba(40,34,27,0.4) over the dark screen.
+    static let auraCard = Color(
+        light: Color(red: 0xF2 / 255, green: 0xE8 / 255, blue: 0xCC / 255).opacity(0.8),
+        dark: Color(red: 40 / 255, green: 34 / 255, blue: 27 / 255).opacity(0.4))
 
 }
 
@@ -37,7 +41,7 @@ private struct AuraCardBackground: View {
     /// The design's rgba(40,34,27,0.4) over the screen's glow, with a hairline edge.
     var body: some View {
         RoundedRectangle(cornerRadius: radius)
-            .fill(Color(red: 40 / 255, green: 34 / 255, blue: 27 / 255).opacity(0.4))
+            .fill(Color.auraCard)
             .overlay(RoundedRectangle(cornerRadius: radius).stroke(.white.opacity(0.08)))
     }
 }
