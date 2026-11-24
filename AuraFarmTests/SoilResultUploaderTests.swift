@@ -17,6 +17,68 @@ final class SoilResultUploaderTests: XCTestCase {
         XCTAssertFalse(sent.contains(picture.base64EncodedString()))
     }
 
+    private func pictures(_ count: Int) -> [OrganismPicture] {
+        (0..<count).map {
+            OrganismPicture(
+                image: .init(taxon: "Volvox", path: "id/organism-\($0).jpg"),
+                file: URL(filePath: "/tmp/\($0).jpg"))
+        }
+    }
+
+    private actor Sent {
+        private(set) var paths: [String] = []
+        private(set) var most = 0
+        private var now = 0
+        func begin() {
+            now += 1
+            most = max(most, now)
+        }
+        func end(_ path: String) {
+            now -= 1
+            paths.append(path)
+        }
+    }
+
+    func testEveryPictureIsSentAFewAtATime() async throws {
+        let sent = Sent()
+        let all = pictures(11)
+        try await SoilResultUploader.send(all, atOnce: 4) { picture in
+            await sent.begin()
+            try await Task.sleep(for: .milliseconds(5))
+            await sent.end(picture.image.path)
+        }
+        let paths = await sent.paths
+        let most = await sent.most
+        XCTAssertEqual(Set(paths), Set(all.map(\.image.path)))
+        XCTAssertEqual(paths.count, 11)
+        XCTAssertLessThanOrEqual(most, 4)
+    }
+
+    func testAPictureThatFailsDoesNotStopTheOthersAndIsReported() async {
+        struct Refused: LocalizedError { var errorDescription: String? { "Bucket not found" } }
+        let sent = Sent()
+        do {
+            try await SoilResultUploader.send(pictures(5), atOnce: 2) { picture in
+                if picture.image.path.hasSuffix("-1.jpg") { throw Refused() }
+                await sent.begin()
+                await sent.end(picture.image.path)
+            }
+            XCTFail("a missing picture must be said")
+        } catch {
+            XCTAssertTrue(
+                error.localizedDescription.hasPrefix(
+                    "The result was sent, but 1 of its 5 pictures were not."),
+                error.localizedDescription)
+            XCTAssertTrue(error.localizedDescription.contains("Bucket not found"))
+        }
+        let count = await sent.paths.count
+        XCTAssertEqual(count, 4)
+    }
+
+    func testNoPicturesSendNothing() async throws {
+        try await SoilResultUploader.send([]) { _ in XCTFail("nothing to send") }
+    }
+
     func testTheColumnsAreNamedTheWayThePostgresTableIs() throws {
         let row = ResultRow(report: report(), sampleID: UUID())
 
@@ -30,6 +92,40 @@ final class SoilResultUploaderTests: XCTestCase {
                 "millilitres_of_water", "frame_count", "detector_model", "recorded_at",
                 "report",
             ]
+        )
+    }
+
+    func testTheRegisteredSamplePlaceGoesUpAsGeometryAndNotAsTheLineTheHelperSees() throws {
+        // location is a PostGIS column: the line a sample shows comes back as
+        // "parse error, invalid geometry".
+        let row = SampleRow(
+            code: "Pak Wayan", plotID: UUID(), place: "-8.54000, 115.12000",
+            collectedAt: Date(timeIntervalSince1970: 1_793_000_000))
+
+        // Longitude first, the way well-known text puts it.
+        XCTAssertEqual(row.location, "SRID=4326;POINT(115.12000000 -8.54000000)")
+    }
+
+    func testAPlotWithNoMiddleRegistersTheSampleWithoutAPlace() throws {
+        // A plot with no corners leaves the line empty, and a sample still has to go up.
+        XCTAssertNil(
+            SampleRow(code: "Pak Wayan", plotID: UUID(), place: "", collectedAt: .now).location)
+        XCTAssertNil(
+            SampleRow(code: "Pak Wayan", plotID: UUID(), place: nil, collectedAt: .now).location)
+    }
+
+    func testTheRegisteredSampleIsNamedTheWayThePostgresTableIs() throws {
+        let row = SampleRow(
+            code: "Pak Wayan", plotID: UUID(), place: "-8.54000, 115.12000",
+            collectedAt: Date(timeIntervalSince1970: 1_793_000_000))
+
+        let json =
+            try JSONSerialization.jsonObject(with: JSONEncoder().encode(row)) as? [String: Any]
+
+        // collected_by is left out on purpose: the column defaults to whoever is signed in.
+        XCTAssertEqual(
+            Set(json?.keys ?? [:].keys),
+            ["id", "sample_code", "plot_id", "location", "collected_at"]
         )
     }
 

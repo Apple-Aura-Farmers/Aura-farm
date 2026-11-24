@@ -101,6 +101,10 @@
                             .buttonStyle(.bordered)
                     }
                 }
+                if driver.phase == .waitingForFocus {
+                    Button("It's sharp. Calibrate") { driver.focusIsSharp() }
+                        .buttonStyle(.borderedProminent)
+                }
                 if case .failed = driver.phase {
                     Button("Retry") { driver.recalibrate() }.buttonStyle(.borderedProminent)
                         .disabled(setupStep != .stage && setupStep != .done)
@@ -119,7 +123,7 @@
         private var canChangePathMode: Bool {
             switch driver.phase {
             case .paused: true
-            case .disconnected, .waitingForStageStep, .failed: setupStep != .done
+            case .disconnected, .waitingForStageStep, .waitingForFocus, .failed: setupStep != .done
             default: false
             }
         }
@@ -150,6 +154,7 @@
             case .calibrating(let axis, let travel):
                 String(format: "Calibrating servo %@: %.1f fields", axis.letter, travel)
             case .calibrated: "Calibrated"
+            case .waitingForFocus: "Focus first: the picture must be sharp to calibrate"
             case .following: "Following the guide" + (driver.lastMove.isEmpty ? "" : " (\(driver.lastMove))")
             case .waitingForEdgeAnswer: "Stopped: answer the edge question"
             case .atLimit(let servo):

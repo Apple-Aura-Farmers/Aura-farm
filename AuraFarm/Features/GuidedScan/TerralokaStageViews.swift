@@ -135,6 +135,8 @@ struct StageCalibrationCard: View {
     var isPaused = false
     var onRetry: () -> Void
     var onResume: () -> Void = {}
+    /// The person says the picture is sharp.
+    var onFocused: () -> Void = {}
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -143,7 +145,11 @@ struct StageCalibrationCard: View {
             if let detail = status.detail {
                 Text(detail).font(.subheadline).foregroundStyle(.secondary)
             }
-            if status.needsPerson != nil {
+            if status.needsPerson == .focusFirst {
+                Text(AutoStageAlert.focusFirst.message).font(.subheadline)
+                Button("It's sharp. Calibrate", action: onFocused)
+                    .buttonStyle(.borderedProminent)
+            } else if status.needsPerson != nil {
                 Button("Retry", action: onRetry).buttonStyle(.borderedProminent)
             } else if isPaused {
                 Button("Resume", action: onResume).buttonStyle(.borderedProminent)

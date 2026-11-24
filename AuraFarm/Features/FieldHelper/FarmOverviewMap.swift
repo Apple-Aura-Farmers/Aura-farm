@@ -99,16 +99,16 @@ struct FarmsOverviewMap: View {
             Text(title).font(.caption2.weight(.medium))
             Text(name).font(.subheadline.weight(.semibold))
         }
-            .foregroundStyle(.white)
-            .lineLimit(1)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 4)
-            .frame(minHeight: 32)
-            .background(colour, in: shape)
-            .overlay(shape.stroke(.white.opacity(0.9), lineWidth: 2))
-            .shadow(radius: 2)
-            .scaleEffect(isSelected ? 1.2 : 1)
-            .animation(.snappy, value: isSelected)
+        .foregroundStyle(.white)
+        .lineLimit(1)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 4)
+        .frame(minHeight: 32)
+        .background(colour, in: shape)
+        .overlay(shape.stroke(.white.opacity(0.9), lineWidth: 2))
+        .shadow(radius: 2)
+        .scaleEffect(isSelected ? 1.2 : 1)
+        .animation(.snappy, value: isSelected)
     }
 
     /// The plot containing the spot. Where plots overlap, the smaller one wins, so a small

@@ -32,6 +32,7 @@ enum SoilReportExporter {
         guard let counts = manifest.organismCounts else { throw Failure.notCounted }
 
         let details = manifest.details
+        let pictures = OrganismPictures.of(sweep).map(\.image)
         let organisms =
             counts
             .filter { $0.value > 0 }
@@ -59,7 +60,8 @@ enum SoilReportExporter {
                 appVersion: appVersion(of: bundle)
             ),
             organisms: organisms,
-            panoramaJPEG: sweep.panoramaURL.flatMap { try? Data(contentsOf: $0) }
+            panoramaJPEG: sweep.panoramaURL.flatMap { try? Data(contentsOf: $0) },
+            organismImages: pictures.isEmpty ? nil : pictures
         )
     }
 

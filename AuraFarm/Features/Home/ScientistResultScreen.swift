@@ -1,7 +1,8 @@
 import SwiftUI
 
 /// What a test found: the score, how many protists, nematodes and rotifers (and anything else),
-/// and what kinds each is made of. Upload sends it to the records; Retest scraps it.
+/// and what kinds each is made of. Upload sends it to the records, with the picture of each
+/// organism the run counted; Retest scraps it.
 ///
 /// `isNew` is a result just taken: it says "Saved in the archive" for three seconds and offers
 /// Retest. One opened from the archive offers Upload only, because scrapping a kept result is
@@ -19,6 +20,9 @@ struct ScientistResultScreen: View {
     @State private var showsWhy = false
     @State private var isConfirmingRetest = false
     @State private var upload = Upload.ready
+    /// The organism pictures Upload sends, and how many it has sent so far.
+    @State private var pictures: [OrganismPicture] = []
+    @State private var picturesSent = 0
 
     private enum Upload: Equatable {
         case ready, sending, sent
@@ -66,13 +70,19 @@ struct ScientistResultScreen: View {
         .toolbarVisibility(.hidden, for: .navigationBar)
         .toolbarVisibility(.hidden, for: .tabBar)
         .overlay(alignment: .topLeading) {
-            Button { dismiss() } label: {
+            Button {
+                dismiss()
+            } label: {
                 Image(systemName: "chevron.backward").font(.title3).frame(width: 36, height: 36)
             }
             .buttonStyle(.glass)
             .buttonBorderShape(.circle)
             .padding(.leading, 22)
             .accessibilityLabel("Back")
+        }
+        .task {
+            let sweep = sweep
+            pictures = await Task.detached { OrganismPictures.of(sweep) }.value
         }
         .task {
             guard isNew else { return }
@@ -139,7 +149,9 @@ struct ScientistResultScreen: View {
             .padding(.top, 36)
             .accessibilityElement(children: .combine)
 
-            Button { showsWhy = true } label: {
+            Button {
+                showsWhy = true
+            } label: {
                 Label("\(estimate.confidence.label) confidence", systemImage: "info.circle")
                     .labelStyle(.titleAndIcon).font(.footnote).foregroundStyle(.secondary)
             }
@@ -168,7 +180,9 @@ struct ScientistResultScreen: View {
 
     private func groupCard(_ group: SoilLifeGroup) -> some View {
         let isOn = selected == group
-        return Button { withAnimation(.snappy) { selected = group } } label: {
+        return Button {
+            withAnimation(.snappy) { selected = group }
+        } label: {
             VStack(spacing: 0) {
                 Group {
                     if let name = group.imageName {
@@ -239,7 +253,9 @@ struct ScientistResultScreen: View {
         VStack(spacing: 12) {
             switch upload {
             case .ready, .failed:
-                Button { Task { await send() } } label: {
+                Button {
+                    Task { await send() }
+                } label: {
                     Label(
                         upload == .ready ? "Upload" : "Try again",
                         systemImage: "icloud.and.arrow.up"
@@ -248,11 +264,20 @@ struct ScientistResultScreen: View {
                 }
                 .buttonStyle(.borderedProminent).buttonBorderShape(.capsule)
                 .controlSize(.large).tint(.aura).foregroundStyle(Color.auraOnAccent)
+                if !pictures.isEmpty {
+                    Text(
+                        pictures.count == 1
+                            ? "With 1 organism picture" : "With \(pictures.count) organism pictures"
+                    )
+                    .font(.footnote).foregroundStyle(.secondary)
+                }
                 if case .failed(let problem) = upload {
                     Text(problem).font(.footnote).foregroundStyle(.red).multilineTextAlignment(.center)
                 }
             case .sending:
-                ProgressView("Uploading")
+                ProgressView(
+                    pictures.isEmpty
+                        ? "Uploading" : "Uploading · \(picturesSent) of \(pictures.count) pictures")
             case .sent:
                 Label("Uploaded", systemImage: "checkmark.circle.fill").foregroundStyle(Color.aura)
             }
@@ -268,15 +293,19 @@ struct ScientistResultScreen: View {
     /// The test is already saved on the phone, so a failure costs the sending and not the test.
     private func send() async {
         upload = .sending
+        picturesSent = 0
         let sweep = sweep
         do {
-            let report = try await Task.detached(priority: .userInitiated) {
-                try SoilReportExporter.report(for: sweep)
+            let (report, found) = try await Task.detached(priority: .userInitiated) {
+                (try SoilReportExporter.report(for: sweep), OrganismPictures.of(sweep))
             }.value
+            pictures = found
             guard let uploader = SoilResultUploader() else {
                 throw SoilResultUploader.Failure.notConfigured
             }
-            try await uploader.upload(report)
+            try await uploader.upload(report, pictures: found, from: sweep.manifest?.details) {
+                picturesSent = $0
+            }
             upload = .sent
         } catch {
             upload = .failed(error.localizedDescription)

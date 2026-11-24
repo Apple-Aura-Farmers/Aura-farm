@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		6C15BFD030B43EFD0010F5FF /* Lottie in Frameworks */ = {isa = PBXBuildFile; productRef = 5B1E0A9C7D4F42A8B3C6D1F1 /* Lottie */; };
 		6C27AD2530A449AC00CBFDD6 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = 5B1E0A9C7D4F42A8B3C6D1E1 /* Supabase */; };
 		6CC87F0230AB0225007CA45E /* Terraloka_App Icon_SF26.icon in Resources */ = {isa = PBXBuildFile; fileRef = 6CC87F0130AB0225007CA45E /* Terraloka_App Icon_SF26.icon */; };
 		87D63309CF8EED96A02FA376 /* AuraFarmKit in Frameworks */ = {isa = PBXBuildFile; productRef = 328C0DD016C1485FB148287C /* AuraFarmKit */; };
@@ -49,6 +50,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				6C15BFD030B43EFD0010F5FF /* Lottie in Frameworks */,
 				6C27AD2530A449AC00CBFDD6 /* Supabase in Frameworks */,
 				87D63309CF8EED96A02FA376 /* AuraFarmKit in Frameworks */,
 			);
@@ -139,6 +141,7 @@
 			packageProductDependencies = (
 				328C0DD016C1485FB148287C /* AuraFarmKit */,
 				5B1E0A9C7D4F42A8B3C6D1E1 /* Supabase */,
+				5B1E0A9C7D4F42A8B3C6D1F1 /* Lottie */,
 			);
 			productName = AuraFarm;
 			productReference = 84ED7D0120B576BF6D11D6DA /* AuraFarm.app */;
@@ -175,6 +178,7 @@
 			packageReferences = (
 				EEDDE6742326E92E2FA695ED /* XCLocalSwiftPackageReference "AuraFarmKit" */,
 				5B1E0A9C7D4F42A8B3C6D1E0 /* XCRemoteSwiftPackageReference "supabase-swift" */,
+				5B1E0A9C7D4F42A8B3C6D1F0 /* XCRemoteSwiftPackageReference "lottie-ios" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 113236722DEE1DC96F378B9D /* Products */;
@@ -306,8 +310,8 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 5;
-				DEVELOPMENT_TEAM = 3RUWTXHBX9;
+				CURRENT_PROJECT_VERSION = 7;
+				DEVELOPMENT_TEAM = Q7PFUBX7QB;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Config/AuraFarm-Info.plist";
@@ -364,8 +368,8 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = "Terraloka_App Icon_SF26";
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 5;
-				DEVELOPMENT_TEAM = 3RUWTXHBX9;
+				CURRENT_PROJECT_VERSION = 7;
+				DEVELOPMENT_TEAM = Q7PFUBX7QB;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Config/AuraFarm-Info.plist";
@@ -448,6 +452,16 @@
 			traits = (
 			);
 		};
+		5B1E0A9C7D4F42A8B3C6D1F0 /* XCRemoteSwiftPackageReference "lottie-ios" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/airbnb/lottie-ios.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 4.5.0;
+			};
+			traits = (
+			);
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -459,6 +473,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 5B1E0A9C7D4F42A8B3C6D1E0 /* XCRemoteSwiftPackageReference "supabase-swift" */;
 			productName = Supabase;
+		};
+		5B1E0A9C7D4F42A8B3C6D1F1 /* Lottie */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 5B1E0A9C7D4F42A8B3C6D1F0 /* XCRemoteSwiftPackageReference "lottie-ios" */;
+			productName = Lottie;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

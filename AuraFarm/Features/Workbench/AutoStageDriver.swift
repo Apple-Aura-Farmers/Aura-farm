@@ -17,6 +17,8 @@ final class AutoStageDriver {
         case calibrating(axis: StageAxis, travel: Double)
         case calibrated(summary: String)
         /// Calibrated, and held until `beginRun()` (see `requiresRunStart`).
+        /// At the stage step without a focus found in setup: waits for the person (or for focus).
+        case waitingForFocus
         case readyToStart
         case following
         case waitingForEdgeAnswer
@@ -100,6 +102,8 @@ final class AutoStageDriver {
     /// The latest tracked guide position (raw), and when it was seen.
     private var lastTracked: (position: CGPoint, at: Date)?
     // The preset zig-zag.
+    /// The person said the picture is sharp (setup's own focus step was skipped).
+    private var focusAccepted = false
     private var edgeAnswer = StageEdgeAnswer()
     private var zigzag: StageZigzag?
     /// How far the preset path has come; nil before it starts and while following the guide.
@@ -340,6 +344,14 @@ final class AutoStageDriver {
         chunkDegrees = max(new.defaultChunk, new.minChunk)
         engine.logEvent("objective_\(new.title)")
         if mapping != nil { recalibrate() }
+    }
+
+    /// "It's sharp": calibrate although setup's focus step was skipped.
+    func focusIsSharp() {
+        guard phase == .waitingForFocus else { return }
+        focusAccepted = true
+        engine.logEvent("stage_focus_accepted")
+        phase = .waitingForStageStep
     }
 
     /// The servos are measured: the stage can start.
@@ -836,7 +848,15 @@ final class AutoStageDriver {
             recalibrate()  // setup went back: the old measurement is stale
             return
         }
-        if step == .stage || step == .done, mapping == nil, phase == .waitingForStageStep {
+        let atStage = step == .stage || step == .done
+        if !atStage { focusAccepted = false }  // setup went back: focus is asked for again
+        let hasFocus = engine.setupInfo.focusFound || focusAccepted
+        if phase == .waitingForFocus, hasFocus || !atStage { phase = .waitingForStageStep }
+        if atStage, !hasFocus, mapping == nil, phase == .waitingForStageStep {
+            phase = .waitingForFocus  // a blurry picture cannot be measured
+            return
+        }
+        if atStage, mapping == nil, phase == .waitingForStageStep {
             phase = .calibrating(axis: .x, travel: 0)
             Task { await calibrate() }
             return

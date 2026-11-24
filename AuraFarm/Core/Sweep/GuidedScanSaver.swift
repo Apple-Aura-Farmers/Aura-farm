@@ -9,6 +9,8 @@ import Foundation
 enum GuidedScanSaver {
     static let runRecordFileName = "run.json"
     static let movementFileName = "movement.csv"
+    /// The folder of organism pictures inside the sweep's folder.
+    static let organismsFolderName = "organisms"
 
     enum Failure: Error, Equatable, LocalizedError {
         case folderNotCreated
@@ -27,11 +29,13 @@ enum GuidedScanSaver {
     ///   - movementCSV: the run's movement log, copied in; nil when there is none.
     ///   - lensVideo: the recorded video, hard-linked in (copied when that is not possible); if
     ///     neither works the sweep is saved without it and the record does not name it.
+    ///   - organisms: the run's folder of organism pictures; the ones the record names are
+    ///     hard-linked in (copied when that is not possible), and the record forgets any other.
     ///   - directory: where sweeps live.
     @discardableResult
     static func save(
         details: SampleDetails, record: GuideRunRecord, movementCSV: URL?, lensVideo: URL? = nil,
-        in directory: URL = SweepStore.sweepsDirectory
+        organisms: URL? = nil, in directory: URL = SweepStore.sweepsDirectory
     ) throws -> String {
         var record = record
         let folder = SweepStore.freeURL(base: details.fileBaseName, in: directory)
@@ -43,16 +47,21 @@ enum GuidedScanSaver {
 
         if let name = record.lensVideoFile {
             let target = folder.appending(path: name)
-            let fileManager = FileManager.default
-            var kept = false
-            if let lensVideo {
-                kept =
-                    (try? fileManager.linkItem(at: lensVideo, to: target)) != nil
-                    || (try? fileManager.copyItem(at: lensVideo, to: target)) != nil
-            }
+            let kept = lensVideo.map { linkOrCopy($0, to: target) } ?? false
             if !kept {
                 record.lensVideoFile = nil
                 record.lensVideoScanStartSeconds = nil
+            }
+        }
+
+        if let organisms {
+            let target = folder.appending(path: organismsFolderName, directoryHint: .isDirectory)
+            try? FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
+            for index in record.organisms.indices {
+                guard let name = record.organisms[index].image else { continue }
+                if !linkOrCopy(organisms.appending(path: name), to: target.appending(path: name)) {
+                    record.organisms[index].image = nil
+                }
             }
         }
 
@@ -75,6 +84,11 @@ enum GuidedScanSaver {
             throw Failure.notSaved
         }
         return folder.lastPathComponent
+    }
+
+    private static func linkOrCopy(_ file: URL, to target: URL) -> Bool {
+        (try? FileManager.default.linkItem(at: file, to: target)) != nil
+            || (try? FileManager.default.copyItem(at: file, to: target)) != nil
     }
 
     /// The run record saved in a sweep's folder; nil for a sweep without one (the capture

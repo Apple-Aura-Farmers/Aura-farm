@@ -16,7 +16,7 @@ final class AutoStageStatusTests: XCTestCase {
 
     private var everyPhase: [AutoStageDriver.Phase] {
         [
-            .disconnected, .waitingForStageStep,
+            .disconnected, .waitingForStageStep, .waitingForFocus,
             .warmingUp(index: 2, count: 3, title: "3×3 grid"),
             .calibrating(axis: .x, travel: 0.4), .calibrated(summary: "ok"), .readyToStart,
             .following, .waitingForEdgeAnswer, .atLimit(.y), .walkingBack(x: 40, y: 50),
@@ -29,6 +29,11 @@ final class AutoStageStatusTests: XCTestCase {
         for phase in everyPhase {
             XCTAssertFalse(status(phase).title.isEmpty, "\(phase)")
         }
+    }
+
+    func testWithoutFocusTheStageAsksForItBeforeCalibrating() {
+        XCTAssertEqual(status(.waitingForFocus).needsPerson, .focusFirst)
+        XCTAssertEqual(AutoStageAlert.focusFirst.kind, "focus_first")
     }
 
     func testTooHotIsSaidOnlyWhileTheStageRunsAndFocusComesFirst() {
