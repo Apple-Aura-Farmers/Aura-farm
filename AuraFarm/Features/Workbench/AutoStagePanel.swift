@@ -86,11 +86,11 @@
                 if let warning = driver.objective.warning(forChunk: driver.chunkDegrees) {
                     Text(warning).font(.caption).foregroundStyle(.orange)
                 }
-                if isManual, driver.manualProblem == .oldPath {
+                if driver.manualProblem == .oldPath {
                     Text("The stage still holds an old path. Go to centre clears it.")
                         .font(.caption).foregroundStyle(.orange)
                     Button("Go to centre") { driver.goToCentre() }.buttonStyle(.borderedProminent)
-                } else if isManual, driver.manualProblem == .noAnswer {
+                } else if driver.manualProblem == .noAnswer {
                     Text("The stage did not answer").font(.caption).foregroundStyle(.orange)
                 }
                 HStack {
@@ -139,8 +139,15 @@
                         .buttonStyle(.borderedProminent)
                 }
                 if case .failed = driver.phase {
-                    Button("Retry") { driver.recalibrate() }.buttonStyle(.borderedProminent)
-                        .disabled(setupStep != .stage && setupStep != .done)
+                    HStack {
+                        Button("Retry") { driver.recalibrate() }.buttonStyle(.borderedProminent)
+                            .disabled(setupStep != .stage && setupStep != .done)
+                        // Too little sample to track: preset moves need no calibration.
+                        if driver.lastCalibrationFailure == .tracking {
+                            Button("Use preset moves") { driver.choosePath(.presetPath) }
+                                .buttonStyle(.bordered)
+                        }
+                    }
                 }
             }
             .padding(.horizontal)
@@ -212,6 +219,7 @@
             case .presetPath(let column, let spot):
                 "Preset path: column \(column), spot \(spot)"
             case .paused: "Paused"
+            case .choosingPath: "Choose the path"
             case .preparingManual: "Getting the stage ready"
             case .byHand:
                 "Manual" + (driver.handSaved.map { " (saved \($0.x),\($0.y))" } ?? "")

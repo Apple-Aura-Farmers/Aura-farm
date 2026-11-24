@@ -30,7 +30,10 @@ final class AutoStageDriver {
         case emptyCapReached(fields: Double)
         case presetPath(column: Int, spot: Int)
         case paused
-        /// Manual session: the board is being put in MANUAL before the arrows work.
+        /// The guided scan waits at the stage step for the path: preset moves need no
+        /// calibration, Follow the guide does.
+        case choosingPath
+        /// The board is being put in MANUAL (a manual session, or before preset moves).
         case preparingManual
         /// The person steers the stage with the arrows (lab only). Taken over from a path, the
         /// position before is saved.
@@ -127,8 +130,7 @@ final class AutoStageDriver {
     private var presetFinished = false
     private var dwellUntil: Date?
     private var countingColumn: Int?
-    private var sawSampleInColumn = false
-    private var noSampleSince: Date?
+    private var edgeWatch = StagePresetEdgeWatch()
     private var ignoreEdgeThisLeg = false
     /// Since when the leg servo could not move while a cross-axis servo is pinned.
     private var crossStuckSince: Date?
@@ -186,6 +188,19 @@ final class AutoStageDriver {
     private var manualStarted = false
     private var manualPreparing = false
     private var manualStageSkipped = false
+    /// Why the last calibration failed: the picture could not be tracked (too little sample), or
+    /// the board did not answer. Nil when it has not failed.
+    enum CalibrationFailureKind { case tracking, board }
+    private(set) var lastCalibrationFailure: CalibrationFailureKind?
+    /// Counts the failures, so a screen can tell a new one from the one it has shown.
+    private(set) var calibrationFailureCount = 0
+    /// The board was put in MANUAL and IDLE for preset moves (nothing moved).
+    private var presetPrepared = false
+    /// The guided scan's path was chosen (until then the driver waits in `.choosingPath`).
+    private var pathChosen = false
+    /// The stage step was reopened and is not yet seen as `.stage`: nothing calibrates before.
+    private var awaitingReopen = false
+    private var presetStageSkipped = false
     /// Y has moved 20 degrees or more since manual began or the last reminder was dismissed:
     /// "Check focus". Angles only.
     private(set) var handFocusReminder = false
@@ -266,7 +281,7 @@ final class AutoStageDriver {
             continueManually()
             return
         }
-        guard mapping != nil else {
+        guard canRunPath else {
             phase = .waitingForStageStep
             return
         }
@@ -383,7 +398,7 @@ final class AutoStageDriver {
         runBegun = true
         sessionEnded = false
         userPaused = false
-        guard mapping != nil else {
+        guard canRunPath else {
             // Paused during the warm-up or calibration: measure again; the open gate then
             // starts the run.
             if phase == .paused { phase = .waitingForStageStep }
@@ -414,6 +429,25 @@ final class AutoStageDriver {
         countingColumn = nil
         engine.setExternalCounting(active: false, column: 0)
         engine.logEvent("path_mode_\(new.rawValue)")
+        edgeWatch = StagePresetEdgeWatch()
+        // Paused on preset moves, now Follow the guide, with no measurement: calibrate first.
+        if controlMode == .autonomous, !requiresRunStart, new == .followGuide, mapping == nil,
+            phase == .paused
+        {
+            beginFollowCalibration()
+        }
+    }
+
+    /// Follow the guide without a measurement: the stage step is reopened if the identity axes
+    /// stand, and calibration starts like a normal start.
+    private func beginFollowCalibration() {
+        presetPrepared = false
+        userPaused = false
+        if engine.setupInfo.step == .done {
+            engine.reopenStage()
+            awaitingReopen = true
+        }
+        phase = .waitingForStageStep
     }
 
     func endSession() {
@@ -439,7 +473,7 @@ final class AutoStageDriver {
             // The measurement was for the other lens: gone, but the manual session goes on.
             mapping = nil
             mappingSummary = ""
-        } else if mapping != nil {
+        } else if mapping != nil || presetPrepared {
             recalibrate()
         }
     }
@@ -455,14 +489,27 @@ final class AutoStageDriver {
         phase = .waitingForStageStep
     }
 
-    /// The servos are measured: the stage can start.
+    /// The servos are measured: Follow the guide can start.
     var isCalibrated: Bool { mapping != nil }
+
+    /// The path can run: preset moves need the board ready (never a calibration); Follow the
+    /// guide needs the measurement.
+    var canRunPath: Bool { pathMode == .presetPath ? presetPrepared : mapping != nil }
+
+    /// The guided scan has not chosen its path yet.
+    private var needsPathChoice: Bool { requiresRunStart && !pathChosen }
 
     /// After a failure, or to measure again at the stage step.
     func recalibrate() {
         guard controlMode != .manual else { return }  // manual never calibrates
         clearHandState()
         pathStarted = false
+        presetPrepared = false
+        pathChosen = false
+        presetStageSkipped = false
+        awaitingReopen = false
+        zigzag = nil
+        presetFinished = false
         runBegun = false  // a new test: the run gate closes again
         sessionEnded = false  // and its END is sent again when it ends
         walkBack = nil
@@ -717,6 +764,8 @@ final class AutoStageDriver {
         defer { isCalibrating = false }
         calibration = StageAutoCalibration()
         stuckWatch = StageStuckWatch()
+        lastCalibrationFailure = nil
+        presetPrepared = false  // the warm-up puts the board in AUTO
         // A warm-up path stopped part-way (Pause, Close, a closed app) stays queued in AUTO, and
         // MODE then answers BUSY. HOME clears it and starts from a known place.
         let homed = await request(
@@ -727,7 +776,7 @@ final class AutoStageDriver {
                 return nil
             })
         if sweepStopped { return stopSweep() }
-        guard homed else { return fail("The stage did not answer HOME") }
+        guard homed else { return fail("The stage did not answer HOME", kind: .board) }
         for (index, item) in warmUpSequence.enumerated() {
             await warmUpStage(item, index: index + 1, of: warmUpSequence.count)
             if sweepStopped { return stopSweep() }
@@ -748,7 +797,7 @@ final class AutoStageDriver {
                 })
         else {
             if sweepStopped { return stopSweep() }
-            return fail("The stage did not answer MODE MANUAL / HOME")
+            return fail("The stage did not answer MODE MANUAL / HOME", kind: .board)
         }
 
         for servo in [StageAxis.x, .y] {
@@ -942,9 +991,11 @@ final class AutoStageDriver {
         collecting = nil
     }
 
-    private func fail(_ message: String) {
+    private func fail(_ message: String, kind: CalibrationFailureKind = .tracking) {
         collecting = nil
         if controlMode == .manual { return }  // a wound-down measurement says nothing now
+        lastCalibrationFailure = kind
+        calibrationFailureCount += 1
         phase = .failed(message)
     }
 
@@ -959,14 +1010,14 @@ final class AutoStageDriver {
                 if controlMode == .manual {
                     if manualStarted, savedAngles == nil { savedAngles = (angleX, angleY) }
                     userPaused = true
-                } else if mapping != nil, savedAngles == nil, walkBack == nil {
+                } else if canRunPath, savedAngles == nil, walkBack == nil {
                     savedAngles = (angleX, angleY)
                     savedTrackerPosition = engine.trackerPosition()
                 }
                 phase = .disconnected
                 inFlight = false
                 releaseHandArrow()  // nothing moves again by itself
-                userPaused = userPaused || mapping != nil  // stay paused until Resume
+                userPaused = userPaused || canRunPath  // stay paused until Resume
             }
             return
         }
@@ -977,10 +1028,10 @@ final class AutoStageDriver {
             return
         }
         if phase == .disconnected {
-            phase = mapping != nil && step == .done ? .paused : .waitingForStageStep
+            phase = canRunPath && step == .done ? .paused : .waitingForStageStep
         }
         guard !isCalibrating else { return }
-        if step != .done, step != .stage, mapping != nil {
+        if step != .done, step != .stage, mapping != nil || presetPrepared {
             recalibrate()  // setup went back: the old measurement is stale
             return
         }
@@ -990,17 +1041,39 @@ final class AutoStageDriver {
         if phase == .waitingForFocus, !needsSharpTap, hasFocus || !atStage {
             phase = .waitingForStageStep
         }
-        if atStage, !hasFocus, mapping == nil, phase == .waitingForStageStep {
-            phase = .waitingForFocus  // a blurry picture cannot be measured
-            return
-        }
-        if atStage, mapping == nil, phase == .waitingForStageStep {
-            phase = .calibrating(axis: .x, travel: 0)
-            Task { await calibrate() }
-            return
+        if atStage, phase == .waitingForStageStep {
+            if needsPathChoice {
+                phase = .choosingPath  // the page asks which path before anything is measured
+                return
+            }
+            if pathMode == .presetPath {
+                // Never a calibration: the identity axes, and the board made ready.
+                if step == .stage {
+                    if !presetStageSkipped {
+                        presetStageSkipped = true
+                        engine.skipStage()
+                    }
+                    return
+                }
+                preparePreset()
+                return
+            }
+            if awaitingReopen {
+                guard step == .stage else { return }  // the old step is still published
+                awaitingReopen = false
+            }
+            if mapping == nil {
+                if !hasFocus || needsSharpTap {
+                    phase = .waitingForFocus  // a blurry picture cannot be measured
+                    return
+                }
+                phase = .calibrating(axis: .x, travel: 0)
+                Task { await calibrate() }
+                return
+            }
         }
         guard step == .done else { return }
-        guard mapping != nil else { return }
+        guard canRunPath else { return }
         evaluateMoveCheck(force: false)
         if autoEndsOnGuideFinish, runBegun, engine.runSummary != nil {
             endSession()  // the guide finished and its summary exists
@@ -1017,6 +1090,7 @@ final class AutoStageDriver {
             }
         }
         if case .readyToStart = phase { return }  // no move before the run starts
+        if phase == .choosingPath || phase == .preparingManual { return }
         if phase == .byHand {
             handTick()
             return
@@ -1038,7 +1112,6 @@ final class AutoStageDriver {
         // slide goes by uncounted. A move on its way finishes.
         if engine.heatMode == .tooHot {
             stallWatch = StageStallWatch()
-            noSampleSince = nil
             return
         }
         if let zigzag {
@@ -1101,8 +1174,7 @@ final class AutoStageDriver {
     }
 
     private func applyPresetEdge() {
-        noSampleSince = nil
-        sawSampleInColumn = false
+        edgeWatch.newColumn()
         if inFlight {
             client.send(.stop)
             inFlight = false
@@ -1118,67 +1190,51 @@ final class AutoStageDriver {
         }
     }
 
-    private func startPreset(_ mapping: StageServoMapping) {
-        guard let plan = StageZigzagPlan(mapping: mapping) else {
-            phase = .failed("Preset path: the servos do not move the picture")
-            return
-        }
+    /// The preset path never uses a mapping: Y walks the columns, X steps across, in the arrows'
+    /// directions; the stop spacing falls back to nominal fields per degree without tracking.
+    private func startPreset() {
+        // The stored flips, also when no pad was shown: the path starts where the arrows' Up and
+        // Left lead.
+        handFlipX = UserDefaults.standard.bool(forKey: "stageLab.flipX")
+        handFlipY = UserDefaults.standard.bool(forKey: "stageLab.flipY")
+        let plan = StageZigzagPlan(objective: objective, flipX: handFlipX, flipY: handFlipY)
         let zigzag = StageZigzag(
             plan: plan, chunkDegrees: chunkDegrees, dwellSeconds: dwellSeconds)
         self.zigzag = zigzag
         presetFinished = false
-        engine.logEvent("stage_mapping", detail: mappingSummary)
+        edgeWatch = StagePresetEdgeWatch()
+        let detail =
+            "uncalibrated, nominal "
+            + String(format: "%.3f", objective.nominalFieldsPerDegree) + " f/deg, "
+            + zigzag.summary
         Task {
             // Another row, so the two events do not overwrite each other.
             try? await Task.sleep(for: .milliseconds(300))
-            engine.logEvent("preset_path_start", detail: zigzag.summary)
+            engine.logEvent("preset_path_start", detail: detail)
         }
     }
 
-    /// Looks for the end of the sample along a leg: blank (not blurry) for 0.6 s after the
-    /// column showed sample.
+    /// Looks for the end of the sample along a leg, one stop at a time (see
+    /// `StagePresetEdgeWatch`): what the view shows during a stop is noted here.
     private func watchPresetEdge() {
-        guard (zigzag?.column ?? 0) > 0, !ignoreEdgeThisLeg, !presetEdgePrompt else { return }
+        guard dwellUntil != nil, (zigzag?.column ?? 0) > 0, !ignoreEdgeThisLeg, !presetEdgePrompt
+        else { return }
         let viewClass = engine.guideInfo.viewClass
-        if viewClass == "sample" || viewClass == "thin" {
-            sawSampleInColumn = true
-            noSampleSince = nil
-            return
-        }
         let blank =
             viewClass == "blank"
             || (engine.guideInfo.holdsForPicture && trackingNow == .paused
                 && viewClass != "blurry")
-        guard sawSampleInColumn, blank else {
-            noSampleSince = nil
-            return
-        }
-        let since = noSampleSince ?? Date()
-        noSampleSince = since
-        guard Date().timeIntervalSince(since) >= 0.6 else { return }
-        noSampleSince = nil
-        if restoreAsksEdges {
-            presetEdgePrompt = true
-            if inFlight {
-                client.send(.stop)
-                inFlight = false
-                lastSettledAt = Date()
-            }
-        } else {
-            applyPresetEdge()
-        }
+        edgeWatch.observe(isSample: viewClass == "sample" || viewClass == "thin", isBlank: blank)
     }
 
     private func presetStep() {
-        guard let mapping else { return }
         if zigzag == nil {
             guard !presetFinished else { return }
-            startPreset(mapping)
+            startPreset()
         }
         guard zigzag != nil else { return }
         zigzag?.dwellSeconds = dwellSeconds
         zigzag?.limits = limits
-        zigzag?.mapping = mapping
         zigzag?.chunkDegrees = max(chunkDegrees, 1)
         phase = .presetPath(column: zigzag?.column ?? 0, spot: zigzag?.spot ?? 0)
         if inFlight, Date().timeIntervalSince(moveSentAt) > 5 {
@@ -1206,6 +1262,15 @@ final class AutoStageDriver {
         guard !presetEdgePrompt else { return }
         if let until = dwellUntil {
             guard Date() >= until else { return }
+            if (zigzag?.column ?? 0) > 0, !ignoreEdgeThisLeg, edgeWatch.endStop() {
+                // The third blank stop in a row after sample: the column ends here.
+                if restoreAsksEdges {
+                    presetEdgePrompt = true  // the dwell stays over; Keep going carries on
+                } else {
+                    applyPresetEdge()
+                }
+                return
+            }
             dwellUntil = nil
             presetEvent = .dwellDone
         }
@@ -1230,7 +1295,8 @@ final class AutoStageDriver {
             }
             switch action {
             case .moveTo(let servo, let angle):
-                if sendMove(servo, angle) {
+                // Preset moves say nothing about a mapping: no move check.
+                if sendMove(servo, angle, checked: false) {
                     inFlight = true
                     moveSentAt = Date()
                     movedForStall = true
@@ -1243,6 +1309,7 @@ final class AutoStageDriver {
                 return
             case .dwell(let seconds):
                 dwellUntil = Date().addingTimeInterval(seconds)
+                edgeWatch.beginStop()
                 let detail = "column \(zigzag?.column ?? 0) at \(angleX),\(angleY)"
                 Task {
                     // Another row than preset_path_column, so they do not overwrite each other.
@@ -1252,8 +1319,7 @@ final class AutoStageDriver {
                 return
             case .columnStarted(let column):
                 ignoreEdgeThisLeg = false
-                sawSampleInColumn = false
-                noSampleSince = nil
+                edgeWatch.newColumn()
                 countingColumn = column
                 engine.setExternalCounting(active: true, column: column)
                 engine.logEvent("preset_path_column", detail: "\(column) at \(angleX),\(angleY)")
@@ -1292,11 +1358,11 @@ final class AutoStageDriver {
 
     /// Sends a move and starts checking it: where the picture is now is "before", and what it
     /// shows after the move settled says whether the mapping's direction and size are right.
-    private func sendMove(_ servo: StageAxis, _ angle: Int) -> Bool {
+    private func sendMove(_ servo: StageAxis, _ angle: Int, checked: Bool = true) -> Bool {
         evaluateMoveCheck(force: true)
         guard client.send(.goTo(servo, angle)) else { return false }
         moveCheck = nil
-        if trackingNow == .tracking, let seen = lastTracked,
+        if checked, trackingNow == .tracking, let seen = lastTracked,
             Date().timeIntervalSince(seen.at) < 0.5
         {
             moveCheck = (
@@ -1558,13 +1624,14 @@ extension AutoStageDriver {
     /// Paused in a run that has started: the person may take over.
     var canMoveByHand: Bool {
         controlMode == .autonomous && phase == .paused && client.status == .connected
-            && engine.setupInfo.step == .done && mapping != nil && pathStarted && !presetFinished && !sessionEnded && walkBack == nil
+            && engine.setupInfo.step == .done && canRunPath && pathStarted && !presetFinished
+            && !sessionEnded && walkBack == nil
             && engine.runSummary == nil && !isCalibrating
     }
 
     /// The saved position exists and the stage is connected: it can go back to it.
     var canGoBack: Bool {
-        handState != nil && mapping != nil && client.status == .connected && !isCalibrating
+        handState != nil && canRunPath && client.status == .connected && !isCalibrating
             && (phase == .byHand || phase == .paused)
     }
 
@@ -1723,7 +1790,7 @@ extension AutoStageDriver {
             guard phase == .byHand || phase == .paused || phase == .preparingManual else { return }
             word = "manual"
         } else {
-            guard mapping != nil else { return }
+            guard canRunPath else { return }
             switch phase {
             case .following, .waitingForEdgeAnswer, .atLimit: word = "following"
             case .presetPath: word = "preset"
@@ -1835,6 +1902,8 @@ extension AutoStageDriver {
             manualStageSkipped = false
             mapping = nil  // the old measurement is stale once setup goes back
             mappingSummary = ""
+            presetPrepared = false
+            pathChosen = false
             if phase != .waitingForStageStep || manualStarted {
                 releaseHandArrow()
                 engine.setHandHold(.off)
@@ -1869,14 +1938,57 @@ extension AutoStageDriver {
 
     /// The board still holds an old path: HOME clears it (and moves), then it starts again.
     func goToCentre() {
-        guard controlMode == .manual, manualProblem == .oldPath, phase == .paused,
-            client.status == .connected
+        guard manualProblem == .oldPath, phase == .paused, client.status == .connected
         else { return }
-        prepareManual(centreFirst: true)
+        if controlMode == .manual {
+            prepareManual(centreFirst: true)
+        } else {
+            preparePreset(centreFirst: true)
+        }
     }
 
+    private enum BoardPreparation { case ready, oldPath, noAnswer, interrupted }
+
     /// STOP, then STATUS; the board must be MANUAL and IDLE. An AUTO board with nothing queued
-    /// is put in MANUAL. Nothing moves on the way in, other than HOME on "Go to centre".
+    /// is put in MANUAL. Nothing moves on the way in, other than HOME on "Go to centre". Shared
+    /// by a manual session and by preset moves (both phases are `.preparingManual`).
+    private func prepareBoard(centreFirst: Bool) async -> BoardPreparation {
+        if centreFirst {
+            let homed = await request(.home, timeout: 20) {
+                if case .done = $0 { return true }
+                if case .error = $0 { return false }
+                return nil
+            }
+            guard homed else { return .noAnswer }
+        }
+        client.send(.stop)
+        var report: (mode: StageMode, state: StageRunState, queued: Int)?
+        func askStatus() async -> Bool {
+            await request(.status, timeout: 3) { reply in
+                guard case .status(let mode, let state, _, _, let queued) = reply else {
+                    return nil
+                }
+                report = (mode, state, queued)
+                return true
+            }
+        }
+        guard await askStatus(), var seen = report else { return .noAnswer }
+        if seen.mode == .auto {
+            guard seen.state == .idle, seen.queued == 0 else { return .oldPath }
+            let manual = await request(.mode(.manual), timeout: 3) {
+                if case .ok(let text) = $0, text.hasPrefix("MODE") { return true }
+                if case .error = $0 { return false }  // ERR BUSY
+                return nil
+            }
+            guard manual else { return .oldPath }
+            guard await askStatus(), let again = report else { return .noAnswer }
+            seen = again
+        }
+        guard seen.mode == .manual, seen.state == .idle else { return .noAnswer }
+        guard phase == .preparingManual, client.status == .connected else { return .interrupted }
+        return .ready
+    }
+
     private func prepareManual(centreFirst: Bool = false) {
         guard !manualPreparing else { return }
         manualPreparing = true
@@ -1885,39 +1997,12 @@ extension AutoStageDriver {
         phase = .preparingManual
         Task {
             defer { manualPreparing = false }
-            if centreFirst {
-                let homed = await request(.home, timeout: 20) {
-                    if case .done = $0 { return true }
-                    if case .error = $0 { return false }
-                    return nil
-                }
-                guard homed else { return manualFailed(.noAnswer) }
+            switch await prepareBoard(centreFirst: centreFirst) {
+            case .oldPath: return manualFailed(.oldPath)
+            case .noAnswer: return manualFailed(.noAnswer)
+            case .interrupted: return
+            case .ready: break
             }
-            client.send(.stop)
-            var report: (mode: StageMode, state: StageRunState, queued: Int)?
-            func askStatus() async -> Bool {
-                await request(.status, timeout: 3) { reply in
-                    guard case .status(let mode, let state, _, _, let queued) = reply else {
-                        return nil
-                    }
-                    report = (mode, state, queued)
-                    return true
-                }
-            }
-            guard await askStatus(), var seen = report else { return manualFailed(.noAnswer) }
-            if seen.mode == .auto {
-                guard seen.state == .idle, seen.queued == 0 else { return manualFailed(.oldPath) }
-                let manual = await request(.mode(.manual), timeout: 3) {
-                    if case .ok(let text) = $0, text.hasPrefix("MODE") { return true }
-                    if case .error = $0 { return false }  // ERR BUSY
-                    return nil
-                }
-                guard manual else { return manualFailed(.oldPath) }
-                guard await askStatus(), let again = report else { return manualFailed(.noAnswer) }
-                seen = again
-            }
-            guard seen.mode == .manual, seen.state == .idle else { return manualFailed(.noAnswer) }
-            guard phase == .preparingManual, client.status == .connected else { return }
             engine.setHandHold(.on)
             stallWatch = StageStallWatch()
             hand.reset()
@@ -1928,6 +2013,38 @@ extension AutoStageDriver {
             dismissHandFocusReminder()
             engine.logEvent("control_manual_start", detail: "\(angleX),\(angleY)")
             phase = .byHand
+        }
+    }
+
+    /// Preset moves: the board made ready as for a manual session, and nothing else. No HOME, no
+    /// warm-up, no calibration, no move: the path starts with the run.
+    private func preparePreset(centreFirst: Bool = false) {
+        guard !manualPreparing else { return }
+        presetPrepared = false
+        manualPreparing = true
+        manualProblem = nil
+        userPaused = false
+        phase = .preparingManual
+        Task {
+            defer { manualPreparing = false }
+            switch await prepareBoard(centreFirst: centreFirst) {
+            case .oldPath: return manualFailed(.oldPath)
+            case .noAnswer: return manualFailed(.noAnswer)
+            case .interrupted: return
+            case .ready: break
+            }
+            presetPrepared = true
+            inFlight = false
+            enterPathPhase()
+        }
+    }
+
+    /// Ready to run: waits for Start scan in the guided scan, otherwise the path begins.
+    private func enterPathPhase() {
+        if requiresRunStart, !runBegun {
+            phase = .readyToStart
+        } else {
+            phase = pathMode == .presetPath ? .presetPath(column: 0, spot: 0) : .following
         }
     }
 
@@ -1947,8 +2064,8 @@ extension AutoStageDriver {
     var canBackToManual: Bool {
         guard controlMode == .autonomous, !runBegun, !pathStarted else { return false }
         switch phase {
-        case .readyToStart, .calibrated, .waitingForFocus, .failed, .warmingUp, .calibrating,
-            .paused:
+        case .choosingPath, .readyToStart, .calibrated, .waitingForFocus, .failed, .warmingUp,
+            .calibrating, .paused:
             return true
         default: return false
         }
@@ -1970,10 +2087,62 @@ extension AutoStageDriver {
         phase = .waitingForStageStep  // manualTick takes it from here, once a measurement is over
     }
 
-    /// Switch to autonomous. Not calibrated yet: the stage goes to its centre, warms up and
-    /// calibrates like a normal start, after the person says the picture is sharp. Calibrated
-    /// already (this test measured once): nothing is measured again. `path` nil leaves the path
-    /// to be chosen later.
+    /// "Try again" after a failed calibration: measures again for Follow the guide (the path
+    /// stays chosen).
+    func retryCalibration() {
+        guard case .failed = phase else { return }
+        recalibrate()
+        pathChosen = true
+    }
+
+    /// The path can still be chosen or changed: before the run, outside a measurement.
+    var canChoosePath: Bool {
+        guard controlMode == .autonomous, !runBegun, !pathStarted else { return false }
+        switch phase {
+        case .choosingPath, .readyToStart, .calibrated, .failed, .waitingForFocus, .paused:
+            return true
+        default: return false
+        }
+    }
+
+    /// The guided scan's path. Preset moves: the board is made ready, nothing is measured.
+    /// Follow the guide: measured once per test (an existing measurement stands; without one the
+    /// stage step is reopened if the identity axes stand, and it calibrates like a normal start).
+    func choosePath(_ path: StagePathMode) {
+        guard canChoosePath else { return }
+        pathChosen = true
+        userPaused = false
+        manualProblem = nil
+        restartNotice = nil
+        if path != pathMode { setPathMode(path) }
+        switch path {
+        case .presetPath:
+            presetPrepared = false
+            phase = .waitingForStageStep  // tick skips the stage step and prepares the board
+        case .followGuide:
+            if mapping != nil {
+                if requiresRunStart, !runBegun {
+                    phase = .readyToStart
+                } else {
+                    // As after a hand return: the focus is checked, then the path goes on.
+                    engine.setHandHold(.checkingFocus)
+                    checkingSince = Date()
+                    phase = .checkingFocus
+                }
+            } else {
+                presetStageSkipped = false
+                if engine.setupInfo.step == .done {
+                    engine.reopenStage()  // the identity axes were taken: measure for real
+                    awaitingReopen = true
+                }
+                phase = .waitingForStageStep
+            }
+        }
+    }
+
+    /// Switch to autonomous. Nothing moves and nothing is measured here: the path is chosen next
+    /// (`path` nil: the page asks; the lab passes one). Follow the guide without a measurement
+    /// asks the person to say the picture is sharp first, as they may have moved out of focus.
     func switchToAutonomous(_ path: StagePathMode?) {
         guard canSwitchToAutonomous else { return }
         releaseHandArrow()
@@ -1985,25 +2154,15 @@ extension AutoStageDriver {
         restartNotice = nil
         savedAngles = nil
         handNote = ""
-        if let path { pathMode = path }
-        guard mapping != nil else {
-            engine.setHandHold(.off)
-            engine.logEvent("control_switch_autonomous", detail: path?.rawValue ?? "")
-            engine.reopenStage()
-            needsSharpTap = true
-            phase = .waitingForFocus
-            return
-        }
-        engine.logEvent("control_switch_autonomous", detail: "calibrated")
+        engine.setHandHold(.off)
+        presetPrepared = false
+        pathChosen = false
+        needsSharpTap = mapping == nil
+        engine.logEvent(
+            "control_switch_autonomous",
+            detail: mapping != nil ? "calibrated" : (path?.rawValue ?? ""))
         engine.restartGuide()
-        if requiresRunStart, !runBegun {
-            engine.setHandHold(.off)
-            phase = .readyToStart
-        } else {
-            // As after a hand return: the focus is checked, then the path goes on.
-            engine.setHandHold(.checkingFocus)
-            checkingSince = Date()
-            phase = .checkingFocus
-        }
+        phase = .choosingPath
+        if let path { choosePath(path) }
     }
 }

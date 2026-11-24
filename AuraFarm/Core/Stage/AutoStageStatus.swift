@@ -129,6 +129,8 @@ struct AutoStageStatus: Equatable {
             }
         case .paused:
             status.title = "Paused"
+        case .choosingPath:
+            status.title = "Choose the path"
         case .preparingManual:
             status.title = "Getting the stage ready"
         case .byHand:

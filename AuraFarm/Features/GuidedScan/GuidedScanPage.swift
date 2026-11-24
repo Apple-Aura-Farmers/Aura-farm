@@ -33,7 +33,10 @@ struct GuidedScanPage: View {
     @State private var objective = StageObjective.x40
     @State private var driver: AutoStageDriver?
     @State private var stageConnected = false
-    @State private var pathChoice = StagePathMode.followGuide
+    @State private var pathChoice = StagePathMode.presetPath
+    /// A calibration failure being told to the person (shown once per failure).
+    @State private var failureKind: AutoStageDriver.CalibrationFailureKind?
+    @State private var alertedFailures = 0
     /// Autonomous or manual with the Terraloka Stage; Autonomous every time the page opens.
     @State private var controlChoice = StageControlMode.autonomous
     @State private var isConfirmingSwitch = false
@@ -131,6 +134,35 @@ struct GuidedScanPage: View {
                 // autonomous run records afresh (the settings sync starts it).
                 if manual, !hasStarted { model.discardLensVideo() }
             }
+            .onChange(of: driver?.calibrationFailureCount) { _, count in
+                guard let driver, let count, count > alertedFailures, case .failed = driver.phase
+                else { return }
+                alertedFailures = count
+                failureKind = driver.lastCalibrationFailure
+                model.logEvent(
+                    "calibration_failed_popup",
+                    detail: failureKind == .board ? "board" : "tracking")
+            }
+            .alert(
+                "Calibration didn't work",
+                isPresented: Binding(
+                    get: { failureKind != nil }, set: { if !$0 { failureKind = nil } }),
+                presenting: failureKind
+            ) { kind in
+                if kind == .tracking {
+                    Button("Use preset moves") {
+                        logPopup(kind, "use_preset_moves")
+                        usePresetMoves()
+                    }
+                }
+                Button("Try again") {
+                    logPopup(kind, "try_again")
+                    driver?.retryCalibration()
+                }
+                Button("Cancel", role: .cancel) { logPopup(kind, "cancel") }
+            } message: { kind in
+                Text(failureMessage(kind))
+            }
             .onChange(of: driver?.client.status) { _, status in
                 guard status == .connected, !stageConnected else { return }
                 stageConnected = true
@@ -151,13 +183,19 @@ struct GuidedScanPage: View {
     /// Top to bottom, nothing overlapping: the top bar, the picture (it shrinks first), the speed
     /// bar, and the instruction card in space of its own that nothing is drawn over.
     private var scanBody: some View {
-        ScanLayoutView {
-            // Above the picture for touches too, whatever the picture does.
-            topLine.zIndex(1)
-        } picture: {
-            picture
-        } bottom: {
-            bottom
+        Group {
+            if stageMode == .undecided {
+                choicePage
+            } else {
+                ScanLayoutView {
+                    // Above the picture for touches too, whatever the picture does.
+                    topLine.zIndex(1)
+                } picture: {
+                    picture
+                } bottom: {
+                    bottom
+                }
+            }
         }
         .background(.black)
         .foregroundStyle(.white)
@@ -171,6 +209,23 @@ struct GuidedScanPage: View {
             guard let record else { return }
             save(record)
         }
+    }
+
+    /// "How will the slide move?": a page of its own, without the camera picture.
+    private var choicePage: some View {
+        ScrollView {
+            VStack(spacing: 10) {
+                if let problem = cameraProblem {
+                    Text(problem).font(.subheadline).foregroundStyle(.red)
+                }
+                StageModeChoiceView(
+                    selection: $modeChoice, objective: $objective, control: $controlChoice,
+                    onContinue: continueFromChoice)
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 8)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     /// Setup: "Step 2 of 4: Find the eyepiece" and More. The scan: the organism total, "Column 3 of
@@ -383,9 +438,7 @@ struct GuidedScanPage: View {
             }
             switch stageMode {
             case .undecided:
-                StageModeChoiceView(
-                    selection: $modeChoice, objective: $objective, control: $controlChoice,
-                    onContinue: continueFromChoice)
+                EmptyView()  // a page of its own: `choicePage`
             case .terraloka where !stageConnected:
                 StageConnectingCard(
                     client: driver?.client.status ?? .idle,
@@ -430,9 +483,102 @@ struct GuidedScanPage: View {
     private func calibrationCard(_ driver: AutoStageDriver) -> some View {
         StageCalibrationCard(
             status: driver.status, isPaused: driver.phase == .paused,
-            onRetry: { driver.recalibrate() }, onResume: { driver.resume() },
+            onRetry: { driver.retryCalibration() }, onResume: { driver.resume() },
             onFocused: { driver.focusIsSharp() },
-            onBackToManual: driver.canBackToManual ? { driver.backToManual() } : nil)
+            onBackToManual: driver.canBackToManual ? { driver.backToManual() } : nil,
+            onUsePreset: driver.lastCalibrationFailure == .tracking
+                ? { usePresetMoves() } : nil)
+    }
+
+    private func logPopup(_ kind: AutoStageDriver.CalibrationFailureKind, _ button: String) {
+        model.logEvent(
+            "calibration_failed_popup",
+            detail: "\(kind == .board ? "board" : "tracking"): \(button)")
+    }
+
+    private func failureMessage(_ kind: AutoStageDriver.CalibrationFailureKind) -> String {
+        switch kind {
+        case .tracking:
+            "There is too little sample in view for the camera to track the movement reliably. Preset moves don't need calibration, so you can use them instead."
+        case .board:
+            if case .failed(let reason)? = driver?.phase { reason } else { "The stage did not answer." }
+        }
+    }
+
+    /// Calibration did not work: preset moves instead. The board is made ready; nothing moves.
+    private func usePresetMoves() {
+        pathChoice = .presetPath
+        driver?.choosePath(.presetPath)
+    }
+
+    /// The path card follows what is chosen: preset moves prepare the board at once; Follow the
+    /// guide waits for its button, unless it is measured already.
+    private func syncPathChoice(_ driver: AutoStageDriver) {
+        guard driver.canChoosePath else { return }
+        switch pathChoice {
+        case .presetPath:
+            if driver.pathMode != .presetPath || driver.phase == .choosingPath {
+                driver.choosePath(.presetPath)
+            }
+        case .followGuide:
+            if driver.isCalibrated, driver.pathMode != .followGuide || driver.phase == .choosingPath {
+                driver.choosePath(.followGuide)
+            }
+        }
+    }
+
+    /// Step 4 in an autonomous test: the path first; calibration only if Follow the guide asks.
+    @ViewBuilder
+    private func pathCards(_ driver: AutoStageDriver) -> some View {
+        switch driver.phase {
+        case .choosingPath, .readyToStart, .calibrated, .preparingManual, .waitingForStageStep:
+            pathCard(driver)
+        case .paused where driver.manualProblem != nil:
+            pathCard(driver)
+        default:
+            calibrationCard(driver)
+        }
+    }
+
+    private func pathCard(_ driver: AutoStageDriver) -> some View {
+        let isConnected = driver.client.status == .connected
+        return VStack(spacing: 10) {
+            StagePathChoiceView(pathMode: $pathChoice, coverage: $coverage, objective: objective)
+            if driver.phase == .preparingManual {
+                Text("Getting the stage ready…").font(.subheadline).foregroundStyle(.secondary)
+            }
+            switch driver.manualProblem {
+            case .oldPath?:
+                Text("The stage still holds an old path. Go to centre clears it.")
+                    .font(.subheadline)
+                bigButton("Go to centre") { driver.goToCentre() }
+            case .noAnswer?:
+                Text("The stage did not answer").font(.subheadline)
+                bigButton("Retry") { driver.resume() }
+            case nil:
+                EmptyView()
+            }
+            recordVideoToggle
+            if pathChoice == .followGuide, !driver.isCalibrated {
+                bigButton(
+                    "Calibrate and continue",
+                    isEnabled: isConnected && driver.phase != .preparingManual
+                ) { driver.choosePath(.followGuide) }
+            } else {
+                bigButton(
+                    "Start scan", isEnabled: isConnected && driver.phase == .readyToStart,
+                    action: startScan)
+            }
+            if !isConnected {
+                Text("Waiting for the stage to reconnect…")
+                    .font(.subheadline).foregroundStyle(.secondary)
+            }
+            if driver.canBackToManual {
+                bigButton("Back to manual", isProminent: false) { driver.backToManual() }
+            }
+        }
+        .onChange(of: pathChoice) { syncPathChoice(driver) }
+        .onChange(of: driver.phase, initial: true) { syncPathChoice(driver) }
     }
 
     /// A manual session: look only. The pad, and the ways to carry on or switch.
@@ -491,23 +637,8 @@ struct GuidedScanPage: View {
                 manualCards(driver)
             } else {
             switch stage {
-            case .stage:
-                calibrationCard(driver)
-            case .ready where !driver.isCalibrated:
-                // "Skip setup" jumps over the stage step: the stage measures itself here.
-                calibrationCard(driver)
-            case .ready:
-                StagePathChoiceView(pathMode: $pathChoice, coverage: $coverage, objective: objective)
-                recordVideoToggle
-                let isConnected = driver.client.status == .connected
-                bigButton("Start scan", isEnabled: isConnected, action: startScan)
-                if !isConnected {
-                    Text("Waiting for the stage to reconnect…")
-                        .font(.subheadline).foregroundStyle(.secondary)
-                }
-                if driver.canBackToManual {
-                    bigButton("Back to manual", isProminent: false) { driver.backToManual() }
-                }
+            case .stage, .ready:
+                pathCards(driver)
             default:
                 if status.needsPerson == .disconnected {
                     StageRunStatusCard(
@@ -534,6 +665,16 @@ struct GuidedScanPage: View {
         return false
     }
 
+    /// Step 4 of an autonomous test before any calibration really runs.
+    private var isChoosingPath: Bool {
+        guard let driver, driver.controlMode == .autonomous, stage == .stage || stage == .ready
+        else { return false }
+        switch driver.phase {
+        case .warmingUp, .calibrating, .failed, .waitingForFocus: return false
+        default: return true
+        }
+    }
+
     /// A look with the Terraloka Stage's arrows: nothing is counted and nothing is saved.
     private var isManualSession: Bool { isTerraloka && driver?.controlMode == .manual }
 
@@ -546,7 +687,7 @@ struct GuidedScanPage: View {
         }
     }
 
-    /// The Fixed sweep: the stage's own columns, not the guide's.
+    /// The preset moves: the stage's own columns, not the guide's.
     private var isFixedSweep: Bool { isTerraloka && driver?.pathMode == .presetPath }
 
     /// No setup step advances until a mode is chosen and, for the stage, it is connected.
@@ -563,6 +704,7 @@ struct GuidedScanPage: View {
         case .undecided: "Start"
         case .terraloka where !stageConnected: "Connecting"
         case .terraloka where isManualSession && (stage == .stage || stage == .ready): "Manual"
+        case .terraloka where isChoosingPath: "Step 4 of \(GuidedScanSetupStage.stepCount): Choose the path"
         default: stage.indicator(automatedStage: isTerraloka)
         }
     }
@@ -678,7 +820,7 @@ struct GuidedScanPage: View {
         details.recordedAt = .now
         if let driver, case .terraloka = stageMode {
             driver.setPathMode(pathChoice)
-            // The Fixed sweep covers the stage's own range: the run ends when the stage's path
+            // The preset moves covers the stage's own range: the run ends when the stage's path
             // does, not when the guide's plan does.
             model.setFinishesOnlyOnRequest(pathChoice == .presetPath)
             session.reportsWords = false

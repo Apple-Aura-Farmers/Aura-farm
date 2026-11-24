@@ -5,7 +5,7 @@ import Foundation
 enum StagePathMode: String, CaseIterable {
     case followGuide, presetPath
 
-    var title: String { self == .followGuide ? "Follow guide" : "Follow preset path" }
+    var title: String { self == .followGuide ? "Follow guide" : "Preset moves" }
 }
 
 /// The zig-zag laid out from the servo mapping: columns run up and down the screen like the
@@ -27,6 +27,19 @@ struct StageZigzagPlan: Equatable {
     var stepStartsHigh: Bool
     /// The two servos' roles were exchanged after the first column ran sideways.
     var rolesSwapped = false
+
+    /// The path without calibration: servo Y walks the columns, servo X steps across, with the
+    /// arrows' own directions (Up is more Y degrees, Left fewer X degrees, unless flipped), so it
+    /// starts at the screen's top left.
+    init(objective: StageObjective, flipX: Bool, flipY: Bool) {
+        rolesSwapped = false
+        legServo = .y
+        stepServo = .x
+        legFieldsPerDegree = objective.nominalFieldsPerDegree
+        stepFieldsPerDegree = objective.nominalFieldsPerDegree
+        legStartsHigh = !flipY
+        stepStartsHigh = flipX
+    }
 
     /// - Parameter swappingRoles: the other servo walks the columns (the first-column check).
     init?(mapping: StageServoMapping, swappingRoles: Bool = false) {

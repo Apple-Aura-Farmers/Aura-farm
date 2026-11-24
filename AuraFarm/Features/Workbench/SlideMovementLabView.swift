@@ -756,7 +756,7 @@
         var onStart: (StageObjective, StagePathMode, StageControlMode) -> Void
         @Environment(\.dismiss) private var dismiss
         @AppStorage("slideLab.stageObjective") private var objectiveName = StageObjective.x40.rawValue
-        @AppStorage("slideLab.stagePathMode") private var pathModeName = StagePathMode.followGuide.rawValue
+        @AppStorage("slideLab.stagePathMode") private var pathModeName = StagePathMode.presetPath.rawValue
         @AppStorage("slideLab.stageControl") private var controlName = StageControlMode.autonomous.rawValue
         private var control: StageControlMode { StageControlMode(rawValue: controlName) ?? .autonomous }
 
@@ -784,7 +784,7 @@
                         Picker(
                             "Path",
                             selection: Binding(
-                                get: { StagePathMode(rawValue: pathModeName) ?? .followGuide },
+                                get: { StagePathMode(rawValue: pathModeName) ?? .presetPath },
                                 set: { pathModeName = $0.rawValue })
                         ) {
                             ForEach(StagePathMode.allCases, id: \.self) { Text($0.title).tag($0) }
@@ -805,7 +805,7 @@
                         Button("Start") {
                             onStart(
                                 StageObjective(rawValue: objectiveName) ?? .x40,
-                                StagePathMode(rawValue: pathModeName) ?? .followGuide, control)
+                                StagePathMode(rawValue: pathModeName) ?? .presetPath, control)
                             dismiss()
                         }
                     }

@@ -8,6 +8,12 @@ enum StageObjective: String, CaseIterable {
     var title: String { self == .x40 ? "40x" : "100x" }
 
     /// The smallest step (degrees) that moves the stage at all: a degree barely moves it at 100x.
+    /// How far the picture moves per degree of either servo, nominally, for a preset path that
+    /// is not calibrated: only the degree fallbacks use it (stop spacing without a tracked
+    /// position). PLACEHOLDER: 100x from the 22 Nov runs (X 0.070 to 0.091, Y 0.047 to 0.096);
+    /// 40x is the 100x value scaled by magnification, not measured.
+    var nominalFieldsPerDegree: Double { self == .x100 ? 0.075 : 0.03 }
+
     var minChunk: Int { self == .x40 ? 1 : 2 }
 
     var defaultChunk: Int { self == .x40 ? 3 : 2 }

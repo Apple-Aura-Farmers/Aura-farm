@@ -76,7 +76,7 @@ struct GuideRunRecord: Codable, Equatable {
         let path =
             switch pathMode {
             case "followGuide": "Follow the guide"
-            case "presetPath": "Fixed sweep"
+            case "presetPath": "Preset moves"
             default: nil as String?
             }
         return (["Terraloka Stage"] + [objective, path].compactMap { $0 }).joined(separator: " · ")

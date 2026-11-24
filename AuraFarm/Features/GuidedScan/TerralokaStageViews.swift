@@ -148,6 +148,8 @@ struct StageCalibrationCard: View {
     var onFocused: () -> Void = {}
     /// Before the run: give up measuring and steer by hand instead; nil hides it.
     var onBackToManual: (() -> Void)?
+    /// After a calibration that could not track the picture: preset moves need none.
+    var onUsePreset: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -162,6 +164,9 @@ struct StageCalibrationCard: View {
                     .buttonStyle(.borderedProminent)
             } else if status.needsPerson != nil {
                 Button("Retry", action: onRetry).buttonStyle(.borderedProminent)
+                if let onUsePreset {
+                    Button("Use preset moves", action: onUsePreset).buttonStyle(.bordered).tint(.white)
+                }
             } else if isPaused {
                 Button("Resume", action: onResume).buttonStyle(.borderedProminent)
             }
@@ -183,9 +188,14 @@ struct StagePathChoiceView: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("How should the stage cover the slide?").font(.title3.weight(.bold))
             StageOptionRow(
+                title: "Preset moves",
+                subtitle: "Sweeps the whole stage range in even columns. No calibration needed.",
+                badge: "Recommended", isSelected: pathMode == .presetPath
+            ) { pathMode = .presetPath }
+            StageOptionRow(
                 title: "Follow the guide",
-                subtitle: "Follows the live guide and finds the sample's edges as it goes.",
-                badge: "Recommended", isSelected: pathMode == .followGuide
+                subtitle: "Follows the live guide. Needs calibration.",
+                badge: nil, isSelected: pathMode == .followGuide
             ) { pathMode = .followGuide }
             if pathMode == .followGuide {
                 ForEach(GuidedScanCoverage.allCases) { option in
@@ -197,10 +207,6 @@ struct StagePathChoiceView: View {
                     ) { coverage = option }
                 }
             }
-            StageOptionRow(
-                title: "Fixed sweep", subtitle: "Sweeps the whole stage range in even columns.",
-                badge: nil, isSelected: pathMode == .presetPath
-            ) { pathMode = .presetPath }
         }
         .stageCard()
     }
@@ -226,7 +232,7 @@ struct StageProgressBar: View {
 struct StageRunStatusCard: View {
     var status: AutoStageStatus
     var isPaused: Bool
-    /// The Fixed sweep's progress; nil hides the bar.
+    /// The preset moves' progress; nil hides the bar.
     var progress: StageZigzagProgress?
     var actions: [(title: String, run: () -> Void)]
     var onPause: () -> Void

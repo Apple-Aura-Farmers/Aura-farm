@@ -124,7 +124,7 @@ final class GuideRunRecordTests: XCTestCase {
         let data = try GuideRunRecord.encoder().encode(original)
         let back = try GuideRunRecord.decoder().decode(GuideRunRecord.self, from: data)
         XCTAssertEqual(back, original)
-        XCTAssertEqual(back.stageLine, "Terraloka Stage · 100x · Fixed sweep")
+        XCTAssertEqual(back.stageLine, "Terraloka Stage · 100x · Preset moves")
         original.pathMode = "followGuide"
         original.objective = "40x"
         XCTAssertEqual(original.stageLine, "Terraloka Stage · 40x · Follow the guide")
