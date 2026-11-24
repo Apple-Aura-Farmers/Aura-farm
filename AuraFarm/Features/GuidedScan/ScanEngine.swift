@@ -1814,7 +1814,7 @@ extension ScanEngine: AVCaptureVideoDataOutputSampleBufferDelegate {
             guideEdgePoints = result.edgeTrailPoints
             let control = SlideMovementInfo.RunControl(
                 pendingEnd: dryRun.pendingEnd, columnInProgress: dryRun.columnInProgress,
-                isFinished: dryRun.isFinished)
+                isFinished: !runIsOpen)
             if control != lastRunControl {
                 lastRunControl = control
                 DispatchQueue.main.async { [weak self] in self?.runControl = control }

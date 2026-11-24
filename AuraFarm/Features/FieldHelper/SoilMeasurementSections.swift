@@ -20,6 +20,7 @@ struct SoilMeasurementSections: View {
                     } label: {
                         BiodiversityRow(test: biodiversity)
                     }
+                    .auraCardRow()
                 }
             }
             npk
@@ -29,16 +30,26 @@ struct SoilMeasurementSections: View {
         }
     }
 
+    @ViewBuilder
     var date: some View {
-        Section {
-            if isEditable {
+        if isEditable {
+            Section {
                 DatePicker(
                     "Measured on", selection: $draft.measuredAt, in: ...Date.now,
                     displayedComponents: .date)
-            } else {
-                LabeledContent(
-                    "Last measured on", value: draft.measuredAt.formatted(date: .abbreviated, time: .omitted))
             }
+            .auraCardRow()
+        } else {
+            Section {
+                LabeledContent(
+                    "Last Measured",
+                    value: draft.measuredAt.formatted(date: .abbreviated, time: .omitted)
+                )
+                .font(.subheadline)
+                .frame(minHeight: 47 - 24)
+            }
+            // The same card and corners as the biodiversity result above it.
+            .auraCardRow()
         }
     }
 

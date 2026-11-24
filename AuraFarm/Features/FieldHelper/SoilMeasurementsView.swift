@@ -31,6 +31,7 @@ struct SoilMeasurementsView: View {
     @State private var isSaving = false
     /// Opening an existing reading shows it read-only until Edit is tapped; a new one has nothing to read yet.
     @State private var isEditing: Bool
+    @State private var keyboardShown = false
 
     init(farmID: UUID, plotID: UUID, entryID: UUID? = nil, day: Date? = nil) {
         self.farmID = farmID
@@ -110,13 +111,21 @@ struct SoilMeasurementsView: View {
                 Group {
                     biodiversity(for: farm)
                     SoilMeasurementSections(draft: $draft, isEditable: isEditing)
-                    advice(for: farm)
+                    if !isEditing { advice(for: farm) }
                     problems
                 }
-                .listRowBackground(Color.auraRow)
+                .listRowBackground(Color.auraCard)
+            }
+            .listSectionSpacing(12)
+            // The button rides above the keyboard and covers the field being typed in.
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+                keyboardShown = true
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+                keyboardShown = false
             }
             .safeAreaInset(edge: .bottom) {
-                if labTests?.isEmpty == false || SoilInputs(draft) != nil {
+                if !isEditing, !keyboardShown, labTests?.isEmpty == false || SoilInputs(draft) != nil {
                     Button {
                         withAnimation { proxy.scrollTo(Self.adviceID, anchor: .top) }
                     } label: {
@@ -149,6 +158,7 @@ struct SoilMeasurementsView: View {
                 } label: {
                     BiodiversityRow(test: latest, others: (labTests?.count ?? 1) - 1)
                 }
+                .auraCardRow()
             } else if labTests == nil {
                 ProgressView()
             } else {
@@ -263,7 +273,8 @@ struct BiodiversityRow: View {
                 EmptyView()
             } currentValueLabel: {
                 Text(test.result.totalCount ?? 0, format: .number)
-                    .font(.footnote)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(test.estimate.level.tint)
             }
             .gaugeStyle(.accessoryCircularCapacity)
             .tint(test.estimate.level.tint)
@@ -273,7 +284,7 @@ struct BiodiversityRow: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(test.estimate.level.title)
-                    .font(.headline)
+                    .font(.body)
                 Text("Confidence: \(test.estimate.confidence.label)")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
@@ -290,7 +301,7 @@ struct BiodiversityRow: View {
                     .accessibilityLabel("\(others) more tests")
             }
         }
-        .padding(.vertical, 6)
+        .padding(.vertical, 12)
     }
 }
 

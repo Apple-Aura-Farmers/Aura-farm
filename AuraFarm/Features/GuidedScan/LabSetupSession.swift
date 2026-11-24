@@ -52,6 +52,8 @@ struct LabSetupInfo: Equatable {
     var focusSquare: CGRect?
     /// The focus tiles on this frame, for the log and the readout only.
     var focusTiles: FocusTilesReading?
+    /// The round view the focus is measured in, frame pixels; nil outside the focus step.
+    var focusCircle: FieldCircle?
     /// Where setup goes after align passes again, when alignment was lost; nil otherwise.
     var resumeStep: LabSetupStep?
     /// The stage step's progress, and the measured axes once known (the identity when
@@ -410,6 +412,7 @@ final class LabSetupSession {
             step: flow.step, frameSize: frameSize, alignment: reading, trend: alignment.trend,
             isAlignmentPassed: alignment.isPassed, focus: focusReading, focusDial: dialReading,
             focusSquare: square, focusTiles: tilesReading,
+            focusCircle: flow.step == .focus ? confirmedFieldCircle ?? lastPassingCircle : nil,
             resumeStep: flow.resumeStep)
         info.focusFound = focusFound
         return info
