@@ -105,6 +105,15 @@ extension FarmStore {
         do {
             if let soil {
                 try await uploader.upload(soil, forPlot: plot.id, inFarm: farm.id)
+                // The soil itself is registered here, so a counted test sent later has a
+                // sample to be filed against rather than failing for want of one. Both sides
+                // name it after the farmer, which is what `SampleDetails.use(_:of:)` puts on
+                // a sweep, so the operator's send finds this row instead of making its own.
+                if let registrar = SampleRegistrar() {
+                    try await registrar.sampleID(
+                        forCode: farm.farmerName, plotID: plot.id,
+                        place: plot.locationDescription, at: soil.measuredAt)
+                }
             } else {
                 try await uploader.delete(id)
             }
