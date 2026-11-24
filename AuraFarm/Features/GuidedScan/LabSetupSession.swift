@@ -139,6 +139,8 @@ final class LabSetupSession {
     /// and the overlays carry on.
     var isHeld = false
     private var stepConfirmed = false
+    /// See `acceptFocus`.
+    private var personSaysSharp = false
     /// The round view the person confirmed, which focus is measured inside.
     private var confirmedFieldCircle: FieldCircle?
     private var frameCounter = 0
@@ -205,6 +207,13 @@ final class LabSetupSession {
     func confirmStep() {
         guard !isHeld else { return }
         stepConfirmed = true
+    }
+
+    /// The person says the picture is sharp although the checks have not found it so: the focus
+    /// step moves on.
+    func acceptFocus() {
+        guard !isHeld, flow.step == .focus else { return }
+        personSaysSharp = true
     }
 
     /// Back to align: the checks start afresh and the stage is forgotten.
@@ -386,9 +395,11 @@ final class LabSetupSession {
             resumingAfterLoss = true
             focusReading = nil
         } else if flow.update(
-            focused: focusReading?.state == .focused && focusFadedSince == nil && canAdvance)
+            focused: personSaysSharp && !isHeld
+                || focusReading?.state == .focused && focusFadedSince == nil && canAdvance)
         {
             stepConfirmed = false
+            personSaysSharp = false
             focusFound = true
             monitor.setFocusBaseline(median(focusIndexes.map(\.value)))
             // Tracking starts afresh for the stage step: the picture is sharper than the anchor
@@ -446,6 +457,7 @@ final class LabSetupSession {
     /// stays found, otherwise the focus guide starts afresh.
     private func enterFocus() {
         stepConfirmed = false
+        personSaysSharp = false
         if !(resumingAfterLoss && focusWasFocused) {
             resetFocus()
             focusWasFocused = false

@@ -15,6 +15,8 @@ struct SoilResultUploader {
         /// No row in `soil_samples` has this `sample_code`, and the sweep names no plot to
         /// register one against: it was recorded before plots could be chosen.
         case noSuchSample(code: String)
+        /// The operator's own sample: it has no farm to be filed under.
+        case ownSample
         /// The result is in the records, but some of its pictures are not.
         case picturesNotSent(missing: Int, of: Int, reason: String)
 
@@ -22,6 +24,8 @@ struct SoilResultUploader {
             switch self {
             case .notConfigured:
                 return "This build is not set up to send tests."
+            case .ownSample:
+                return "This is your own sample. Only tests of a farm can be uploaded."
             case .noSuchSample(let code):
                 return """
                     No sample is registered as \(code), and this test names no plot, \
@@ -51,6 +55,8 @@ struct SoilResultUploader {
     /// sending the same sweep twice updates its row instead of making a second one, which is
     /// what a helper retrying on a bad connection needs.
     func upload(_ report: SoilReport, from details: SampleDetails? = nil) async throws {
+        // Never matched by its name alone: that could be a farm's sample with the same name.
+        if details?.isOwnSample == true { throw Failure.ownSample }
         let code = report.sample.sampleID.trimmingCharacters(in: .whitespacesAndNewlines)
         let sampleID = try await sampleID(forCode: code, from: details, at: report.sample.recordedAt)
         try await client

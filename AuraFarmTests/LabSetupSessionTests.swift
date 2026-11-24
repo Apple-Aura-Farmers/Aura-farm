@@ -171,6 +171,17 @@ final class LabSetupSessionTests: XCTestCase {
         XCTAssertTrue(session.skipsAllChecks)
     }
 
+    func testThePersonCanSayItIsSharp() {
+        let pipeline = makePipeline()
+        let session = LabSetupSession()
+        let time = reachFocus(session: session, pipeline: pipeline)
+        session.confirmsSteps = true
+        session.acceptFocus()
+        feed(texturedFrame(60), for: 0.3, from: time, session: session, pipeline: pipeline)
+        XCTAssertEqual(session.step, .stage)
+        XCTAssertTrue(session.info.focusFound)
+    }
+
     func testFocusIsNotFoundWhenItWasSkipped() {
         let skipping = LabSetupSession(skippingAlignAndFocus: true)
         let pipeline = makePipeline()

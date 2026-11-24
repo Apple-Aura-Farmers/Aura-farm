@@ -383,6 +383,11 @@ class ScanEngine: NSObject {
         analysisQueue.async { [weak self] in self?.setup.confirmStep() }
     }
 
+    /// "It's sharp, continue" on the focus step.
+    func acceptFocus() {
+        analysisQueue.async { [weak self] in self?.setup.acceptFocus() }
+    }
+
     /// Whether the guide pauses on the run monitor's say.
     func setPausesOnMonitor(_ pauses: Bool) {
         pausesOnMonitor = pauses

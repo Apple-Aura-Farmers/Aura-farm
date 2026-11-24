@@ -95,6 +95,10 @@ struct SampleDetails: Codable, Equatable {
             && !(location ?? "").trimmingCharacters(in: .whitespaces).isEmpty
     }
 
+    /// The operator's own sample: a name, and no farm or place. It stays on the phone, because
+    /// the records only take tests of a farm's plot.
+    var isOwnSample: Bool { farmID == nil && plotID == nil && location == nil }
+
     /// Base name for the clip and its sidecar: safe as a file name and sorts by time.
     var fileBaseName: String {
         let safeID = String(

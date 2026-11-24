@@ -369,6 +369,9 @@
                         : "3. Focus with the microscope's focus knob (the stage's Z), not the phone's."
                 )
                 .font(.callout)
+                if model.setupInfo.step == .focus {
+                    Button("It's sharp, continue") { model.acceptFocus() }.buttonStyle(.bordered)
+                }
                 setupButtons
                 footer
             }

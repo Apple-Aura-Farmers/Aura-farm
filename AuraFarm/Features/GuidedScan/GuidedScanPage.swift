@@ -463,11 +463,21 @@ struct GuidedScanPage: View {
                     ? AlignmentTicks(
                         reading: model.setupInfo.alignment,
                         passed: model.setupInfo.isAlignmentPassed) : nil)
+            acceptFocusButton
             if stage == .ready {
                 CoverageChoiceView(coverage: $coverage)
                 recordVideoToggle
                 bigButton("Start scan", action: startScan)
             }
+        }
+    }
+
+    /// The person can always say it is sharp: the checks cannot judge every sample. Hidden once
+    /// the checks agree and ask by themselves.
+    @ViewBuilder
+    private var acceptFocusButton: some View {
+        if stage == .focus, model.setupInfo.focus?.state != .focused {
+            bigButton("It's sharp, continue", isProminent: false) { model.acceptFocus() }
         }
     }
 
@@ -653,6 +663,7 @@ struct GuidedScanPage: View {
                         ? AlignmentTicks(
                             reading: model.setupInfo.alignment,
                             passed: model.setupInfo.isAlignmentPassed) : nil)
+                acceptFocusButton
             }
             }
         }

@@ -22,14 +22,24 @@ struct HomeView: View {
 }
 
 /// The first tab: the plots waiting for a test. Analyze opens a test already filled in for that
-/// plot. The plus button still starts a test from scratch, which the debugging needs.
+/// plot. New test starts one of the operator's own samples, which nobody has to ask for. The plus
+/// button still starts a farm's test from scratch, which the debugging needs.
+/// What a New Test sheet is for: the operator's own sample, which may have no farm, or a field
+/// helper's request, which keeps its farm and plot.
+private enum NewTestKind: Identifiable {
+    case own, request
+    var id: Self { self }
+}
+
 private struct HomeTab: View {
     var onSwitchRole: (() -> Void)?
 
     /// Carried across the sheet and the camera, so the camera is given the details the
     /// helper just typed.
     @State private var details = SampleDetails.blank
-    @State private var isNaming = false
+    /// The New Test sheet, and what it is for. One value drives the sheet, so what it offers
+    /// can never be older than the sheet itself.
+    @State private var naming: NewTestKind?
     /// The guided scan is open (full screen). Set once the New Test sheet has closed.
     @State private var isScanning = false
     /// Start was tapped: the guided scan opens as soon as the New Test sheet is gone.
@@ -80,12 +90,28 @@ private struct HomeTab: View {
                             ) {
                                 details = .blank
                                 details.use(item.plot, of: item.farm)
-                                isNaming = true
+                                naming = .request
                             }
                         }
                     }
                     .padding(.horizontal, 20)
                 }
+            }
+            .safeAreaInset(edge: .bottom) {
+                Button {
+                    details = .blank
+                    naming = .own
+                } label: {
+                    Label("New test", systemImage: "microbe")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .buttonBorderShape(.capsule)
+                .controlSize(.large)
+                .tint(.aura)
+                .foregroundStyle(Color.auraOnAccent)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 8)
             }
             .auraBackground()
             .navigationTitle("Action")
@@ -93,7 +119,7 @@ private struct HomeTab: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         details = .blank
-                        isNaming = true
+                        naming = .own
                     } label: {
                         Label("New Test", systemImage: "plus")
                     }
@@ -177,7 +203,7 @@ private struct HomeTab: View {
                 AccountView()
             }
             .sheet(
-                isPresented: $isNaming,
+                item: $naming,
                 onDismiss: {
                     // The scan opens after the sheet has gone, so the two never overlap.
                     if startRequested {
@@ -185,10 +211,10 @@ private struct HomeTab: View {
                         isScanning = true
                     }
                 }
-            ) {
-                NewTestView(details: $details) {
+            ) { kind in
+                NewTestView(details: $details, allowsNoFarm: kind == .own) {
                     startRequested = true
-                    isNaming = false
+                    naming = nil
                 }
             }
             // Full screen, so nothing swipes a run away: the scan's own Close (which asks) and
