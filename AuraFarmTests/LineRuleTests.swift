@@ -328,6 +328,6 @@ final class LineRuleTests: XCTestCase {
         // lens video's two, the line crossing count and position, the spot limit
         // reason and the slip tilt, the focus pause's peak and hint, the stage's servo angles)
         // follow it.
-        XCTAssertEqual(MovementLog.header[MovementLog.header.count - 53], "line_attach_source")
+        XCTAssertEqual(MovementLog.header[MovementLog.header.count - 62], "line_attach_source")
     }
 }

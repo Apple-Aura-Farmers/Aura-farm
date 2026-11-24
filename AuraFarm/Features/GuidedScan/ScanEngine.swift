@@ -153,6 +153,14 @@ class ScanEngine: NSObject {
     }
     @ObservationIgnored private var snapshotTrigger = SnapshotTrigger()
     @ObservationIgnored var snapshotRequested = false
+    // The lab's focus test (labels and sweeps): logging only, nothing here decides anything.
+    /// A label tap: its name, when it was given, and how many of its three frames are saved.
+    @ObservationIgnored var focusBurst: (label: String, start: Double, shots: Int)?
+    @ObservationIgnored var focusSweepOn = false
+    @ObservationIgnored private var focusSweepShots = 0
+    @ObservationIgnored private var lastSweepShotAt = -Double.infinity
+    /// A focus sweep is running (main queue, for the lab's button).
+    private(set) var focusSweeping = false
     /// A tap on an edge button waiting for the next logged row: it names the row, saves a
     /// frame, and is answered to the guide.
     @ObservationIgnored private var pendingEdgeFeedback: EdgeFeedback?
@@ -666,6 +674,7 @@ class ScanEngine: NSObject {
         // Strong self: the file is finished even if the page lets go of the engine first.
         analysisQueue.async { [self] in
             cameraRunning = false
+            endFocusTest()
             finishLensVideo()
         }
         sessionQueue.async { [weak self] in
@@ -749,6 +758,8 @@ class ScanEngine: NSObject {
             self.snapshots.begin()
             self.snapshotTrigger.reset()
             self.snapshotRequested = false
+            self.focusBurst = nil
+            self.setFocusSweep(false)
             DispatchQueue.main.async {
                 self.exportItems = []
                 self.isLogging = true
@@ -758,10 +769,84 @@ class ScanEngine: NSObject {
         }
     }
 
+    // MARK: Focus test (the lab's labels and sweeps)
+
+    /// A label for the view as it is now: the next logged row carries it (and the event
+    /// `focus_label_<name>`), and three raw frames are saved, at once, 0.5 s and 1.0 s later, the
+    /// rows that carry them with the label. Only while a log is recording; a second tap during
+    /// that second is ignored. Nothing is paused, counted, moved or held by it.
+    func labelFocus(_ label: String) {
+        analysisQueue.async { [weak self] in
+            guard let self, self.logging, self.focusBurst == nil else { return }
+            self.focusBurst = (label, self.lastFrameSeconds, 0)
+            self.queuedEvents.append(("focus_label_\(label)", ""))
+        }
+    }
+
+    /// A raw frame every 0.5 s (at most 40) with `focus_sweep` 1 on every row, for turning the
+    /// focus knob through the peak.
+    func startFocusSweep() {
+        analysisQueue.async { [weak self] in
+            guard let self, self.logging, !self.focusSweepOn else { return }
+            self.setFocusSweep(true)
+            self.queuedEvents.append(("focus_sweep_start", ""))
+        }
+    }
+
+    func endFocusSweep() {
+        analysisQueue.async { [weak self] in self?.endFocusTest() }
+    }
+
+    /// Ends a sweep and a label in progress (leaving the lab, the background). Analysis queue.
+    func endFocusTest() {
+        if focusSweepOn {
+            if logging { queuedEvents.append(("focus_sweep_end", "")) }
+            setFocusSweep(false)
+        }
+        focusBurst = nil
+    }
+
+    private func setFocusSweep(_ on: Bool) {
+        focusSweepOn = on
+        focusSweepShots = 0
+        lastSweepShotAt = -.infinity
+        DispatchQueue.main.async { [weak self] in self?.focusSweeping = on }
+    }
+
+    /// This row's share of the focus test: the label of a frame being saved, the sweep flag, and
+    /// whether a frame is to be saved on it.
+    private func focusTestRow(at time: Double, _ logged: inout MovementLogRow) -> Bool {
+        var saves = false
+        if var burst = focusBurst {
+            if burst.shots < 3, time - burst.start >= Double(burst.shots) * 0.5 - 1e-9 {
+                saves = true
+                burst.shots += 1
+                logged.focusLabel = burst.label
+            }
+            focusBurst = burst.shots >= 3 ? nil : burst
+        }
+        if focusSweepOn {
+            logged.focusSweep = true
+            if time - lastSweepShotAt >= 0.5 - 1e-9 {
+                saves = true
+                lastSweepShotAt = time
+                focusSweepShots += 1
+                if focusSweepShots >= 40 {
+                    queuedEvents.append(("focus_sweep_end", "40 frames"))
+                    setFocusSweep(false)
+                    logged.focusSweep = true
+                }
+            }
+        }
+        return saves
+    }
+
     /// Ends the log and writes its CSV to a temporary file for sharing.
     func stopLog() {
         analysisQueue.async { [weak self] in
             guard let self, self.logging else { return }
+            self.setFocusSweep(false)
+            self.focusBurst = nil
             self.logging = false
             self.queuedEvents = []
             let url = Self.write(self.rows, test: self.currentTest)
@@ -1338,6 +1423,8 @@ class ScanEngine: NSObject {
         logged.focusHint = monitor?.focusHint ?? ""
         logged.stageAngleX = stageAngles?.x
         logged.stageAngleY = stageAngles?.y
+        logged.focusTiles = monitor?.focusTiles
+        logged.focusTilesMs = monitor?.focusTilesMilliseconds
         if let note = monitor?.resumedNote, !note.isEmpty, pendingEventName.isEmpty {
             pendingEventName = "focus_resumed"
             pendingEventDetail = note
@@ -1792,11 +1879,13 @@ extension ScanEngine: AVCaptureVideoDataOutputSampleBufferDelegate {
                     instruction: logged.guideInstruction, lineCandidate: edgeLine?.isCandidate)
             }
             let tapped = pendingEdgeFeedback
-            if tapped != nil || automatic || snapshotRequested {
+            let focusFrame = focusTestRow(at: time, &logged)
+            if tapped != nil || automatic || snapshotRequested || focusFrame {
                 logged.snapshot =
                     snapshots.save(
                         buffer, csvSeconds: time - origin,
-                        automatic: tapped == nil && !snapshotRequested, tap: tapped != nil)
+                        automatic: tapped == nil && !snapshotRequested && !focusFrame,
+                        tap: tapped != nil)
                     ?? ""
             }
             snapshotRequested = false

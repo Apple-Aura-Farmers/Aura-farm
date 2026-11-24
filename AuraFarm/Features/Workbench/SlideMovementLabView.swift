@@ -52,6 +52,8 @@
         @AppStorage("slideLab.heatAdaptive") private var heatAdaptive = true
         @AppStorage("slideLab.modelRateCap") private var modelRateCap = true
         @AppStorage("slideLab.recordLensVideo") private var recordsLensVideo = false
+        /// Labels and sweeps for the focus data (measured and logged only).
+        @AppStorage("slideLab.focusTest") private var focusTest = false
         @State private var noteText = ""
         // Automated stage (Terraloka BLE stage in place of the knobs).
         @State private var autoStage: AutoStageDriver?
@@ -283,6 +285,10 @@
                         StageHandPad(
                             driver: autoStage, needsGuideDryRun: !model.guideDryRun,
                             onSwitchToAutonomous: { isChoosingAutonomousPath = true })
+                    }
+
+                    if focusTest, model.setupInfo.step == .done {
+                        FocusTestSection(model: model)
                     }
 
                     if model.isAnalyzing, isSettingUp {
@@ -518,6 +524,7 @@
                 Toggle("Columns follow the slip's tilt", isOn: $followsSlipTilt)
                 Toggle("Show life on map", isOn: $showsLifeOnMap)
                 Toggle("Record lens video", isOn: $recordsLensVideo)
+                Toggle("Focus test (labels and sweeps)", isOn: $focusTest)
                 Toggle("Swap knobs", isOn: $swapsKnobs)
                 Toggle("Reverse X", isOn: $reversesKnobX)
                 Toggle("Reverse Y", isOn: $reversesKnobY)
@@ -731,6 +738,54 @@
     }
 
     #Preview("Cover slip setting") { CoverSlipPreview() }
+
+    /// Labels and sweeps for the focus data: with the log recording, a tap says what the view is
+    /// (three raw frames are saved), a sweep saves a frame every half second. Logging only: it
+    /// pauses, counts, moves and holds nothing.
+    private struct FocusTestSection: View {
+        var model: ScanEngine
+
+        var body: some View {
+            let tiles = model.setupInfo.monitor.recentFocusTiles
+            VStack(alignment: .leading, spacing: 8) {
+                if !model.isLogging {
+                    Text("Start the log first").font(.footnote).foregroundStyle(.orange)
+                }
+                HStack(spacing: 8) {
+                    ForEach(["sharp", "blurry", "empty"], id: \.self) { name in
+                        Button {
+                            model.labelFocus(name)
+                        } label: {
+                            Text(name.capitalized).font(.title3.bold())
+                                .frame(maxWidth: .infinity, minHeight: 48)
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                }
+                .disabled(!model.isLogging)
+                Button {
+                    if model.focusSweeping { model.endFocusSweep() } else { model.startFocusSweep() }
+                } label: {
+                    Text(model.focusSweeping ? "End sweep" : "Start sweep")
+                        .frame(maxWidth: .infinity, minHeight: 36)
+                }
+                .buttonStyle(.bordered)
+                .disabled(!model.isLogging)
+                Text(
+                    tiles.map {
+                        String(
+                            format: "top %.4g · active %d of %d · noise %.4g", $0.top, $0.active,
+                            $0.used, $0.noise)
+                    } ?? "no reading yet"
+                )
+                .font(.footnote.monospacedDigit()).foregroundStyle(.secondary)
+            }
+            .padding(10)
+            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 14))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+        }
+    }
 
     /// The top-of-screen question that replaces the old dialog: not modal, so nothing can drop it.
     private struct MovementChoiceCard: View {

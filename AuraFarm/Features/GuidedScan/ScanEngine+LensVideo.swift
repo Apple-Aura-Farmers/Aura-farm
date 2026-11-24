@@ -143,6 +143,7 @@ extension ScanEngine {
     @objc private func appEnteredBackground() {
         let task = UIApplication.shared.beginBackgroundTask()
         analysisQueue.async { [self] in
+            endFocusTest()
             finishLensVideo { _ in
                 DispatchQueue.main.async { UIApplication.shared.endBackgroundTask(task) }
             }

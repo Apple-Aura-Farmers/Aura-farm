@@ -31,6 +31,11 @@ struct RunMonitorInfo: Equatable {
     var resumedNote = ""
     /// The latest focus index, also on the frames between readings; nil when it is too old.
     var recentFocusIndex: Double?
+    /// The focus tiles: this frame's reading (nil between readings, for the log) and the latest
+    /// one (for the lab's readout). Nothing decides with them.
+    var focusTiles: FocusTilesReading?
+    var focusTilesMilliseconds: Double?
+    var recentFocusTiles: FocusTilesReading?
 }
 
 /// What the setup screens draw, published by the lab at its normal throttle.
@@ -45,6 +50,8 @@ struct LabSetupInfo: Equatable {
     var focusDial: FocusDialReading?
     /// The square the focus is measured in, frame pixels.
     var focusSquare: CGRect?
+    /// The focus tiles on this frame, for the log and the readout only.
+    var focusTiles: FocusTilesReading?
     /// Where setup goes after align passes again, when alignment was lost; nil otherwise.
     var resumeStep: LabSetupStep?
     /// The stage step's progress, and the measured axes once known (the identity when
@@ -137,6 +144,9 @@ final class LabSetupSession {
     private var frameCounter = 0
     /// When the run monitor last took a focus index and an alignment reading; nil outside the run.
     private var lastRunFocusAt: Double?
+    /// The focus tiles are read about three times a second, like the focus index.
+    private var lastTilesAt: Double?
+    private var recentTiles: FocusTilesReading?
     private var lastRunAlignmentAt: Double?
     private var origin: Double?
     private let gridStep = FieldMaskThresholds().gridStep
@@ -322,6 +332,7 @@ final class LabSetupSession {
         var focusReading: FocusReading?
         var dialReading: FocusDialReading?
         var square: CGRect?
+        var tilesReading: FocusTilesReading?
         // Measured inside the confirmed round view; the alignment's circle until there is one.
         if flow.step == .focus, let circle = confirmedFieldCircle ?? lastPassingCircle {
             let box = Self.focusSquare(for: circle, frameSize: frameSize)
@@ -349,6 +360,11 @@ final class LabSetupSession {
                 focusIndexes.append((seconds, index))
                 focusIndexes.removeAll { seconds - $0.seconds > Self.baselineSeconds }
             }
+            // Measured and logged, nothing more.
+            if Self.isDue(lastTilesAt, now: seconds, interval: Self.runFocusIntervalSeconds) {
+                lastTilesAt = seconds
+                tilesReading = FocusTiles.measure(of: buffer, in: box)
+            }
         }
         let atStep = flow.step
         let start = origin ?? seconds
@@ -356,7 +372,7 @@ final class LabSetupSession {
         appendLog(
             SetupLogRow(
                 seconds: seconds - start, step: atStep, alignment: reading, focus: focusReading,
-                focusDial: dialReading))
+                focusDial: dialReading, focusTiles: tilesReading))
 
         if atStep == .align {
             if flow.update(alignmentPassed: alignment.isPassed && canAdvance) {
@@ -382,7 +398,7 @@ final class LabSetupSession {
         info = LabSetupInfo(
             step: flow.step, frameSize: frameSize, alignment: reading, trend: alignment.trend,
             isAlignmentPassed: alignment.isPassed, focus: focusReading, focusDial: dialReading,
-            focusSquare: square,
+            focusSquare: square, focusTiles: tilesReading,
             resumeStep: flow.resumeStep)
         info.focusFound = focusFound
         return info
@@ -450,6 +466,8 @@ final class LabSetupSession {
         let inRun = flow.step == .done
         if !inRun {
             lastRunFocusAt = nil
+            lastTilesAt = nil
+            recentTiles = nil
             lastRunFocusIndex = nil
             lastRunAlignmentAt = nil
         }
@@ -525,6 +543,29 @@ final class LabSetupSession {
         info.stage = flow.step == .stage || flow.step == .done ? progress : nil
         info.stageAxes = stageAxes
         if flow.step != .done { info.monitor = RunMonitorInfo(circle: referenceCircle) }
+        if flow.step == .done { measureRunTiles(buffer, seconds: seconds) }
+    }
+
+    /// The focus tiles of the run, about three times a second, whatever the monitor is doing
+    /// (paused for focus, held for the hand, after Skip setup). For the log and the lab's readout
+    /// only: no decision reads them.
+    private func measureRunTiles(_ buffer: CVPixelBuffer, seconds: Double) {
+        var fresh: FocusTilesReading?
+        var milliseconds: Double?
+        if let circle = confirmedFieldCircle ?? referenceCircle,
+            Self.isDue(lastTilesAt, now: seconds, interval: Self.runFocusIntervalSeconds)
+        {
+            lastTilesAt = seconds
+            let size = CGSize(
+                width: CVPixelBufferGetWidth(buffer), height: CVPixelBufferGetHeight(buffer))
+            let started = ContinuousClock.now
+            fresh = FocusTiles.measure(of: buffer, in: Self.focusSquare(for: circle, frameSize: size))
+            milliseconds = Self.milliseconds(since: started)
+            if let fresh { recentTiles = fresh }
+        }
+        info.monitor.focusTiles = fresh
+        info.monitor.focusTilesMilliseconds = fresh == nil ? nil : milliseconds
+        info.monitor.recentFocusTiles = recentTiles
     }
 
     /// Field and stage: the geometry-only check; lost alignment goes back to align.
