@@ -1,7 +1,11 @@
 // Bluetooth Low Energy control of the X/Y stage plus the Z (focus) servo, ESP32-C3 Super Mini.
 // X servo GPIO3, Y servo GPIO4, Z servo GPIO5. Board: ESP32-C3 Super Mini, core 3.x,
 // USB CDC On Boot: Enabled.
-// C3 runs from the Mac's USB. Servos run from the HW-131 rail (separate power, shared ground).
+// The C3 runs from any USB supply (a power bank, a charger or a computer): nothing waits for a
+// computer. Servos run from the HW-131 rail (separate power, shared ground).
+//
+// Blue LED (GPIO8): solid = starting up, slow blink = waiting for the phone, a short flash every
+// 2 s = phone connected. Solid for more than 15 s means it is stuck starting up.
 //
 // Z (focus): JOG/GOTO Z only, in MANUAL. Z is NOT attached at boot (no startup jump): it starts
 // from its last angle, saved in flash once it has stopped with no Z move queued. HOME, END, PATH, START and TRAVERSE
@@ -55,7 +59,12 @@ const int MAX_POINTS = 50;                    // path points accepted by PATH
 const int QUEUE_SIZE = MAX_POINTS * 2 + 4;    // queued single-servo moves
 const int MAX_JOG_QUEUE = 10;                 // MANUAL: moves allowed to wait in line
 
-const unsigned long SERIAL_WAIT_MS = 5000;    // wait this long for Serial Monitor at boot
+const unsigned long SERIAL_WAIT_MS = 3000;    // on a computer: wait this long for Serial Monitor at boot
+
+const int LED_PIN = 8;                        // the board's own LED, on when LOW
+const unsigned long LED_BLINK_MS = 500;       // waiting for the phone
+const unsigned long LED_FLASH_MS = 60;        // connected: a short flash ...
+const unsigned long LED_FLASH_EVERY_MS = 2000;  // ... this often
 
 // ---------------- State ----------------
 enum Mode { MODE_AUTO, MODE_MANUAL };
@@ -92,6 +101,20 @@ QueueHandle_t cmdQueue;            // commands from the BLE task, handled in loo
 const int CMD_LEN = 256;
 String serialLine;
 
+// ---------------- Log ----------------
+// The log on USB. It never waits: with no computer, or one that is not reading, a line is dropped.
+// (Serial itself can hold the program for up to about 2 s a line when the port is not read.)
+class UsbLog : public Print {
+public:
+  using Print::write;
+  size_t write(uint8_t c) override { return write(&c, 1); }
+  size_t write(const uint8_t* data, size_t size) override {
+    if (!Serial || Serial.availableForWrite() < (int)size) return size;  // dropped
+    return Serial.write(data, size);
+  }
+};
+UsbLog usbLog;
+
 // ---------------- Helpers ----------------
 const char* resetName(int r) {
   switch (r) {
@@ -113,14 +136,14 @@ const char* resetName(int r) {
 }
 
 void stamp() {
-  Serial.printf("[%9.3f s] ", millis() / 1000.0);
+  usbLog.printf("[%9.3f s] ", millis() / 1000.0);
 }
 
 // Reply to the phone (BLE notify) and the Serial Monitor.
 void reply(const String& msg) {
   stamp();
-  Serial.print("> ");
-  Serial.println(msg);
+  usbLog.print("> ");
+  usbLog.println(msg);
   if (bleConnected && txChar) {
     txChar->setValue(msg.c_str());
     txChar->notify();
@@ -148,6 +171,22 @@ String posText() {
 // Z on a line of its own, so the X/Y replies keep their format for older app versions.
 void replyZ() {
   reply(String("ZPOS Z=") + currentAngle[Z_SERVO]);
+}
+
+// Why the board last started and for how long it has run, for the phone: without a computer there
+// is no log to read it from. On its own line, so older app versions ignore it.
+void replyBoot() {
+  reply(String("BOOT ") + resetName(esp_reset_reason()) + " UP=" + (millis() / 1000));
+}
+
+void led(bool on) {
+  digitalWrite(LED_PIN, on ? LOW : HIGH);
+}
+
+void updateLed() {
+  unsigned long now = millis();
+  if (bleConnected) led(now % LED_FLASH_EVERY_MS < LED_FLASH_MS);
+  else led((now / LED_BLINK_MS) % 2 == 0);
 }
 
 // The X and Y limits on a line of its own, so the other replies keep their format.
@@ -189,7 +228,7 @@ void saveZIfDue() {
   zp.putInt("z", currentAngle[Z_SERVO]);
   zp.end();
   stamp();
-  Serial.printf("servo Z (GPIO%d) | saved angle %d deg\n", SERVO_PINS[Z_SERVO], currentAngle[Z_SERVO]);
+  usbLog.printf("servo Z (GPIO%d) | saved angle %d deg\n", SERVO_PINS[Z_SERVO], currentAngle[Z_SERVO]);
 }
 
 // ---------------- Limits and home (from calibration) ----------------
@@ -208,7 +247,7 @@ void loadLimits() {
     maxAngle[i] = limitsOk ? mx : DEFAULT_MAX;
     bool homeOk = hm >= minAngle[i] && hm <= maxAngle[i];
     homeAngle[i] = homeOk ? hm : DEFAULT_HOME;
-    Serial.printf("servo %c (GPIO%d) | min %d, max %d (%s) | home %d (%s)\n",
+    usbLog.printf("servo %c (GPIO%d) | min %d, max %d (%s) | home %d (%s)\n",
                   SERVO_NAMES[i], SERVO_PINS[i], minAngle[i], maxAngle[i],
                   limitsOk ? "saved" : "default", homeAngle[i], homeOk ? "saved" : "default");
   }
@@ -218,7 +257,7 @@ void loadLimits() {
 // ---------------- Servo ----------------
 void servoOn(int i) {
   if (!ledcAttach(SERVO_PINS[i], PWM_FREQ_HZ, PWM_BITS)) {
-    Serial.println("ERROR: ledcAttach failed");
+    usbLog.println("ERROR: ledcAttach failed");
   }
   ledcWrite(SERVO_PINS[i], angleToDuty(currentAngle[i]));
 }
@@ -252,7 +291,7 @@ void haltCurrentMove() {
     lastOffMs = millis();
     if (s == Z_SERVO) scheduleZSave();
     stamp();
-    Serial.printf("servo %c (GPIO%d) | stopped at %d deg (signal off)\n", SERVO_NAMES[s], SERVO_PINS[s], currentAngle[s]);
+    usbLog.printf("servo %c (GPIO%d) | stopped at %d deg (signal off)\n", SERVO_NAMES[s], SERVO_PINS[s], currentAngle[s]);
   }
   phase = PH_IDLE;
 }
@@ -286,7 +325,7 @@ void runEngine() {
       popMove();
     } else {
       stamp();
-      Serial.printf("servo %c (GPIO%d) | %d -> %d deg | start\n", SERVO_NAMES[m.servo], SERVO_PINS[m.servo],
+      usbLog.printf("servo %c (GPIO%d) | %d -> %d deg | start\n", SERVO_NAMES[m.servo], SERVO_PINS[m.servo],
                     currentAngle[m.servo], m.target);
       servoOn(m.servo);
       phase = PH_STEP;
@@ -310,7 +349,7 @@ void runEngine() {
     servoOff(m.servo);
     lastOffMs = now;
     stamp();
-    Serial.printf("servo %c (GPIO%d) | at %d deg | end\n", SERVO_NAMES[m.servo], SERVO_PINS[m.servo], currentAngle[m.servo]);
+    usbLog.printf("servo %c (GPIO%d) | at %d deg | end\n", SERVO_NAMES[m.servo], SERVO_PINS[m.servo], currentAngle[m.servo]);
     int movedServo = m.servo;  // read before popMove frees the slot
     popMove();
     phase = PH_IDLE;
@@ -357,7 +396,7 @@ void handleCommand(String cmd) {
   cmd.toUpperCase();
   if (cmd.length() == 0) return;
   stamp();
-  Serial.printf("< %s\n", cmd.c_str());
+  usbLog.printf("< %s\n", cmd.c_str());
 
   int sp1 = cmd.indexOf(' ');
   String word = sp1 < 0 ? cmd : cmd.substring(0, sp1);
@@ -509,33 +548,33 @@ void setupBle() {
   rxChar->setCallbacks(new RxCallbacks());
   service->start();
   bleServer->getAdvertising()->start();
-  Serial.printf("BLE advertising as \"%s\" (Nordic UART Service)\n", BLE_NAME);
+  usbLog.printf("BLE advertising as \"%s\" (Nordic UART Service)\n", BLE_NAME);
 }
 
 void handleBleEvents() {
   if (disconnectEvent) {
     disconnectEvent = false;
     stamp();
-    Serial.println("BLE disconnected");
+    usbLog.println("BLE disconnected");
     if (mode == MODE_AUTO) {
       if (phase != PH_IDLE || qCount > 0) {
         haltCurrentMove();   // stop immediately, keep position and remaining path
         paused = true;
         pausedByDisconnect = true;
         stamp();
-        Serial.printf("paused by disconnect at %s, %d moves left\n", posText().c_str(), qCount);
+        usbLog.printf("paused by disconnect at %s, %d moves left\n", posText().c_str(), qCount);
       }
     } else {
       clearQueue();          // MANUAL: stop and wait
     }
     delay(500);              // give the BLE stack a moment, then advertise again
     bleServer->startAdvertising();
-    Serial.println("BLE advertising again");
+    usbLog.println("BLE advertising again");
   }
   if (connectEvent) {
     connectEvent = false;
     stamp();
-    Serial.println("BLE connected");
+    usbLog.println("BLE connected");
     delay(300);              // let the phone subscribe before the first message
     if (pausedByDisconnect) {
       // Position was kept while paused; the next move re-attaches at the saved angle
@@ -548,6 +587,7 @@ void handleBleEvents() {
     }
     replyLimits();
     replyZ();
+    replyBoot();
   }
 }
 
@@ -558,14 +598,22 @@ void setup() {
     digitalWrite(SERVO_PINS[i], LOW);
   }
 
+  pinMode(LED_PIN, OUTPUT);
+  led(true);  // starting up
+
+  // The log must never hold the stage: no waiting on a write, and no wait for a computer that
+  // is not there (a power bank or a charger).
+  Serial.setTxBufferSize(1024);
   Serial.begin(115200);
+  Serial.setTxTimeoutMs(0);
+  delay(50);
   unsigned long t0 = millis();
-  while (!Serial && millis() - t0 < SERIAL_WAIT_MS) delay(10);
+  while (!Serial && HWCDC::isPlugged() && millis() - t0 < SERIAL_WAIT_MS) delay(10);
 
   int reason = esp_reset_reason();
-  Serial.println();
-  Serial.println("=== Stage control X/Y/Z (ESP32-C3 Super Mini) ===");
-  Serial.printf("Reset reason: %s (%d)\n", resetName(reason), reason);
+  usbLog.println();
+  usbLog.println("=== Stage control X/Y/Z (ESP32-C3 Super Mini) ===");
+  usbLog.printf("Reset reason: %s (%d)\n", resetName(reason), reason);
   loadLimits();
 
   // Z is not attached at boot: it starts from its saved angle, and its first move begins there.
@@ -573,14 +621,14 @@ void setup() {
   bool zOk = inLimits(Z_SERVO, savedZ);
   currentAngle[Z_SERVO] = zOk ? savedZ : homeAngle[Z_SERVO];
   projected[Z_SERVO] = currentAngle[Z_SERVO];
-  Serial.printf("startup | servo Z (GPIO%d) | not attached, last angle %d deg (%s)\n",
+  usbLog.printf("startup | servo Z (GPIO%d) | not attached, last angle %d deg (%s)\n",
                 SERVO_PINS[Z_SERVO], currentAngle[Z_SERVO], zOk ? "saved" : "home, nothing saved");
 
   // Attach X, then Y, each with one jump to its home (position unknown after power-up).
   delay(BOOT_WAIT_MS);
   for (int i = 0; i < STAGE_SERVOS; i++) {
     stamp();
-    Serial.printf("startup | servo %c (GPIO%d) | attach at home %d deg (one direct jump)\n",
+    usbLog.printf("startup | servo %c (GPIO%d) | attach at home %d deg (one direct jump)\n",
                   SERVO_NAMES[i], SERVO_PINS[i], homeAngle[i]);
     currentAngle[i] = homeAngle[i];
     projected[i] = homeAngle[i];
@@ -593,8 +641,8 @@ void setup() {
 
   cmdQueue = xQueueCreate(8, CMD_LEN);
   setupBle();
-  Serial.println("Ready. Mode MANUAL. Commands: STATUS, MODE AUTO|MANUAL, JOG X|Y|Z n, GOTO X|Y|Z n,");
-  Serial.println("PATH x,y;x,y;..., START, TRAVERSE, STOP, RESUME, HOME, END (HOME/END: X and Y only)");
+  usbLog.println("Ready. Mode MANUAL. Commands: STATUS, MODE AUTO|MANUAL, JOG X|Y|Z n, GOTO X|Y|Z n,");
+  usbLog.println("PATH x,y;x,y;..., START, TRAVERSE, STOP, RESUME, HOME, END (HOME/END: X and Y only)");
 }
 
 void loop() {
@@ -603,7 +651,7 @@ void loop() {
   char buf[CMD_LEN];
   while (xQueueReceive(cmdQueue, buf, 0) == pdTRUE) handleCommand(String(buf));
 
-  while (Serial.available()) {
+  while (Serial.available() > 0) {  // -1 when the port is not there
     char c = Serial.read();
     if (c == '\n' || c == '\r') {
       handleCommand(serialLine);
@@ -615,5 +663,6 @@ void loop() {
 
   runEngine();
   saveZIfDue();
+  updateLed();
   delay(1);
 }
