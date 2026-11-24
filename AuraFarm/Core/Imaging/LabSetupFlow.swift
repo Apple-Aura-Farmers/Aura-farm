@@ -111,6 +111,14 @@ struct LabSetupFlow: Equatable {
         resumeStep = nil
     }
 
+    /// Done, but the stage is to be measured after all (the manual stage switches to
+    /// autonomous): back to the stage step only.
+    mutating func reopenStage() {
+        guard step == .done else { return }
+        step = .stage
+        resumeStep = nil
+    }
+
     /// Straight to the lab (on the stage step, with `StageAxes.identity`).
     mutating func skip() {
         step = .done

@@ -120,4 +120,16 @@ final class AutoStageStatusTests: XCTestCase {
             GuidedScanSetupStage.stage.indicator(automatedStage: false),
             GuidedScanSetupStage.stage.indicator)
     }
+
+    func testTheHandPhasesHaveTitlesAndNoAlert() {
+        let phases: [AutoStageDriver.Phase] = [
+            .byHand, .returningFromHand(x: 90, y: 100), .checkingFocus,
+        ]
+        for phase in phases {
+            let result = status(phase, focusPaused: true)
+            XCTAssertFalse(result.title.isEmpty, "\(phase)")
+            XCTAssertNil(result.needsPerson, "\(phase)")
+        }
+        XCTAssertEqual(status(.checkingFocus).title, "Back in place, checking focus")
+    }
 }

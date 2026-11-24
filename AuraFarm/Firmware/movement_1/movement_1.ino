@@ -150,6 +150,12 @@ void replyZ() {
   reply(String("ZPOS Z=") + currentAngle[Z_SERVO]);
 }
 
+// The X and Y limits on a line of its own, so the other replies keep their format.
+void replyLimits() {
+  reply(String("LIMITS XMIN=") + minAngle[0] + " XMAX=" + maxAngle[0] + " YMIN=" + minAngle[1] +
+        " YMAX=" + maxAngle[1]);
+}
+
 // ---------------- Z angle in flash ----------------
 int loadSavedZ() {
   Preferences zp;
@@ -312,6 +318,8 @@ void runEngine() {
       scheduleZSave();
       replyZ();
     } else {
+      if (currentAngle[movedServo] == minAngle[movedServo]) reply(String("LIMIT ") + SERVO_NAMES[movedServo] + " MIN");
+      if (currentAngle[movedServo] == maxAngle[movedServo]) reply(String("LIMIT ") + SERVO_NAMES[movedServo] + " MAX");
       reply("POS " + posText());
     }
   }
@@ -358,6 +366,7 @@ void handleCommand(String cmd) {
 
   if (word == "STATUS") {
     reply(String(modeName()) + " " + stateName() + " " + posText() + " Q=" + qCount);
+    replyLimits();
     replyZ();
 
   } else if (word == "MODE") {
@@ -537,6 +546,7 @@ void handleBleEvents() {
     } else {
       reply(String("HELLO ") + modeName() + " " + stateName() + " " + posText());
     }
+    replyLimits();
     replyZ();
   }
 }

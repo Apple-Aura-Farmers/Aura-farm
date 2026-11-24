@@ -15,6 +15,8 @@ struct StageMotionPlanner {
     /// Degrees added to a servo's step while its gear is stuck (see `StageStuckWatch`).
     var boostX = 0
     var boostY = 0
+    /// The angles the servos may reach (the board's, 0...180 until it reports).
+    var limits = StageLimits()
 
     /// - Parameters:
     ///   - angles: where the servos are now.
@@ -43,7 +45,7 @@ struct StageMotionPlanner {
     }
 
     /// One servo's move for its own share of `target` (the leg servo's, when the other one
-    /// is pinned): same chunk, rounding and 0...180 clamp as `next`.
+    /// is pinned): same chunk, rounding and limits clamp as `next`.
     func move(servo: StageAxis, angles: (x: Int, y: Int), target: CGPoint?) -> StageMove {
         guard let target, let needed = mapping.degrees(forMove: target) else { return .idle }
         return move(servo, degrees(of: servo, in: needed), angles)
@@ -61,7 +63,7 @@ struct StageMotionPlanner {
         // Closer than one degree is not possible: stop here instead of hunting.
         guard step != 0 else { return .idle }
         let current = servo == .x ? angles.x : angles.y
-        let angle = min(max(current + step, 0), 180)
+        let angle = limits.clamp(current + step, servo)
         return angle == current ? .atLimit(servo) : .move(servo: servo, toAngle: angle)
     }
 }

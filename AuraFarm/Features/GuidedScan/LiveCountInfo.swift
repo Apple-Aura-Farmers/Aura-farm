@@ -32,6 +32,10 @@ struct LiveCountInfo: Equatable {
     /// One row per label seen, biggest map count first; labels with no count are left out.
     var labels: [LabelCount] = []
     var boxes: [Box] = []
+    /// What the detector sees while the stage is moved by hand (never counted), and whether
+    /// that is what the boxes show now.
+    var previewBoxes: [Box] = []
+    var isPreviewing = false
     /// Every organism the helper's count includes, on the map (fields, the trail's space).
     var dots: [RunMapOrganism] = []
     var frameSize = CGSize.zero

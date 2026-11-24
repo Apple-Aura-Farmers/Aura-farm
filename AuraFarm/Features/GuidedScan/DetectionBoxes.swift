@@ -23,12 +23,13 @@ struct DetectionBoxes: View {
         case .counted: .green
         case .seenOnce: .gray
         case .repeatOnMap: .blue
+        case .notCounted: .yellow
         }
     }
 
     var body: some View {
         Canvas { context, _ in
-            for box in info.boxes {
+            for box in info.isPreviewing ? info.previewBoxes : info.boxes {
                 let points = polygon(box.rect)
                 guard let first = points.first else { continue }
                 var path = Path()
@@ -38,6 +39,7 @@ struct DetectionBoxes: View {
                 context.stroke(path, with: .color(colour), lineWidth: 2)
                 let caption = Text(
                     "\(box.id) \(OrganismDisplayName.label(box.label)) \(Int(box.confidence * 100))%"
+                        + (box.status == .notCounted ? " not counted" : "")
                 )
                 .font(.caption2.bold())
                 .foregroundStyle(colour)

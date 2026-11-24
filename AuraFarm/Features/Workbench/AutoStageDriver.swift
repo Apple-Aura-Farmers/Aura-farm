@@ -1,3 +1,4 @@
+import AudioToolbox
 import CoreGraphics
 import Foundation
 import Observation
@@ -29,6 +30,15 @@ final class AutoStageDriver {
         case emptyCapReached(fields: Double)
         case presetPath(column: Int, spot: Int)
         case paused
+        /// Manual session: the board is being put in MANUAL before the arrows work.
+        case preparingManual
+        /// The person steers the stage with the arrows (lab only). Taken over from a path, the
+        /// position before is saved.
+        case byHand
+        /// Moving the servos back to the saved angles.
+        case returningFromHand(x: Int, y: Int)
+        /// Back in place: waiting for the picture to be sharp before the path goes on.
+        case checkingFocus
         case failed(String)
     }
 
@@ -64,6 +74,8 @@ final class AutoStageDriver {
     /// Press the guide's "Stage limit" when a servo is pinned at 0 or 180.
     var autoStageLimit = true
     private(set) var autoStageLimitCount = 0
+    /// The angles the servos may reach, as the board reports them (0...180 until it does).
+    private(set) var limits = StageLimits()
     /// The lab shows the picture straightened (and so measures the guide in straightened axes).
     var guideIsStraightened = true
 
@@ -84,6 +96,8 @@ final class AutoStageDriver {
     private var mappingWatch = StageMappingWatch()
     private var stuckWatch = StageStuckWatch()
     private var runBegun = false
+    /// The path ran at least once since the last calibration.
+    private var pathStarted = false
     private var sessionEnded = false
     private var hasConnected = false
     private var lastAlertKind: String?
@@ -138,6 +152,42 @@ final class AutoStageDriver {
     /// The text of the stage's latest ERR reply ("LIMIT 0-180", ...).
     private var lastErrorText = ""
     private var restoreAsksEdges = true
+    // Hand control (lab only): the person steers the stage while the path is paused.
+    private struct HandControl {
+        var saved: (x: Int, y: Int)
+        var tracker: CGPoint
+        /// Each servo's last real direction before the takeover: +1, -1 or 0.
+        var direction: (x: Int, y: Int)
+        var moved = (x: false, y: false)
+    }
+    private var handState: HandControl?
+    private var handBegin = false
+    private var handRestartNotice = false
+    private var hand = StageHandControl()
+    private var handReturn: StageHandReturn?
+    private var handLimitLogged: StageArrow?
+    private var checkingSince = Date.distantPast
+    /// The last real direction of each servo, from the angles the board reports.
+    private var servoDirection = (x: 0, y: 0)
+    /// Fine steps (the objective's smallest) instead of the chosen chunk.
+    var handFine = false
+    /// The limit or warning the pad shows.
+    private(set) var handNote = ""
+    /// Manual: steer with the arrows, no calibration. Autonomous: the stage moves by itself.
+    /// Set before `activate`.
+    var controlMode = StageControlMode.autonomous
+    /// The arrows' flips (the Stage control lab's own, set by the pad).
+    var handFlipX = false
+    var handFlipY = false
+
+    enum ManualProblem { case oldPath, noAnswer }
+    /// Why a manual session could not start; nil otherwise.
+    private(set) var manualProblem: ManualProblem?
+    private var manualStarted = false
+    private var manualPreparing = false
+    private var manualStageSkipped = false
+    /// After "Switch to autonomous": the person says the picture is sharp before it calibrates.
+    private var needsSharpTap = false
     private var loop: Task<Void, Never>?
     private var waiter: (id: Int, accept: (StageReply) -> Bool?, done: (Bool) -> Void)?
     private var nextWaiterID = 0
@@ -158,6 +208,7 @@ final class AutoStageDriver {
         restoreAsksEdges = previous
         engine.setAsksEdges(asksEdgeQuestions)
         sessionEnded = false
+        limits = StageLimits()
         engine.logEvent("objective_\(objective.title)")
         client.onReply = { [weak self] reply in
             MainActor.assumeIsolated { self?.handle(reply) }
@@ -175,6 +226,7 @@ final class AutoStageDriver {
     }
 
     func deactivate() {
+        clearHandState()
         loop?.cancel()
         loop = nil
         cancelSweep = true
@@ -197,6 +249,7 @@ final class AutoStageDriver {
         finishWaiter(false)  // a warm-up or calibration wait ends now, not at its timeout
         client.send(.stop)
         inFlight = false
+        releaseHandArrow()
         engine.setExternalCounting(active: false, column: 0)
         phase = .paused
     }
@@ -205,8 +258,16 @@ final class AutoStageDriver {
         userPaused = false
         guard phase == .paused else { return }
         sessionEnded = false
+        if controlMode == .manual {
+            continueManually()
+            return
+        }
         guard mapping != nil else {
             phase = .waitingForStageStep
+            return
+        }
+        if handState != nil {
+            goBackAndResume()  // the way back first; the path carries on after it
             return
         }
         if let walkBack {
@@ -245,10 +306,34 @@ final class AutoStageDriver {
     /// The first HELLO / STATUS after a drop: angles more than a degree from where the servos
     /// were mean the stage lost power and started again (its servos jump to 90).
     private func checkForRestart(reported: (x: Int, y: Int)) {
+        if controlMode == .manual {
+            // No walk back: the person steers from wherever the board is.
+            guard let saved = savedAngles else { return }
+            savedAngles = nil
+            if StageRestart.detected(saved: saved, reported: reported) {
+                restartNotice =
+                    "The stage restarted (check its power). It is at X \(reported.x)°, Y \(reported.y)°."
+                engine.logEvent(
+                    "stage_restart_detected",
+                    detail: "saved \(saved.x),\(saved.y) reported \(reported.x),\(reported.y)")
+            }
+            return
+        }
         guard let saved = savedAngles, let tracker = savedTrackerPosition else { return }
         savedAngles = nil
         savedTrackerPosition = nil
         guard StageRestart.detected(saved: saved, reported: reported) else { return }  // a plain drop
+        if let handState {
+            // The way back is the hand return's: it goes to where the person took over.
+            handRestartNotice = true
+            restartNotice =
+                "The stage restarted (check its power). Go back and resume returns it to "
+                + "\(handState.saved.x),\(handState.saved.y)."
+            engine.logEvent(
+                "stage_restart_detected",
+                detail: "saved \(saved.x),\(saved.y) reported \(reported.x),\(reported.y)")
+            return
+        }
         walkBack = (saved, tracker)
         restartNotice =
             "The stage restarted (check its power). Resume walks it back to \(saved.x),\(saved.y)."
@@ -313,6 +398,7 @@ final class AutoStageDriver {
     /// Only while paused or before setup is done (the panel enforces it).
     func setPathMode(_ new: StagePathMode) {
         guard new != pathMode else { return }
+        clearHandState()
         pathMode = new
         zigzag = nil
         presetProgress = nil
@@ -329,6 +415,7 @@ final class AutoStageDriver {
     func endSession() {
         guard !sessionEnded else { return }
         sessionEnded = true
+        clearHandState()
         userPaused = true
         cancelSweep = true
         finishWaiter(false)
@@ -340,6 +427,7 @@ final class AutoStageDriver {
 
     /// A measurement taken at the other magnification is wrong: it is made again.
     func changeObjective(to new: StageObjective) {
+        if controlMode != .manual { clearHandState() }  // manual: only the step size changes
         objective = new
         chunkDegrees = max(new.defaultChunk, new.minChunk)
         engine.logEvent("objective_\(new.title)")
@@ -349,6 +437,9 @@ final class AutoStageDriver {
     /// "It's sharp": calibrate although setup's focus step was skipped.
     func focusIsSharp() {
         guard phase == .waitingForFocus else { return }
+        // After a switch to autonomous the setup step must really be the stage step again.
+        if needsSharpTap, engine.setupInfo.step != .stage { return }
+        needsSharpTap = false
         focusAccepted = true
         engine.logEvent("stage_focus_accepted")
         phase = .waitingForStageStep
@@ -359,6 +450,9 @@ final class AutoStageDriver {
 
     /// After a failure, or to measure again at the stage step.
     func recalibrate() {
+        guard controlMode != .manual else { return }  // manual never calibrates
+        clearHandState()
+        pathStarted = false
         runBegun = false  // a new test: the run gate closes again
         sessionEnded = false  // and its END is sent again when it ends
         walkBack = nil
@@ -479,6 +573,19 @@ final class AutoStageDriver {
             .hello(_, _, let x, let y), .status(_, _, let x, let y, _):
             if case .hello = reply { checkForRestart(reported: (x, y)) }
             if case .status = reply { checkForRestart(reported: (x, y)) }
+            switch reply {
+            case .hello, .resumed:
+                limits = StageLimits()  // a board is connected: its own limits follow
+                // A path it was running would carry on by itself: no.
+                if case .resumed = reply, controlMode == .manual { client.send(.stop) }
+            default: break
+            }
+            if case .hello = reply {
+                // A new connection can be a restart: the servos jumped, they did not turn.
+            } else {
+                if x != angleX { servoDirection.x = x > angleX ? 1 : -1 }
+                if y != angleY { servoDirection.y = y > angleY ? 1 : -1 }
+            }
             angleX = x
             angleY = y
             engine.setStageAngles((x, y))
@@ -498,17 +605,23 @@ final class AutoStageDriver {
             // tracker trusts between two frames.
             engine.requestTrackerReanchor()
             if moveCheck != nil, moveCheck?.posAt == nil { moveCheck?.posAt = Date() }
-            if presetAwaitingSettle, zigzag != nil {
+            if isHandPhase { hand.settled() }
+            if presetAwaitingSettle, zigzag != nil, !isHandPhase {
                 presetAwaitingSettle = false
                 presetEvent = .settled
             }
         case .ok(let text) where text.hasPrefix("STOP"):
             inFlight = false
             lastSettledAt = Date()
+        case .limits(let new):
+            limits = new
+        case .limitReached(let axis, let end):
+            noteLimitReported(axis, end)
         case .error(let text):
             inFlight = false
             lastErrorText = text
-            if text.hasPrefix("LIMIT"), mapping != nil, !isCalibrating { phase = .atLimit(lastServo) }
+            if text.hasPrefix("LIMIT") { refused(text) }
+            if isHandPhase { hand.settled() }
         default: break
         }
         if let w = waiter, let result = w.accept(reply) { finishWaiter(result) }
@@ -574,6 +687,7 @@ final class AutoStageDriver {
     private func goTo(_ servo: StageAxis, _ angle: Int) async -> Bool {
         // The firmware drops a move to where the servo already is without a reply.
         if (servo == .x ? angleX : angleY) == angle { return true }
+        lastServo = servo
         inFlight = true
         let ok = await request(.goTo(servo, angle)) {
             if case .position = $0 { return true }
@@ -687,7 +801,7 @@ final class AutoStageDriver {
         while calibration.travel(of: servo) < calibration.minTravelFields
             || calibration.movingAngles(of: servo) < 5,
             abs(current - start) < calibration.maxDegrees,
-            (0...180).contains(current + direction * calibrationStepDegrees)
+            limits.range(of: servo).contains(current + direction * calibrationStepDegrees)
         {
             current += direction * calibrationStepDegrees
             lastErrorText = ""
@@ -828,18 +942,26 @@ final class AutoStageDriver {
         guard client.status == .connected else {
             if phase != .disconnected, !isCalibrating {
                 // The last position before the drop, to tell a restart from a plain drop.
-                if mapping != nil, savedAngles == nil, walkBack == nil {
+                if controlMode == .manual {
+                    if manualStarted, savedAngles == nil { savedAngles = (angleX, angleY) }
+                    userPaused = true
+                } else if mapping != nil, savedAngles == nil, walkBack == nil {
                     savedAngles = (angleX, angleY)
                     savedTrackerPosition = engine.trackerPosition()
                 }
                 phase = .disconnected
                 inFlight = false
+                releaseHandArrow()  // nothing moves again by itself
                 userPaused = userPaused || mapping != nil  // stay paused until Resume
             }
             return
         }
         reanchorIfStuckLost()
         let step = engine.setupInfo.step
+        if controlMode == .manual {
+            manualTick(step)
+            return
+        }
         if phase == .disconnected {
             phase = mapping != nil && step == .done ? .paused : .waitingForStageStep
         }
@@ -851,7 +973,9 @@ final class AutoStageDriver {
         let atStage = step == .stage || step == .done
         if !atStage { focusAccepted = false }  // setup went back: focus is asked for again
         let hasFocus = engine.setupInfo.focusFound || focusAccepted
-        if phase == .waitingForFocus, hasFocus || !atStage { phase = .waitingForStageStep }
+        if phase == .waitingForFocus, !needsSharpTap, hasFocus || !atStage {
+            phase = .waitingForStageStep
+        }
         if atStage, !hasFocus, mapping == nil, phase == .waitingForStageStep {
             phase = .waitingForFocus  // a blurry picture cannot be measured
             return
@@ -879,6 +1003,18 @@ final class AutoStageDriver {
             }
         }
         if case .readyToStart = phase { return }  // no move before the run starts
+        if phase == .byHand {
+            handTick()
+            return
+        }
+        if case .returningFromHand = phase {
+            returnStep()
+            return
+        }
+        if phase == .checkingFocus {
+            checkFocusStep()
+            return
+        }
         if userPaused || phase == .paused { return }
         if case .walkingBack = phase {
             walkBackStep()
@@ -895,6 +1031,7 @@ final class AutoStageDriver {
             self.zigzag?.boostLeg = stuckWatch.extraDegrees(for: zigzag.plan.legServo)
             self.zigzag?.boostStep = stuckWatch.extraDegrees(for: zigzag.plan.stepServo)
         }
+        pathStarted = true
         if pathMode == .presetPath { presetStep() } else { follow() }
     }
 
@@ -1026,6 +1163,7 @@ final class AutoStageDriver {
         }
         guard zigzag != nil else { return }
         zigzag?.dwellSeconds = dwellSeconds
+        zigzag?.limits = limits
         zigzag?.mapping = mapping
         zigzag?.chunkDegrees = max(chunkDegrees, 1)
         phase = .presetPath(column: zigzag?.column ?? 0, spot: zigzag?.spot ?? 0)
@@ -1158,6 +1296,7 @@ final class AutoStageDriver {
         var planner = StageMotionPlanner(mapping: mapping, chunkDegrees: chunkDegrees)
         planner.boostX = stuckWatch.extraDegrees(for: .x)
         planner.boostY = stuckWatch.extraDegrees(for: .y)
+        planner.limits = limits
         return planner
     }
 
@@ -1373,5 +1512,427 @@ final class AutoStageDriver {
 extension CGAffineTransform {
     fileprivate var withoutTranslation: CGAffineTransform {
         CGAffineTransform(a: a, b: b, c: c, d: d, tx: 0, ty: 0)
+    }
+}
+
+// MARK: - Hand control (lab only; the guided scan never offers it)
+
+extension AutoStageDriver {
+    fileprivate var isHandPhase: Bool {
+        switch phase {
+        case .byHand, .returningFromHand, .checkingFocus: true
+        default: false
+        }
+    }
+
+    /// Where the servos are, as the board last said.
+    var stageAngles: (x: Int, y: Int) { (angleX, angleY) }
+    /// The position saved when the person took over; nil when there is none.
+    var handSaved: (x: Int, y: Int)? { handState?.saved }
+
+    /// Which way each arrow turns its servo: the board's angles and the flips, nothing else.
+    var handDirections: StageArrowDirections {
+        StageArrowDirections(flipX: handFlipX, flipY: handFlipY)
+    }
+
+    /// The flips may change while no arrow is active and no move is in flight.
+    var canChangeFlips: Bool { hand.active == nil && !inFlight }
+    /// Fine is offered only when it is smaller than the chosen chunk.
+    var canFineStep: Bool { objective.minChunk < chunkDegrees }
+    var handStepDegrees: Int { handFine && canFineStep ? objective.minChunk : chunkDegrees }
+
+    /// Paused in a run that has started: the person may take over.
+    var canMoveByHand: Bool {
+        controlMode == .autonomous && phase == .paused && client.status == .connected
+            && engine.setupInfo.step == .done && mapping != nil && pathStarted && !presetFinished && !sessionEnded && walkBack == nil
+            && engine.runSummary == nil && !isCalibrating
+    }
+
+    /// The saved position exists and the stage is connected: it can go back to it.
+    var canGoBack: Bool {
+        handState != nil && mapping != nil && client.status == .connected && !isCalibrating
+            && (phase == .byHand || phase == .paused)
+    }
+
+    func handEnabled(_ arrow: StageArrow) -> Bool {
+        hand.enabled(
+            arrow, directions: handDirections, angles: (angleX, angleY), step: handStepDegrees,
+            limits: limits)
+    }
+
+    /// "Move by hand": the board's own X and Y, taken from a STATUS answer in IDLE, are the
+    /// position to come back to. A position saved earlier stays the saved one.
+    func beginHandControl() {
+        guard canMoveByHand, !handBegin else { return }
+        handBegin = true
+        Task {
+            defer { handBegin = false }
+            var reported: (x: Int, y: Int)?
+            let answered = await request(.status, timeout: 3) { reply in
+                guard case .status(_, let state, let x, let y, _) = reply else { return nil }
+                guard state == .idle else { return false }
+                reported = (x, y)
+                return true
+            }
+            guard answered, let reported, canMoveByHand else {
+                lastMove = "The stage did not answer"
+                return
+            }
+            if handState == nil {
+                handState = HandControl(
+                    saved: reported, tracker: engine.trackerPosition(), direction: servoDirection)
+            }
+            let saved = handState?.saved ?? reported
+            engine.logEvent("hand_start", detail: "\(saved.x),\(saved.y)")
+            engine.setHandHold(.on)
+            stallWatch = StageStallWatch()
+            hand.reset()
+            handNote = ""
+            handLimitLogged = nil
+            phase = .byHand
+        }
+    }
+
+    func handPress(_ arrow: StageArrow) {
+        guard phase == .byHand, hand.press(arrow) else { return }
+        if handNote.hasPrefix("Stage limit") { handNote = "" }
+        handAdvance(atOnce: true)
+    }
+
+    /// The finger is up: the step under way finishes, and nothing else is sent.
+    func handRelease(_ arrow: StageArrow) {
+        guard hand.active == arrow else { return }  // another finger's arrow says nothing
+        handReleaseAll()
+    }
+
+    /// Every arrow up: the pad going away, or the scene being left.
+    func handReleaseAll() {
+        hand.release()
+        handLimitLogged = nil
+    }
+
+    /// Stops the stage and lets go of the arrow; stays in hand control.
+    func handStop() {
+        guard phase == .byHand else { return }
+        client.send(.stop)
+        inFlight = false
+        lastSettledAt = Date()
+        releaseHandArrow()
+    }
+
+    fileprivate func releaseHandArrow() {
+        hand.reset()
+    }
+
+    private func handTick() {
+        if inFlight, Date().timeIntervalSince(moveSentAt) > 5 {
+            inFlight = false
+            lastSettledAt = Date()
+            client.send(.status)
+            lastMove = "No reply, resynced"
+            releaseHandArrow()
+            return
+        }
+        handAdvance(atOnce: false)
+    }
+
+    /// Sends the active arrow's next move, one at a time: at once on a press, after the POS and
+    /// the rest while it stays pressed.
+    private func handAdvance(atOnce: Bool) {
+        guard hand.wantsMove, let arrow = hand.active else { return }
+        let directions = handDirections
+        let servo = arrow.axis
+        let current = servo == .x ? angleX : angleY
+        guard
+            let target = directions.nextAngle(
+                arrow, from: current, step: handStepDegrees, limits: limits)
+        else {
+            hand.blocked()
+            reportHandLimit(arrow, at: current)
+            return
+        }
+        guard !inFlight, atOnce || Date().timeIntervalSince(lastSettledAt) >= 0.3 else { return }
+        moveCheck = nil  // a hand move says nothing about the mapping or the gear
+        guard client.send(.goTo(servo, target)) else { return }
+        hand.sent()
+        inFlight = true
+        moveSentAt = Date()
+        lastServo = servo
+        if servo == .x { handState?.moved.x = true } else { handState?.moved.y = true }
+        lastMove = "GOTO \(servo.letter) \(target) (by hand)"
+        engine.logEvent(
+            "hand_move", detail: "\(servo.letter) \(String(format: "%+d", target - current)) -> \(target)")
+    }
+
+    private func reportHandLimit(_ arrow: StageArrow, at angle: Int) {
+        handNote = "Stage limit: \(arrow.axis.letter) can't go further \(arrow.word)"
+        guard handLimitLogged != arrow else { return }
+        handLimitLogged = arrow
+        AudioServicesPlaySystemSound(1104)
+        engine.logEvent("hand_limit", detail: "\(arrow.axis.letter) \(arrow.word) \(angle)")
+    }
+
+    /// The board refused a move ("ERR LIMIT a-b"): its range is learned, and whatever waited for
+    /// that move goes on.
+    fileprivate func refused(_ text: String) {
+        limits.merge(refusal: text, axis: lastServo)
+        if pathMode == .presetPath, zigzag != nil, presetAwaitingSettle, !isHandPhase {
+            presetAwaitingSettle = false
+            presetEvent = .settled  // the sweep goes on from where the servo is
+        }
+        switch phase {
+        case .returningFromHand:
+            userPaused = true
+            phase = .paused
+            lastMove = "Could not go back: stage limit"
+        case .byHand:
+            if let arrow = hand.active {
+                hand.blocked()
+                reportHandLimit(arrow, at: arrow.axis == .x ? angleX : angleY)
+            }
+        default: break
+        }
+    }
+
+    fileprivate func noteLimitReported(_ axis: StageAxis, _ end: StageLimitEnd) {
+        guard !isCalibrating, !sessionEnded else { return }
+        let word: String
+        if controlMode == .manual {
+            guard phase == .byHand || phase == .paused || phase == .preparingManual else { return }
+            word = "manual"
+        } else {
+            guard mapping != nil else { return }
+            switch phase {
+            case .following, .waitingForEdgeAnswer, .atLimit: word = "following"
+            case .presetPath: word = "preset"
+            case .paused: word = "paused"
+            case .byHand: word = "by_hand"
+            case .returningFromHand: word = "returning"
+            case .checkingFocus: word = "checking_focus"
+            case .walkingBack: word = "walking_back"
+            case .crossingEmpty, .emptyCapReached: word = "crossing"
+            default: return  // warming up, calibrating, not connected: nothing to say
+            }
+        }
+        let range = limits.range(of: axis)
+        let angle = end == .min ? range.lowerBound : range.upperBound
+        engine.logEvent(
+            "stage_limit_reported",
+            detail: "\(axis.letter) \(end == .min ? "MIN" : "MAX") \(angle) \(word)")
+    }
+
+    // MARK: Going back
+
+    /// Back to the saved position (Y first, then X, past it first when it must be approached
+    /// from the side the servo came from), then a check of the focus, then the path goes on.
+    func goBackAndResume() {
+        guard let saved = handState, canGoBack else { return }
+        releaseHandArrow()
+        handNote = ""
+        handReturn = StageHandReturn(
+            saved: saved.saved, chunk: max(chunkDegrees, 1), limits: limits, moved: saved.moved,
+            direction: saved.direction)
+        engine.setHandHold(.on)
+        logSpaced([
+            ("hand_end", "\(angleX),\(angleY)"),
+            ("hand_return", "\(saved.saved.x),\(saved.saved.y)"),
+        ])
+        userPaused = false
+        phase = .returningFromHand(x: saved.saved.x, y: saved.saved.y)
+    }
+
+    private func returnStep() {
+        guard let saved = handState else { return resumeWhereItStopped() }
+        if inFlight, Date().timeIntervalSince(moveSentAt) > 5 {
+            inFlight = false
+            lastSettledAt = Date()
+            client.send(.status)
+            lastMove = "No reply, resynced"
+        }
+        guard !inFlight, Date().timeIntervalSince(lastSettledAt) >= 0.3 else { return }
+        if let next = handReturn?.nextStep(angles: (angleX, angleY)) {
+            moveCheck = nil  // these moves say nothing about the mapping
+            guard client.send(.goTo(next.servo, next.angle)) else { return }
+            inFlight = true
+            moveSentAt = Date()
+            lastServo = next.servo
+            lastMove = "GOTO \(next.servo.letter) \(next.angle) (back)"
+            return
+        }
+        // The hardware angles are the truth: the map is put back to match them, always.
+        engine.restoreTrackerPosition(to: saved.tracker)
+        engine.logEvent("hand_returned", detail: "\(saved.saved.x),\(saved.saved.y)")
+        engine.setHandHold(.checkingFocus)
+        stallWatch = StageStallWatch()
+        handReturn = nil
+        checkingSince = Date()
+        phase = .checkingFocus
+    }
+
+    private func checkFocusStep() {
+        guard Date().timeIntervalSince(checkingSince) >= 3,
+            engine.setupInfo.monitor.state == .ok
+        else { return }
+        clearHandState()  // the hold ends, and so does the saved position
+        resumeWhereItStopped()
+    }
+
+    /// Ends hand control for good: the hold, the saved position and the notice.
+    fileprivate func clearHandState() {
+        let wasHeld = handState != nil || isHandPhase || manualStarted
+        manualStarted = false
+        handState = nil
+        handReturn = nil
+        releaseHandArrow()
+        handNote = ""
+        handLimitLogged = nil
+        if handRestartNotice {
+            restartNotice = nil
+            handRestartNotice = false
+        }
+        guard wasHeld else { return }
+        engine.setHandHold(.off)
+        stallWatch = StageStallWatch()
+        if isHandPhase { phase = .paused }
+    }
+}
+
+// MARK: - Manual session (lab only): the arrows, no calibration
+
+extension AutoStageDriver {
+    /// What a manual session does each tick. It never looks at a mapping, the tracker or the
+    /// picture: the board's angles and limits are all it uses.
+    fileprivate func manualTick(_ step: LabSetupStep) {
+        if phase == .disconnected {
+            phase = manualStarted && step == .done ? .paused : .waitingForStageStep
+        }
+        guard step == .stage || step == .done else {
+            // Setup went back (Redo setup): the arrow lets go, the hold ends, setup runs again.
+            manualStageSkipped = false
+            if phase != .waitingForStageStep || manualStarted {
+                releaseHandArrow()
+                engine.setHandHold(.off)
+                manualStarted = false
+                manualProblem = nil
+                phase = .waitingForStageStep
+            }
+            return
+        }
+        if step == .stage {
+            if !manualStageSkipped {
+                manualStageSkipped = true
+                engine.skipStage()  // no stage axes to measure: the identity
+            }
+            return
+        }
+        switch phase {
+        case .waitingForStageStep: prepareManual()
+        case .byHand: handTick()
+        default: break
+        }
+    }
+
+    /// From Paused (Pause, a reconnect, or a start that did not work): the arrows again.
+    func continueManually() {
+        guard controlMode == .manual, client.status == .connected,
+            engine.setupInfo.step == .done, phase == .paused
+        else { return }
+        restartNotice = nil
+        prepareManual()
+    }
+
+    /// The board still holds an old path: HOME clears it (and moves), then it starts again.
+    func goToCentre() {
+        guard controlMode == .manual, manualProblem == .oldPath, phase == .paused,
+            client.status == .connected
+        else { return }
+        prepareManual(centreFirst: true)
+    }
+
+    /// STOP, then STATUS; the board must be MANUAL and IDLE. An AUTO board with nothing queued
+    /// is put in MANUAL. Nothing moves on the way in, other than HOME on "Go to centre".
+    private func prepareManual(centreFirst: Bool = false) {
+        guard !manualPreparing else { return }
+        manualPreparing = true
+        manualProblem = nil
+        userPaused = false
+        phase = .preparingManual
+        Task {
+            defer { manualPreparing = false }
+            if centreFirst {
+                let homed = await request(.home, timeout: 20) {
+                    if case .done = $0 { return true }
+                    if case .error = $0 { return false }
+                    return nil
+                }
+                guard homed else { return manualFailed(.noAnswer) }
+            }
+            client.send(.stop)
+            var report: (mode: StageMode, state: StageRunState, queued: Int)?
+            func askStatus() async -> Bool {
+                await request(.status, timeout: 3) { reply in
+                    guard case .status(let mode, let state, _, _, let queued) = reply else {
+                        return nil
+                    }
+                    report = (mode, state, queued)
+                    return true
+                }
+            }
+            guard await askStatus(), var seen = report else { return manualFailed(.noAnswer) }
+            if seen.mode == .auto {
+                guard seen.state == .idle, seen.queued == 0 else { return manualFailed(.oldPath) }
+                let manual = await request(.mode(.manual), timeout: 3) {
+                    if case .ok(let text) = $0, text.hasPrefix("MODE") { return true }
+                    if case .error = $0 { return false }  // ERR BUSY
+                    return nil
+                }
+                guard manual else { return manualFailed(.oldPath) }
+                guard await askStatus(), let again = report else { return manualFailed(.noAnswer) }
+                seen = again
+            }
+            guard seen.mode == .manual, seen.state == .idle else { return manualFailed(.noAnswer) }
+            guard phase == .preparingManual, client.status == .connected else { return }
+            engine.setHandHold(.on)
+            stallWatch = StageStallWatch()
+            hand.reset()
+            handNote = ""
+            handLimitLogged = nil
+            manualStarted = true
+            inFlight = false
+            engine.logEvent("control_manual_start", detail: "\(angleX),\(angleY)")
+            phase = .byHand
+        }
+    }
+
+    private func manualFailed(_ problem: ManualProblem) {
+        guard phase == .preparingManual else { return }  // paused or dropped meanwhile
+        manualProblem = problem
+        phase = .paused
+    }
+
+    /// Enabled when connected, no arrow is held and no move is in flight.
+    var canSwitchToAutonomous: Bool {
+        controlMode == .manual && client.status == .connected && hand.active == nil && !inFlight
+            && (phase == .byHand || phase == .paused)
+    }
+
+    /// The stage goes to its centre, warms up and calibrates like a normal start, then moves by
+    /// itself. Nothing moves before the person says the picture is sharp.
+    func switchToAutonomous(_ path: StagePathMode) {
+        guard canSwitchToAutonomous else { return }
+        releaseHandArrow()
+        engine.setHandHold(.off)
+        stallWatch = StageStallWatch()
+        controlMode = .autonomous
+        manualStarted = false
+        manualProblem = nil
+        restartNotice = nil
+        savedAngles = nil
+        handNote = ""
+        pathMode = path
+        engine.logEvent("control_switch_autonomous", detail: path.rawValue)
+        engine.reopenStage()
+        needsSharpTap = true
+        phase = .waitingForFocus
     }
 }

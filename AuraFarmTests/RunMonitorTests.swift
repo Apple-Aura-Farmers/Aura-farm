@@ -465,4 +465,25 @@ final class RunMonitorTests: XCTestCase {
         XCTAssertEqual(monitor.state, .pausedAlignment)
         XCTAssertEqual(monitor.pauseCause, "alignment")
     }
+
+    func testEndingAFocusPauseForTheHandKeepsTheBaselineAndAlignmentIsStillSeen() {
+        withBaseline()
+        feed(focus: 0.5, for: 2.6)
+        XCTAssertEqual(monitor.state, .pausedFocus)
+        monitor.endFocusPauseForHand()
+        XCTAssertEqual(monitor.state, .ok)
+        XCTAssertEqual(monitor.focusBaseline, 1.0, "the manual resume would have cleared it")
+        // The picture is blank while the hand moves the stage: no focus pause comes of it.
+        XCTAssertEqual(feed(viewClass: .blank, for: 5), .ok)
+        // A phone that moved off the eyepiece is still seen.
+        XCTAssertEqual(
+            feed(alignment: reading(shift: 0.5), viewClass: .blank, for: 3.1), .pausedAlignment)
+    }
+
+    func testEndingForTheHandDoesNotEndAnAlignmentPause() {
+        feed(alignment: reading(shift: 0.5), for: 3.1)
+        XCTAssertEqual(monitor.state, .pausedAlignment)
+        monitor.endFocusPauseForHand()
+        XCTAssertEqual(monitor.state, .pausedAlignment)
+    }
 }

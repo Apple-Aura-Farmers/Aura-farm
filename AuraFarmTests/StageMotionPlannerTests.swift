@@ -141,4 +141,21 @@ extension StageMotionPlannerTests {
         XCTAssertEqual(StageLegServo.choose(heading: CGPoint(x: 1, y: 0), mapping: swapped), .y)
         XCTAssertNil(StageLegServo.choose(heading: .zero, mapping: swapped))
     }
+
+    func testNarrowerLimitsGiveAtLimit() {
+        var p = planner()
+        p.limits = StageLimits(xMin: 10, xMax: 170)
+        XCTAssertEqual(
+            p.next(angles: (170, 90), target: CGPoint(x: 1, y: 0)), .atLimit(.x),
+            "the old 0...180 clamp would have sent 173")
+        XCTAssertEqual(
+            p.next(angles: (168, 90), target: CGPoint(x: 1, y: 0)), .move(servo: .x, toAngle: 170))
+        XCTAssertEqual(p.next(angles: (10, 90), target: CGPoint(x: -1, y: 0)), .atLimit(.x))
+    }
+
+    func testDefaultLimitsAreUnchanged() {
+        XCTAssertEqual(planner().next(angles: (180, 90), target: CGPoint(x: 1, y: 0)), .atLimit(.x))
+        XCTAssertEqual(
+            planner().next(angles: (178, 90), target: CGPoint(x: 1, y: 0)), .move(servo: .x, toAngle: 180))
+    }
 }

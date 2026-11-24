@@ -159,9 +159,19 @@ enum EdgeFeedback: Equatable {
     }
 }
 
-/// Why the run is paused: the phone moved off the eyepiece, or the picture went out of focus.
+/// Why the run is paused: the phone moved off the eyepiece, the picture went out of focus, or
+/// the stage is being moved by hand.
 enum GuidePauseReason: Equatable {
-    case alignment, focus
+    case alignment, focus, byHand
+
+    /// A short word for the CSV.
+    var csvName: String {
+        switch self {
+        case .alignment: "paused_alignment"
+        case .focus: "paused_focus"
+        case .byHand: "paused_by_hand"
+        }
+    }
 }
 
 /// What the guide asks the person to do next.
@@ -271,7 +281,9 @@ enum GuideInstruction: Equatable {
         case .notAnEdge: "Not an edge, keep going"
         case .nothingToFollow: "Nothing to follow here"
         case .stageLimit: "Stage limit, turning"
-        case .paused(let reason): reason == .alignment ? "Paused: alignment" : "Paused: focus"
+        case .paused(.alignment): "Paused: alignment"
+        case .paused(.focus): "Paused: focus"
+        case .paused(.byHand): "Paused: moved by hand"
         case .tooFar: "Too far, come back a little"
         case .otherWay: "Other way"
         case .missedSpot: "Missed spot"
@@ -307,6 +319,7 @@ enum GuideInstruction: Equatable {
         // No words: the orange circle and "Paused" say it, and the picture stays clear.
         case .paused(.alignment): ""
         case .paused(.focus): "Out of focus. Turn the focus knob slowly until it's sharp"
+        case .paused(.byHand): ""
         case .tooFar, .otherWay: "Turn back toward the cross"
         case .missedSpot: "Missed a spot. Come back a little, slower"
         case .refocus: "Refocus"
@@ -345,7 +358,7 @@ enum GuideInstruction: Equatable {
         case .notAnEdge: "not_an_edge"
         case .nothingToFollow: "nothing_to_follow"
         case .stageLimit: "stage_limit"
-        case .paused(let reason): reason == .alignment ? "paused_alignment" : "paused_focus"
+        case .paused(let reason): reason.csvName
         case .tooFar: "too_far"
         case .otherWay: "other_way"
         case .missedSpot: "missed_spot"

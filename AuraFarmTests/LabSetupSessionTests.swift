@@ -482,4 +482,62 @@ final class LabSetupSessionTests: XCTestCase {
         print("PREVIEW \(url.path) \(Int(image.size.width))x\(Int(image.size.height))")
         XCTAssertGreaterThan(data.count, 10_000)
     }
+
+    // MARK: The stage moved by hand
+
+    /// A smooth pattern: the fine detail is gone, as in a blurry picture.
+    private func blurredFrame() -> CVPixelBuffer {
+        SyntheticFrame.make(width: 1280, height: 720) { x, y in
+            guard hypot(Double(x) - 640, Double(y) - 360) <= 300 else { return 10 }
+            return UInt8(max(0, min(255, 170 + 80 * sin(Double(x) * 0.03) * sin(Double(y) * 0.03))))
+        }
+    }
+
+    private func runFeed(
+        _ frame: CVPixelBuffer, for duration: Double, from start: Double,
+        session: LabSetupSession, pipeline: SlideMovementPipeline
+    ) -> Double {
+        var seconds = start
+        for _ in 0..<Int((duration * 10).rounded()) {
+            seconds += 0.1
+            _ = session.process(
+                frame, seconds: seconds, pipeline: pipeline, measureAgreement: false,
+                viewClass: .sample)
+        }
+        return seconds
+    }
+
+    func testWithTheHandHoldOnABlurryViewNeverPausesAndWithItOffItDoes() throws {
+        let axes = try XCTUnwrap(
+            StageAxes(xDirection: CGPoint(x: 1, y: 0), yDirection: CGPoint(x: 0, y: 1)))
+        for hold in [StageHandHold.on, .off] {
+            let pipeline = makePipeline()
+            let session = LabSetupSession(skippingAlignAndFocus: true)
+            var seconds = 0.0
+            for _ in 0..<31 {
+                seconds += 0.1
+                _ = session.process(
+                    discFrame(), seconds: seconds, pipeline: pipeline, measureAgreement: false)
+            }
+            pipeline.confirmField()
+            seconds += 0.1
+            _ = session.process(
+                discFrame(), seconds: seconds, pipeline: pipeline, measureAgreement: false)
+            session.completeStage(with: axes)
+            XCTAssertEqual(session.step, .done)
+            seconds = runFeed(
+                texturedFrame(80), for: 4, from: seconds, session: session, pipeline: pipeline)
+            XCTAssertEqual(session.monitorState, .ok)
+            XCTAssertNotNil(session.focusBaseline, "the baseline was learned from the sharp view")
+            session.setHandHold(hold)
+            seconds = runFeed(
+                blurredFrame(), for: 8, from: seconds, session: session, pipeline: pipeline)
+            if hold == .on {
+                XCTAssertEqual(session.monitorState, .ok, "held: focus is not judged")
+                XCTAssertNotNil(session.focusBaseline, "and the baseline is kept")
+            } else {
+                XCTAssertEqual(session.monitorState, .pausedFocus, "not held: a blurry view pauses")
+            }
+        }
+    }
 }

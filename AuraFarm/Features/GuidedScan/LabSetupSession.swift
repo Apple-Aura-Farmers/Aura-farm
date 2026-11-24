@@ -168,6 +168,26 @@ final class LabSetupSession {
     /// Focus is clearly low, for the guide to hold off a capture.
     var isFocusLow: Bool { info.monitor.focusLow }
 
+    /// The stage is moved by hand (see `StageHandHold`). Analysis queue.
+    private(set) var handHold = StageHandHold.off
+
+    /// While `.on` the monitor sees a blank view and no focus index, so focus neither pauses nor
+    /// resumes, and alignment is still watched. Entering it ends a pause for focus and keeps the
+    /// baseline.
+    func setHandHold(_ hold: StageHandHold) {
+        handHold = hold
+        guard hold == .on else { return }
+        monitor.endFocusPauseForHand()
+        runDial = nil
+        runDialReading = nil
+        if info.monitor.state == .pausedFocus {
+            info.monitor.state = .ok
+            info.monitor.pauseCause = ""
+            info.monitor.dial = nil
+        }
+        info.monitor.focusLow = false
+    }
+
     /// The run monitor's state, for the guide to pause on.
     var monitorState: RunMonitorState { info.monitor.state }
 
@@ -228,6 +248,21 @@ final class LabSetupSession {
         stageAxes = .identity
         info.step = .done
         info.stageAxes = .identity
+    }
+
+    /// Back to the stage step to be measured again, as a normal start would: the old axes and
+    /// the monitor's pauses are gone; the focus baseline and focusFound are kept.
+    func reopenStage() {
+        guard flow.step == .done, !skipsAllChecks else { return }
+        flow.reopenStage()
+        calibration.reset()
+        stageAxes = nil
+        monitor.reset()  // keeps the focus baseline
+        runDial = nil
+        runDialReading = nil
+        info.step = .stage
+        info.stageAxes = nil
+        info.monitor = RunMonitorInfo(circle: referenceCircle)
     }
 
     /// The automated stage measured the axes itself: the step is done with them.
@@ -519,8 +554,10 @@ final class LabSetupSession {
         tracking: TrackingState, viewClass: ViewClass, isStill: Bool, seconds: Double
     ) {
         guard !skipsAllChecks else { return }
+        let held = handHold == .on
+        let viewClass = held ? ViewClass.blank : viewClass
         var index: Double?
-        if let box = step.registrationRect,
+        if !held, let box = step.registrationRect,
             Self.isDue(lastRunFocusAt, now: seconds, interval: Self.runFocusIntervalSeconds)
         {
             lastRunFocusAt = seconds

@@ -29,6 +29,8 @@ class ScanEngine: NSObject {
     /// Live organism counting: the count, the boxes and the settings that shape them.
     private(set) var countInfo = LiveCountInfo()
     private(set) var showsDetections = false
+    /// The stage is moved by hand (see `setHandHold`); main queue, for the lab's overlay.
+    private(set) var handHold = StageHandHold.off
     /// The hardware the counting model runs on, and the camera's rate.
     private(set) var detectorUnits = DetectorUnits.neuralEngine
     private(set) var cameraRate = CameraRate.fps20
@@ -159,6 +161,9 @@ class ScanEngine: NSObject {
     @ObservationIgnored var setup = LabSetupSession()
     @ObservationIgnored private var lastPublishedStep = LabSetupStep.align
     @ObservationIgnored private var pausesOnMonitorFlag = true
+    /// The stage is moved by hand: the guide is held and nothing is counted. Analysis queue.
+    @ObservationIgnored private var handHoldFlag = StageHandHold.off
+    @ObservationIgnored private var previewShown = false
     @ObservationIgnored var pendingEventName = ""
     @ObservationIgnored private var pendingEventDetail = ""
     @ObservationIgnored private var queuedEvents: [(name: String, detail: String)] = []
@@ -415,6 +420,22 @@ class ScanEngine: NSObject {
         }
     }
 
+    /// The stage is moved by hand (or has just come back): `.on` holds the guide (no spot, no edge,
+    /// no column change, no finish), counts nothing, judges no focus and shows what the detector
+    /// sees without counting it; `.checkingFocus` holds the guide and judges focus, counting
+    /// nothing; `.off` is as usual, and the guide's timers start afresh.
+    func setHandHold(_ hold: StageHandHold) {
+        handHold = hold
+        analysisQueue.async { [weak self] in
+            guard let self, self.handHoldFlag != hold else { return }
+            self.handHoldFlag = hold
+            self.setup.setHandHold(hold)
+            self.live.setPreviewing(hold == .on)
+            let info = self.setup.info
+            DispatchQueue.main.async { self.setupInfo = info }
+        }
+    }
+
     /// Switches organism counting on for a path that is not the guide's (the automated stage's
     /// preset zig-zag), with the column number; off with `active: false`. Overrides the guide
     /// route's own counting and column while it is on.
@@ -527,6 +548,19 @@ class ScanEngine: NSObject {
         analysisQueue.async { [weak self] in
             guard let self, self.setup.requestFocusPause() else { return }
             self.pendingEventName = "focus_pause_stall"
+            let info = self.setup.info
+            DispatchQueue.main.async { self.setupInfo = info }
+        }
+    }
+
+    /// The stage is to be measured after all (manual to autonomous): back to the stage step.
+    func reopenStage() {
+        analysisQueue.async { [weak self] in
+            guard let self, self.setup.step == .done else { return }
+            self.setup.reopenStage()
+            self.lastPublishedStep = self.setup.step
+            self.clearTrackingDisplay()
+            self.resetGuide()
             let info = self.setup.info
             DispatchQueue.main.async { self.setupInfo = info }
         }
@@ -1604,9 +1638,10 @@ extension ScanEngine: AVCaptureVideoDataOutputSampleBufferDelegate {
         var edgeLine: EdgeLine?
         var countLog = LiveCountFrameLog()
         if guideEnabled, setup.step == .done {
+            let held = handHoldFlag != .off
             dryRun.pauseReason =
-                pausesOnMonitorFlag ? setup.monitorState.pauseReason : nil
-            dryRun.focusLow = pausesOnMonitorFlag && setup.isFocusLow
+                held ? .byHand : (pausesOnMonitorFlag ? setup.monitorState.pauseReason : nil)
+            dryRun.focusLow = pausesOnMonitorFlag && !held && setup.isFocusLow
             // The line is measured first so the guide can use it on this very reading.
             edgeLine = edgeProbe.update(buffer, step: step, direction: dryRun.frameHeading)
             let result = dryRun.update(
@@ -1618,7 +1653,7 @@ extension ScanEngine: AVCaptureVideoDataOutputSampleBufferDelegate {
                 heat.resetTimes()
                 live.prepare()
             }
-            let countingOn = externalColumn != nil || dryRun.countingActive
+            let countingOn = !held && (externalColumn != nil || dryRun.countingActive)
             if countingOn != lastCountingActive {
                 lastCountingActive = countingOn
                 live.setCounting(lastCountingActive)
@@ -1643,6 +1678,23 @@ extension ScanEngine: AVCaptureVideoDataOutputSampleBufferDelegate {
                     fieldCircle: step.fieldState?.mask.flatMap { FieldCircle(fitting: $0) },
                     seconds: time - runStartSeconds, column: externalColumn ?? dryRun.column,
                     fieldSide: step.boxSide)
+            }
+            if handHoldFlag == .on {
+                // The same rules as counting, but nothing here reaches the count.
+                let reason = LiveOrganismCounter.skipReason(
+                    tracking: step.tracking.trackingState,
+                    isGhostOrSparseSkip: step.reading == "ghost" || step.reading == "sparse_skip",
+                    monitorPaused: false, viewClass: dryRun.lastViewClass,
+                    speedFraction: indicators.speedFraction,
+                    stillSeconds: indicators.stillSeconds,
+                    secondsSinceLastDetection: live.secondsSincePreview(at: time - runStartSeconds),
+                    maxModelRunsPerSecond: modelRateCap ? countThresholds.maxModelRunsPerSecond : nil,
+                    heat: lastHeatMode, heatThresholds: heatThresholds)
+                live.processPreview(
+                    buffer: buffer, skipReason: reason, moved: indicators.stillSeconds <= 0,
+                    frameSize: step.frameSize,
+                    fieldCircle: step.fieldState?.mask.flatMap { FieldCircle(fitting: $0) },
+                    seconds: time - runStartSeconds)
             }
             publishCount(isActive: countingOn, frameSize: step.frameSize)
             let path = edgeLine.map { $0.isCandidate ? $0.path : [] }
@@ -1697,7 +1749,7 @@ extension ScanEngine: AVCaptureVideoDataOutputSampleBufferDelegate {
         if step.event != .none { lastEventName = step.eventName }
 
         trail.append(step.positionFields)
-        if guideEnabled, runIsOpen {
+        if guideEnabled, runIsOpen, handHoldFlag == .off {
             runPath.append(step.positionFields)
             // Keeps every other point when it gets long: the path stays whole and small.
             if runPath.count > 4 * RunMapContent.maxPathPoints {
@@ -1860,8 +1912,11 @@ extension ScanEngine: AVCaptureVideoDataOutputSampleBufferDelegate {
         guard info != lastCountInfo else { return }
         lastCountInfo = info
         countThrottle.offer(info)
-        if showsDetectionsFlag {
-            DispatchQueue.main.async { [weak self] in self?.liveBoxes = info }
+        // While the stage is moved by hand the detector's boxes show whatever the switch says.
+        if showsDetectionsFlag || info.isPreviewing || previewShown {
+            previewShown = info.isPreviewing
+            let shown = showsDetectionsFlag || info.isPreviewing
+            DispatchQueue.main.async { [weak self] in self?.liveBoxes = shown ? info : LiveCountInfo() }
         }
     }
 

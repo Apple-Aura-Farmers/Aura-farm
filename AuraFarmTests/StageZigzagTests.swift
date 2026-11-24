@@ -336,4 +336,88 @@ final class StageZigzagTests: XCTestCase {
         _ = simulate(&zigzag, angles: &angles, edge: { column, dwell, _ in column == 3 && dwell == 1 })
         XCTAssertEqual(zigzag.progress.fraction, 1)
     }
+
+    // MARK: Limits
+
+    private func moveAngles(_ actions: [StageZigzagAction]) -> [(servo: StageAxis, angle: Int)] {
+        actions.compactMap {
+            if case .moveTo(let servo, let angle) = $0 { return (servo, angle) }
+            return nil
+        }
+    }
+
+    func testAFullPathInsideNarrowerLimitsFinishesAndNeverAsksBeyondThem() throws {
+        var zigzag = try makeZigzag(mapping(), chunk: 3)
+        zigzag.limits = StageLimits(xMin: 40, xMax: 140, yMin: 30, yMax: 150)
+        var angles = (x: 90, y: 90)
+        let actions = simulate(&zigzag, angles: &angles)
+        guard case .finished? = actions.last else { return XCTFail("did not finish") }
+        let moves = moveAngles(actions)
+        XCTAssertFalse(moves.isEmpty)
+        for move in moves {
+            let range = zigzag.limits.range(of: move.servo)
+            XCTAssertTrue(range.contains(move.angle), "\(move.servo) \(move.angle)")
+        }
+    }
+
+    func testLimitsNarrowedInTheMiddleOfALegEndTheLegInsteadOfHanging() throws {
+        var zigzag = try makeZigzag(mapping(), chunk: 3)
+        var angles = (x: 90, y: 90)
+        var event: StageZigzagEvent?
+        var legMoves = 0
+        var narrowedAt: Int?
+        var afterNarrowing: [StageZigzagAction] = []
+        for _ in 0..<5_000 {
+            guard let action = zigzag.next(angles: angles, event: event, tracked: nil) else {
+                return XCTFail("stuck")
+            }
+            event = nil
+            if narrowedAt != nil { afterNarrowing.append(action) }
+            switch action {
+            case .moveTo(let servo, let angle):
+                let current = servo == .x ? angles.x : angles.y
+                if servo == zigzag.plan.legServo, zigzag.column == 1 {
+                    legMoves += 1
+                }
+                if legMoves == 4, narrowedAt == nil {
+                    // The board refuses this move: the range ends where the servo is.
+                    narrowedAt = legMoves
+                    let rising = angle > current
+                    if servo == .x {
+                        zigzag.limits = rising ? StageLimits(xMin: 0, xMax: current) : StageLimits(xMin: current, xMax: 180)
+                    } else {
+                        zigzag.limits = rising ? StageLimits(yMin: 0, yMax: current) : StageLimits(yMin: current, yMax: 180)
+                    }
+                } else if servo == .x {
+                    angles.x = angle
+                } else {
+                    angles.y = angle
+                }
+                event = .settled
+            case .dwell: event = .dwellDone
+            case .finished: return XCTFail("finished before the narrowing took effect")
+            default: break
+            }
+            if afterNarrowing.contains(where: { if case .columnEnded(1) = $0 { true } else { false } }) {
+                break
+            }
+        }
+        XCTAssertNotNil(narrowedAt)
+        let leg = zigzag.plan.legServo
+        XCTAssertTrue(
+            afterNarrowing.contains { if case .columnEnded(1) = $0 { true } else { false } },
+            "the leg ended instead of hanging")
+        XCTAssertFalse(
+            moveAngles(afterNarrowing).contains {
+                $0.servo == leg && !zigzag.limits.range(of: leg).contains($0.angle)
+            })
+    }
+
+    func testDefaultLimitsRunTheWholeTurn() throws {
+        var zigzag = try makeZigzag(mapping(), chunk: 3)
+        var angles = (x: 90, y: 90)
+        let moves = moveAngles(simulate(&zigzag, angles: &angles))
+        XCTAssertTrue(moves.contains { $0.angle == 0 })
+        XCTAssertTrue(moves.contains { $0.angle == 180 })
+    }
 }
