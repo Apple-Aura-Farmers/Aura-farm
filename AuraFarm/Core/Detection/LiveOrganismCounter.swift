@@ -14,6 +14,8 @@ struct LiveOrganismCounter {
         case seenOnce
         /// Counted by the tally but already on the map.
         case repeatOnMap
+        /// Seen while the stage is moved by hand: shown, never counted.
+        case notCounted
     }
 
     struct VisibleBox: Identifiable, Equatable {

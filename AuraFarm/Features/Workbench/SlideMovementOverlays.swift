@@ -63,7 +63,7 @@
                 } else {
                     if model.guideDryRun {
                         GuideGeometryHost(model: model, previewLayer: previewLayer, display: display)
-                        if model.showsDetections {
+                        if model.showsDetections || model.handHold == .on {
                             let mapper = FramePreviewConverter(
                                 layer: previewLayer, frameSize: model.fieldInfo.frameSize,
                                 display: display)

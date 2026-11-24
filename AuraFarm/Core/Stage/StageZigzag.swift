@@ -5,7 +5,7 @@ import Foundation
 enum StagePathMode: String, CaseIterable {
     case followGuide, presetPath
 
-    var title: String { self == .followGuide ? "Follow guide" : "Follow preset path" }
+    var title: String { self == .followGuide ? "Follow guide" : "Preset moves" }
 }
 
 /// The zig-zag laid out from the servo mapping: columns run up and down the screen like the
@@ -27,6 +27,19 @@ struct StageZigzagPlan: Equatable {
     var stepStartsHigh: Bool
     /// The two servos' roles were exchanged after the first column ran sideways.
     var rolesSwapped = false
+
+    /// The path without calibration: servo Y walks the columns, servo X steps across, with the
+    /// arrows' own directions (Up is more Y degrees, Left fewer X degrees, unless flipped), so it
+    /// starts at the screen's top left.
+    init(objective: StageObjective, flipX: Bool, flipY: Bool) {
+        rolesSwapped = false
+        legServo = .y
+        stepServo = .x
+        legFieldsPerDegree = objective.nominalFieldsPerDegree
+        stepFieldsPerDegree = objective.nominalFieldsPerDegree
+        legStartsHigh = !flipY
+        stepStartsHigh = flipX
+    }
 
     /// - Parameter swappingRoles: the other servo walks the columns (the first-column check).
     init?(mapping: StageServoMapping, swappingRoles: Bool = false) {
@@ -92,6 +105,8 @@ struct StageZigzag {
     /// Degrees added to the leg servo's and the step servo's moves while their gears are stuck.
     var boostLeg = 0
     var boostStep = 0
+    /// The angles the servos may reach; may change while the path runs (the board refused a move).
+    var limits = StageLimits()
     /// The current mapping (kept up to date by the caller); used to rebuild the plan on a swap.
     var mapping: StageServoMapping?
     /// Picture travel in column 1 that is enough to tell its direction, in fields.
@@ -126,6 +141,12 @@ struct StageZigzag {
         stepFieldsPerDegree = plan.stepFieldsPerDegree
         // From the start end toward the other.
         direction = plan.legStartsHigh ? -1 : 1
+    }
+
+    /// The end of `servo`'s range: the high one or the low one.
+    private func rangeEnd(of servo: StageAxis, high: Bool) -> Int {
+        let range = limits.range(of: servo)
+        return high ? range.upperBound : range.lowerBound
     }
 
     /// Degrees between stops along a leg when the picture position is not known.
@@ -184,8 +205,8 @@ struct StageZigzag {
             return
         }
         guard column > 0 else { return }
-        let far = plan.stepStartsHigh ? 0 : 180
-        let start = plan.stepStartsHigh ? 180 : 0
+        let far = rangeEnd(of: plan.stepServo, high: !plan.stepStartsHigh)
+        let start = rangeEnd(of: plan.stepServo, high: plan.stepStartsHigh)
         // A column step is made of whole moves; from column 3 on, the steps so far say more.
         let chunk = Double(chunkDegrees)
         var width = (Double(columnFallbackDegrees) / chunk).rounded(.up) * chunk
@@ -286,8 +307,8 @@ struct StageZigzag {
     }
 
     private mutating func approach(_ angles: (x: Int, y: Int)) {
-        let legEnd = plan.legStartsHigh ? 180 : 0
-        let stepEnd = plan.stepStartsHigh ? 180 : 0
+        let legEnd = rangeEnd(of: plan.legServo, high: plan.legStartsHigh)
+        let stepEnd = rangeEnd(of: plan.stepServo, high: plan.stepStartsHigh)
         let leg = angle(of: plan.legServo, angles)
         let step = angle(of: plan.stepServo, angles)
         if leg != legEnd {
@@ -320,8 +341,9 @@ struct StageZigzag {
     }
 
     private func bounds() -> (low: Int, high: Int) {
-        let low = lowEdge.map { max($0 - plan.rangeMargin, 0) } ?? 0
-        let high = highEdge.map { min($0 + plan.rangeMargin, 180) } ?? 180
+        let range = limits.range(of: plan.legServo)
+        let low = lowEdge.map { max($0 - plan.rangeMargin, range.lowerBound) } ?? range.lowerBound
+        let high = highEdge.map { min($0 + plan.rangeMargin, range.upperBound) } ?? range.upperBound
         return (low, high)
     }
 
@@ -338,8 +360,9 @@ struct StageZigzag {
         let current = angle(of: plan.legServo, angles)
         let range = bounds()
         let end = direction > 0 ? range.high : range.low
+        // Limits narrowed to behind the servo end the leg too, instead of walking it back.
+        guard (end - current) * direction > 0 else { return endLeg(angles) }
         let target = stepToward(end, from: current, servo: plan.legServo)
-        guard target != current else { return endLeg(angles) }
         stage = .legMove
         queue.append(.moveTo(servo: plan.legServo, angle: target))
     }
@@ -361,7 +384,7 @@ struct StageZigzag {
     private mutating func endLeg(_ angles: (x: Int, y: Int)) {
         queue.append(.columnEnded(column))
         let current = angle(of: plan.stepServo, angles)
-        let far = plan.stepStartsHigh ? 0 : 180
+        let far = rangeEnd(of: plan.stepServo, high: !plan.stepStartsHigh)
         guard current != far else {
             stage = .done
             isFinished = true
@@ -379,7 +402,7 @@ struct StageZigzag {
     /// column's width (or the degree fallback, capped at twice that), else another step.
     private mutating func stepStep(_ angles: (x: Int, y: Int)) {
         let current = angle(of: plan.stepServo, angles)
-        let far = plan.stepStartsHigh ? 0 : 180
+        let far = rangeEnd(of: plan.stepServo, high: !plan.stepStartsHigh)
         let moved = abs(current - anchorAngle)
         var arrived = moved >= 2 * columnFallbackDegrees || current == far
         if let tracked, let anchorPosition {

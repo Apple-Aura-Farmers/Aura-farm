@@ -120,6 +120,10 @@ enum StageReply: Equatable {
     case status(mode: StageMode, state: StageRunState, x: Int, y: Int, queued: Int)
     /// "ZPOS Z=n": the focus servo, on its own line.
     case focusPosition(z: Int)
+    /// "LIMITS XMIN=n XMAX=n YMIN=n YMAX=n": the angles the servos may reach.
+    case limits(StageLimits)
+    /// "LIMIT X MAX": a move of that servo ended at the end of its range.
+    case limitReached(StageAxis, StageLimitEnd)
     case unknown(String)
 
     static func parse(_ line: String) -> StageReply {
@@ -138,6 +142,18 @@ enum StageReply: Equatable {
             if let x = f["X"], let y = f["Y"], words.count == 3 { return .done(x: x, y: y) }
         case "ZPOS":
             if let z = f["Z"], words.count == 2 { return .focusPosition(z: z) }
+        case "LIMITS":
+            if words.count == 5, let a = f["XMIN"], let b = f["XMAX"], let c = f["YMIN"],
+                let d = f["YMAX"], StageLimits.isSane(a, b), StageLimits.isSane(c, d)
+            {
+                return .limits(StageLimits(xMin: a, xMax: b, yMin: c, yMax: d))
+            }
+        case "LIMIT":
+            if words.count == 3, words[1] == "X" || words[1] == "Y",
+                words[2] == "MIN" || words[2] == "MAX"
+            {
+                return .limitReached(words[1] == "X" ? .x : .y, words[2] == "MIN" ? .min : .max)
+            }
         case "RESUMED":
             if let x = f["X"], let y = f["Y"], let q = f["Q"], words.count == 4 {
                 return .resumed(x: x, y: y, queued: q)

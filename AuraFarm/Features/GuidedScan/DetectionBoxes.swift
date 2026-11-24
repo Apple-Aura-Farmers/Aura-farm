@@ -23,12 +23,13 @@ struct DetectionBoxes: View {
         case .counted: .green
         case .seenOnce: .gray
         case .repeatOnMap: .blue
+        case .notCounted: .yellow
         }
     }
 
     var body: some View {
         Canvas { context, _ in
-            for box in info.boxes {
+            for box in info.isPreviewing ? info.previewBoxes : info.boxes {
                 let points = polygon(box.rect)
                 guard let first = points.first else { continue }
                 var path = Path()
@@ -36,11 +37,10 @@ struct DetectionBoxes: View {
                 path.closeSubpath()
                 let colour = Self.colour(box.status)
                 context.stroke(path, with: .color(colour), lineWidth: 2)
-                let caption = Text(
-                    "\(box.id) \(OrganismDisplayName.label(box.label)) \(Int(box.confidence * 100))%"
-                )
-                .font(.caption2.bold())
-                .foregroundStyle(colour)
+                // Only the organism's name; the colour says whether it counts.
+                let caption = Text(OrganismDisplayName.label(box.label))
+                    .font(.caption2.bold())
+                    .foregroundStyle(colour)
                 context.draw(caption, at: CGPoint(x: first.x, y: first.y - 8), anchor: .bottomLeading)
             }
         }

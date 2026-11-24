@@ -3,23 +3,29 @@ import Foundation
 /// The numbers `FocusGuide` decides with. Data, not logic. All PLACEHOLDER: calibrate from the
 /// setup log (`focus_*` columns).
 struct FocusThresholds {
-    /// The sharpness used is the median of this many readings.
-    var smoothingReadings: Int = 3
-    /// Lab scale (`FrameAnalyzer.stats` at step 4). A peak below this means there is not enough
-    /// sample in view. Source: E1, soil inside the cover slip read median 489 and 10th
-    /// percentile 194.
+    /// The sharpness used is the median of this many readings, so a shake of the phone is not
+    /// the best seen.
+    var smoothingReadings: Int = 5
+    /// Lab scale (`FrameAnalyzer.stats` at step 4). A peak above this is enough sample by itself.
+    /// Source: E1, soil inside the cover slip read median 489 and 10th percentile 194.
     var minPeakSharpness: Double = 150
+    /// A sparse view peaks lower: it counts from this peak on, when turning the knob changed the
+    /// sharpness by `sparsePeakRise` (an empty view hardly changes). PLACEHOLDER: the operator,
+    /// 24 Nov: a sharp sparse view was never accepted.
+    var sparsePeakSharpness: Double = 40
+    /// The peak over the lowest value seen.
+    var sparsePeakRise: Double = 1.5
     /// A sweep this long with no peak above `minPeakSharpness`: ask to move to sample.
     var sweepSecondsBeforeNoSample: Double = 8
     /// Current below this share of the peak, after the peak: passed it.
-    var passedFraction: Double = 0.7
+    var passedFraction: Double = 0.55
     /// Current at or above this share of the peak: near the best.
-    var nearFraction: Double = 0.9
+    var nearFraction: Double = 0.75
     /// Near the best and steady for this long: focused.
-    var settleSeconds: Double = 1.0
+    var settleSeconds: Double = 0.6
     /// Steady: the standard deviation of the smoothed readings over `settleSeconds`, as a share
     /// of the peak, is under this.
-    var settleVariation: Double = 0.08
+    var settleVariation: Double = 0.15
 }
 
 enum FocusGuideState: Equatable {
@@ -50,7 +56,7 @@ struct FocusReading: Equatable {
 /// phone camera's own focus stays fixed; the best focus is the PEAK of sharpness over the
 /// helper's sweep, because absolute sharpness depends on the sample.
 ///
-/// 1. Starts in `turnOneWay`, keeping the peak. 2. Once the peak exceeds `minPeakSharpness`
+/// 1. Starts in `turnOneWay`, keeping the peak. 2. Once the peak is a real one (`hasSample`)
 /// and the current value falls below `passedFraction` of it: `passedPeak`. 3. From there,
 /// back to `nearFraction` of the peak: `nearPeak`. 4. Near the best and steady for
 /// `settleSeconds`: `focused`, which stays. 5. `needsSample` when the sweep runs
@@ -62,6 +68,8 @@ struct FocusGuide {
 
     private var window: [Double] = []
     private var peak = 0.0
+    /// The lowest smoothed value seen, for the peak of a sparse view.
+    private var lowest = Double.infinity
     private var state = FocusGuideState.turnOneWay
     private var startedAt: Double?
     private var settling: [(seconds: Double, value: Double)] = []
@@ -77,6 +85,7 @@ struct FocusGuide {
         let sorted = window.sorted()
         let current = sorted[sorted.count / 2]
         peak = max(peak, current)
+        lowest = min(lowest, current)
 
         if state != .focused {
             advance(current: current, seconds: seconds)
@@ -90,8 +99,14 @@ struct FocusGuide {
         self = FocusGuide(thresholds: thresholds)
     }
 
+    /// The peak is a real one: high enough by itself, or clearly above the rest of the sweep.
+    private var hasSample: Bool {
+        peak > thresholds.minPeakSharpness
+            || peak > thresholds.sparsePeakSharpness && peak >= thresholds.sparsePeakRise * lowest
+    }
+
     private mutating func advance(current: Double, seconds: Double) {
-        guard peak > thresholds.minPeakSharpness else {
+        guard hasSample else {
             if seconds - (startedAt ?? seconds) >= thresholds.sweepSecondsBeforeNoSample {
                 state = .needsSample
             }

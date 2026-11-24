@@ -123,7 +123,7 @@ final class KnobRuleTests: XCTestCase {
         // the line crossing columns, the spot limit and slip tilt columns, and last the focus
         // pause's two and the stage's two servo angles.
         XCTAssertEqual(
-            Array(MovementLog.header.suffix(13).prefix(5)),
+            Array(MovementLog.header.suffix(22).prefix(5)),
             ["knob_words", "heat_mode", "screen_brightness", "lens_recording", "video_drops"])
     }
 }

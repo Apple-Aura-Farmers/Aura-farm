@@ -5,6 +5,7 @@
     struct AutoStagePanel: View {
         let driver: AutoStageDriver
         let setupStep: LabSetupStep
+        var onSwitchToAutonomous: () -> Void = {}
         @State private var isChangingObjective = false
 
         var body: some View {
@@ -14,9 +15,10 @@
                     Circle().fill(dot).frame(width: 10, height: 10)
                     Text(phaseText).font(.footnote).lineLimit(2)
                     Text(driver.objective.title).font(.footnote.bold())
+                    Text(isManual ? "Manual" : "Autonomous").font(.footnote).foregroundStyle(.secondary)
                     Button("Change") { isChangingObjective = true }
                         .font(.caption)
-                        .disabled(busyMeasuring)
+                        .disabled(busyMeasuring || (isByHand && !isManual))
                     Spacer()
                     if driver.client.status == .connected || driver.client.status == .reconnecting {
                         Button("Disconnect") { driver.client.disconnect() }
@@ -24,7 +26,7 @@
                         Button("Connect") { driver.client.connect() }
                     }
                 }
-                if !driver.mappingSummary.isEmpty || driver.autoStageLimitCount > 0 {
+                if !isManual, !driver.mappingSummary.isEmpty || driver.autoStageLimitCount > 0 {
                     Text(
                         driver.mappingSummary
                             + (driver.autoStageLimitCount > 0
@@ -32,21 +34,25 @@
                     )
                     .font(.caption).foregroundStyle(.secondary)
                 }
-                Toggle(
-                    "Warm-up (traverse, 3×3, cross)",
-                    isOn: Binding(
-                        get: { !driver.warmUpSequence.isEmpty },
-                        set: { driver.warmUpSequence = $0 ? StageWarmUpItem.defaultSequence : [] })
-                )
-                .font(.footnote)
-                .disabled(busyMeasuring)
-                Toggle("Auto stage limit", isOn: $driver.autoStageLimit).font(.footnote)
+                if !isManual {
+                    Toggle(
+                        "Warm-up (traverse, 3×3, cross)",
+                        isOn: Binding(
+                            get: { !driver.warmUpSequence.isEmpty },
+                            set: { driver.warmUpSequence = $0 ? StageWarmUpItem.defaultSequence : [] })
+                    )
+                    .font(.footnote)
+                    .disabled(busyMeasuring)
+                    Toggle("Auto stage limit", isOn: $driver.autoStageLimit).font(.footnote)
+                }
                 Picker("Chunk", selection: $driver.chunkDegrees) {
                     ForEach([1, 2, 3, 5, 10].filter { $0 >= driver.objective.minChunk }, id: \.self) {
                         Text("\($0)°").tag($0)
                     }
                 }
                 .pickerStyle(.segmented)
+                .disabled(isByHand && !isManual)
+                if !isManual {
                 Picker(
                     "Path",
                     selection: Binding(
@@ -55,13 +61,14 @@
                     ForEach(StagePathMode.allCases, id: \.self) { Text($0.title).tag($0) }
                 }
                 .pickerStyle(.segmented)
-                .disabled(!canChangePathMode)
-                if driver.pathMode == .presetPath {
+                .disabled(!canChangePathMode || isByHand)
+                }
+                if !isManual, driver.pathMode == .presetPath {
                     Stepper(value: $driver.dwellSeconds, in: 0.6...3.0, step: 0.2) {
                         Text(String(format: "Dwell %.1f s", driver.dwellSeconds)).font(.footnote)
                     }
                 }
-                if driver.pathMode == .presetPath, let progress = driver.presetProgress {
+                if !isManual, driver.pathMode == .presetPath, let progress = driver.presetProgress {
                     StageProgressBar(progress: progress)
                 }
                 if driver.presetEdgePrompt {
@@ -79,14 +86,40 @@
                 if let warning = driver.objective.warning(forChunk: driver.chunkDegrees) {
                     Text(warning).font(.caption).foregroundStyle(.orange)
                 }
+                if driver.manualProblem == .oldPath {
+                    Text("The stage still holds an old path. Go to centre clears it.")
+                        .font(.caption).foregroundStyle(.orange)
+                    Button("Go to centre") { driver.goToCentre() }.buttonStyle(.borderedProminent)
+                } else if driver.manualProblem == .noAnswer {
+                    Text("The stage did not answer").font(.caption).foregroundStyle(.orange)
+                }
                 HStack {
                     if case .paused = driver.phase {
-                        Button("Resume") { driver.resume() }
+                        if isManual {
+                            Button(driver.manualProblem == .noAnswer ? "Retry" : "Continue manually") {
+                                driver.continueManually()
+                            }
+                            Button("Switch to autonomous", action: onSwitchToAutonomous)
+                                .disabled(!driver.canSwitchToAutonomous)
+                        } else {
+                            Button("Resume") { driver.resume() }
+                        }
                     } else {
                         Button("Pause") { driver.pause() }
                     }
-                    Button("Recalibrate") { driver.recalibrate() }
-                        .disabled(setupStep != .stage && setupStep != .done)
+                    if driver.canMoveByHand {
+                        Button("Move manually") { driver.beginHandControl() }
+                    }
+                    if driver.canBackToManual {
+                        Button("Back to manual") { driver.backToManual() }
+                    }
+                    if driver.canGoBack, !isManual {
+                        Button("Go back and resume") { driver.goBackAndResume() }
+                    }
+                    if !isManual {
+                        Button("Recalibrate") { driver.recalibrate() }
+                            .disabled((setupStep != .stage && setupStep != .done) || isByHand)
+                    }
                     Button("End session") { driver.endSession() }
                 }
                 .buttonStyle(.bordered)
@@ -106,8 +139,15 @@
                         .buttonStyle(.borderedProminent)
                 }
                 if case .failed = driver.phase {
-                    Button("Retry") { driver.recalibrate() }.buttonStyle(.borderedProminent)
-                        .disabled(setupStep != .stage && setupStep != .done)
+                    HStack {
+                        Button("Retry") { driver.recalibrate() }.buttonStyle(.borderedProminent)
+                            .disabled(setupStep != .stage && setupStep != .done)
+                        // Too little sample to track: preset moves need no calibration.
+                        if driver.lastCalibrationFailure == .tracking {
+                            Button("Use preset moves") { driver.choosePath(.presetPath) }
+                                .buttonStyle(.bordered)
+                        }
+                    }
                 }
             }
             .padding(.horizontal)
@@ -124,6 +164,16 @@
             switch driver.phase {
             case .paused: true
             case .disconnected, .waitingForStageStep, .waitingForFocus, .failed: setupStep != .done
+            default: false
+            }
+        }
+
+        private var isManual: Bool { driver.controlMode == .manual }
+
+        /// Hand control or the way back from it: the setup is not touched meanwhile.
+        private var isByHand: Bool {
+            switch driver.phase {
+            case .byHand, .returningFromHand, .checkingFocus, .preparingManual: true
             default: false
             }
         }
@@ -169,6 +219,12 @@
             case .presetPath(let column, let spot):
                 "Preset path: column \(column), spot \(spot)"
             case .paused: "Paused"
+            case .choosingPath: "Choose the path"
+            case .preparingManual: "Getting the stage ready"
+            case .byHand:
+                "Manual" + (driver.handSaved.map { " (saved \($0.x),\($0.y))" } ?? "")
+            case .returningFromHand(let x, let y): "Going back to \(x),\(y)"
+            case .checkingFocus: "Back in place, checking focus"
             case .failed(let message): message
             }
         }

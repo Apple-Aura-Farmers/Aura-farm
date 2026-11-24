@@ -43,6 +43,8 @@ struct ScientistResultScreen: View {
         kinds = SoilLifeGroup.summarize(result?.countsByClass ?? [:])
     }
 
+    private var isOwnSample: Bool { sweep.manifest?.details.isOwnSample == true }
+
     private func count(_ group: SoilLifeGroup) -> Int {
         kinds[group]?.map(\.count).reduce(0, +) ?? 0
     }
@@ -252,6 +254,9 @@ struct ScientistResultScreen: View {
     private var footer: some View {
         VStack(spacing: 12) {
             switch upload {
+            case .ready where isOwnSample:
+                Text("Your own sample, kept on this phone.")
+                    .font(.footnote).foregroundStyle(.secondary)
             case .ready, .failed:
                 Button {
                     Task { await send() }

@@ -77,4 +77,46 @@ final class StageProtocolTests: XCTestCase {
         XCTAssertEqual(StageReply.parse("ZPOS X=1"), .unknown("ZPOS X=1"))
         XCTAssertEqual(StageReply.parse("ZPOS Z=87 X=1"), .unknown("ZPOS Z=87 X=1"))
     }
+
+    // MARK: Limits
+
+    func testLimitsLine() {
+        XCTAssertEqual(
+            StageReply.parse("LIMITS XMIN=10 XMAX=170 YMIN=0 YMAX=180"),
+            .limits(StageLimits(xMin: 10, xMax: 170, yMin: 0, yMax: 180)))
+    }
+
+    func testLimitReachedLines() {
+        XCTAssertEqual(StageReply.parse("LIMIT X MIN"), .limitReached(.x, .min))
+        XCTAssertEqual(StageReply.parse("LIMIT X MAX"), .limitReached(.x, .max))
+        XCTAssertEqual(StageReply.parse("LIMIT Y MIN"), .limitReached(.y, .min))
+        XCTAssertEqual(StageReply.parse("LIMIT Y MAX"), .limitReached(.y, .max))
+    }
+
+    func testMalformedLimitLinesAreUnknown() {
+        for line in [
+            "LIMITS XMIN=10 XMAX=170 YMIN=0", "LIMITS XMIN=170 XMAX=10 YMIN=0 YMAX=180",
+            "LIMITS XMIN=0 XMAX=181 YMIN=0 YMAX=180", "LIMITS XMIN=a XMAX=170 YMIN=0 YMAX=180",
+            "LIMITS XMIN=0 XMAX=180 YMIN=0 YMAX=180 Z=1", "LIMIT Z MIN", "LIMIT X", "LIMIT X MIDDLE",
+            "LIMIT X MIN extra", "LIMIT",
+        ] {
+            XCTAssertEqual(StageReply.parse(line), .unknown(line), line)
+        }
+    }
+
+    func testEveryExistingReplyParsesAsBefore() {
+        XCTAssertEqual(StageReply.parse("POS X=93 Y=90"), .position(x: 93, y: 90))
+        XCTAssertEqual(StageReply.parse("DONE X=1 Y=2"), .done(x: 1, y: 2))
+        XCTAssertEqual(StageReply.parse("ERR LIMIT 10-170"), .error("LIMIT 10-170"))
+        XCTAssertEqual(StageReply.parse("OK MODE MANUAL"), .ok("MODE MANUAL"))
+        XCTAssertEqual(StageReply.parse("ZPOS Z=70"), .focusPosition(z: 70))
+        XCTAssertEqual(
+            StageReply.parse("HELLO MANUAL IDLE X=90 Y=90"),
+            .hello(mode: .manual, state: .idle, x: 90, y: 90))
+        XCTAssertEqual(
+            StageReply.parse("RESUMED X=90 Y=90 Q=2"), .resumed(x: 90, y: 90, queued: 2))
+        XCTAssertEqual(
+            StageReply.parse("MANUAL IDLE X=90 Y=90 Q=0"),
+            .status(mode: .manual, state: .idle, x: 90, y: 90, queued: 0))
+    }
 }

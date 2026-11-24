@@ -34,6 +34,17 @@ extension GeoPoint {
 }
 
 extension SampleDetails {
+    /// "No farm": what a farm filled in is taken out again, its name included.
+    mutating func useNoFarm() {
+        // Already no farm: the name is the person's own, so leave it.
+        guard farmID != nil || plotID != nil || location != nil else { return }
+        farmID = nil
+        plotID = nil
+        plotName = nil
+        location = nil
+        sampleID = ""
+    }
+
     /// Fills in everything a sample takes from its plot, so none of it is typed.
     ///
     /// A farm with several plots names the plot after the farmer, so earlier samples of one

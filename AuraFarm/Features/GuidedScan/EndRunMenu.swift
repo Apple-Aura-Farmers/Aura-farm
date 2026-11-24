@@ -36,6 +36,10 @@ enum EndRunMenu {
         return (columnInProgress ? [.endNow, .endAfterColumn] : [.endNow]) + [.keepScanning]
     }
 
+    /// While the stage is away from the path (steered by hand, returning, or a saved position
+    /// waits): the column cannot be ended after, only the run now.
+    static let awayItems: [Item] = [.endNow, .keepScanning]
+
     /// The button's words: it says at once what was chosen.
     static func label(endingAfterColumn: Bool) -> String {
         endingAfterColumn ? "Ending after this column" : "End run"

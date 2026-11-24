@@ -252,6 +252,23 @@ struct RunMonitor {
         sharpnessPeaks = []
     }
 
+    /// The hand takes over: a pause for focus ends, and every focus count and low-detail
+    /// stretch in progress is dropped. The baseline is kept (the manual resume measures it again;
+    /// this one must not, the view comes back as it was). An alignment pause stays, and an
+    /// alignment loss is still seen afterwards.
+    mutating func endFocusPauseForHand() {
+        if state == .pausedFocus {
+            state = .ok
+            endFocusPause()
+            pauseCause = ""
+        }
+        clearFocusCounts()
+        stretch = nil
+        stillOnset = false
+        onsetSince = nil
+        detailHistory = []
+    }
+
     /// "Resume anyway": back to running at once, and the baseline measured again from the next
     /// `baselineSeconds` of eligible readings. For a pause for focus only; the sharpness reference
     /// is kept.

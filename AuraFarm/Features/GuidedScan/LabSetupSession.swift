@@ -31,6 +31,11 @@ struct RunMonitorInfo: Equatable {
     var resumedNote = ""
     /// The latest focus index, also on the frames between readings; nil when it is too old.
     var recentFocusIndex: Double?
+    /// The focus tiles: this frame's reading (nil between readings, for the log) and the latest
+    /// one (for the lab's readout). Nothing decides with them.
+    var focusTiles: FocusTilesReading?
+    var focusTilesMilliseconds: Double?
+    var recentFocusTiles: FocusTilesReading?
 }
 
 /// What the setup screens draw, published by the lab at its normal throttle.
@@ -45,6 +50,8 @@ struct LabSetupInfo: Equatable {
     var focusDial: FocusDialReading?
     /// The square the focus is measured in, frame pixels.
     var focusSquare: CGRect?
+    /// The focus tiles on this frame, for the log and the readout only.
+    var focusTiles: FocusTilesReading?
     /// The round view the focus is measured in, frame pixels; nil outside the focus step.
     var focusCircle: FieldCircle?
     /// Where setup goes after align passes again, when alignment was lost; nil otherwise.
@@ -134,11 +141,16 @@ final class LabSetupSession {
     /// and the overlays carry on.
     var isHeld = false
     private var stepConfirmed = false
+    /// See `acceptFocus`.
+    private var personSaysSharp = false
     /// The round view the person confirmed, which focus is measured inside.
     private var confirmedFieldCircle: FieldCircle?
     private var frameCounter = 0
     /// When the run monitor last took a focus index and an alignment reading; nil outside the run.
     private var lastRunFocusAt: Double?
+    /// The focus tiles are read about three times a second, like the focus index.
+    private var lastTilesAt: Double?
+    private var recentTiles: FocusTilesReading?
     private var lastRunAlignmentAt: Double?
     private var origin: Double?
     private let gridStep = FieldMaskThresholds().gridStep
@@ -170,6 +182,26 @@ final class LabSetupSession {
     /// Focus is clearly low, for the guide to hold off a capture.
     var isFocusLow: Bool { info.monitor.focusLow }
 
+    /// The stage is moved by hand (see `StageHandHold`). Analysis queue.
+    private(set) var handHold = StageHandHold.off
+
+    /// While `.on` the monitor sees a blank view and no focus index, so focus neither pauses nor
+    /// resumes, and alignment is still watched. Entering it ends a pause for focus and keeps the
+    /// baseline.
+    func setHandHold(_ hold: StageHandHold) {
+        handHold = hold
+        guard hold == .on else { return }
+        monitor.endFocusPauseForHand()
+        runDial = nil
+        runDialReading = nil
+        if info.monitor.state == .pausedFocus {
+            info.monitor.state = .ok
+            info.monitor.pauseCause = ""
+            info.monitor.dial = nil
+        }
+        info.monitor.focusLow = false
+    }
+
     /// The run monitor's state, for the guide to pause on.
     var monitorState: RunMonitorState { info.monitor.state }
 
@@ -177,6 +209,13 @@ final class LabSetupSession {
     func confirmStep() {
         guard !isHeld else { return }
         stepConfirmed = true
+    }
+
+    /// The person says the picture is sharp although the checks have not found it so: the focus
+    /// step moves on.
+    func acceptFocus() {
+        guard !isHeld, flow.step == .focus else { return }
+        personSaysSharp = true
     }
 
     /// Back to align: the checks start afresh and the stage is forgotten.
@@ -230,6 +269,23 @@ final class LabSetupSession {
         stageAxes = .identity
         info.step = .done
         info.stageAxes = .identity
+    }
+
+    /// Back to the stage step to be measured again, as a normal start would: the old axes and
+    /// the monitor's pauses are gone; the focus baseline and focusFound are kept.
+    func reopenStage() {
+        // After "Skip setup" too: skipsAllChecks stays true, so no focus or alignment pause comes
+        // back, and the stage step does not watch alignment.
+        guard flow.step == .done else { return }
+        flow.reopenStage()
+        calibration.reset()
+        stageAxes = nil
+        monitor.reset()  // keeps the focus baseline
+        runDial = nil
+        runDialReading = nil
+        info.step = .stage
+        info.stageAxes = nil
+        info.monitor = RunMonitorInfo(circle: referenceCircle)
     }
 
     /// The automated stage measured the axes itself: the step is done with them.
@@ -287,6 +343,7 @@ final class LabSetupSession {
         var focusReading: FocusReading?
         var dialReading: FocusDialReading?
         var square: CGRect?
+        var tilesReading: FocusTilesReading?
         // Measured inside the confirmed round view; the alignment's circle until there is one.
         if flow.step == .focus, let circle = confirmedFieldCircle ?? lastPassingCircle {
             let box = Self.focusSquare(for: circle, frameSize: frameSize)
@@ -314,6 +371,11 @@ final class LabSetupSession {
                 focusIndexes.append((seconds, index))
                 focusIndexes.removeAll { seconds - $0.seconds > Self.baselineSeconds }
             }
+            // Measured and logged, nothing more.
+            if Self.isDue(lastTilesAt, now: seconds, interval: Self.runFocusIntervalSeconds) {
+                lastTilesAt = seconds
+                tilesReading = FocusTiles.measure(of: buffer, in: box)
+            }
         }
         let atStep = flow.step
         let start = origin ?? seconds
@@ -321,7 +383,7 @@ final class LabSetupSession {
         appendLog(
             SetupLogRow(
                 seconds: seconds - start, step: atStep, alignment: reading, focus: focusReading,
-                focusDial: dialReading))
+                focusDial: dialReading, focusTiles: tilesReading))
 
         if atStep == .align {
             if flow.update(alignmentPassed: alignment.isPassed && canAdvance) {
@@ -335,9 +397,11 @@ final class LabSetupSession {
             resumingAfterLoss = true
             focusReading = nil
         } else if flow.update(
-            focused: focusReading?.state == .focused && focusFadedSince == nil && canAdvance)
+            focused: personSaysSharp && !isHeld
+                || focusReading?.state == .focused && focusFadedSince == nil && canAdvance)
         {
             stepConfirmed = false
+            personSaysSharp = false
             focusFound = true
             monitor.setFocusBaseline(median(focusIndexes.map(\.value)))
             // Tracking starts afresh for the stage step: the picture is sharper than the anchor
@@ -347,7 +411,7 @@ final class LabSetupSession {
         info = LabSetupInfo(
             step: flow.step, frameSize: frameSize, alignment: reading, trend: alignment.trend,
             isAlignmentPassed: alignment.isPassed, focus: focusReading, focusDial: dialReading,
-            focusSquare: square,
+            focusSquare: square, focusTiles: tilesReading,
             focusCircle: flow.step == .focus ? confirmedFieldCircle ?? lastPassingCircle : nil,
             resumeStep: flow.resumeStep)
         info.focusFound = focusFound
@@ -396,6 +460,7 @@ final class LabSetupSession {
     /// stays found, otherwise the focus guide starts afresh.
     private func enterFocus() {
         stepConfirmed = false
+        personSaysSharp = false
         if !(resumingAfterLoss && focusWasFocused) {
             resetFocus()
             focusWasFocused = false
@@ -416,6 +481,8 @@ final class LabSetupSession {
         let inRun = flow.step == .done
         if !inRun {
             lastRunFocusAt = nil
+            lastTilesAt = nil
+            recentTiles = nil
             lastRunFocusIndex = nil
             lastRunAlignmentAt = nil
         }
@@ -458,7 +525,7 @@ final class LabSetupSession {
             if moved.step == .done {
                 stageAxes = calibration.result
                 flow.update(stageMeasured: true)
-            } else {
+            } else if !skipsAllChecks {
                 watchAlignment(reading, tracking: tracking, seconds: seconds)
             }
         case .done:
@@ -491,6 +558,29 @@ final class LabSetupSession {
         info.stage = flow.step == .stage || flow.step == .done ? progress : nil
         info.stageAxes = stageAxes
         if flow.step != .done { info.monitor = RunMonitorInfo(circle: referenceCircle) }
+        if flow.step == .done { measureRunTiles(buffer, seconds: seconds) }
+    }
+
+    /// The focus tiles of the run, about three times a second, whatever the monitor is doing
+    /// (paused for focus, held for the hand, after Skip setup). For the log and the lab's readout
+    /// only: no decision reads them.
+    private func measureRunTiles(_ buffer: CVPixelBuffer, seconds: Double) {
+        var fresh: FocusTilesReading?
+        var milliseconds: Double?
+        if let circle = confirmedFieldCircle ?? referenceCircle,
+            Self.isDue(lastTilesAt, now: seconds, interval: Self.runFocusIntervalSeconds)
+        {
+            lastTilesAt = seconds
+            let size = CGSize(
+                width: CVPixelBufferGetWidth(buffer), height: CVPixelBufferGetHeight(buffer))
+            let started = ContinuousClock.now
+            fresh = FocusTiles.measure(of: buffer, in: Self.focusSquare(for: circle, frameSize: size))
+            milliseconds = Self.milliseconds(since: started)
+            if let fresh { recentTiles = fresh }
+        }
+        info.monitor.focusTiles = fresh
+        info.monitor.focusTilesMilliseconds = fresh == nil ? nil : milliseconds
+        info.monitor.recentFocusTiles = recentTiles
     }
 
     /// Field and stage: the geometry-only check; lost alignment goes back to align.
@@ -522,8 +612,10 @@ final class LabSetupSession {
         tracking: TrackingState, viewClass: ViewClass, isStill: Bool, seconds: Double
     ) {
         guard !skipsAllChecks else { return }
+        let held = handHold == .on
+        let viewClass = held ? ViewClass.blank : viewClass
         var index: Double?
-        if let box = step.registrationRect,
+        if !held, let box = step.registrationRect,
             Self.isDue(lastRunFocusAt, now: seconds, interval: Self.runFocusIntervalSeconds)
         {
             lastRunFocusAt = seconds

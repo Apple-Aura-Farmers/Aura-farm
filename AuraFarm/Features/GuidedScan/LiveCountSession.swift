@@ -111,6 +111,13 @@ final class LiveCountSession {
     private var counting = false
     private var counterState = LiveOrganismCounter()
     private var hapticCount = 0
+    // Detections shown while the stage is moved by hand: nothing here reaches the count.
+    private var previewing = false
+    private var previewEpoch = 0
+    private var previewInFlight = false
+    private var previewBoxes: [LiveCountInfo.Box] = []
+    /// Run seconds of the last preview result, for the preview's own skip rules.
+    private var previewResultAt: Double?
 
     // Detector queue only.
     private let snapshots = DetectionSnapshotWriter()
@@ -149,6 +156,26 @@ final class LiveCountSession {
             counting = isOn
             lock.unlock()
         }
+    }
+
+    /// Starts or ends showing detections without counting them (the stage moved by hand). Either
+    /// way the boxes are cleared, and a result still running is dropped when it arrives.
+    func setPreviewing(_ isOn: Bool) {
+        lock.lock()
+        if previewing != isOn {
+            previewing = isOn
+            previewEpoch += 1
+        }
+        previewBoxes = []
+        previewResultAt = nil
+        lock.unlock()
+    }
+
+    /// How long ago a preview result came, on the run's clock; nil if none has.
+    func secondsSincePreview(at seconds: Double) -> Double? {
+        lock.lock()
+        defer { lock.unlock() }
+        return previewResultAt.map { seconds - $0 }
     }
 
     /// Whether the detector queue has been told counting is on, once it has caught up.
@@ -369,6 +396,93 @@ final class LiveCountSession {
         return log
     }
 
+    /// One analysed frame while the stage is moved by hand: the same rules decide whether the
+    /// detector looks (`skipReason`, made with the paused rule off), but the result only goes to
+    /// the preview boxes. The counter, the tally, the map, the crops, the haptics and the run's
+    /// detection clock are not touched. Analysis queue.
+    /// - Parameter moved: the picture is moving; the boxes are then cleared once no result has
+    ///   come for a second. A still view keeps them.
+    func processPreview(
+        buffer: CVPixelBuffer, skipReason: String?, moved: Bool, frameSize: CGSize,
+        fieldCircle: FieldCircle?, seconds: Double
+    ) {
+        if let fieldCircle { lastCircle = fieldCircle }
+        lock.lock()
+        guard previewing, isEnabled else {
+            lock.unlock()
+            return
+        }
+        if moved, seconds - (previewResultAt ?? -.infinity) > 1 { previewBoxes = [] }
+        var reason = skipReason
+        if reason == nil, !(injected != nil || loaded != nil) { reason = "model_loading" }
+        if reason == nil, previewInFlight { reason = "busy" }
+        guard reason == nil else {
+            lock.unlock()
+            if reason == "model_loading" { prepare() }
+            return
+        }
+        previewInFlight = true
+        let ticket = previewEpoch
+        lock.unlock()
+        var crop: CGRect?
+        if cropsToEyepiece, let circle = lastCircle {
+            crop = FieldCentring.cropRect(for: circle, frameSize: frameSize)
+        }
+        let held = HeldBuffer(buffer)
+        let confidence = minimumConfidence
+        let circle = fieldCircle ?? lastCircle
+        detectorQueue.async { [self] in
+            detectPreview(
+                held, ticket: ticket, confidence: confidence, crop: crop, circle: circle,
+                frameSize: frameSize, seconds: seconds)
+        }
+    }
+
+    /// The preview's detect note. Detector queue.
+    private func detectPreview(
+        _ held: HeldBuffer, ticket: Int, confidence: Float, crop: CGRect?, circle: FieldCircle?,
+        frameSize: CGSize, seconds: Double
+    ) {
+        guard let buffer = held.buffer else { return }
+        var run = injected
+        if run == nil, var detector = readyDetector() {
+            detector.minimumConfidence = confidence
+            run = { try detector.timedDetections(in: $0, crop: $1) }
+        }
+        let found = run.flatMap { try? $0(buffer, crop) }?.found ?? []
+        held.buffer = nil
+        lock.lock()
+        previewInFlight = false
+        // The hold ended (or began again) while the model ran: the result belongs to nothing.
+        guard previewing, previewEpoch == ticket else {
+            lock.unlock()
+            return
+        }
+        let drops = counterState.dropsOutsideField
+        let guards = counterState.guards
+        var boxes: [LiveCountInfo.Box] = []
+        for detection in found where detection.confidence >= confidence {
+            let box = OrganismTally.Found(
+                detection, frameWidth: Double(frameSize.width), frameHeight: Double(frameSize.height)
+            ).box
+            if drops, let circle,
+                hypot(Double(box.midX - circle.centre.x), Double(box.midY - circle.centre.y))
+                    > circle.radius
+            {
+                continue
+            }
+            if guards.drop(box: box, crop: crop, circle: circle) != nil { continue }
+            boxes.append(
+                .init(
+                    id: boxes.count + 1, label: detection.label, confidence: detection.confidence,
+                    rect: box, status: .notCounted))
+        }
+        previewBoxes = boxes
+        previewResultAt = seconds
+        lock.unlock()
+        onResult?()
+    }
+
     private var isReady: Bool {
         lock.lock()
         defer { lock.unlock() }
@@ -482,6 +596,8 @@ final class LiveCountSession {
         let isLoading = loadingGeneration != nil
         let counter = counterState
         let haptics = hapticCount
+        let preview = previewBoxes
+        let isPreviewing = previewing
         lock.unlock()
         var labels: [String: LiveCountInfo.LabelCount] = [:]
         for (label, count) in counter.helperCountByLabel {
@@ -498,6 +614,7 @@ final class LiveCountSession {
                     id: $0.id, label: $0.label, confidence: $0.confidence, rect: $0.box,
                     status: $0.status)
             },
+            previewBoxes: preview, isPreviewing: isPreviewing,
             dots: counter.map.entries.map {
                 RunMapOrganism(
                     label: $0.label, x: Double($0.fields.x), y: Double($0.fields.y),

@@ -27,6 +27,8 @@ struct SetupLogRow: Equatable {
     var stage: StageAxesProgress?
     var stageAxes: StageAxes?
     var tracker: SetupTrackerSample?
+    /// The focus tiles' reading on this frame (the focus step), for the log only.
+    var focusTiles: FocusTilesReading?
 }
 
 enum SetupLog {
@@ -40,6 +42,7 @@ enum SetupLog {
         "focus_level", "stage_step", "stage_travel_fields", "stage_tilt_deg", "stage_skew_deg",
         "tracking", "position_x_fields", "position_y_fields", "box_sharpness", "view_class",
         "still_seconds", "feature_cells", "focus_dial_offset", "focus_dial_side",
+        "focus_top", "focus_top_ratio", "focus_noise", "focus_tiles_used", "focus_tiles_active",
     ]
 
     static func csv(_ rows: [SetupLogRow]) -> String {
@@ -70,6 +73,9 @@ enum SetupLog {
             number(row.tracker?.stillSeconds, 2),
             row.tracker.map { String($0.featureCells) } ?? "",
             number(row.focusDial?.offset, 3), row.focusDial?.csvSide ?? "",
+            significant(row.focusTiles?.top), significant(row.focusTiles?.topRatio),
+            significant(row.focusTiles?.noise), row.focusTiles.map { String($0.used) } ?? "",
+            row.focusTiles.map { String($0.active) } ?? "",
         ]
     }
 
@@ -80,6 +86,11 @@ enum SetupLog {
         case .matching: "matching"
         case .lost: "lost"
         }
+    }
+
+    /// Four significant digits, always with a dot; empty for nil.
+    private static func significant(_ value: Double?) -> String {
+        value.map { String(format: "%.4g", $0) } ?? ""
     }
 
     /// Fixed decimals, always with a dot; empty for nil.

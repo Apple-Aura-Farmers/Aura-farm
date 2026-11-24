@@ -190,6 +190,6 @@ final class HeatModeBehaviourTests: XCTestCase {
     }
 
     func testTheCSVHasHeatModeAndScreenBrightnessAfterTheKnobWords() {
-        XCTAssertEqual(Array(MovementLog.header.suffix(12).prefix(2)), ["heat_mode", "screen_brightness"])
+        XCTAssertEqual(Array(MovementLog.header.suffix(21).prefix(2)), ["heat_mode", "screen_brightness"])
     }
 }
