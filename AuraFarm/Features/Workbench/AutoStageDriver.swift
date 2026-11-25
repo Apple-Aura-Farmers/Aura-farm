@@ -129,6 +129,19 @@ final class AutoStageDriver {
     private var presetAwaitingSettle = false
     private var presetFinished = false
     private var dwellUntil: Date?
+    // Preset stops (see `PresetStopTracker`): the stop the dwell began, told to the engine so the
+    // model looks at it. The id goes on after a pause at the same place.
+    private var presetStopID = 0
+    private var presetStopOpen = false
+    private var presetStopSuspended = false
+    private var presetStopColumn = 0
+    private var presetStopAngles = (x: 0, y: 0)
+    private var presetFlips = (x: false, y: false)
+    /// Seconds the open stop has been held while the path ran (no pause, no focus pause), and the
+    /// time of the last preset step: a safeguard if the engine's own count never says "enough".
+    private var stopHeldSeconds = 0.0
+    private var lastPresetStepAt = Date()
+    private var lastStillSent: Bool?
     private var countingColumn: Int?
     private var edgeWatch = StagePresetEdgeWatch()
     private var ignoreEdgeThisLeg = false
@@ -250,6 +263,8 @@ final class AutoStageDriver {
     }
 
     func deactivate() {
+        endPresetStop()
+        engine.setPresetStops(false)
         cancelSwitchToManual()
         engine.stageMoveSettled()
         clearHandState()
@@ -278,6 +293,10 @@ final class AutoStageDriver {
         inFlight = false
         releaseHandArrow()
         engine.setExternalCounting(active: false, column: 0)
+        if presetStopOpen, !presetStopSuspended {
+            presetStopSuspended = true
+            engine.presetStopSuspended()
+        }
         phase = .paused
     }
 
@@ -430,6 +449,8 @@ final class AutoStageDriver {
         guard new != pathMode else { return }
         clearHandState()
         pathMode = new
+        endPresetStop()
+        engine.setPresetStops(false)
         zigzag = nil
         presetProgress = nil
         presetFinished = false
@@ -462,6 +483,7 @@ final class AutoStageDriver {
     }
 
     func endSession() {
+        endPresetStop()
         cancelSwitchToManual()
         guard !sessionEnded else { return }
         sessionEnded = true
@@ -521,6 +543,8 @@ final class AutoStageDriver {
         pathChosen = false
         presetStageSkipped = false
         awaitingReopen = false
+        endPresetStop()
+        engine.setPresetStops(false)
         zigzag = nil
         presetFinished = false
         runBegun = false  // a new test: the run gate closes again
@@ -738,6 +762,7 @@ final class AutoStageDriver {
     /// Sends a GOTO; from the moment it is out the detector's boxes are hidden (drawing only).
     private func sendGoTo(_ servo: StageAxis, _ angle: Int) -> Bool {
         guard client.send(.goTo(servo, angle)) else { return false }
+        endPresetStop()
         engine.stageMoveStarted()
         return true
     }
@@ -1043,6 +1068,7 @@ final class AutoStageDriver {
                 }
                 phase = .disconnected
                 inFlight = false
+                endPresetStop()
                 cancelSwitchToManual()
                 engine.stageMoveSettled()
                 releaseHandArrow()  // nothing moves again by itself
@@ -1051,6 +1077,13 @@ final class AutoStageDriver {
             return
         }
         reanchorIfStuckLost()
+        // No move in flight and the last one settled a moment ago: the stage stands still (the
+        // engine reads it at a preset stop and in hand control).
+        let still = !inFlight && Date().timeIntervalSince(lastSettledAt) >= 0.3
+        if still != lastStillSent {
+            lastStillSent = still
+            engine.setStageStandsStill(still)
+        }
         let step = engine.setupInfo.step
         if controlMode == .manual {
             manualTick(step)
@@ -1220,6 +1253,34 @@ final class AutoStageDriver {
         }
     }
 
+    /// The stop is over (the next GOTO, a hand on the stage, a disconnect, the column or the run
+    /// ending): the engine stops looking at it.
+    private func endPresetStop() {
+        guard presetStopOpen else { return }
+        presetStopOpen = false
+        presetStopSuspended = false
+        engine.presetStopEnded()
+    }
+
+    /// Where the stops are on the slide: fields per degree of each servo in use, and the flips the
+    /// path started with.
+    private func currentPresetGeometry() -> PresetStopGeometry {
+        let plan = zigzag?.plan
+        let leg = zigzag?.legFieldsPerDegree ?? 0
+        let step = zigzag?.stepFieldsPerDegree ?? 0
+        let legIsX = plan?.legServo == .x
+        return PresetStopGeometry(
+            fieldsPerDegreeX: legIsX ? leg : step, fieldsPerDegreeY: legIsX ? step : leg,
+            flipX: presetFlips.x, flipY: presetFlips.y)
+    }
+
+    /// The dwell is over, but the stop may still be held for its looks: fewer than two and under
+    /// two seconds, with looks possible at all (the engine says).
+    private func holdsStopForLooks() -> Bool {
+        guard presetStopOpen, !presetStopSuspended, engine.presetStopHolds else { return false }
+        return stopHeldSeconds < LiveCountThresholds().stopMaxSeconds + 1
+    }
+
     /// The preset path never uses a mapping: Y walks the columns, X steps across, in the arrows'
     /// directions; the stop spacing falls back to nominal fields per degree without tracking.
     private func startPreset() {
@@ -1231,6 +1292,8 @@ final class AutoStageDriver {
         let zigzag = StageZigzag(
             plan: plan, chunkDegrees: chunkDegrees, dwellSeconds: dwellSeconds)
         self.zigzag = zigzag
+        presetFlips = (handFlipX, handFlipY)
+        engine.setPresetStops(true)
         presetFinished = false
         edgeWatch = StagePresetEdgeWatch()
         let detail =
@@ -1267,6 +1330,16 @@ final class AutoStageDriver {
         zigzag?.limits = limits
         zigzag?.chunkDegrees = max(chunkDegrees, 1)
         phase = .presetPath(column: zigzag?.column ?? 0, spot: zigzag?.spot ?? 0)
+        let stepNow = Date()
+        let stepDt = min(stepNow.timeIntervalSince(lastPresetStepAt), 0.5)
+        lastPresetStepAt = stepNow
+        if presetStopOpen, presetStopSuspended {
+            // Back after a pause at the same place: the same stop, with the looks it had.
+            presetStopSuspended = false
+            engine.presetStopBegan(
+                id: presetStopID, column: presetStopColumn, angles: presetStopAngles,
+                geometry: currentPresetGeometry())
+        }
         if inFlight, Date().timeIntervalSince(moveSentAt) > 5 {
             inFlight = false
             lastSettledAt = Date()
@@ -1289,10 +1362,13 @@ final class AutoStageDriver {
         }
         movedForStall = false
         guard monitor.state == .ok else { return }
+        if presetStopOpen { stopHeldSeconds += stepDt }
         watchPresetEdge()
         guard !presetEdgePrompt else { return }
         if let until = dwellUntil {
             guard Date() >= until else { return }
+            // Preset moves: the stop is held until it has had its looks (or the longest time).
+            if holdsStopForLooks() { return }
             if (zigzag?.column ?? 0) > 0, !ignoreEdgeThisLeg, edgeWatch.endStop() {
                 // The third blank stop in a row after sample: the column ends here.
                 if restoreAsksEdges {
@@ -1341,6 +1417,16 @@ final class AutoStageDriver {
             case .dwell(let seconds):
                 dwellUntil = Date().addingTimeInterval(seconds)
                 edgeWatch.beginStop()
+                // A stop: the stage is still here. Its looks start now, 0.3 s after the settle.
+                presetStopID += 1
+                presetStopOpen = true
+                presetStopSuspended = false
+                presetStopColumn = zigzag?.column ?? 0
+                presetStopAngles = (angleX, angleY)
+                stopHeldSeconds = 0
+                engine.presetStopBegan(
+                    id: presetStopID, column: presetStopColumn, angles: presetStopAngles,
+                    geometry: currentPresetGeometry())
                 let detail = "column \(zigzag?.column ?? 0) at \(angleX),\(angleY)"
                 Task {
                     // Another row than preset_path_column, so they do not overwrite each other.
@@ -1356,13 +1442,17 @@ final class AutoStageDriver {
                 engine.logEvent("preset_path_column", detail: "\(column) at \(angleX),\(angleY)")
             case .swapped(let dx, let dy):
                 // The path starts again from the new corner: drop what belonged to the old one.
+                endPresetStop()
                 dwellUntil = nil
                 engine.logEvent(
                     "preset_path_swapped", detail: String(format: "dx=%.2f dy=%.2f", dx, dy))
             case .columnEnded(let column):
+                endPresetStop()
                 countingColumn = nil
                 engine.setExternalCounting(active: false, column: column)
             case .finished(let reason):
+                endPresetStop()
+                engine.setPresetStops(false)
                 presetFinished = true
                 presetProgress = zigzag?.progress
                 zigzag = nil
@@ -1698,6 +1788,7 @@ extension AutoStageDriver {
     /// Hand control starts: the board is idle at `reported`. A position saved earlier stays the
     /// saved one.
     private func enterHandControl(at reported: (x: Int, y: Int)) {
+        endPresetStop()
         if handState == nil {
             handState = HandControl(
                 saved: reported, tracker: engine.trackerPosition(), direction: servoDirection)

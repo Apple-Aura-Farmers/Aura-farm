@@ -40,9 +40,28 @@ struct LiveOrganismCounter {
         var newEntries: [SlideOrganismMap.Entry] = []
         /// The detection box (frame px, from the top left) of each new entry, by entry id.
         var newBoxes: [Int: CGRect] = [:]
+        /// At a preset stop: outside the stop's own cell, and lens dirt (neither is counted).
+        var outsideCell = 0
+        var dirt = 0
+    }
+
+    /// The preset stop a frame was taken at: its id, and the square of the frame it counts in.
+    struct StopContext: Equatable {
+        var id: Int
+        var cell: CGRect
     }
 
     private var tally = OrganismTally()
+    // Preset stops: the stop counted into now, the tracks of the one before it (for a result that
+    // arrives late), and what each saw, for the lens dirt check.
+    private var stopID: Int?
+    private var parked: (id: Int, tracks: [OrganismTally.Track])?
+    private var currentSeen: [StopSighting] = []
+    private var previousSeen: [StopSighting] = []
+    /// Detections of the last stop result that did not count (drawn grey).
+    private(set) var ignoredBoxes: [VisibleBox] = []
+    /// Results that came too late to belong to a stop the counter still knows.
+    private(set) var lateStopDrops = 0
     private(set) var map = SlideOrganismMap()
     /// Drop boxes whose centre is outside the field circle (the dark ring). On by default.
     var dropsOutsideField = true
@@ -85,7 +104,7 @@ struct LiveOrganismCounter {
             return VisibleBox(
                 id: track.id, label: track.label, confidence: track.confidence, box: track.box,
                 status: status)
-        }
+        } + ignoredBoxes
     }
 
     /// A frame that went to the detector.
@@ -93,14 +112,41 @@ struct LiveOrganismCounter {
     mutating func update(
         detections: [OrganismDetector.Detection], pictureMoved: CGPoint, trackerPosition: CGPoint,
         frameSize: CGSize, fieldCircle: FieldCircle?, crop: CGRect? = nil, seconds: Double,
-        column: Int, fieldSide: Double = 1
+        column: Int, fieldSide: Double = 1, stop: StopContext? = nil,
+        thresholds: LiveCountThresholds = LiveCountThresholds()
     ) -> FrameResult {
         let width = Double(frameSize.width)
         let height = Double(frameSize.height)
         var result = FrameResult()
         var found: [OrganismTally.Found] = []
+        // A result belongs to the stop its frame was taken at. A new stop clears the tracks (the
+        // counts and the map stay); a result for the stop before it, arriving late, is counted
+        // into that stop's own tracks; an older one is dropped.
+        var currentTracks: [OrganismTally.Track]?
+        if let stop {
+            if let known = stopID, stop.id < known {
+                guard let earlier = parked, earlier.id == stop.id else {
+                    lateStopDrops += 1
+                    lastResult = FrameResult()
+                    return lastResult
+                }
+                currentTracks = tally.swapTracks(earlier.tracks)
+            } else if stop.id != stopID {
+                if let known = stopID { parked = (known, tally.tracks) }
+                previousSeen = currentSeen
+                currentSeen = []
+                tally.clearTracks()
+                stopID = stop.id
+            }
+        }
+        let isLate = currentTracks != nil
+        var seenHere: [StopSighting] = []
+        var ignored: [VisibleBox] = []
         for detection in detections {
             let box = OrganismTally.Found(detection, frameWidth: width, frameHeight: height)
+            let centre = CGPoint(x: box.box.midX, y: box.box.midY)
+            let side = Double(max(box.box.width, box.box.height))
+            if stop != nil { seenHere.append(StopSighting(label: box.label, centre: centre, side: side)) }
             if dropsOutsideField, let circle = fieldCircle,
                 hypot(Double(box.box.midX - circle.centre.x), Double(box.box.midY - circle.centre.y))
                     > circle.radius
@@ -118,12 +164,40 @@ struct LiveOrganismCounter {
             case nil:
                 break
             }
+            if let stop {
+                // Drawn grey, never counted: outside the stop's own cell, or lens dirt.
+                let isDirt = !isLate && StopDirt.isDirt(
+                    label: box.label, centre: centre, side: side, previous: previousSeen,
+                    share: thresholds.stopDirtShare)
+                if !stop.cell.contains(centre) || isDirt {
+                    if isDirt, stop.cell.contains(centre) { result.dirt += 1 } else { result.outsideCell += 1 }
+                    ignored.append(
+                        VisibleBox(
+                            id: 1_000_000 + ignored.count, label: box.label,
+                            confidence: box.confidence, box: box.box, status: .seenOnce))
+                    continue
+                }
+            }
             found.append(box)
         }
         result.found = found.count
-        let moved = CGPoint(x: carriedShift.x + pictureMoved.x, y: carriedShift.y + pictureMoved.y)
+        // Within a stop the picture does not move.
+        let moved =
+            stop != nil
+            ? CGPoint.zero
+            : CGPoint(x: carriedShift.x + pictureMoved.x, y: carriedShift.y + pictureMoved.y)
         carriedShift = .zero
         let counted = tally.update(found: found, pictureMoved: moved)
+        if let tracks = currentTracks, let was = parked {
+            // The late result's tracks go back to their own stop; the current stop's come back.
+            parked = (was.id, tally.swapTracks(tracks))
+        }
+        if stop != nil {
+            if isLate { previousSeen += seenHere } else { currentSeen += seenHere }
+            ignoredBoxes = ignored
+        } else {
+            ignoredBoxes = []
+        }
         framesCounted += 1
         result.newInTally = counted.count
         for track in counted {
@@ -168,6 +242,12 @@ struct LiveOrganismCounter {
         lastResult = FrameResult()
         carriedShift = .zero
         isRepeat = [:]
+        stopID = nil
+        parked = nil
+        currentSeen = []
+        previousSeen = []
+        ignoredBoxes = []
+        lateStopDrops = 0
     }
 }
 
@@ -199,9 +279,29 @@ struct LiveCountThresholds {
     /// A stage move that never reports it settled holds the boxes back this long, then they may
     /// come back (results from before the move still do not). PLACEHOLDER.
     var boxMoveHoldSeconds = 10.0
+
+    // Preset moves on the Terraloka stage: the model looks at the stops (see `PresetStopTracker`).
+    // PLACEHOLDER; source: operator, 25 Nov 2026, blank or untracked views at a stop.
+    /// At most this many looks at one stop, then "stop_done".
+    var stopMaxLooks = 3
+    /// A stop is held after its dwell until it has this many looks...
+    var stopWantedLooks = 2
+    /// ...or has lasted this long in all (a focus pause does not count).
+    var stopMaxSeconds = 2.0
+    /// A stop counts only in the square of this many boxes at the centre of the field circle (the
+    /// preset path's own `stepFields`).
+    var stopCellFields = 0.8
+    /// A detection this close to one of the previous stop, as a share of its side, is lens dirt.
+    var stopDirtShare = 0.5
+    /// The log event of a stop waits this long for its last results.
+    var stopEventDelaySeconds = 0.5
 }
 
 extension LiveOrganismCounter {
+    /// The stage is known to be standing still: at a stop of the preset path, or in hand control
+    /// with no move in flight (the preview).
+    enum StillStage { case none, stop, hand }
+
     /// Why a frame is NOT sent to the detector while counting is on, or nil when it goes. The
     /// reasons are checked in this order: not_tracking, junk_frame, paused, no_sample, too_fast,
     /// unchanged, heat_critical, rate, heat. `maxModelRunsPerSecond` is the "rate" cap; nil is no
@@ -212,14 +312,22 @@ extension LiveOrganismCounter {
         secondsSinceLastDetection: Double? = nil, maxModelRunsPerSecond: Double? = nil,
         heat: HeatMode = .normal,
         heatThresholds: HeatThresholds = HeatThresholds(),
-        thresholds: LiveCountThresholds = LiveCountThresholds()
+        thresholds: LiveCountThresholds = LiveCountThresholds(),
+        stillStage: StillStage = .none
     ) -> String? {
-        if tracking != .tracking { return "not_tracking" }
-        if isGhostOrSparseSkip { return "junk_frame" }
+        // A stopped stage is known to be still: what the tracker and the view class say about the
+        // picture moving or being followed does not apply (a dark view still does at a stop).
+        let ignoresPicture = stillStage != .none
+        if !ignoresPicture, tracking != .tracking { return "not_tracking" }
+        if !ignoresPicture, isGhostOrSparseSkip { return "junk_frame" }
         if monitorPaused { return "paused" }
-        if viewClass != .sample && viewClass != .thin { return "no_sample" }
-        if speedFraction > thresholds.countMaxSpeedFraction { return "too_fast" }
-        if stillSeconds >= thresholds.stillSecondsBeforeSkip - 1e-9,
+        if ignoresPicture {
+            if stillStage == .stop, viewClass == .dark { return "no_sample" }
+        } else if viewClass != .sample && viewClass != .thin {
+            return "no_sample"
+        }
+        if !ignoresPicture, speedFraction > thresholds.countMaxSpeedFraction { return "too_fast" }
+        if stillStage != .stop, stillSeconds >= thresholds.stillSecondsBeforeSkip - 1e-9,
             let since = secondsSinceLastDetection, since < thresholds.refreshSeconds - 1e-9
         {
             return "unchanged"

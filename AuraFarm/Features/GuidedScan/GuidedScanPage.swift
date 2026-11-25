@@ -25,7 +25,7 @@ struct GuidedScanPage: View {
     /// "Ending after this column" is on; shown at once, then kept in step with the engine.
     @State private var endsAfterColumn = false
     /// Draws the model's detection boxes over the picture; this scan only, never stored.
-    @State private var showsDetections = false
+    @State private var showsDetections = true
     @State private var haptics = HelperHapticPlayer()
     @Environment(\.scenePhase) private var scenePhase
     // How the slide moves in this test (section A to F of the flow); fresh for every page.

@@ -169,6 +169,16 @@ struct OrganismTally {
         countByLabel[track.label, default: 0] += 1
     }
 
+    /// A new stop of the preset path: the tracks go, the counts stay.
+    mutating func clearTracks() { tracks = [] }
+
+    /// Puts `new` in place of the tracks and hands back what was there.
+    mutating func swapTracks(_ new: [Track]) -> [Track] {
+        let old = tracks
+        tracks = new
+        return old
+    }
+
     mutating func reset() {
         tracks = []
         countByLabel = [:]

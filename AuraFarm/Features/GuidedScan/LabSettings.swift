@@ -51,14 +51,14 @@ struct LabSettings: Equatable {
     var spotMode: SpotConfirmMode { spotModeName == "holdStill" ? .holdStill : .briefTouch }
 
     /// The guided scan page's settings: the lab's own, with the guide on, the operator's
-    /// coverage, no detection boxes, and align and focus always done: a lab shortcut must not
+    /// coverage, the detection boxes on, and align and focus always done: a lab shortcut must not
     /// carry into a real test ("Skip setup" is the page's own). Nothing else differs.
     func forGuidedScan(coverage: Double, recordsVideo: Bool = false) -> LabSettings {
         var copy = self
         copy.recordsLensVideo = recordsVideo
         copy.guideDryRun = true
         copy.coverageStep = coverage
-        copy.showsDetections = false
+        copy.showsDetections = true
         copy.skipsAlignFocus = false
         // The real test never follows the lab's slider.
         copy.confidence = OrganismDetector.defaultConfidence

@@ -123,6 +123,8 @@ final class LiveCountSession {
     private var previewShiftSinceSend = CGPoint.zero
     private var countShift = CGPoint.zero
     private var countShiftSinceSend = CGPoint.zero
+    /// What each preset stop's results found, for its log event. Under `lock`.
+    private var stopTotals: [Int: StopTotals] = [:]
     /// Run seconds of the last preview result, for the preview's own skip rules.
     private var previewResultAt: Double?
 
@@ -137,6 +139,29 @@ final class LiveCountSession {
 
     init(detect: Detect? = nil) {
         injected = detect
+    }
+
+    /// What the results of one preset stop added up to.
+    struct StopTotals: Equatable {
+        var results = 0
+        var found = 0
+        var counted = 0
+        var outsideCell = 0
+        var dirt = 0
+    }
+
+    func totals(forStop id: Int) -> StopTotals? {
+        lock.lock()
+        defer { lock.unlock() }
+        return stopTotals[id]
+    }
+
+    /// Whether a frame sent now could be looked at: counting is on in the lab's settings and the
+    /// model is open.
+    var canLook: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return isEnabled && (injected != nil || loaded != nil) && loadFailure == nil
     }
 
     /// A copy of the counter as it is now.
@@ -251,6 +276,7 @@ final class LiveCountSession {
         counterState.reset()
         countShift = .zero
         countShiftSinceSend = .zero
+        stopTotals = [:]
         cropFiles = [:]
         hapticCount = 0
         lock.unlock()
@@ -366,7 +392,7 @@ final class LiveCountSession {
     func process(
         buffer: CVPixelBuffer, skipReason: String?, pictureMoved: CGPoint,
         trackerPosition: CGPoint, frameSize: CGSize, fieldCircle: FieldCircle?, seconds: Double,
-        column: Int, fieldSide: Double = 1
+        column: Int, fieldSide: Double = 1, stop: LiveOrganismCounter.StopContext? = nil
     ) -> LiveCountFrameLog {
         var log = LiveCountFrameLog(active: true)
         log.model = model.rawValue
@@ -418,7 +444,8 @@ final class LiveCountSession {
             detect(
                 held, ticket: ticket, confidence: confidence, crop: crop, circle: circle,
                 pictureMoved: pictureMoved, trackerPosition: trackerPosition,
-                frameSize: frameSize, seconds: seconds, column: column, fieldSide: fieldSide)
+                frameSize: frameSize, seconds: seconds, column: column, fieldSide: fieldSide,
+                stop: stop)
         }
         finish(&log)
         return log
@@ -520,7 +547,7 @@ final class LiveCountSession {
     private func detect(
         _ held: HeldBuffer, ticket: Int, confidence: Float, crop: CGRect?, circle: FieldCircle?,
         pictureMoved: CGPoint, trackerPosition: CGPoint, frameSize: CGSize, seconds: Double,
-        column: Int, fieldSide: Double
+        column: Int, fieldSide: Double, stop: LiveOrganismCounter.StopContext?
     ) {
         guard let buffer = held.buffer else { return }
         var run = injected
@@ -552,8 +579,17 @@ final class LiveCountSession {
         let result = counterState.update(
             detections: output.found, pictureMoved: pictureMoved,
             trackerPosition: trackerPosition, frameSize: frameSize, fieldCircle: circle,
-            crop: crop, seconds: seconds, column: column, fieldSide: fieldSide)
+            crop: crop, seconds: seconds, column: column, fieldSide: fieldSide, stop: stop)
         lastDetectedAt = seconds
+        if let stop {
+            var totals = stopTotals[stop.id] ?? StopTotals()
+            totals.results += 1
+            totals.found += result.found
+            totals.counted += result.newInTally
+            totals.outsideCell += result.outsideCell
+            totals.dirt += result.dirt
+            stopTotals[stop.id] = totals
+        }
         countShift = countShiftSinceSend
         var log = LiveCountFrameLog(active: true)
         log.ran = true
