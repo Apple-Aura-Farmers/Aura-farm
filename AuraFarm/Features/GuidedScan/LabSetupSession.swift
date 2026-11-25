@@ -36,6 +36,8 @@ struct RunMonitorInfo: Equatable {
     var focusTiles: FocusTilesReading?
     var focusTilesMilliseconds: Double?
     var recentFocusTiles: FocusTilesReading?
+    /// The highest tiles detail since the pause began; logging only.
+    var focusDetailBest: Double?
 }
 
 /// What the setup screens draw, published by the lab at its normal throttle.
@@ -151,6 +153,31 @@ final class LabSetupSession {
     /// The focus tiles are read about three times a second, like the focus index.
     private var lastTilesAt: Double?
     private var recentTiles: FocusTilesReading?
+    /// The highest `FocusTilesReading.detail` at this spot: cleared whenever the focus guide resets
+    /// and when a pause for focus begins. For the log; nothing decides by it.
+    private var detailBest: Double?
+    /// The newest tiles reading, and the one measured on this very frame (nil between readings).
+    private var latestTiles: FocusTilesReading?
+    private var freshTiles: FocusTilesReading?
+    /// What the focus record needs about the latest frame (analysis queue).
+    private var lastSeconds = 0.0
+    private var lastFocusReading: FocusReading?
+    private var lastDialReading: FocusDialReading?
+    private var lastFocusSquare: CGRect?
+    private var lastFocusCircle: FieldCircle?
+    private var lastViewClass = ViewClass.blank
+    private var lastTracking = TrackingState.paused
+    private var lastIsStill = true
+    private var lastBox: (brightness: Double, sharpness: Double)?
+    private var focusPauseBeganAt: Double?
+    private var focusPauseCause = ""
+    /// For the setup CSV's `focus_event`, written on the next setup row.
+    private var pendingFocusEvent = ""
+    /// The app accepted the focus on this frame (setup focused, or a focus pause ended by itself):
+    /// taken by the engine, which hands it to the recorder.
+    private var appAccept: (record: FocusAcceptRecord, place: FocusAcceptPlace)?
+    /// The lab's focus records are on: only then are the app's acceptances worked out.
+    var buildsFocusRecords = false
     private var lastRunAlignmentAt: Double?
     private var origin: Double?
     private let gridStep = FieldMaskThresholds().gridStep
@@ -213,9 +240,138 @@ final class LabSetupSession {
 
     /// The person says the picture is sharp although the checks have not found it so: the focus
     /// step moves on.
-    func acceptFocus() {
-        guard !isHeld, flow.step == .focus else { return }
+    /// True when it was taken (the focus step, not held). Needs no reading and no state of the
+    /// guide: the flow reads this flag on the next setup frame whatever the checks say.
+    @discardableResult
+    func acceptFocus() -> Bool {
+        guard !isHeld, flow.step == .focus else { return false }
         personSaysSharp = true
+        return true
+    }
+
+    /// The microscope is at a new spot (the Terraloka stage moved, or the person says so): in the
+    /// focus step the guide, the dial, the fade, the confirmation, the focus index readings and the
+    /// best detail start afresh, which also restarts the 12 s count for too little sample. Every
+    /// other step: nothing. A focus the person already accepted stays accepted.
+    func focusSpotChanged() {
+        guard flow.step == .focus, !personSaysSharp else { return }
+        resetFocus()
+        stepConfirmed = false
+        focusIndexes = []
+        pendingFocusEvent = "new_spot"
+    }
+
+    /// The step the focus accept is wanted in: kept frames and readings are for these.
+    var wantsFocusRing: Bool {
+        flow.step == .focus || flow.step == .done && monitor.state == .pausedFocus
+    }
+
+    /// The app accepted the focus on the last frame, once.
+    func takeAppAccept() -> (record: FocusAcceptRecord, place: FocusAcceptPlace)? {
+        defer { appAccept = nil }
+        return appAccept
+    }
+
+    /// Names a focus event for the setup CSV (setup steps only; the movement log has its own).
+    func noteFocusEvent(_ name: String) {
+        if flow.step != .done { pendingFocusEvent = name }
+    }
+
+    /// This frame's reading for the focus record; nil when there is none to keep.
+    func focusRow(at seconds: Double) -> FocusAcceptRecord.Row? {
+        if flow.step == .focus, let reading = lastFocusReading {
+            return FocusAcceptRecord.Row(
+                t: seconds, state: reading.state.csvName, current: reading.current,
+                peak: reading.peak, level: reading.level, detail: freshTiles?.detail,
+                active: freshTiles?.active, viewClass: "")
+        }
+        if flow.step == .done, monitor.state == .pausedFocus {
+            // The run has no guide: the focus index stands for the sharpness, the box sharpness
+            // over its reference for the level.
+            let m = info.monitor
+            return FocusAcceptRecord.Row(
+                t: seconds, state: m.state.csvName, current: m.recentFocusIndex, peak: m.focusPeak,
+                level: m.sharpnessShare, detail: freshTiles?.detail, active: freshTiles?.active,
+                viewClass: lastViewClass.rawValue)
+        }
+        return nil
+    }
+
+    /// What the focus check says now, as a record's numbers. `byApp`: the app itself accepted on
+    /// this frame, so it agreed by definition. The engine adds exposure, ISO, objective and angles.
+    func focusAcceptRecord(place: FocusAcceptPlace, byApp: Bool = false) -> FocusAcceptRecord {
+        var record = FocusAcceptRecord()
+        record.appBuild = Self.appBuild
+        var thresholds = FocusAcceptRecord.numbers(of: FocusTilesThresholds())
+        switch place {
+        case .setup:
+            let reading = lastFocusReading
+            record.whyNot =
+                byApp
+                ? []
+                : FocusGuide.whyNot(
+                    focus, reading: reading, faded: focusFadedSince != nil,
+                    awaitsConfirm: confirmsSteps && !stepConfirmed)
+            record.state = reading?.state.csvName
+            record.current = reading?.current
+            record.peak = reading?.peak
+            record.level = reading?.level
+            record.lowest = focus.lowest.isFinite ? focus.lowest : nil
+            record.dial = lastDialReading?.offset
+            record.secondsSinceBegan = focus.startedAt.map { lastSeconds - $0 }
+            thresholds.merge(FocusAcceptRecord.numbers(of: focus.thresholds)) { $1 }
+        case .run:
+            let m = info.monitor
+            record.whyNot =
+                byApp
+                ? []
+                : RunMonitor.whyNotResumed(
+                    state: m.state, index: m.recentFocusIndex, baseline: m.focusBaseline,
+                    sharpnessShare: m.sharpnessShare, isSharp: monitor.isSharp,
+                    viewClass: lastViewClass, tracking: lastTracking, isStill: lastIsStill)
+            record.monitorState = m.state.csvName
+            record.pauseCause = m.pauseCause.isEmpty ? focusPauseCause : m.pauseCause
+            record.focusIndex = m.recentFocusIndex
+            record.focusBaseline = m.focusBaseline
+            record.sharpnessShare = m.sharpnessShare
+            record.isSharp = monitor.isSharp
+            record.dial = m.dial?.offset
+            record.peak = m.focusPeak
+            record.secondsSinceBegan = focusPauseBeganAt.map { lastSeconds - $0 }
+            thresholds.merge(FocusAcceptRecord.numbers(of: monitor.thresholds)) { $1 }
+        case .calibrate:
+            // Setup's focus step was skipped: no check ran.
+            record.whyNot = ["no_reading"]
+        }
+        record.agreed = record.whyNot.isEmpty
+        record.thresholds = thresholds
+        record.detailBest = detailBest
+        if let tiles = latestTiles {
+            record.detail = tiles.detail
+            record.top = tiles.top
+            record.topRatio = tiles.topRatio
+            record.noise = tiles.noise
+            record.used = tiles.used
+            record.active = tiles.active
+            record.tileFine = tiles.tileFine
+            record.tileCoarse = tiles.tileCoarse
+        }
+        record.viewClass = place == .setup ? nil : lastViewClass.rawValue
+        record.tracking = place == .setup ? nil : SetupLog.trackingName(lastTracking)
+        record.boxBrightness = lastBox?.brightness
+        record.boxSharpness = lastBox?.sharpness
+        if let square = lastFocusSquare {
+            record.focusSquare = [square.minX, square.minY, square.width, square.height].map(Double.init)
+        }
+        if let circle = lastFocusCircle {
+            record.circle = [Double(circle.centre.x), Double(circle.centre.y), circle.radius]
+        }
+        return record
+    }
+
+    private static var appBuild: String {
+        let info = Bundle.main.infoDictionary
+        return "\(info?["CFBundleShortVersionString"] as? String ?? "?") (\(info?["CFBundleVersion"] as? String ?? "?"))"
     }
 
     /// Back to align: the checks start afresh and the stage is forgotten.
@@ -310,6 +466,10 @@ final class LabSetupSession {
         guidePosition: (SlideMovementStep) -> CGPoint = { $0.positionFields },
         viewClass: ViewClass = .blank, isStill: Bool = true, stillSeconds: Double = 0
     ) -> Output? {
+        lastSeconds = seconds
+        freshTiles = nil
+        lastViewClass = viewClass
+        lastIsStill = isStill
         switch flow.step {
         case .align, .focus:
             return processSetup(buffer, seconds: seconds, pipeline: pipeline).map { .setup($0) }
@@ -348,14 +508,24 @@ final class LabSetupSession {
         if flow.step == .focus, let circle = confirmedFieldCircle ?? lastPassingCircle {
             let box = Self.focusSquare(for: circle, frameSize: frameSize)
             square = box
+            lastFocusSquare = box
+            lastFocusCircle = circle
+            // The tiles first (about three times a second): their active count feeds the guide.
+            if Self.isDue(lastTilesAt, now: seconds, interval: Self.runFocusIntervalSeconds) {
+                lastTilesAt = seconds
+                tilesReading = FocusTiles.measure(of: buffer, in: box, circle: circle)
+                noteTiles(tilesReading)
+            }
             if let sharpness = FrameAnalyzer.stats(of: buffer, in: box, step: 4)?.sharpness {
-                focusReading = focus.update(sharpness: sharpness, seconds: seconds)
+                focusReading = focus.update(
+                    sharpness: sharpness, seconds: seconds, activeTiles: tilesReading?.active)
                 if focusHasFaded(focusReading, seconds) {
                     // The knob was turned away again, or (after an alignment loss) the picture is
                     // not the one that was found sharp: found no longer.
                     resetFocus()
                     stepConfirmed = false
-                    focusReading = focus.update(sharpness: sharpness, seconds: seconds)
+                    focusReading = focus.update(
+                        sharpness: sharpness, seconds: seconds, activeTiles: tilesReading?.active)
                 }
                 focusWasFocused = focusReading?.state == .focused
                 // The dial follows from the start, so it knows the side once it shows: after
@@ -371,20 +541,21 @@ final class LabSetupSession {
                 focusIndexes.append((seconds, index))
                 focusIndexes.removeAll { seconds - $0.seconds > Self.baselineSeconds }
             }
-            // Measured and logged, nothing more.
-            if Self.isDue(lastTilesAt, now: seconds, interval: Self.runFocusIntervalSeconds) {
-                lastTilesAt = seconds
-                tilesReading = FocusTiles.measure(of: buffer, in: box)
-            }
         }
+        lastFocusReading = focusReading
+        lastDialReading = dialReading
         let atStep = flow.step
         let start = origin ?? seconds
         origin = start
         appendLog(
             SetupLogRow(
                 seconds: seconds - start, step: atStep, alignment: reading, focus: focusReading,
-                focusDial: dialReading, focusTiles: tilesReading))
+                focusDial: dialReading, focusTiles: tilesReading, focusDetailBest: detailBest,
+                focusEvent: pendingFocusEvent))
+        pendingFocusEvent = ""
 
+        let personSays = personSaysSharp && !isHeld
+        let appSays = focusReading?.state == .focused && focusFadedSince == nil && canAdvance
         if atStep == .align {
             if flow.update(alignmentPassed: alignment.isPassed && canAdvance) {
                 stepConfirmed = false
@@ -396,10 +567,13 @@ final class LabSetupSession {
             alignment.reset()
             resumingAfterLoss = true
             focusReading = nil
-        } else if flow.update(
-            focused: personSaysSharp && !isHeld
-                || focusReading?.state == .focused && focusFadedSince == nil && canAdvance)
-        {
+        } else if flow.update(focused: personSays || appSays) {
+            // The app's own acceptance is recorded too (the person's is, at the tap).
+            if appSays && !personSays && buildsFocusRecords {
+                appAccept = (focusAcceptRecord(place: .setup, byApp: true), .setup)
+                // This frame's row is written already.
+                if !log.isEmpty { log[log.count - 1].focusEvent = "focus_accept_app_setup" }
+            }
             stepConfirmed = false
             personSaysSharp = false
             focusFound = true
@@ -441,6 +615,7 @@ final class LabSetupSession {
 
     private func resetFocus() {
         focus.reset()
+        detailBest = nil
         focusFadedSince = nil
         focusDial = Self.newSetupDial()
     }
@@ -477,8 +652,11 @@ final class LabSetupSession {
     ) {
         frameCounter += 1
         let tracking = step.tracking.trackingState
+        lastTracking = tracking
+        lastBox = (step.boxStats.brightness, step.boxStats.sharpness)
         var reading: AlignmentReading?
         let inRun = flow.step == .done
+        if flow.step == .stage { detailBest = nil }
         if !inRun {
             lastRunFocusAt = nil
             lastTilesAt = nil
@@ -549,7 +727,9 @@ final class LabSetupSession {
                         tracking: tracking, position: guidePosition(step),
                         boxSharpness: step.boxStats.sharpness, viewClass: viewClass,
                         stillSeconds: stillSeconds,
-                        featureCells: step.tracking.featureCells)))
+                        featureCells: step.tracking.featureCells),
+                    focusEvent: pendingFocusEvent))
+            pendingFocusEvent = ""
         }
         info.step = flow.step
         info.focusFound = focusFound
@@ -559,6 +739,14 @@ final class LabSetupSession {
         info.stageAxes = stageAxes
         if flow.step != .done { info.monitor = RunMonitorInfo(circle: referenceCircle) }
         if flow.step == .done { measureRunTiles(buffer, seconds: seconds) }
+    }
+
+    /// A new tiles reading: kept as the latest, and its detail may be the best at this spot.
+    private func noteTiles(_ reading: FocusTilesReading?) {
+        guard let reading else { return }
+        latestTiles = reading
+        freshTiles = reading
+        if let detail = reading.detail { detailBest = max(detailBest ?? detail, detail) }
     }
 
     /// The focus tiles of the run, about three times a second, whatever the monitor is doing
@@ -574,13 +762,18 @@ final class LabSetupSession {
             let size = CGSize(
                 width: CVPixelBufferGetWidth(buffer), height: CVPixelBufferGetHeight(buffer))
             let started = ContinuousClock.now
-            fresh = FocusTiles.measure(of: buffer, in: Self.focusSquare(for: circle, frameSize: size))
+            let box = Self.focusSquare(for: circle, frameSize: size)
+            fresh = FocusTiles.measure(of: buffer, in: box, circle: circle)
             milliseconds = Self.milliseconds(since: started)
+            lastFocusSquare = box
+            lastFocusCircle = circle
             if let fresh { recentTiles = fresh }
+            noteTiles(fresh)
         }
         info.monitor.focusTiles = fresh
         info.monitor.focusTilesMilliseconds = fresh == nil ? nil : milliseconds
         info.monitor.recentFocusTiles = recentTiles
+        info.monitor.focusDetailBest = detailBest
     }
 
     /// Field and stage: the geometry-only check; lost alignment goes back to align.
@@ -624,10 +817,21 @@ final class LabSetupSession {
             lastRunFocusIndex = index
             focusIndexMilliseconds = Self.milliseconds(since: started)
         }
+        let wasPaused = monitor.state == .pausedFocus
         let state = monitor.update(
             alignment: reading, confirmedCircle: referenceCircle, focusIndex: index,
             boxSharpness: step.boxStats.sharpness, viewClass: viewClass, tracking: tracking,
             isStill: isStill, seconds: seconds)
+        if state == .pausedFocus {
+            if !wasPaused {
+                focusPauseBeganAt = seconds
+                detailBest = nil
+            }
+            if !monitor.pauseCause.isEmpty { focusPauseCause = monitor.pauseCause }
+        } else if wasPaused, !monitor.resumeNote.isEmpty, buildsFocusRecords {
+            // The run's own check ended the pause: recorded, so wrong acceptances can be found.
+            appAccept = (focusAcceptRecord(place: .run, byApp: true), .run)
+        }
         if state == .pausedFocus, let index {
             // Paused for focus: from the first reading, a dial against the baseline (words
             // only without one). The Z knob does not move the slide, so still or not.

@@ -49,13 +49,13 @@ final class MovementLogTests: XCTestCase {
         XCTAssertEqual(fields[index("position_x_frames")], "0.014")
         XCTAssertEqual(fields[index("frame_width")], "1280")
         XCTAssertEqual(
-            MovementLog.header.suffix(134).prefix(7),
+            MovementLog.header.suffix(138).prefix(7),
             [
                 "box_brightness", "box_sharpness", "box_contrast", "reading", "predicted_streak",
                 "no_detail", "blind_stretches",
             ])
         XCTAssertEqual(
-            MovementLog.header.suffix(127).prefix(27),
+            MovementLog.header.suffix(131).prefix(27),
             [
                 "start_match_x_px", "start_match_y_px", "true_off_start_fields",
                 "tracker_error_fields", "blank_returns_matched", "blank_returns_unmatched",
@@ -89,7 +89,7 @@ final class MovementLogTests: XCTestCase {
         XCTAssertEqual(fields[index("focus_top")], "1.200")
         XCTAssertEqual(fields[index("focus_bottom")], "", "a half with no ratio is empty")
         XCTAssertEqual(
-            MovementLog.header.suffix(99).prefix(5),
+            MovementLog.header.suffix(103).prefix(5),
             ["focus_index", "focus_baseline", "circle_shift_r", "circle_radius_change", "focus_low"],
             "the run monitor's columns are appended after every column")
         XCTAssertEqual(fields[index("monitor_state")], "")
@@ -186,9 +186,9 @@ final class MovementLogTests: XCTestCase {
 
     func testTheSpotAndCountingColumnsAreAppendedLast() {
         XCTAssertEqual(
-            MovementLog.header.suffix(61).prefix(3), ["spot_mode", "spot_window", "touch_seconds"])
+            MovementLog.header.suffix(65).prefix(3), ["spot_mode", "spot_window", "touch_seconds"])
         XCTAssertEqual(
-            MovementLog.header.suffix(45).prefix(18),
+            MovementLog.header.suffix(49).prefix(18),
             [
                 "event_detail", "detector_model", "det_drop_disc", "det_drop_big", "det_units",
                 "frame_dt", "camera_fps", "exposure_ms", "iso", "thermal_state", "battery_level",
@@ -266,7 +266,7 @@ final class MovementLogTests: XCTestCase {
         // step 3) and the two lens video columns,
         // the guide's four, and the stage branch's four.
         XCTAssertEqual(
-            Array(MovementLog.header.suffix(27).prefix(5)),
+            Array(MovementLog.header.suffix(31).prefix(5)),
             ["line_accept", "area_ahead_share", "predicted_edge_along", "expected_edge_ask", "camera_drops"])
         var logged = row()
         logged.lineState = "attached"
@@ -279,7 +279,7 @@ final class MovementLogTests: XCTestCase {
             separator: ",", omittingEmptySubsequences: false
         ).map(String.init)
         XCTAssertEqual(fields.count, MovementLog.header.count)
-        XCTAssertEqual(Array(fields.suffix(27).prefix(5)), ["area", "0.051", "-9.123", "1", "7"])
+        XCTAssertEqual(Array(fields.suffix(31).prefix(5)), ["area", "0.051", "-9.123", "1", "7"])
     }
 
     /// Performance step 3: the heat mode and the screen brightness come before the lens video's
@@ -291,7 +291,7 @@ final class MovementLogTests: XCTestCase {
         let lines = MovementLog.csv([logged]).split(separator: "\n")
         let fields = lines[1].split(separator: ",", omittingEmptySubsequences: false)
         XCTAssertEqual(fields.count, MovementLog.header.count)
-        XCTAssertEqual(fields.suffix(21).prefix(2).map(String.init), ["cool_down", "0.35"])
+        XCTAssertEqual(fields.suffix(25).prefix(2).map(String.init), ["cool_down", "0.35"])
     }
 
     func testTheLensVideoColumnsComeBeforeTheGuidesAndTheStages() {
@@ -302,17 +302,17 @@ final class MovementLogTests: XCTestCase {
             separator: ",", omittingEmptySubsequences: false
         ).map(String.init)
         XCTAssertEqual(fields.count, MovementLog.header.count)
-        XCTAssertEqual(Array(fields.suffix(19).prefix(2)), ["1", "4"])
+        XCTAssertEqual(Array(fields.suffix(23).prefix(2)), ["1", "4"])
         XCTAssertEqual(
             Array(
                 MovementLog.csv([row()]).split(separator: "\n")[1].split(
                     separator: ",", omittingEmptySubsequences: false
-                ).suffix(19).prefix(2)), ["0", ""])
+                ).suffix(23).prefix(2)), ["0", ""])
     }
 
     /// The focus pause's peak and turning hint come after the lens video's and the guide's.
     func testTheFocusPauseColumnsComeBeforeTheStageAngles() {
-        XCTAssertEqual(Array(MovementLog.header.suffix(13).prefix(2)), ["focus_peak", "focus_hint"])
+        XCTAssertEqual(Array(MovementLog.header.suffix(17).prefix(2)), ["focus_peak", "focus_hint"])
         var logged = row()
         logged.focusPeak = 0.7281
         logged.focusHint = "Try turning the other way"
@@ -320,25 +320,25 @@ final class MovementLogTests: XCTestCase {
             separator: ",", omittingEmptySubsequences: false
         ).map(String.init)
         XCTAssertEqual(fields.count, MovementLog.header.count)
-        XCTAssertEqual(Array(fields.suffix(13).prefix(2)), ["0.728", "Try turning the other way"])
+        XCTAssertEqual(Array(fields.suffix(17).prefix(2)), ["0.728", "Try turning the other way"])
     }
 
     /// The automated stage's servo angles are the last two columns, empty without the stage.
     func testTheStageAngleColumnsPrecedeTheFocusTilesColumns() {
         XCTAssertEqual(
-            Array(MovementLog.header.suffix(11).prefix(2)), ["stage_angle_x", "stage_angle_y"])
+            Array(MovementLog.header.suffix(15).prefix(2)), ["stage_angle_x", "stage_angle_y"])
         var logged = row()
         let plain = MovementLog.csv([logged]).split(separator: "\n")[1].split(
             separator: ",", omittingEmptySubsequences: false
         ).map(String.init)
-        XCTAssertEqual(Array(plain.suffix(11).prefix(2)), ["", ""])
+        XCTAssertEqual(Array(plain.suffix(15).prefix(2)), ["", ""])
         logged.stageAngleX = 87
         logged.stageAngleY = 142
         let fields = MovementLog.csv([logged]).split(separator: "\n")[1].split(
             separator: ",", omittingEmptySubsequences: false
         ).map(String.init)
         XCTAssertEqual(fields.count, MovementLog.header.count)
-        XCTAssertEqual(Array(fields.suffix(11).prefix(2)), ["87", "142"])
+        XCTAssertEqual(Array(fields.suffix(15).prefix(2)), ["87", "142"])
     }
 
     // MARK: Focus tiles
@@ -351,7 +351,7 @@ final class MovementLogTests: XCTestCase {
 
     func testTheFocusTilesColumnsAreTheLastNineAndFilledFromTheReading() {
         XCTAssertEqual(
-            Array(MovementLog.header.suffix(9)),
+            Array(MovementLog.header.suffix(13).prefix(9)),
             [
                 "focus_top", "focus_top_ratio", "focus_noise", "focus_tiles_used",
                 "focus_tiles_active", "focus_top_tiles", "focus_tiles_ms", "focus_label",
@@ -367,7 +367,7 @@ final class MovementLogTests: XCTestCase {
         ).map(String.init)
         XCTAssertEqual(fields.count, MovementLog.header.count)
         XCTAssertEqual(
-            Array(fields.suffix(9)),
+            Array(fields.suffix(13).prefix(9)),
             ["1235", "2.5", "12.35", "60", "9", "3 19 20 41", "0.4321", "sharp", "1"])
     }
 
@@ -375,6 +375,44 @@ final class MovementLogTests: XCTestCase {
         let fields = MovementLog.csv([row()]).split(separator: "\n")[1].split(
             separator: ",", omittingEmptySubsequences: false
         ).map(String.init)
-        XCTAssertEqual(Array(fields.suffix(9)), ["", "", "", "", "", "", "", "", "0"])
+        XCTAssertEqual(Array(fields.suffix(13).prefix(9)), ["", "", "", "", "", "", "", "", "0"])
+    }
+
+    func testTheLastFourColumnsHoldTheDetailAndAll64Tiles() {
+        XCTAssertEqual(
+            Array(MovementLog.header.suffix(4)),
+            ["focus_detail", "focus_detail_best", "focus_tile_fine", "focus_tile_coarse"])
+        var logged = row()
+        var fine = [Double?](repeating: nil, count: 64)
+        var coarse = [Double?](repeating: nil, count: 64)
+        fine[0] = 1234.5678
+        fine[63] = 0.5
+        coarse[0] = 7
+        var reading = focusReading()
+        reading.tileFine = fine
+        reading.tileCoarse = coarse
+        reading.detail = 6.789123
+        logged.focusTiles = reading
+        logged.focusDetailBest = 9.87654
+        let fields = MovementLog.csv([logged]).split(separator: "\n")[1].split(
+            separator: ",", omittingEmptySubsequences: false
+        ).map(String.init)
+        XCTAssertEqual(fields.count, MovementLog.header.count)
+        XCTAssertEqual(fields[fields.count - 4], "6.789")
+        XCTAssertEqual(fields[fields.count - 3], "9.877")
+        let tiles = fields[fields.count - 2].split(separator: " ").map(String.init)
+        XCTAssertEqual(tiles.count, 64)
+        XCTAssertEqual(tiles[0], "1235")
+        XCTAssertEqual(tiles[1], "-")
+        XCTAssertEqual(tiles[63], "0.5")
+        XCTAssertEqual(fields[fields.count - 1].split(separator: " ").count, 64)
+        XCTAssertEqual(fields[fields.count - 1].split(separator: " ").first, "7")
+    }
+
+    func testTheLastFourColumnsAreEmptyWithoutAReading() {
+        let fields = MovementLog.csv([row()]).split(separator: "\n")[1].split(
+            separator: ",", omittingEmptySubsequences: false
+        ).map(String.init)
+        XCTAssertEqual(Array(fields.suffix(4)), ["", "", "", ""])
     }
 }

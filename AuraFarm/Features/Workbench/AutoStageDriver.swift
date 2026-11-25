@@ -129,6 +129,19 @@ final class AutoStageDriver {
     private var presetAwaitingSettle = false
     private var presetFinished = false
     private var dwellUntil: Date?
+    // Preset stops (see `PresetStopTracker`): the stop the dwell began, told to the engine so the
+    // model looks at it. The id goes on after a pause at the same place.
+    private var presetStopID = 0
+    private var presetStopOpen = false
+    private var presetStopSuspended = false
+    private var presetStopColumn = 0
+    private var presetStopAngles = (x: 0, y: 0)
+    private var presetFlips = (x: false, y: false)
+    /// Seconds the open stop has been held while the path ran (no pause, no focus pause), and the
+    /// time of the last preset step: a safeguard if the engine's own count never says "enough".
+    private var stopHeldSeconds = 0.0
+    private var lastPresetStepAt = Date()
+    private var lastStillSent: Bool?
     private var countingColumn: Int?
     private var edgeWatch = StagePresetEdgeWatch()
     private var ignoreEdgeThisLeg = false
@@ -164,6 +177,11 @@ final class AutoStageDriver {
     }
     private var handState: HandControl?
     private var handBegin = false
+    /// The page's Auto | Manual change-over (see `StageManualSwitch`), and what to tell the person
+    /// when the board did not answer.
+    private(set) var manualSwitch = StageManualSwitch()
+    private(set) var manualSwitchProblem: String?
+    private var lastStopAt = Date.distantPast
     private var handRestartNotice = false
     private var hand = StageHandControl()
     private var handReturn: StageHandReturn?
@@ -245,6 +263,10 @@ final class AutoStageDriver {
     }
 
     func deactivate() {
+        endPresetStop()
+        engine.setPresetStops(false)
+        cancelSwitchToManual()
+        engine.stageMoveSettled()
         clearHandState()
         loop?.cancel()
         loop = nil
@@ -267,13 +289,20 @@ final class AutoStageDriver {
         cancelSweep = true
         finishWaiter(false)  // a warm-up or calibration wait ends now, not at its timeout
         client.send(.stop)
+        lastStopAt = Date()
         inFlight = false
         releaseHandArrow()
         engine.setExternalCounting(active: false, column: 0)
+        if presetStopOpen, !presetStopSuspended {
+            presetStopSuspended = true
+            engine.presetStopSuspended()
+        }
         phase = .paused
     }
 
     func resume() {
+        cancelSwitchToManual()
+        manualSwitchProblem = nil
         userPaused = false
         guard phase == .paused else { return }
         sessionEnded = false
@@ -370,6 +399,7 @@ final class AutoStageDriver {
             lastSettledAt = Date()
             client.send(.status)
             lastMove = "No reply, resynced"
+            engine.stageMoveSettled()
         }
         guard !inFlight, Date().timeIntervalSince(lastSettledAt) >= 0.3 else { return }
         guard
@@ -386,7 +416,7 @@ final class AutoStageDriver {
             return
         }
         moveCheck = nil  // these moves say nothing about the mapping
-        guard client.send(.goTo(next.servo, next.angle)) else { return }
+        guard sendGoTo(next.servo, next.angle) else { return }
         inFlight = true
         moveSentAt = Date()
         lastServo = next.servo
@@ -419,6 +449,8 @@ final class AutoStageDriver {
         guard new != pathMode else { return }
         clearHandState()
         pathMode = new
+        endPresetStop()
+        engine.setPresetStops(false)
         zigzag = nil
         presetProgress = nil
         presetFinished = false
@@ -451,6 +483,8 @@ final class AutoStageDriver {
     }
 
     func endSession() {
+        endPresetStop()
+        cancelSwitchToManual()
         guard !sessionEnded else { return }
         sessionEnded = true
         clearHandState()
@@ -485,6 +519,7 @@ final class AutoStageDriver {
         if needsSharpTap, engine.setupInfo.step != .stage { return }
         needsSharpTap = false
         focusAccepted = true
+        engine.recordCalibrateAccept()
         engine.logEvent("stage_focus_accepted")
         phase = .waitingForStageStep
     }
@@ -508,6 +543,8 @@ final class AutoStageDriver {
         pathChosen = false
         presetStageSkipped = false
         awaitingReopen = false
+        endPresetStop()
+        engine.setPresetStops(false)
         zigzag = nil
         presetFinished = false
         runBegun = false  // a new test: the run gate closes again
@@ -533,7 +570,7 @@ final class AutoStageDriver {
             lastMove = "No direction to cross in"
             return
         }
-        engine.resumeFocusAnyway()
+        engine.resumeFocusAnyway(emptyArea: true)
         engine.logEvent("empty_confirmed")
         crossing = StageBlindCrossing(
             direction: lastSteer, startAngles: (angleX, angleY))
@@ -658,6 +695,9 @@ final class AutoStageDriver {
         case .position, .done:
             inFlight = false
             lastSettledAt = Date()
+            // The view is somewhere new: setup's focus step starts its guide afresh.
+            engine.focusSpotChanged()
+            engine.stageMoveSettled()
             // Every step starts from zero offset: a step can move the picture further than the
             // tracker trusts between two frames.
             engine.requestTrackerReanchor()
@@ -670,11 +710,14 @@ final class AutoStageDriver {
         case .ok(let text) where text.hasPrefix("STOP"):
             inFlight = false
             lastSettledAt = Date()
+            // It may have stopped part way: frames from before now stay hidden.
+            engine.stageMoveSettled()
         case .limits(let new):
             limits = new
         case .limitReached(let axis, let end):
             noteLimitReported(axis, end)
         case .error(let text):
+            if inFlight { engine.stageMoveSettled() }
             inFlight = false
             lastErrorText = text
             if text.hasPrefix("LIMIT") { refused(text) }
@@ -716,6 +759,14 @@ final class AutoStageDriver {
         return v.applying(s.inverted().withoutTranslation)
     }
 
+    /// Sends a GOTO; from the moment it is out the detector's boxes are hidden (drawing only).
+    private func sendGoTo(_ servo: StageAxis, _ angle: Int) -> Bool {
+        guard client.send(.goTo(servo, angle)) else { return false }
+        endPresetStop()
+        engine.stageMoveStarted()
+        return true
+    }
+
     /// Sends `command` and waits for a reply `accept` decides on (true: good, false: bad).
     private func request(
         _ command: StageCommand, timeout: Double = 10, accept: @escaping (StageReply) -> Bool?
@@ -728,6 +779,7 @@ final class AutoStageDriver {
                 finishWaiter(false)
                 return
             }
+            if case .goTo = command { engine.stageMoveStarted() }
             Task { [weak self] in
                 try? await Task.sleep(for: .seconds(timeout))
                 if self?.waiter?.id == id { self?.finishWaiter(false) }
@@ -1016,12 +1068,22 @@ final class AutoStageDriver {
                 }
                 phase = .disconnected
                 inFlight = false
+                endPresetStop()
+                cancelSwitchToManual()
+                engine.stageMoveSettled()
                 releaseHandArrow()  // nothing moves again by itself
                 userPaused = userPaused || canRunPath  // stay paused until Resume
             }
             return
         }
         reanchorIfStuckLost()
+        // No move in flight and the last one settled a moment ago: the stage stands still (the
+        // engine reads it at a preset stop and in hand control).
+        let still = !inFlight && Date().timeIntervalSince(lastSettledAt) >= 0.3
+        if still != lastStillSent {
+            lastStillSent = still
+            engine.setStageStandsStill(still)
+        }
         let step = engine.setupInfo.step
         if controlMode == .manual {
             manualTick(step)
@@ -1124,7 +1186,8 @@ final class AutoStageDriver {
 
     /// The plain-words status, for the guided scan's screens.
     var status: AutoStageStatus {
-        AutoStageStatus.make(
+        if isSwitchingToManual { return AutoStageStatus(title: "Switching to manual") }
+        return AutoStageStatus.make(
             phase: phase, restartNotice: restartNotice, presetEdgePrompt: presetEdgePrompt,
             pathMode: pathMode, client: client.status, focusPaused: isFocusPaused,
             dwelling: isDwelling, hasConnected: hasConnected, tooHot: engine.heatMode == .tooHot)
@@ -1190,6 +1253,34 @@ final class AutoStageDriver {
         }
     }
 
+    /// The stop is over (the next GOTO, a hand on the stage, a disconnect, the column or the run
+    /// ending): the engine stops looking at it.
+    private func endPresetStop() {
+        guard presetStopOpen else { return }
+        presetStopOpen = false
+        presetStopSuspended = false
+        engine.presetStopEnded()
+    }
+
+    /// Where the stops are on the slide: fields per degree of each servo in use, and the flips the
+    /// path started with.
+    private func currentPresetGeometry() -> PresetStopGeometry {
+        let plan = zigzag?.plan
+        let leg = zigzag?.legFieldsPerDegree ?? 0
+        let step = zigzag?.stepFieldsPerDegree ?? 0
+        let legIsX = plan?.legServo == .x
+        return PresetStopGeometry(
+            fieldsPerDegreeX: legIsX ? leg : step, fieldsPerDegreeY: legIsX ? step : leg,
+            flipX: presetFlips.x, flipY: presetFlips.y)
+    }
+
+    /// The dwell is over, but the stop may still be held for its looks: fewer than two and under
+    /// two seconds, with looks possible at all (the engine says).
+    private func holdsStopForLooks() -> Bool {
+        guard presetStopOpen, !presetStopSuspended, engine.presetStopHolds else { return false }
+        return stopHeldSeconds < LiveCountThresholds().stopMaxSeconds + 1
+    }
+
     /// The preset path never uses a mapping: Y walks the columns, X steps across, in the arrows'
     /// directions; the stop spacing falls back to nominal fields per degree without tracking.
     private func startPreset() {
@@ -1201,6 +1292,8 @@ final class AutoStageDriver {
         let zigzag = StageZigzag(
             plan: plan, chunkDegrees: chunkDegrees, dwellSeconds: dwellSeconds)
         self.zigzag = zigzag
+        presetFlips = (handFlipX, handFlipY)
+        engine.setPresetStops(true)
         presetFinished = false
         edgeWatch = StagePresetEdgeWatch()
         let detail =
@@ -1237,11 +1330,22 @@ final class AutoStageDriver {
         zigzag?.limits = limits
         zigzag?.chunkDegrees = max(chunkDegrees, 1)
         phase = .presetPath(column: zigzag?.column ?? 0, spot: zigzag?.spot ?? 0)
+        let stepNow = Date()
+        let stepDt = min(stepNow.timeIntervalSince(lastPresetStepAt), 0.5)
+        lastPresetStepAt = stepNow
+        if presetStopOpen, presetStopSuspended {
+            // Back after a pause at the same place: the same stop, with the looks it had.
+            presetStopSuspended = false
+            engine.presetStopBegan(
+                id: presetStopID, column: presetStopColumn, angles: presetStopAngles,
+                geometry: currentPresetGeometry())
+        }
         if inFlight, Date().timeIntervalSince(moveSentAt) > 5 {
             inFlight = false
             lastSettledAt = Date()
             client.send(.status)
             lastMove = "No reply, resynced"
+            engine.stageMoveSettled()
             if presetAwaitingSettle {
                 presetAwaitingSettle = false
                 presetEvent = .settled
@@ -1258,10 +1362,13 @@ final class AutoStageDriver {
         }
         movedForStall = false
         guard monitor.state == .ok else { return }
+        if presetStopOpen { stopHeldSeconds += stepDt }
         watchPresetEdge()
         guard !presetEdgePrompt else { return }
         if let until = dwellUntil {
             guard Date() >= until else { return }
+            // Preset moves: the stop is held until it has had its looks (or the longest time).
+            if holdsStopForLooks() { return }
             if (zigzag?.column ?? 0) > 0, !ignoreEdgeThisLeg, edgeWatch.endStop() {
                 // The third blank stop in a row after sample: the column ends here.
                 if restoreAsksEdges {
@@ -1310,6 +1417,16 @@ final class AutoStageDriver {
             case .dwell(let seconds):
                 dwellUntil = Date().addingTimeInterval(seconds)
                 edgeWatch.beginStop()
+                // A stop: the stage is still here. Its looks start now, 0.3 s after the settle.
+                presetStopID += 1
+                presetStopOpen = true
+                presetStopSuspended = false
+                presetStopColumn = zigzag?.column ?? 0
+                presetStopAngles = (angleX, angleY)
+                stopHeldSeconds = 0
+                engine.presetStopBegan(
+                    id: presetStopID, column: presetStopColumn, angles: presetStopAngles,
+                    geometry: currentPresetGeometry())
                 let detail = "column \(zigzag?.column ?? 0) at \(angleX),\(angleY)"
                 Task {
                     // Another row than preset_path_column, so they do not overwrite each other.
@@ -1325,13 +1442,17 @@ final class AutoStageDriver {
                 engine.logEvent("preset_path_column", detail: "\(column) at \(angleX),\(angleY)")
             case .swapped(let dx, let dy):
                 // The path starts again from the new corner: drop what belonged to the old one.
+                endPresetStop()
                 dwellUntil = nil
                 engine.logEvent(
                     "preset_path_swapped", detail: String(format: "dx=%.2f dy=%.2f", dx, dy))
             case .columnEnded(let column):
+                endPresetStop()
                 countingColumn = nil
                 engine.setExternalCounting(active: false, column: column)
             case .finished(let reason):
+                endPresetStop()
+                engine.setPresetStops(false)
                 presetFinished = true
                 presetProgress = zigzag?.progress
                 zigzag = nil
@@ -1360,7 +1481,7 @@ final class AutoStageDriver {
     /// shows after the move settled says whether the mapping's direction and size are right.
     private func sendMove(_ servo: StageAxis, _ angle: Int, checked: Bool = true) -> Bool {
         evaluateMoveCheck(force: true)
-        guard client.send(.goTo(servo, angle)) else { return false }
+        guard sendGoTo(servo, angle) else { return false }
         moveCheck = nil
         if checked, trackingNow == .tracking, let seen = lastTracked,
             Date().timeIntervalSince(seen.at) < 0.5
@@ -1502,6 +1623,7 @@ final class AutoStageDriver {
             lastSettledAt = Date()
             client.send(.status)
             lastMove = "No reply, resynced"
+            engine.stageMoveSettled()
         }
         if crossing != nil {
             crossStep()
@@ -1644,7 +1766,7 @@ extension AutoStageDriver {
     /// "Move by hand": the board's own X and Y, taken from a STATUS answer in IDLE, are the
     /// position to come back to. A position saved earlier stays the saved one.
     func beginHandControl() {
-        guard canMoveByHand, !handBegin else { return }
+        guard canMoveByHand, !handBegin, !isSwitchingToManual else { return }
         handBegin = true
         Task {
             defer { handBegin = false }
@@ -1659,20 +1781,90 @@ extension AutoStageDriver {
                 lastMove = "The stage did not answer"
                 return
             }
-            if handState == nil {
-                handState = HandControl(
-                    saved: reported, tracker: engine.trackerPosition(), direction: servoDirection)
-            }
-            let saved = handState?.saved ?? reported
-            engine.logEvent("hand_start", detail: "\(saved.x),\(saved.y)")
-            dismissHandFocusReminder()
-            engine.setHandHold(.on)
-            stallWatch = StageStallWatch()
-            hand.reset()
-            handNote = ""
-            handLimitLogged = nil
-            phase = .byHand
+            enterHandControl(at: reported)
         }
+    }
+
+    /// Hand control starts: the board is idle at `reported`. A position saved earlier stays the
+    /// saved one.
+    private func enterHandControl(at reported: (x: Int, y: Int)) {
+        endPresetStop()
+        if handState == nil {
+            handState = HandControl(
+                saved: reported, tracker: engine.trackerPosition(), direction: servoDirection)
+        }
+        let saved = StageManualSwitch.saved(existing: handState?.saved, reported: reported)
+        engine.logEvent("hand_start", detail: "\(saved.x),\(saved.y)")
+        dismissHandFocusReminder()
+        engine.setHandHold(.on)
+        stallWatch = StageStallWatch()
+        hand.reset()
+        handNote = ""
+        handLimitLogged = nil
+        phase = .byHand
+    }
+
+    // MARK: Auto | Manual
+
+    /// A change-over is under way (the switch shows Manual, the status says so).
+    var isSwitchingToManual: Bool { manualSwitch.state == .switching }
+
+    /// The run may be switched to manual: see `StageManualSwitch.canSwitch`.
+    var canSwitchToManual: Bool {
+        StageManualSwitch.canSwitch(
+            phase: phase, isAutonomous: controlMode == .autonomous,
+            isConnected: client.status == .connected,
+            pathRuns: engine.setupInfo.step == .done && canRunPath && pathStarted && !presetFinished,
+            sessionEnded: sessionEnded, walkingBack: walkBack != nil,
+            hasSummary: engine.runSummary != nil, isCalibrating: isCalibrating)
+    }
+
+    /// Pauses (unless paused), waits for the board to say IDLE, then starts hand control as
+    /// `beginHandControl` does. Only STOP (the pause) and STATUS are sent; nothing moves. When the
+    /// board does not answer or is not idle it stays paused, and `manualSwitchProblem` says so.
+    func switchToManual() {
+        guard canSwitchToManual, !handBegin, let token = manualSwitch.begin() else { return }
+        manualSwitchProblem = nil
+        if StageManualSwitch.needsPause(phase) { pause() }
+        Task {
+            var lastAsk: Date?
+            while let delay = manualSwitch.nextAsk(
+                sinceStop: Date().timeIntervalSince(lastStopAt),
+                sinceLastAsk: lastAsk.map { Date().timeIntervalSince($0) })
+            {
+                if delay > 0 { try? await Task.sleep(for: .seconds(delay)) }
+                guard manualSwitch.isCurrent(token) else { return }
+                guard client.status == .connected else { return cancelSwitchToManual() }
+                lastAsk = Date()
+                var reading: StageManualSwitch.Reading?
+                _ = await request(.status, timeout: 3) { reply in
+                    guard case .status(_, let state, let x, let y, _) = reply else { return nil }
+                    reading = .init(x: x, y: y, isIdle: state == .idle)
+                    return true
+                }
+                guard manualSwitch.isCurrent(token) else { return }
+                if let outcome = manualSwitch.record(reading) {
+                    finishSwitch(outcome)
+                    return
+                }
+            }
+        }
+    }
+
+    private func finishSwitch(_ outcome: StageManualSwitch.Outcome) {
+        switch outcome {
+        case .entered(let x, let y) where canMoveByHand:
+            enterHandControl(at: (x, y))
+        default:
+            lastMove = "The stage did not answer"
+            manualSwitchProblem = StageManualSwitch.didNotAnswerText
+        }
+    }
+
+    /// Ends a change-over without entering manual: a disconnect, the app in the background,
+    /// End run, Stop and discard, the page closing, or Resume. Does nothing when none is under way.
+    func cancelSwitchToManual() {
+        manualSwitch.cancel()
     }
 
     func handPress(_ arrow: StageArrow) {
@@ -1719,6 +1911,7 @@ extension AutoStageDriver {
             lastSettledAt = Date()
             client.send(.status)
             lastMove = "No reply, resynced"
+            engine.stageMoveSettled()
             releaseHandArrow()
             return
         }
@@ -1742,7 +1935,7 @@ extension AutoStageDriver {
         }
         guard !inFlight, atOnce || Date().timeIntervalSince(lastSettledAt) >= 0.3 else { return }
         moveCheck = nil  // a hand move says nothing about the mapping or the gear
-        guard client.send(.goTo(servo, target)) else { return }
+        guard sendGoTo(servo, target) else { return }
         hand.sent()
         inFlight = true
         moveSentAt = Date()
@@ -1837,11 +2030,12 @@ extension AutoStageDriver {
             lastSettledAt = Date()
             client.send(.status)
             lastMove = "No reply, resynced"
+            engine.stageMoveSettled()
         }
         guard !inFlight, Date().timeIntervalSince(lastSettledAt) >= 0.3 else { return }
         if let next = handReturn?.nextStep(angles: (angleX, angleY)) {
             moveCheck = nil  // these moves say nothing about the mapping
-            guard client.send(.goTo(next.servo, next.angle)) else { return }
+            guard sendGoTo(next.servo, next.angle) else { return }
             inFlight = true
             moveSentAt = Date()
             lastServo = next.servo

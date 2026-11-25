@@ -50,6 +50,8 @@
                     DispatchQueue.main.async { self.labelSummaries = final }
                 }
             }
+            // Only the lab keeps focus records; the guided scan never switches them on.
+            setFocusRecording(true)
         }
 
         /// Writes the setup log (at most the last 2 minutes) to a CSV for sharing.

@@ -28,14 +28,16 @@ final class SetupLogTests: XCTestCase {
                     viewClass: .blank, stillSeconds: 2.5, featureCells: 7),
                 focusTiles: FocusTilesReading(
                     top: 1234.5678, topRatio: 2.5, topTiles: [3, 19], noise: 12.3456, used: 60,
-                    active: 9, tileFine: Array(repeating: nil, count: 64))),
+                    active: 9, tileFine: [1234.5678, nil] + [Double?](repeating: nil, count: 62),
+                    tileCoarse: [2, nil] + [Double?](repeating: nil, count: 62), detail: 6.789123),
+                focusDetailBest: 7.5, focusEvent: "new_spot"),
             SetupLogRow(seconds: 2, step: .align, alignment: AlignmentReading(), focus: nil),
         ]
         let lines = SetupLog.csv(rows).split(separator: "\n").map(String.init)
         XCTAssertEqual(lines.count, 3)
         XCTAssertEqual(
             lines[0],
-            "seconds,step,found,circle_x,circle_y,circle_r,clipped_sides,roundness,evenness,darkest_sector,brightest_sector,saturated_share,glare_ratio,score,problems,focus_state,focus_current,focus_peak,focus_level,stage_step,stage_travel_fields,stage_tilt_deg,stage_skew_deg,tracking,position_x_fields,position_y_fields,box_sharpness,view_class,still_seconds,feature_cells,focus_dial_offset,focus_dial_side,focus_top,focus_top_ratio,focus_noise,focus_tiles_used,focus_tiles_active"
+            "seconds,step,found,circle_x,circle_y,circle_r,clipped_sides,roundness,evenness,darkest_sector,brightest_sector,saturated_share,glare_ratio,score,problems,focus_state,focus_current,focus_peak,focus_level,stage_step,stage_travel_fields,stage_tilt_deg,stage_skew_deg,tracking,position_x_fields,position_y_fields,box_sharpness,view_class,still_seconds,feature_cells,focus_dial_offset,focus_dial_side,focus_top,focus_top_ratio,focus_noise,focus_tiles_used,focus_tiles_active,focus_detail,focus_detail_best,focus_tile_fine,focus_tile_coarse,focus_event"
         )
         let first = lines[1].split(separator: ",", omittingEmptySubsequences: false).map(String.init)
         XCTAssertEqual(first.count, SetupLog.header.count)
@@ -67,6 +69,14 @@ final class SetupLogTests: XCTestCase {
         XCTAssertEqual(first[index("focus_noise")], "12.35")
         XCTAssertEqual(first[index("focus_tiles_used")], "60")
         XCTAssertEqual(first[index("focus_tiles_active")], "9")
+        XCTAssertEqual(first[index("focus_detail")], "6.789")
+        XCTAssertEqual(first[index("focus_detail_best")], "7.5")
+        XCTAssertEqual(
+            first[index("focus_tile_fine")], "1235 -" + String(repeating: " -", count: 62))
+        XCTAssertEqual(
+            first[index("focus_tile_coarse")], "2 -" + String(repeating: " -", count: 62))
+        XCTAssertEqual(first[index("focus_event")], "new_spot")
+        XCTAssertEqual(SetupLog.header.suffix(5).first, "focus_detail", "added at the very end")
         let empty = lines[2].split(separator: ",", omittingEmptySubsequences: false).map(String.init)
         XCTAssertEqual(empty.count, SetupLog.header.count)
         XCTAssertEqual(empty[index("step")], "align")
@@ -75,8 +85,10 @@ final class SetupLogTests: XCTestCase {
         XCTAssertEqual(empty[index("focus_state")], "")
         XCTAssertEqual(empty[index("tracking")], "", "the tracker is not running at align")
         XCTAssertEqual(empty[index("still_seconds")], "")
-        for name in ["focus_top", "focus_top_ratio", "focus_noise", "focus_tiles_used", "focus_tiles_active"]
-        {
+        for name in [
+            "focus_top", "focus_top_ratio", "focus_noise", "focus_tiles_used", "focus_tiles_active",
+            "focus_detail", "focus_detail_best", "focus_tile_fine", "focus_tile_coarse", "focus_event",
+        ] {
             XCTAssertEqual(empty[index(name)], "", name)
         }
     }

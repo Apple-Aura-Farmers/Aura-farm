@@ -20,6 +20,15 @@ struct FocusTilesThresholds {
     var topTiles = 4
     /// A tile is active when its fine is at least this many times the noise.
     var activeFactor = 3.0
+    /// A tile is used only when all four of its corners are inside this share of the round view's
+    /// radius: the rim is dark, vignetted and holds the cover slip's edge. PLACEHOLDER; source:
+    /// "25 Nov 100x logs".
+    var circleShare = 0.95
+    /// `detail` is the mean over this many of the active tiles with the highest fine. PLACEHOLDER;
+    /// source: "25 Nov 100x logs".
+    var detailTiles = 4
+    /// `detail` needs at least this many active tiles. PLACEHOLDER; source: "25 Nov 100x logs".
+    var detailMinActive = 2
     /// The Laplacian variance over the mean luma squared, times this, so brightness cancels.
     var scale = 10_000.0
 }
@@ -39,15 +48,29 @@ struct FocusTilesReading: Equatable {
     var active: Int
     /// All 64 fine values; nil where a tile was left out.
     var tileFine: [Double?]
+    /// The same for the coarse values.
+    var tileCoarse: [Double?] = []
+    /// Of the active tiles, up to `detailTiles` with the highest fine: their mean fine over their
+    /// mean coarse. Pure noise scores about 1, so inactive tiles never go in; nil with fewer than
+    /// `detailMinActive` active tiles. For the log only.
+    var detail: Double?
+
+    /// Four significant digits per tile, separated by spaces; "-" for a tile left out; empty
+    /// without values (no reading).
+    static func text(_ values: [Double?]) -> String {
+        values.map { $0.map { String(format: "%.4g", $0) } ?? "-" }.joined(separator: " ")
+    }
 }
 
 /// Focus measured per tile, so a view with little sample in it still has a number: the sharp tiles
 /// say it, the blank ones do not dilute it. Each tile is measured on its own pixels. Pure: luma in,
 /// a reading out.
 enum FocusTiles {
-    /// The reading of `box` (frame pixels from the top left) in `buffer`'s luma plane.
+    /// The reading of `box` (frame pixels from the top left) in `buffer`'s luma plane. Only tiles
+    /// with all four corners inside `circleShare` of `circle`'s radius are used.
     static func measure(
-        of buffer: CVPixelBuffer, in box: CGRect, thresholds: FocusTilesThresholds = FocusTilesThresholds()
+        of buffer: CVPixelBuffer, in box: CGRect, circle: FieldCircle,
+        thresholds: FocusTilesThresholds = FocusTilesThresholds()
     ) -> FocusTilesReading? {
         CVPixelBufferLockBaseAddress(buffer, .readOnly)
         defer { CVPixelBufferUnlockBaseAddress(buffer, .readOnly) }
@@ -64,26 +87,32 @@ enum FocusTiles {
         guard maxX > minX, maxY > minY else { return nil }
         return measure(
             pixels: base.assumingMemoryBound(to: UInt8.self), bytesPerRow: bytesPerRow,
-            region: (minX, minY, maxX, maxY), thresholds: thresholds)
+            region: (minX, minY, maxX, maxY), circle: circle, thresholds: thresholds)
     }
 
     private static func measure(
         pixels: UnsafePointer<UInt8>, bytesPerRow: Int, region: (Int, Int, Int, Int),
-        thresholds t: FocusTilesThresholds
+        circle: FieldCircle, thresholds t: FocusTilesThresholds
     ) -> FocusTilesReading? {
         let (minX, minY, maxX, maxY) = region
         let grid = t.grid
         let tileWidth = Double(maxX - minX) / Double(grid)
         let tileHeight = Double(maxY - minY) / Double(grid)
         var fine = [Double?](repeating: nil, count: grid * grid)
-        var coarse = [Double](repeating: 0, count: grid * grid)
+        var coarse = [Double?](repeating: nil, count: grid * grid)
+        let limit = t.circleShare * circle.radius
         for row in 0..<grid {
             for column in 0..<grid {
                 let x0 = minX + Int((Double(column) * tileWidth).rounded())
                 let x1 = minX + Int((Double(column + 1) * tileWidth).rounded())
                 let y0 = minY + Int((Double(row) * tileHeight).rounded())
                 let y1 = minY + Int((Double(row + 1) * tileHeight).rounded())
+                let inside = [(x0, y0), (x1, y0), (x0, y1), (x1, y1)].allSatisfy {
+                    hypot(Double($0.0) - Double(circle.centre.x), Double($0.1) - Double(circle.centre.y))
+                        <= limit
+                }
                 guard
+                    inside,
                     let f = tile(
                         pixels, bytesPerRow, x0, y0, x1, y1, step: t.fineStep, measuresLuma: true),
                     f.mean >= t.minMeanLuma, f.saturatedShare <= t.maxSaturatedShare,
@@ -105,17 +134,25 @@ enum FocusTiles {
         }
         let top = Array(byFine.prefix(t.topTiles))
         let topFine = top.map { fine[$0] ?? 0 }.reduce(0, +) / Double(top.count)
-        let topCoarse = top.map { coarse[$0] }.reduce(0, +) / Double(top.count)
+        let topCoarse = top.map { coarse[$0] ?? 0 }.reduce(0, +) / Double(top.count)
         let lowest = byFine.suffix(max(usedIndices.count / 4, 1))
         let noise = lowest.map { fine[$0] ?? 0 }.reduce(0, +) / Double(lowest.count)
-        let active = usedIndices.filter {
+        let activeIndices = byFine.filter {
             let value = fine[$0] ?? 0
             return value > 0 && value >= t.activeFactor * noise
-        }.count
+        }
+        var detail: Double?
+        if activeIndices.count >= t.detailMinActive {
+            // byFine is sorted, so the first ones are the highest.
+            let best = activeIndices.prefix(t.detailTiles)
+            let meanFine = best.map { fine[$0] ?? 0 }.reduce(0, +) / Double(best.count)
+            let meanCoarse = best.map { coarse[$0] ?? 0 }.reduce(0, +) / Double(best.count)
+            if meanCoarse > 1e-9 { detail = meanFine / meanCoarse }
+        }
         return FocusTilesReading(
             top: topFine, topRatio: topCoarse > 1e-9 ? topFine / topCoarse : 0,
-            topTiles: top.sorted(), noise: noise, used: usedIndices.count, active: active,
-            tileFine: fine)
+            topTiles: top.sorted(), noise: noise, used: usedIndices.count,
+            active: activeIndices.count, tileFine: fine, tileCoarse: coarse, detail: detail)
     }
 
     /// The variance of the 4-neighbour Laplacian over the samples `step` pixels apart inside a

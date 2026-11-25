@@ -89,7 +89,7 @@ final class GuidedScanSetupTests: XCTestCase {
     }
 
     #if DEBUG
-        /// The page's settings are the lab's own; only four differ.
+        /// The page's settings are the lab's own; only five differ.
         func testThePageOverridesOnlyTheGuideTheCoverageTheDetectionsAndTheSkip() {
             var lab = LabSettings()
             lab.mappingName = ScreenMapping.rotateLeft.rawValue
@@ -102,7 +102,8 @@ final class GuidedScanSetupTests: XCTestCase {
             var expected = lab
             expected.guideDryRun = true
             expected.coverageStep = 1.6
-            expected.showsDetections = false
+            expected.showsDetections = true
+            expected.confidence = OrganismDetector.defaultConfidence
             expected.skipsAlignFocus = false
             XCTAssertEqual(page, expected)
             XCTAssertTrue(page.guideDryRun)

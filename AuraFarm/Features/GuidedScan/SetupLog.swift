@@ -29,6 +29,10 @@ struct SetupLogRow: Equatable {
     var tracker: SetupTrackerSample?
     /// The focus tiles' reading on this frame (the focus step), for the log only.
     var focusTiles: FocusTilesReading?
+    /// The highest detail at this spot (since the focus guide last reset), once there is one.
+    var focusDetailBest: Double?
+    /// What happened to the focus on this row: "new_spot", or "focus_accept_<who>_<where>".
+    var focusEvent = ""
 }
 
 enum SetupLog {
@@ -43,6 +47,7 @@ enum SetupLog {
         "tracking", "position_x_fields", "position_y_fields", "box_sharpness", "view_class",
         "still_seconds", "feature_cells", "focus_dial_offset", "focus_dial_side",
         "focus_top", "focus_top_ratio", "focus_noise", "focus_tiles_used", "focus_tiles_active",
+        "focus_detail", "focus_detail_best", "focus_tile_fine", "focus_tile_coarse", "focus_event",
     ]
 
     static func csv(_ rows: [SetupLogRow]) -> String {
@@ -76,10 +81,13 @@ enum SetupLog {
             significant(row.focusTiles?.top), significant(row.focusTiles?.topRatio),
             significant(row.focusTiles?.noise), row.focusTiles.map { String($0.used) } ?? "",
             row.focusTiles.map { String($0.active) } ?? "",
+            significant(row.focusTiles?.detail), significant(row.focusDetailBest),
+            row.focusTiles.map { FocusTilesReading.text($0.tileFine) } ?? "",
+            row.focusTiles.map { FocusTilesReading.text($0.tileCoarse) } ?? "", row.focusEvent,
         ]
     }
 
-    private static func trackingName(_ state: TrackingState) -> String {
+    static func trackingName(_ state: TrackingState) -> String {
         switch state {
         case .tracking: "tracking"
         case .paused: "paused"

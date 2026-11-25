@@ -24,7 +24,7 @@ struct LabSettings: Equatable {
     var countsOrganisms = true
     var showsDetections = false
     var cropsToEyepiece = true
-    var confidence = 0.3
+    var confidence = OrganismDetector.defaultConfidence
     var detectorModelName = DetectorModel.v3.rawValue
     var detectorUnitsName = DetectorUnits.neuralEngine.rawValue
     var cameraRateName = CameraRate.fps20.rawValue
@@ -51,15 +51,17 @@ struct LabSettings: Equatable {
     var spotMode: SpotConfirmMode { spotModeName == "holdStill" ? .holdStill : .briefTouch }
 
     /// The guided scan page's settings: the lab's own, with the guide on, the operator's
-    /// coverage, no detection boxes, and align and focus always done: a lab shortcut must not
+    /// coverage, the detection boxes on, and align and focus always done: a lab shortcut must not
     /// carry into a real test ("Skip setup" is the page's own). Nothing else differs.
     func forGuidedScan(coverage: Double, recordsVideo: Bool = false) -> LabSettings {
         var copy = self
         copy.recordsLensVideo = recordsVideo
         copy.guideDryRun = true
         copy.coverageStep = coverage
-        copy.showsDetections = false
+        copy.showsDetections = true
         copy.skipsAlignFocus = false
+        // The real test never follows the lab's slider.
+        copy.confidence = OrganismDetector.defaultConfidence
         return copy
     }
 
@@ -162,7 +164,7 @@ struct LabSettingsSync: ViewModifier {
         @AppStorage("slideLab.countOrganisms") private var countsOrganisms = true
         @AppStorage("slideLab.showDetections") private var showsDetections = false
         @AppStorage("slideLab.cropEyepiece") private var cropsToEyepiece = true
-        @AppStorage("slideLab.confidence") private var confidence = 0.3
+        @AppStorage("slideLab.confidence05") private var confidence = OrganismDetector.defaultConfidence
         @AppStorage("slideLab.detectorModel") private var detectorModelName = DetectorModel.v3.rawValue
         @AppStorage("slideLab.detectorUnits") private var detectorUnitsName = DetectorUnits
             .neuralEngine.rawValue

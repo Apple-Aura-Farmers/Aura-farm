@@ -30,7 +30,7 @@ final class GuidedScanReleaseTests: XCTestCase {
         XCTAssertTrue(release.pausesOnMonitor)
         XCTAssertFalse(release.showsDetections)
         XCTAssertTrue(release.countsOrganisms)
-        XCTAssertEqual(release.confidence, 0.3)
+        XCTAssertEqual(release.confidence, 0.5)
         XCTAssertTrue(release.guideDryRun)
     }
 
@@ -41,5 +41,13 @@ final class GuidedScanReleaseTests: XCTestCase {
         lab.coverageStep = 1.6
         lab.guideDryRun = true
         XCTAssertEqual(LabSettings.releaseDefaults, lab)
+    }
+
+    func testTheGuidedScanIgnoresTheLabsConfidence() {
+        var lab = LabSettings()
+        lab.confidence = 0.2
+        XCTAssertEqual(lab.forGuidedScan(coverage: 1.6).confidence, OrganismDetector.defaultConfidence)
+        XCTAssertEqual(OrganismDetector.defaultConfidence, 0.5)
+        XCTAssertEqual(OrganismDetector.leastConfidence, Float(0.5))
     }
 }

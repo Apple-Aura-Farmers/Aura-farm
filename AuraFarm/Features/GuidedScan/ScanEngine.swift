@@ -96,6 +96,11 @@ class ScanEngine: NSObject {
     private(set) var exportURL: URL?
     /// The CSV and the frames saved while logging, shared together.
     private(set) var exportItems: [URL] = []
+    /// The lab's focus records (see `FocusAcceptRecorder`): how many, their files, and the short
+    /// line shown after an accept. Main queue.
+    private(set) var focusRecordCount = 0
+    private(set) var focusRecordFiles: [URL] = []
+    private(set) var focusRecordNote = ""
 
     // MARK: Hooks for the lab (analysis queue)
 
@@ -126,10 +131,24 @@ class ScanEngine: NSObject {
     @ObservationIgnored private let dryRun = GuideDryRun()
     @ObservationIgnored private let edgeProbe = EdgeLineProbe()
     @ObservationIgnored private let snapshots = FrameSnapshotWriter()
+    @ObservationIgnored private let focusRecorder = FocusAcceptRecorder()
     @ObservationIgnored private let live = LiveCountSession()
     @ObservationIgnored private var lastCountInfo = LiveCountInfo()
     @ObservationIgnored private var lastCountingActive = false
     @ObservationIgnored private var lastCountFrameSize = CGSize.zero
+    /// For drawing the detector's boxes only (analysis queue): the capture time of the last frame
+    /// the tracker gave a shift for, and the Terraloka stage's latest move (the capture time of the
+    /// last frame when it started and, once known, when it settled).
+    @ObservationIgnored private var lastShiftSeconds: Double?
+    @ObservationIgnored private var stageMove = StageMoveWatch()
+    /// Preset moves count at the stops (analysis queue; see `PresetStopTracker`), where the stops
+    /// are on the slide, and whether the stage stands still now (the driver says).
+    @ObservationIgnored private var presetStops = PresetStopTracker()
+    @ObservationIgnored private var presetGeometry: PresetStopGeometry?
+    @ObservationIgnored private var stageStandsStill = false
+    @ObservationIgnored private var lastStopHolds = false
+    /// The stop wants to be held longer (main queue; the driver waits on it).
+    private(set) var presetStopHolds = false
     @ObservationIgnored private var runStartedAt: Date?
     /// The automated stage's servo angles, for the CSV (analysis queue; nil without the stage).
     @ObservationIgnored private var stageAngles: (x: Int, y: Int)?
@@ -385,7 +404,18 @@ class ScanEngine: NSObject {
 
     /// "It's sharp, continue" on the focus step.
     func acceptFocus() {
-        analysisQueue.async { [weak self] in self?.setup.acceptFocus() }
+        analysisQueue.async { [weak self] in
+            guard let self, self.setup.acceptFocus() else { return }
+            if self.focusRecorder.isOn {
+                self.recordFocusAccept(self.setup.focusAcceptRecord(place: .setup), .person, .setup)
+            }
+        }
+    }
+
+    /// The microscope is at a new spot: setup's focus step starts its focus guide afresh (see
+    /// `LabSetupSession.focusSpotChanged`); in any other step nothing happens.
+    func focusSpotChanged() {
+        analysisQueue.async { [weak self] in self?.setup.focusSpotChanged() }
     }
 
     /// Whether the guide pauses on the run monitor's say.
@@ -509,9 +539,15 @@ class ScanEngine: NSObject {
 
     /// "Resume anyway" on the focus-pause banner. The run goes on and the focus baseline is
     /// measured again from the next readings.
-    func resumeFocusAnyway() {
+    /// - Parameter emptyArea: "In focus – empty area"; only marks the lab's focus record.
+    func resumeFocusAnyway(emptyArea: Bool = false) {
         analysisQueue.async { [weak self] in
-            guard let self, self.setup.resumeFocusManually() else { return }
+            guard let self else { return }
+            // Worked out before the pause ends, so the record shows why it had not.
+            var record = self.focusRecorder.isOn ? self.setup.focusAcceptRecord(place: .run) : nil
+            record?.emptyArea = emptyArea
+            guard self.setup.resumeFocusManually() else { return }
+            if let record { self.recordFocusAccept(record, .person, .run) }
             self.pendingEventName = "focus_resume_manual"
             let info = self.setup.info
             DispatchQueue.main.async { self.setupInfo = info }
@@ -622,6 +658,7 @@ class ScanEngine: NSObject {
         setup = LabSetupSession(skippingAlignAndFocus: skips)
         setup.confirmsSteps = confirmsSetupSteps
         setup.isHeld = setupHeld
+        setup.buildsFocusRecords = focusRecorder.isOn
         pipeline.resetPosition()
         if skips { pipeline.redetectField() }
         clearTrackingDisplay()
@@ -679,6 +716,7 @@ class ScanEngine: NSObject {
         // Strong self: the file is finished even if the page lets go of the engine first.
         analysisQueue.async { [self] in
             cameraRunning = false
+            focusRecorder.flush()
             endFocusTest()
             finishLensVideo()
         }
@@ -771,6 +809,81 @@ class ScanEngine: NSObject {
                 self.rowCount = 0
                 self.exportURL = nil
             }
+        }
+    }
+
+    // MARK: Focus records (the lab only)
+
+    /// The lab switches the recorder on; it stays off in the real test, where nothing is kept.
+    func setFocusRecording(_ on: Bool) {
+        analysisQueue.async { [weak self] in
+            guard let self else { return }
+            self.focusRecorder.isOn = on
+            self.setup.buildsFocusRecords = on
+            self.focusRecorder.onChange = { [weak self] in
+                guard let self else { return }
+                let files = self.focusRecorder.files
+                DispatchQueue.main.async { self.focusRecordFiles = files }
+            }
+        }
+    }
+
+    /// "It's sharp. Calibrate": the person accepts a focus the setup never judged. Recorded with
+    /// whatever frames and readings there are; the calibration itself does not wait for this.
+    func recordCalibrateAccept() {
+        analysisQueue.async { [weak self] in
+            guard let self, self.focusRecorder.isOn else { return }
+            self.recordFocusAccept(self.setup.focusAcceptRecord(place: .calibrate), .person, .calibrate)
+        }
+    }
+
+    /// The lab closes or the app goes to the background: records in progress are written with
+    /// the frames they have.
+    func flushFocusRecords() {
+        analysisQueue.async { [weak self] in self?.focusRecorder.flush() }
+    }
+
+    /// "Clear focus records": the files are deleted and the limit starts afresh.
+    func clearFocusRecords() {
+        analysisQueue.async { [weak self] in
+            guard let self else { return }
+            self.focusRecorder.clear()
+            DispatchQueue.main.async {
+                self.focusRecordCount = 0
+                self.focusRecordFiles = []
+                self.focusRecordNote = ""
+            }
+        }
+    }
+
+    /// Hands an acceptance to the recorder and tells the logs and the lab. Never fails the caller:
+    /// the accept itself has happened already. Analysis queue.
+    private func recordFocusAccept(
+        _ base: FocusAcceptRecord, _ who: FocusAcceptWho, _ place: FocusAcceptPlace
+    ) {
+        var record = base
+        record.objective = runStageInfo.objective
+        record.stageAngleX = stageAngles?.x
+        record.stageAngleY = stageAngles?.y
+        record.exposureMs = device.map { $0.exposureDuration.seconds * 1000 }
+        record.iso = device.map { Double($0.iso) }
+        let outcome = focusRecorder.accept(record, who: who, place: place, seconds: lastFrameSeconds)
+        let note: String
+        switch outcome {
+        case .off: return
+        case .limitReached: note = "Focus record limit reached"
+        case .recorded(let number):
+            note = "Focus recorded (\(number))"
+            let name = "focus_accept_\(who.rawValue)_\(place.rawValue)"
+            // In the setup CSV a person's accept is the focus_event; the app's is written by the
+            // session on its own row.
+            if who == .person { setup.noteFocusEvent(name) }
+            if logging { queuedEvents.append((name, record.whyNot.joined(separator: " "))) }
+        }
+        let count = focusRecorder.count
+        DispatchQueue.main.async {
+            self.focusRecordCount = count
+            self.focusRecordNote = note
         }
     }
 
@@ -1009,6 +1122,7 @@ class ScanEngine: NSObject {
         lastEdgeReachedCount = 0
         pendingEdgeQuestionID = nil
         // A new run: counting, its snapshots and the summary start afresh.
+        presetStops.reset()
         runStamp = Self.stamp()
         live.begin(stamp: runStamp)
         live.setCounting(false)
@@ -1430,6 +1544,7 @@ class ScanEngine: NSObject {
         logged.stageAngleY = stageAngles?.y
         logged.focusTiles = monitor?.focusTiles
         logged.focusTilesMs = monitor?.focusTilesMilliseconds
+        logged.focusDetailBest = monitor?.focusDetailBest
         if let note = monitor?.resumedNote, !note.isEmpty, pendingEventName.isEmpty {
             pendingEventName = "focus_resumed"
             pendingEventDetail = note
@@ -1475,7 +1590,10 @@ class ScanEngine: NSObject {
     /// The route has finished, for any reason: writes the run record (JSON, in the Files app)
     /// and the summary row of the CSV, and shows the summary card. Analysis queue only.
     private func finalizeRun(seconds: Double) {
-        let spots = dryRun.spotsTicked
+        // Preset moves: the stops that were looked at are the fields scanned.
+        let spots =
+            runStageInfo.pathMode == StagePathMode.presetPath.rawValue
+            ? presetStops.stopsWithLooks : dryRun.spotsTicked
         let elapsed = seconds - runStartSeconds
         let reason = dryRun.finishReason ?? .endedByHelper
         live.drain()
@@ -1502,7 +1620,7 @@ class ScanEngine: NSObject {
                 RunMapOrganism(
                     label: $0.label, x: Double($0.fields.x), y: Double($0.fields.y),
                     column: $0.column, seconds: $0.firstSeenSeconds,
-                    image: live.cropFile(forEntry: $0.id))
+                    image: live.cropFile(forEntry: $0.id), confidence: $0.confidence)
             },
             path: RunMapContent.thinned(runPath), edges: runMapEdges(),
             mapMapping: dryRun.mapping.rawValue, mapMirrored: dryRun.mirrored,
@@ -1689,6 +1807,14 @@ extension ScanEngine: AVCaptureVideoDataOutputSampleBufferDelegate {
                 viewClass: guideEnabled ? dryRun.lastViewClass : .blank,
                 isStill: indicators.stillSeconds > 0, stillSeconds: indicators.stillSeconds)
         else { return }
+        if focusRecorder.isOn {
+            // The app's own acceptance first: it freezes the ring, which this frame then joins.
+            if let accepted = setup.takeAppAccept() {
+                recordFocusAccept(accepted.record, .app, accepted.place)
+            }
+            focusRecorder.offer(
+                buffer, seconds: time, wanted: setup.wantsFocusRing, row: setup.focusRow(at: time))
+        }
         let stepChanged = setup.step != lastPublishedStep
         if stepChanged {
             // Reaching field starts learning, which needs a clean display.
@@ -1739,6 +1865,15 @@ extension ScanEngine: AVCaptureVideoDataOutputSampleBufferDelegate {
                 speedState.status = status
             }
         }
+        // Followed for real: tracking, a shift, and not a frame the tracker only carried over.
+        let isFollowed = LiveOrganismCounter.isFollowed(
+            tracking: step.tracking.trackingState, frameShift: step.tracking.frameShift,
+            reading: step.reading)
+        // At a preset stop, or in hand control, a stage that stands still is followed by definition,
+        // with no shift.
+        let atStop = presetStops.isEnabled && presetStops.isAtStop
+        let standsStill = stageStandsStill && (atStop || handHoldFlag == .on)
+        if isFollowed || standsStill { lastShiftSeconds = time }
         var edgeLine: EdgeLine?
         var countLog = LiveCountFrameLog()
         if guideEnabled, setup.step == .done {
@@ -1763,26 +1898,59 @@ extension ScanEngine: AVCaptureVideoDataOutputSampleBufferDelegate {
                 live.setCounting(lastCountingActive)
             }
             lastCountFrameSize = step.frameSize
+            // The boxes drawn follow the picture whether counting is on or not; once per frame.
+            live.noteFrameShift(
+                isFollowed && !atStop
+                    ? LiveOrganismCounter.pictureMoved(frameShift: step.tracking.frameShift) : .zero)
+            if presetStops.isEnabled {
+                presetStops.tick(at: time, inFocusPause: setup.info.monitor.state == .pausedFocus)
+            }
             if countingOn {
-                let reason = LiveOrganismCounter.skipReason(
-                    tracking: step.tracking.trackingState,
-                    isGhostOrSparseSkip: step.reading == "ghost" || step.reading == "sparse_skip",
-                    monitorPaused: dryRun.pauseReason != nil, viewClass: dryRun.lastViewClass,
-                    speedFraction: indicators.speedFraction,
-                    stillSeconds: indicators.stillSeconds,
-                    secondsSinceLastDetection: live.secondsSinceDetection(
-                        at: time - runStartSeconds),
-                    maxModelRunsPerSecond: modelRateCap ? countThresholds.maxModelRunsPerSecond : nil,
-                    heat: lastHeatMode, heatThresholds: heatThresholds)
+                // Preset moves: the model looks at the stops only, and a stopped stage is known to
+                // be still, so the tracker's say on the picture does not apply there.
+                let presets = presetStops.isEnabled
+                var reason =
+                    presets ? presetStops.skipReason(frameAt: time, thresholds: countThresholds) : nil
+                if reason == nil {
+                    reason = LiveOrganismCounter.skipReason(
+                        tracking: step.tracking.trackingState,
+                        isGhostOrSparseSkip: step.reading == "ghost" || step.reading == "sparse_skip",
+                        monitorPaused: dryRun.pauseReason != nil, viewClass: dryRun.lastViewClass,
+                        speedFraction: indicators.speedFraction,
+                        stillSeconds: indicators.stillSeconds,
+                        secondsSinceLastDetection: live.secondsSinceDetection(
+                            at: time - runStartSeconds),
+                        maxModelRunsPerSecond: modelRateCap
+                            ? countThresholds.maxModelRunsPerSecond : nil,
+                        heat: lastHeatMode, heatThresholds: heatThresholds,
+                        stillStage: presets ? .stop : .none)
+                }
+                let circle = step.fieldState?.mask.flatMap { FieldCircle(fitting: $0) }
+                var stopFrame: LiveOrganismCounter.StopContext?
+                var position = step.position
+                if presets, reason == nil, let stop = presetStops.stop {
+                    let centre =
+                        circle?.centre
+                        ?? CGPoint(x: step.frameSize.width / 2, y: step.frameSize.height / 2)
+                    stopFrame = .init(
+                        id: stop.id,
+                        cell: PresetStopCell.rect(
+                            centre: centre, boxSide: step.boxSide,
+                            fields: countThresholds.stopCellFields))
+                    position = stopTrackerPosition(of: stop, boxSide: step.boxSide)
+                }
                 countLog = live.process(
                     buffer: buffer, skipReason: reason,
-                    pictureMoved: LiveOrganismCounter.pictureMoved(
-                        frameShift: step.tracking.frameShift),
-                    trackerPosition: step.position, frameSize: step.frameSize,
-                    fieldCircle: step.fieldState?.mask.flatMap { FieldCircle(fitting: $0) },
+                    pictureMoved: presets
+                        ? .zero
+                        : LiveOrganismCounter.pictureMoved(frameShift: step.tracking.frameShift),
+                    trackerPosition: position, frameSize: step.frameSize,
+                    fieldCircle: circle,
                     seconds: time - runStartSeconds, column: externalColumn ?? dryRun.column,
-                    fieldSide: step.boxSide)
+                    fieldSide: step.boxSide, stop: stopFrame)
+                if presets, countLog.skipReason == nil { presetStops.noteLook() }
             }
+            if presetStops.isEnabled { publishStopHolds() }
             if handHoldFlag == .on {
                 // The same rules as counting, but nothing here reaches the count.
                 let reason = LiveOrganismCounter.skipReason(
@@ -1793,9 +1961,11 @@ extension ScanEngine: AVCaptureVideoDataOutputSampleBufferDelegate {
                     stillSeconds: indicators.stillSeconds,
                     secondsSinceLastDetection: live.secondsSincePreview(at: time - runStartSeconds),
                     maxModelRunsPerSecond: modelRateCap ? countThresholds.maxModelRunsPerSecond : nil,
-                    heat: lastHeatMode, heatThresholds: heatThresholds)
+                    heat: lastHeatMode, heatThresholds: heatThresholds,
+                    // No move in flight and the last one settled a moment ago: the view is still.
+                    stillStage: stageStandsStill ? .hand : .none)
                 live.processPreview(
-                    buffer: buffer, skipReason: reason, moved: indicators.stillSeconds <= 0,
+                    buffer: buffer, skipReason: reason,
                     frameSize: step.frameSize,
                     fieldCircle: step.fieldState?.mask.flatMap { FieldCircle(fitting: $0) },
                     seconds: time - runStartSeconds)
@@ -1995,6 +2165,123 @@ extension ScanEngine: AVCaptureVideoDataOutputSampleBufferDelegate {
         publish(step, time: time)
     }
 
+    // MARK: Preset stops
+
+    /// The preset path starts or ends: while on, counting happens at its stops only.
+    func setPresetStops(_ on: Bool) {
+        analysisQueue.async { [weak self] in
+            guard let self else { return }
+            if !on, let finished = self.presetStops.end() { self.logStopEnd(finished) }
+            self.presetStops.isEnabled = on
+            self.publishStopHolds()
+        }
+    }
+
+    /// A preset stop begins (the dwell), or goes on after a pause (same id). The stage is still
+    /// and at `angles`; only frames captured from now on belong to it.
+    func presetStopBegan(
+        id: Int, column: Int, angles: (x: Int, y: Int), geometry: PresetStopGeometry
+    ) {
+        analysisQueue.async { [weak self] in
+            guard let self, self.presetStops.isEnabled else { return }
+            self.presetGeometry = geometry
+            if let finished = self.presetStops.begin(
+                id: id, column: column, angles: StageAngles(x: angles.x, y: angles.y),
+                at: self.lastCapturedSeconds)
+            {
+                self.logStopEnd(finished)
+            }
+            self.publishStopHolds()
+        }
+    }
+
+    /// A pause: the stop waits where it is.
+    func presetStopSuspended() {
+        analysisQueue.async { [weak self] in
+            self?.presetStops.suspend()
+            self?.publishStopHolds()
+        }
+    }
+
+    /// The stop is over: the next GOTO, a hand on the stage, a disconnect, the column or the run
+    /// ending.
+    func presetStopEnded() {
+        analysisQueue.async { [weak self] in
+            guard let self else { return }
+            if let finished = self.presetStops.end() { self.logStopEnd(finished) }
+            self.publishStopHolds()
+        }
+    }
+
+    /// No move is in flight and the last one settled a moment ago (the driver says).
+    func setStageStandsStill(_ still: Bool) {
+        analysisQueue.async { [weak self] in self?.stageStandsStill = still }
+    }
+
+    /// The log event of a stop, a moment after it ends so its last results are in.
+    private func logStopEnd(_ stop: PresetStopTracker.Stop) {
+        analysisQueue.asyncAfter(deadline: .now() + countThresholds.stopEventDelaySeconds) {
+            [weak self] in
+            guard let self else { return }
+            let totals = self.live.totals(forStop: stop.id) ?? LiveCountSession.StopTotals()
+            self.logEvent(
+                "preset_stop_done",
+                detail: String(
+                    format: "stop=%d column=%d looks=%d found=%d counted=%d outside_cell=%d dirt=%d waited=%.1f",
+                    stop.id, stop.column, stop.looks, totals.found, totals.counted,
+                    totals.outsideCell, totals.dirt, stop.waited))
+        }
+    }
+
+    /// Where a stop is on the slide in the tracker's axes (frame px), from the servo angles
+    /// relative to the run's first stop: the tracker does not follow a stage that stands still at
+    /// a stop with nothing to track.
+    private func stopTrackerPosition(of stop: PresetStopTracker.Stop, boxSide: Double) -> CGPoint {
+        guard let geometry = presetGeometry, let first = presetStops.firstAngles else { return .zero }
+        let fields = geometry.guideFields(
+            dx: stop.angles.x - first.x, dy: stop.angles.y - first.y)
+        return dryRun.trackerOffset(forGuideFields: fields, boxSide: boxSide) ?? .zero
+    }
+
+    private func publishStopHolds() {
+        let canLook = externalColumn != nil && live.canLook && lastHeatMode != .tooHot
+        let holds = presetStops.holds(canLook: canLook, thresholds: countThresholds)
+        guard holds != lastStopHolds else { return }
+        lastStopHolds = holds
+        DispatchQueue.main.async { [weak self] in self?.presetStopHolds = holds }
+    }
+
+    /// The Terraloka stage starts a move (any GOTO): the detector's boxes are hidden at once, and a
+    /// result from a frame taken before it is not drawn when it arrives late. Drawing only.
+    func stageMoveStarted() {
+        analysisQueue.async { [weak self] in
+            guard let self else { return }
+            self.stageMove.start(at: self.lastCapturedSeconds)
+            if self.guideEnabled {
+                self.publishCount(isActive: self.lastCountingActive, frameSize: self.lastCountFrameSize)
+            }
+        }
+    }
+
+    /// The move settled: results from frames taken before now stay hidden, the next one is drawn.
+    func stageMoveSettled() {
+        analysisQueue.async { [weak self] in
+            guard let self else { return }
+            self.stageMove.settle(at: self.lastCapturedSeconds)
+        }
+    }
+
+    /// Which boxes may be drawn at `time` (see `LiveBoxGate`).
+    private func boxGate(at time: Double) -> LiveBoxGate {
+        let origin = runStartSeconds
+        var gate = LiveBoxGate(
+            now: time - origin, trackedAt: lastShiftSeconds.map { $0 - origin },
+            thresholds: countThresholds)
+        gate.notBefore = stageMove.notBefore(
+            now: lastCapturedSeconds, origin: origin, holdSeconds: countThresholds.boxMoveHoldSeconds)
+        return gate
+    }
+
     /// Publishes the count when it changed, through the throttle. Analysis queue. Called for
     /// every analysed frame, and when the detector queue finishes a result.
     /// Feeds the heat policy this frame's thermal state; on a change, sheds or restores the work
@@ -2014,7 +2301,8 @@ extension ScanEngine: AVCaptureVideoDataOutputSampleBufferDelegate {
     }
 
     private func publishCount(isActive: Bool, frameSize: CGSize) {
-        let info = live.info(isActive: isActive, frameSize: frameSize)
+        let info = live.info(
+            isActive: isActive, frameSize: frameSize, gate: boxGate(at: lastFrameSeconds))
         guard info != lastCountInfo else { return }
         lastCountInfo = info
         countThrottle.offer(info)

@@ -210,7 +210,7 @@ struct FocusOverlay: View {
         case .passedPeak?: "Past the sharpest point. Turn back slowly"
         case .nearPeak?: "Almost there. Turn very slowly, then stop"
         case .focused?: "Best focus found ✓"
-        case .needsSample?: "Not enough detail. Move to an area with sample, then focus"
+        case .needsSample?: "Too little sample here. Move to a busier spot, then turn slowly."
         }
     }
 
@@ -371,6 +371,9 @@ struct PausedOverlay: View {
     var onResumeAnyway: (() -> Void)?
     /// "In focus – empty area", shown under "Resume anyway" while paused for focus; nil hides it.
     var onEmptyArea: (() -> Void)?
+    /// False for the Terraloka stage's scan: the Scan page says it all under the lens, and only
+    /// the orange alignment outline is drawn on the picture.
+    var showsControls = true
 
     var body: some View {
         if let reason = monitor.state.pauseReason {
@@ -385,36 +388,40 @@ struct PausedOverlay: View {
                     context.stroke(Path(ellipseIn: box), with: .color(.orange), lineWidth: 4)
                 }
                 .allowsHitTesting(false)
-                VStack {
-                    Text("Paused")
-                        .font(.headline)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 4)
-                        .background(.orange, in: Capsule())
-                        .foregroundStyle(.black)
-                    if reason == .focus, let dial = monitor.dial {
-                        FocusDialView(reading: dial)
-                        SetupLine(text: dial.message, tone: dial.isGreen ? .green : .orange)
-                        if let hint = monitor.focusHint {
-                            SetupLine(text: hint, tone: .white)
-                        }
-                    } else if !GuideInstruction.paused(reason).helperText.isEmpty {
-                        SetupLine(text: GuideInstruction.paused(reason).helperText, tone: .orange)
-                    }
-                    if reason == .focus, let onResumeAnyway {
-                        Button("Resume anyway", action: onResumeAnyway)
-                            .buttonStyle(.borderedProminent)
-                            .tint(.orange)
+                if showsControls {
+                    VStack {
+                        Text("Paused")
+                            .font(.headline)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 4)
+                            .background(.orange, in: Capsule())
                             .foregroundStyle(.black)
+                        if reason == .focus, let dial = monitor.dial {
+                            FocusDialView(reading: dial)
+                            // One line: the hint when there is one, otherwise the dial's words.
+                            if let hint = monitor.focusHint {
+                                SetupLine(text: hint, tone: dial.isGreen ? .green : .orange)
+                            } else {
+                                SetupLine(text: dial.message, tone: dial.isGreen ? .green : .orange)
+                            }
+                        } else if !GuideInstruction.paused(reason).helperText.isEmpty {
+                            SetupLine(text: GuideInstruction.paused(reason).helperText, tone: .orange)
+                        }
+                        if reason == .focus, let onResumeAnyway {
+                            Button("Resume anyway", action: onResumeAnyway)
+                                .buttonStyle(.borderedProminent)
+                                .tint(.orange)
+                                .foregroundStyle(.black)
+                        }
+                        if reason == .focus, let onEmptyArea {
+                            Button("In focus – empty area", action: onEmptyArea)
+                                .buttonStyle(.bordered)
+                                .tint(.orange)
+                        }
+                        Spacer()
                     }
-                    if reason == .focus, let onEmptyArea {
-                        Button("In focus – empty area", action: onEmptyArea)
-                            .buttonStyle(.bordered)
-                            .tint(.orange)
-                    }
-                    Spacer()
+                    .padding(8)
                 }
-                .padding(8)
             }
         }
     }

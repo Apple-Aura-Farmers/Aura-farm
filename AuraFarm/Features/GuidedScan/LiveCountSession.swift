@@ -116,6 +116,15 @@ final class LiveCountSession {
     private var previewEpoch = 0
     private var previewInFlight = false
     private var previewBoxes: [LiveCountInfo.Box] = []
+    /// How far the picture moved since the frame the drawn boxes were found on, and since the
+    /// latest frame sent to the detector (which becomes the first when its result arrives). Drawing
+    /// only. Under `lock`.
+    private var previewShift = CGPoint.zero
+    private var previewShiftSinceSend = CGPoint.zero
+    private var countShift = CGPoint.zero
+    private var countShiftSinceSend = CGPoint.zero
+    /// What each preset stop's results found, for its log event. Under `lock`.
+    private var stopTotals: [Int: StopTotals] = [:]
     /// Run seconds of the last preview result, for the preview's own skip rules.
     private var previewResultAt: Double?
 
@@ -130,6 +139,29 @@ final class LiveCountSession {
 
     init(detect: Detect? = nil) {
         injected = detect
+    }
+
+    /// What the results of one preset stop added up to.
+    struct StopTotals: Equatable {
+        var results = 0
+        var found = 0
+        var counted = 0
+        var outsideCell = 0
+        var dirt = 0
+    }
+
+    func totals(forStop id: Int) -> StopTotals? {
+        lock.lock()
+        defer { lock.unlock() }
+        return stopTotals[id]
+    }
+
+    /// Whether a frame sent now could be looked at: counting is on in the lab's settings and the
+    /// model is open.
+    var canLook: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return isEnabled && (injected != nil || loaded != nil) && loadFailure == nil
     }
 
     /// A copy of the counter as it is now.
@@ -168,6 +200,8 @@ final class LiveCountSession {
         }
         previewBoxes = []
         previewResultAt = nil
+        previewShift = .zero
+        previewShiftSinceSend = .zero
         lock.unlock()
     }
 
@@ -240,6 +274,9 @@ final class LiveCountSession {
         lastDetectedAt = nil
         completed = []
         counterState.reset()
+        countShift = .zero
+        countShiftSinceSend = .zero
+        stopTotals = [:]
         cropFiles = [:]
         hapticCount = 0
         lock.unlock()
@@ -330,6 +367,21 @@ final class LiveCountSession {
 
     // MARK: Frames
 
+    /// How far the picture moved on an analysed frame the tracker really followed (see
+    /// `ScanEngine`), so the boxes drawn move with it until the next result (see `LiveBoxGate`).
+    /// Once per analysed frame, counting or not, BEFORE `process` or `processPreview` on it. Drawing
+    /// only: nothing reaches the counter or the detector. Analysis queue.
+    func noteFrameShift(_ shift: CGPoint) {
+        lock.lock()
+        countShift = CGPoint(x: countShift.x + shift.x, y: countShift.y + shift.y)
+        countShiftSinceSend = CGPoint(
+            x: countShiftSinceSend.x + shift.x, y: countShiftSinceSend.y + shift.y)
+        previewShift = CGPoint(x: previewShift.x + shift.x, y: previewShift.y + shift.y)
+        previewShiftSinceSend = CGPoint(
+            x: previewShiftSinceSend.x + shift.x, y: previewShiftSinceSend.y + shift.y)
+        lock.unlock()
+    }
+
     /// One analysed frame while counting is on (the guide's `countingActive`). Analysis queue.
     /// Returns at once: a frame sent to the model comes back with `ran` false, and its result
     /// turns up later in `takeCompleted()`.
@@ -340,7 +392,7 @@ final class LiveCountSession {
     func process(
         buffer: CVPixelBuffer, skipReason: String?, pictureMoved: CGPoint,
         trackerPosition: CGPoint, frameSize: CGSize, fieldCircle: FieldCircle?, seconds: Double,
-        column: Int, fieldSide: Double = 1
+        column: Int, fieldSide: Double = 1, stop: LiveOrganismCounter.StopContext? = nil
     ) -> LiveCountFrameLog {
         var log = LiveCountFrameLog(active: true)
         log.model = model.rawValue
@@ -359,16 +411,18 @@ final class LiveCountSession {
             reason = failed ? "no_model" : "model_loading"
         }
         var ticket = 0
+        lock.lock()
         if reason == nil {
-            lock.lock()
             if detectInFlight {
                 reason = "busy"
             } else {
                 detectInFlight = true
                 ticket = epoch
+                // This frame's result will be in its own coordinates: only later shifts count.
+                countShiftSinceSend = .zero
             }
-            lock.unlock()
         }
+        lock.unlock()
         if let reason {
             detectorQueue.async { [self] in
                 lock.lock()
@@ -390,7 +444,8 @@ final class LiveCountSession {
             detect(
                 held, ticket: ticket, confidence: confidence, crop: crop, circle: circle,
                 pictureMoved: pictureMoved, trackerPosition: trackerPosition,
-                frameSize: frameSize, seconds: seconds, column: column, fieldSide: fieldSide)
+                frameSize: frameSize, seconds: seconds, column: column, fieldSide: fieldSide,
+                stop: stop)
         }
         finish(&log)
         return log
@@ -400,10 +455,8 @@ final class LiveCountSession {
     /// detector looks (`skipReason`, made with the paused rule off), but the result only goes to
     /// the preview boxes. The counter, the tally, the map, the crops, the haptics and the run's
     /// detection clock are not touched. Analysis queue.
-    /// - Parameter moved: the picture is moving; the boxes are then cleared once no result has
-    ///   come for a second. A still view keeps them.
     func processPreview(
-        buffer: CVPixelBuffer, skipReason: String?, moved: Bool, frameSize: CGSize,
+        buffer: CVPixelBuffer, skipReason: String?, frameSize: CGSize,
         fieldCircle: FieldCircle?, seconds: Double
     ) {
         if let fieldCircle { lastCircle = fieldCircle }
@@ -412,7 +465,6 @@ final class LiveCountSession {
             lock.unlock()
             return
         }
-        if moved, seconds - (previewResultAt ?? -.infinity) > 1 { previewBoxes = [] }
         var reason = skipReason
         if reason == nil, !(injected != nil || loaded != nil) { reason = "model_loading" }
         if reason == nil, previewInFlight { reason = "busy" }
@@ -422,6 +474,7 @@ final class LiveCountSession {
             return
         }
         previewInFlight = true
+        previewShiftSinceSend = .zero
         let ticket = previewEpoch
         lock.unlock()
         var crop: CGRect?
@@ -478,6 +531,7 @@ final class LiveCountSession {
                     rect: box, status: .notCounted))
         }
         previewBoxes = boxes
+        previewShift = previewShiftSinceSend
         previewResultAt = seconds
         lock.unlock()
         onResult?()
@@ -493,7 +547,7 @@ final class LiveCountSession {
     private func detect(
         _ held: HeldBuffer, ticket: Int, confidence: Float, crop: CGRect?, circle: FieldCircle?,
         pictureMoved: CGPoint, trackerPosition: CGPoint, frameSize: CGSize, seconds: Double,
-        column: Int, fieldSide: Double
+        column: Int, fieldSide: Double, stop: LiveOrganismCounter.StopContext?
     ) {
         guard let buffer = held.buffer else { return }
         var run = injected
@@ -525,8 +579,18 @@ final class LiveCountSession {
         let result = counterState.update(
             detections: output.found, pictureMoved: pictureMoved,
             trackerPosition: trackerPosition, frameSize: frameSize, fieldCircle: circle,
-            crop: crop, seconds: seconds, column: column, fieldSide: fieldSide)
+            crop: crop, seconds: seconds, column: column, fieldSide: fieldSide, stop: stop)
         lastDetectedAt = seconds
+        if let stop {
+            var totals = stopTotals[stop.id] ?? StopTotals()
+            totals.results += 1
+            totals.found += result.found
+            totals.counted += result.newInTally
+            totals.outsideCell += result.outsideCell
+            totals.dirt += result.dirt
+            stopTotals[stop.id] = totals
+        }
+        countShift = countShiftSinceSend
         var log = LiveCountFrameLog(active: true)
         log.ran = true
         log.milliseconds = milliseconds
@@ -588,16 +652,28 @@ final class LiveCountSession {
         lock.unlock()
     }
 
-    /// The screen's view of the count.
-    func info(isActive: Bool, frameSize: CGSize) -> LiveCountInfo {
+    /// The screen's view of the count. With a `gate` the boxes are the ones to draw now (moved with
+    /// the picture, none that are old or outside the field); without, they are as the detector
+    /// left them. Analysis queue (it reads the field circle).
+    func info(isActive: Bool, frameSize: CGSize, gate: LiveBoxGate? = nil) -> LiveCountInfo {
         lock.lock()
         let failure = loadFailure
         let opened = loadMilliseconds
         let isLoading = loadingGeneration != nil
         let counter = counterState
         let haptics = hapticCount
-        let preview = previewBoxes
+        var preview = previewBoxes
         let isPreviewing = previewing
+        var boxes = counter.visibleBoxes.map {
+            LiveCountInfo.Box(
+                id: $0.id, label: $0.label, confidence: $0.confidence, rect: $0.box,
+                status: $0.status)
+        }
+        if let gate {
+            boxes = gate.shown(boxes, shift: countShift, resultAt: lastDetectedAt, circle: lastCircle)
+            preview = gate.shown(
+                preview, shift: previewShift, resultAt: previewResultAt, circle: lastCircle)
+        }
         lock.unlock()
         var labels: [String: LiveCountInfo.LabelCount] = [:]
         for (label, count) in counter.helperCountByLabel {
@@ -609,11 +685,7 @@ final class LiveCountSession {
         return LiveCountInfo(
             isActive: isActive, total: counter.helperTotal, tallyTotal: counter.tallyTotal,
             labels: labels.values.sorted { $0.map != $1.map ? $0.map > $1.map : $0.label < $1.label },
-            boxes: counter.visibleBoxes.map {
-                .init(
-                    id: $0.id, label: $0.label, confidence: $0.confidence, rect: $0.box,
-                    status: $0.status)
-            },
+            boxes: boxes,
             previewBoxes: preview, isPreviewing: isPreviewing,
             dots: counter.map.entries.map {
                 RunMapOrganism(
