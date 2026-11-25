@@ -163,6 +163,7 @@ struct GuidedScanPage: View {
                 // The stage stops when the app leaves the screen, during the warm-up and
                 // calibration too; it never starts by itself.
                 guard phase == .background, let driver else { return }
+                driver.cancelSwitchToManual()
                 if hasStarted || driver.client.status == .connected { driver.pause() }
             }
     }
@@ -362,6 +363,9 @@ struct GuidedScanPage: View {
                             .accessibilityValue(showsDetections ? "On" : "Off")
                         }
                     }
+                    if let driver, isTerraloka, !model.runControl.isFinished {
+                        stageControlSwitch(driver)
+                    }
                     if let columns = columnProgress {
                         OperatorColumnBlocks(done: columns.done, total: columns.total)
                     }
@@ -382,6 +386,43 @@ struct GuidedScanPage: View {
         .font(.headline.monospacedDigit())
         .padding(.horizontal)
         .padding(.vertical, 8)
+    }
+
+    private enum StageControl: String, CaseIterable, Identifiable {
+        case auto = "Auto"
+        case manual = "Manual"
+        var id: String { rawValue }
+    }
+
+    /// Auto | Manual for the Terraloka stage: Manual while steering with the arrows or while the
+    /// change-over runs; Auto otherwise (also while going back and checking focus). Manual takes
+    /// the run over (pausing it first), Auto in manual goes back and resumes.
+    private func stageControlSwitch(_ driver: AutoStageDriver) -> some View {
+        let isManual = driver.phase == .byHand || driver.isSwitchingToManual
+        let canChange = driver.phase == .byHand ? driver.canGoBack : driver.canSwitchToManual
+        return VStack(spacing: 4) {
+            Picker(
+                "Stage control",
+                selection: Binding(
+                    get: { isManual ? StageControl.manual : .auto },
+                    set: { choice in
+                        if choice == .manual {
+                            driver.switchToManual()
+                        } else if driver.phase == .byHand {
+                            driver.goBackAndResume()
+                        }
+                    })
+            ) {
+                ForEach(StageControl.allCases) { Text($0.rawValue).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .disabled(driver.isSwitchingToManual || !canChange)
+            .accessibilityLabel("Stage control")
+            if let problem = driver.manualSwitchProblem {
+                Text(problem).font(.footnote).foregroundStyle(.orange)
+                    .multilineTextAlignment(.center)
+            }
+        }
     }
 
     /// The lab's own picture container: preview gravity, display transform and centring.
@@ -989,7 +1030,10 @@ struct GuidedScanPage: View {
         case .discard: isConfirmingLeave = true  // the same question as the X; nothing is lost before it
         case .endNow, .keepScanning: break
         }
-        if let action = item.action { model.endRun(action) }
+        if let action = item.action {
+            if action != .cancel { driver?.cancelSwitchToManual() }
+            model.endRun(action)
+        }
     }
 
     /// Begins the scan: logging is on for every guided scan (the movement CSV and the run
@@ -1089,15 +1133,11 @@ struct GuidedScanPage: View {
             if let driver, isTerraloka, driver.phase == .byHand {
                 // The pad takes the words' place; the organisms show as not counted.
                 StageHandPad(driver: driver, isCompact: true)
-                Button("Go back and resume") { driver.goBackAndResume() }
-                    .buttonStyle(.borderedProminent).controlSize(.large)
             } else if let driver, isTerraloka, let alert = driver.status.needsPerson {
                 StageRunStatusCard(
                     status: driver.status, isPaused: driver.phase == .paused,
                     actions: alertActions(alert, driver),
                     onPause: { driver.pause() }, onResume: { driver.resume() },
-                    canMoveManually: driver.canMoveByHand,
-                    onMoveManually: { driver.beginHandControl() },
                     hasSavedPosition: driver.handSaved != nil && driver.canGoBack,
                     onGoBack: { driver.goBackAndResume() })
             } else if let driver, isTerraloka {
@@ -1145,7 +1185,7 @@ struct GuidedScanPage: View {
         .padding(.bottom, 8)
     }
 
-    /// What the stage is doing and, while paused, Move manually. The progress is the ring's.
+    /// What the stage is doing. The progress is the ring's; Manual is the switch up top.
     private func stageWords(_ driver: AutoStageDriver) -> some View {
         VStack(spacing: 10) {
             if scanPhase == .complete {
@@ -1159,10 +1199,6 @@ struct GuidedScanPage: View {
                 }
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 300)
-                if driver.canMoveByHand {
-                    Button("Move manually") { driver.beginHandControl() }
-                        .buttonStyle(.bordered).tint(.white)
-                }
             }
         }
     }

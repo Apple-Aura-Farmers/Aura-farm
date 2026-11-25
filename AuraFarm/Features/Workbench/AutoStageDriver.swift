@@ -164,6 +164,11 @@ final class AutoStageDriver {
     }
     private var handState: HandControl?
     private var handBegin = false
+    /// The page's Auto | Manual change-over (see `StageManualSwitch`), and what to tell the person
+    /// when the board did not answer.
+    private(set) var manualSwitch = StageManualSwitch()
+    private(set) var manualSwitchProblem: String?
+    private var lastStopAt = Date.distantPast
     private var handRestartNotice = false
     private var hand = StageHandControl()
     private var handReturn: StageHandReturn?
@@ -245,6 +250,7 @@ final class AutoStageDriver {
     }
 
     func deactivate() {
+        cancelSwitchToManual()
         engine.stageMoveSettled()
         clearHandState()
         loop?.cancel()
@@ -268,6 +274,7 @@ final class AutoStageDriver {
         cancelSweep = true
         finishWaiter(false)  // a warm-up or calibration wait ends now, not at its timeout
         client.send(.stop)
+        lastStopAt = Date()
         inFlight = false
         releaseHandArrow()
         engine.setExternalCounting(active: false, column: 0)
@@ -275,6 +282,8 @@ final class AutoStageDriver {
     }
 
     func resume() {
+        cancelSwitchToManual()
+        manualSwitchProblem = nil
         userPaused = false
         guard phase == .paused else { return }
         sessionEnded = false
@@ -453,6 +462,7 @@ final class AutoStageDriver {
     }
 
     func endSession() {
+        cancelSwitchToManual()
         guard !sessionEnded else { return }
         sessionEnded = true
         clearHandState()
@@ -1033,6 +1043,7 @@ final class AutoStageDriver {
                 }
                 phase = .disconnected
                 inFlight = false
+                cancelSwitchToManual()
                 engine.stageMoveSettled()
                 releaseHandArrow()  // nothing moves again by itself
                 userPaused = userPaused || canRunPath  // stay paused until Resume
@@ -1142,7 +1153,8 @@ final class AutoStageDriver {
 
     /// The plain-words status, for the guided scan's screens.
     var status: AutoStageStatus {
-        AutoStageStatus.make(
+        if isSwitchingToManual { return AutoStageStatus(title: "Switching to manual") }
+        return AutoStageStatus.make(
             phase: phase, restartNotice: restartNotice, presetEdgePrompt: presetEdgePrompt,
             pathMode: pathMode, client: client.status, focusPaused: isFocusPaused,
             dwelling: isDwelling, hasConnected: hasConnected, tooHot: engine.heatMode == .tooHot)
@@ -1664,7 +1676,7 @@ extension AutoStageDriver {
     /// "Move by hand": the board's own X and Y, taken from a STATUS answer in IDLE, are the
     /// position to come back to. A position saved earlier stays the saved one.
     func beginHandControl() {
-        guard canMoveByHand, !handBegin else { return }
+        guard canMoveByHand, !handBegin, !isSwitchingToManual else { return }
         handBegin = true
         Task {
             defer { handBegin = false }
@@ -1679,20 +1691,89 @@ extension AutoStageDriver {
                 lastMove = "The stage did not answer"
                 return
             }
-            if handState == nil {
-                handState = HandControl(
-                    saved: reported, tracker: engine.trackerPosition(), direction: servoDirection)
-            }
-            let saved = handState?.saved ?? reported
-            engine.logEvent("hand_start", detail: "\(saved.x),\(saved.y)")
-            dismissHandFocusReminder()
-            engine.setHandHold(.on)
-            stallWatch = StageStallWatch()
-            hand.reset()
-            handNote = ""
-            handLimitLogged = nil
-            phase = .byHand
+            enterHandControl(at: reported)
         }
+    }
+
+    /// Hand control starts: the board is idle at `reported`. A position saved earlier stays the
+    /// saved one.
+    private func enterHandControl(at reported: (x: Int, y: Int)) {
+        if handState == nil {
+            handState = HandControl(
+                saved: reported, tracker: engine.trackerPosition(), direction: servoDirection)
+        }
+        let saved = StageManualSwitch.saved(existing: handState?.saved, reported: reported)
+        engine.logEvent("hand_start", detail: "\(saved.x),\(saved.y)")
+        dismissHandFocusReminder()
+        engine.setHandHold(.on)
+        stallWatch = StageStallWatch()
+        hand.reset()
+        handNote = ""
+        handLimitLogged = nil
+        phase = .byHand
+    }
+
+    // MARK: Auto | Manual
+
+    /// A change-over is under way (the switch shows Manual, the status says so).
+    var isSwitchingToManual: Bool { manualSwitch.state == .switching }
+
+    /// The run may be switched to manual: see `StageManualSwitch.canSwitch`.
+    var canSwitchToManual: Bool {
+        StageManualSwitch.canSwitch(
+            phase: phase, isAutonomous: controlMode == .autonomous,
+            isConnected: client.status == .connected,
+            pathRuns: engine.setupInfo.step == .done && canRunPath && pathStarted && !presetFinished,
+            sessionEnded: sessionEnded, walkingBack: walkBack != nil,
+            hasSummary: engine.runSummary != nil, isCalibrating: isCalibrating)
+    }
+
+    /// Pauses (unless paused), waits for the board to say IDLE, then starts hand control as
+    /// `beginHandControl` does. Only STOP (the pause) and STATUS are sent; nothing moves. When the
+    /// board does not answer or is not idle it stays paused, and `manualSwitchProblem` says so.
+    func switchToManual() {
+        guard canSwitchToManual, !handBegin, let token = manualSwitch.begin() else { return }
+        manualSwitchProblem = nil
+        if StageManualSwitch.needsPause(phase) { pause() }
+        Task {
+            var lastAsk: Date?
+            while let delay = manualSwitch.nextAsk(
+                sinceStop: Date().timeIntervalSince(lastStopAt),
+                sinceLastAsk: lastAsk.map { Date().timeIntervalSince($0) })
+            {
+                if delay > 0 { try? await Task.sleep(for: .seconds(delay)) }
+                guard manualSwitch.isCurrent(token) else { return }
+                guard client.status == .connected else { return cancelSwitchToManual() }
+                lastAsk = Date()
+                var reading: StageManualSwitch.Reading?
+                _ = await request(.status, timeout: 3) { reply in
+                    guard case .status(_, let state, let x, let y, _) = reply else { return nil }
+                    reading = .init(x: x, y: y, isIdle: state == .idle)
+                    return true
+                }
+                guard manualSwitch.isCurrent(token) else { return }
+                if let outcome = manualSwitch.record(reading) {
+                    finishSwitch(outcome)
+                    return
+                }
+            }
+        }
+    }
+
+    private func finishSwitch(_ outcome: StageManualSwitch.Outcome) {
+        switch outcome {
+        case .entered(let x, let y) where canMoveByHand:
+            enterHandControl(at: (x, y))
+        default:
+            lastMove = "The stage did not answer"
+            manualSwitchProblem = StageManualSwitch.didNotAnswerText
+        }
+    }
+
+    /// Ends a change-over without entering manual: a disconnect, the app in the background,
+    /// End run, Stop and discard, the page closing, or Resume. Does nothing when none is under way.
+    func cancelSwitchToManual() {
+        manualSwitch.cancel()
     }
 
     func handPress(_ arrow: StageArrow) {

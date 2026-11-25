@@ -235,10 +235,7 @@ struct StageRunStatusCard: View {
     var actions: [(title: String, run: () -> Void)]
     var onPause: () -> Void
     var onResume: () -> Void
-    /// Paused: the person may steer by hand (Move manually), and with a saved position the
-    /// way on is Go back and resume, not a plain Resume.
-    var canMoveManually = false
-    var onMoveManually: () -> Void = {}
+    /// With a saved position the way on is Go back and resume, not a plain Resume.
     var hasSavedPosition = false
     var onGoBack: () -> Void = {}
 
@@ -283,7 +280,7 @@ struct StageRunStatusCard: View {
         }
     }
 
-    /// Pause, or while paused Resume (Go back and resume with a saved position) and Move manually.
+    /// Pause, or while paused Resume (Go back and resume with a saved position).
     @ViewBuilder
     private func pauseButtons(tint: Color) -> some View {
         if isPaused {
@@ -291,9 +288,6 @@ struct StageRunStatusCard: View {
                 Button("Go back and resume", action: onGoBack).buttonStyle(.borderedProminent)
             } else {
                 Button("Resume", action: onResume).buttonStyle(.borderedProminent)
-            }
-            if canMoveManually {
-                Button("Move manually", action: onMoveManually).buttonStyle(.bordered).tint(tint)
             }
         } else {
             Button("Pause", action: onPause).buttonStyle(.bordered).tint(tint)
