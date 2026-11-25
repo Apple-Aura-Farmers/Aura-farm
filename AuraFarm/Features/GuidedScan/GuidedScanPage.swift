@@ -260,7 +260,11 @@ struct GuidedScanPage: View {
                     OperatorFocusScreen(model: model)
                         // The person can always say it is sharp; hidden once the checks agree.
                         .overlay(alignment: .bottom) {
-                            acceptFocusButton.padding(.horizontal).padding(.bottom, 40)
+                            VStack(spacing: 8) {
+                                newSpotButton
+                                acceptFocusButton
+                            }
+                            .padding(.horizontal).padding(.bottom, 40)
                         }
                         .task(id: model.setupInfo.focus?.state == .focused) {
                             guard model.setupInfo.focus?.state == .focused else { return }
@@ -632,6 +636,15 @@ struct GuidedScanPage: View {
     private var acceptFocusButton: some View {
         if stage == .focus, model.setupInfo.focus?.state != .focused {
             bigButton("It's sharp, continue", isProminent: false) { model.acceptFocus() }
+        }
+    }
+
+    /// The mechanical stage cannot tell the app it moved: the operator says the view is somewhere
+    /// new, and the focus check starts afresh. (The Terraloka stage says it itself.)
+    @ViewBuilder
+    private var newSpotButton: some View {
+        if stage == .focus, !isTerraloka {
+            bigButton("I'm at a new spot", isProminent: false) { model.focusSpotChanged() }
         }
     }
 

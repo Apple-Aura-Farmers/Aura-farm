@@ -567,4 +567,85 @@ final class LabSetupSessionTests: XCTestCase {
             }
         }
     }
+
+    // MARK: A new spot, and accepting
+
+    private func reachFocused(
+        _ session: LabSetupSession, _ pipeline: SlideMovementPipeline, confirms: Bool = false
+    ) -> Double {
+        var time = reachFocus(session: session, pipeline: pipeline)
+        session.confirmsSteps = confirms
+        for amplitude in [30.0, 60, 80, 80, 80, 20, 20, 20, 80, 80] {
+            time = feed(
+                texturedFrame(amplitude), for: 0.4, from: time, session: session, pipeline: pipeline)
+        }
+        return feed(texturedFrame(80), for: 3, from: time, session: session, pipeline: pipeline)
+    }
+
+    func testANewSpotStartsTheFocusAfreshInTheFocusStepOnly() {
+        let pipeline = makePipeline()
+        let session = LabSetupSession()
+        let time = reachFocused(session, pipeline, confirms: true)
+        XCTAssertEqual(session.info.focus?.state, .focused)
+        session.focusSpotChanged()
+        feed(texturedFrame(80), for: 0.2, from: time, session: session, pipeline: pipeline)
+        XCTAssertEqual(session.step, .focus)
+        XCTAssertEqual(session.info.focus?.state, .turnOneWay, "a new guide")
+        XCTAssertTrue(session.log.contains { $0.focusEvent == "new_spot" })
+
+        // Any other step: nothing.
+        let aligning = LabSetupSession()
+        aligning.focusSpotChanged()
+        feed(discFrame(), for: 0.3, from: 0, session: aligning, pipeline: makePipeline())
+        XCTAssertFalse(aligning.log.contains { $0.focusEvent == "new_spot" })
+    }
+
+    func testANewSpotKeepsAFocusThePersonAlreadyAccepted() {
+        let pipeline = makePipeline()
+        let session = LabSetupSession()
+        let time = reachFocus(session: session, pipeline: pipeline)
+        session.confirmsSteps = true
+        session.acceptFocus()
+        session.focusSpotChanged()
+        feed(texturedFrame(60), for: 0.3, from: time, session: session, pipeline: pipeline)
+        XCTAssertEqual(session.step, .stage)
+        XCTAssertTrue(session.info.focusFound)
+    }
+
+    func testAcceptingNeedsNeitherAReadingNorAPeak() {
+        let fresh = LabSetupSession()
+        XCTAssertEqual(fresh.focusAcceptRecord(place: .setup).whyNot, ["no_reading"])
+        XCTAssertFalse(fresh.focusAcceptRecord(place: .setup).agreed)
+
+        let pipeline = makePipeline()
+        let session = LabSetupSession()
+        let time = reachFocus(session: session, pipeline: pipeline)
+        // A blank view: no peak, nothing the check could accept.
+        XCTAssertNotEqual(session.info.focus?.state, .focused)
+        XCTAssertFalse(session.focusAcceptRecord(place: .setup).agreed)
+        XCTAssertTrue(session.acceptFocus())
+        feed(discFrame(), for: 0.3, from: time, session: session, pipeline: pipeline)
+        XCTAssertEqual(session.step, .stage)
+        XCTAssertTrue(session.info.focusFound)
+    }
+
+    func testTheAppsOwnAcceptanceIsRecordedOnceAndOnlyWhenRecordsAreOn() {
+        for on in [true, false] {
+            let pipeline = makePipeline()
+            let session = LabSetupSession()
+            session.buildsFocusRecords = on
+            _ = reachFocused(session, pipeline)
+            XCTAssertEqual(session.step, .stage)
+            let taken = session.takeAppAccept()
+            if on {
+                XCTAssertEqual(taken?.place, .setup)
+                XCTAssertEqual(taken?.record.agreed, true)
+                XCTAssertEqual(taken?.record.whyNot, [])
+                XCTAssertNil(session.takeAppAccept(), "taken once")
+                XCTAssertTrue(session.log.contains { $0.focusEvent == "focus_accept_app_setup" })
+            } else {
+                XCTAssertNil(taken)
+            }
+        }
+    }
 }

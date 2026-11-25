@@ -96,6 +96,11 @@ class ScanEngine: NSObject {
     private(set) var exportURL: URL?
     /// The CSV and the frames saved while logging, shared together.
     private(set) var exportItems: [URL] = []
+    /// The lab's focus records (see `FocusAcceptRecorder`): how many, their files, and the short
+    /// line shown after an accept. Main queue.
+    private(set) var focusRecordCount = 0
+    private(set) var focusRecordFiles: [URL] = []
+    private(set) var focusRecordNote = ""
 
     // MARK: Hooks for the lab (analysis queue)
 
@@ -126,6 +131,7 @@ class ScanEngine: NSObject {
     @ObservationIgnored private let dryRun = GuideDryRun()
     @ObservationIgnored private let edgeProbe = EdgeLineProbe()
     @ObservationIgnored private let snapshots = FrameSnapshotWriter()
+    @ObservationIgnored private let focusRecorder = FocusAcceptRecorder()
     @ObservationIgnored private let live = LiveCountSession()
     @ObservationIgnored private var lastCountInfo = LiveCountInfo()
     @ObservationIgnored private var lastCountingActive = false
@@ -385,7 +391,18 @@ class ScanEngine: NSObject {
 
     /// "It's sharp, continue" on the focus step.
     func acceptFocus() {
-        analysisQueue.async { [weak self] in self?.setup.acceptFocus() }
+        analysisQueue.async { [weak self] in
+            guard let self, self.setup.acceptFocus() else { return }
+            if self.focusRecorder.isOn {
+                self.recordFocusAccept(self.setup.focusAcceptRecord(place: .setup), .person, .setup)
+            }
+        }
+    }
+
+    /// The microscope is at a new spot: setup's focus step starts its focus guide afresh (see
+    /// `LabSetupSession.focusSpotChanged`); in any other step nothing happens.
+    func focusSpotChanged() {
+        analysisQueue.async { [weak self] in self?.setup.focusSpotChanged() }
     }
 
     /// Whether the guide pauses on the run monitor's say.
@@ -509,9 +526,15 @@ class ScanEngine: NSObject {
 
     /// "Resume anyway" on the focus-pause banner. The run goes on and the focus baseline is
     /// measured again from the next readings.
-    func resumeFocusAnyway() {
+    /// - Parameter emptyArea: "In focus – empty area"; only marks the lab's focus record.
+    func resumeFocusAnyway(emptyArea: Bool = false) {
         analysisQueue.async { [weak self] in
-            guard let self, self.setup.resumeFocusManually() else { return }
+            guard let self else { return }
+            // Worked out before the pause ends, so the record shows why it had not.
+            var record = self.focusRecorder.isOn ? self.setup.focusAcceptRecord(place: .run) : nil
+            record?.emptyArea = emptyArea
+            guard self.setup.resumeFocusManually() else { return }
+            if let record { self.recordFocusAccept(record, .person, .run) }
             self.pendingEventName = "focus_resume_manual"
             let info = self.setup.info
             DispatchQueue.main.async { self.setupInfo = info }
@@ -622,6 +645,7 @@ class ScanEngine: NSObject {
         setup = LabSetupSession(skippingAlignAndFocus: skips)
         setup.confirmsSteps = confirmsSetupSteps
         setup.isHeld = setupHeld
+        setup.buildsFocusRecords = focusRecorder.isOn
         pipeline.resetPosition()
         if skips { pipeline.redetectField() }
         clearTrackingDisplay()
@@ -679,6 +703,7 @@ class ScanEngine: NSObject {
         // Strong self: the file is finished even if the page lets go of the engine first.
         analysisQueue.async { [self] in
             cameraRunning = false
+            focusRecorder.flush()
             endFocusTest()
             finishLensVideo()
         }
@@ -771,6 +796,81 @@ class ScanEngine: NSObject {
                 self.rowCount = 0
                 self.exportURL = nil
             }
+        }
+    }
+
+    // MARK: Focus records (the lab only)
+
+    /// The lab switches the recorder on; it stays off in the real test, where nothing is kept.
+    func setFocusRecording(_ on: Bool) {
+        analysisQueue.async { [weak self] in
+            guard let self else { return }
+            self.focusRecorder.isOn = on
+            self.setup.buildsFocusRecords = on
+            self.focusRecorder.onChange = { [weak self] in
+                guard let self else { return }
+                let files = self.focusRecorder.files
+                DispatchQueue.main.async { self.focusRecordFiles = files }
+            }
+        }
+    }
+
+    /// "It's sharp. Calibrate": the person accepts a focus the setup never judged. Recorded with
+    /// whatever frames and readings there are; the calibration itself does not wait for this.
+    func recordCalibrateAccept() {
+        analysisQueue.async { [weak self] in
+            guard let self, self.focusRecorder.isOn else { return }
+            self.recordFocusAccept(self.setup.focusAcceptRecord(place: .calibrate), .person, .calibrate)
+        }
+    }
+
+    /// The lab closes or the app goes to the background: records in progress are written with
+    /// the frames they have.
+    func flushFocusRecords() {
+        analysisQueue.async { [weak self] in self?.focusRecorder.flush() }
+    }
+
+    /// "Clear focus records": the files are deleted and the limit starts afresh.
+    func clearFocusRecords() {
+        analysisQueue.async { [weak self] in
+            guard let self else { return }
+            self.focusRecorder.clear()
+            DispatchQueue.main.async {
+                self.focusRecordCount = 0
+                self.focusRecordFiles = []
+                self.focusRecordNote = ""
+            }
+        }
+    }
+
+    /// Hands an acceptance to the recorder and tells the logs and the lab. Never fails the caller:
+    /// the accept itself has happened already. Analysis queue.
+    private func recordFocusAccept(
+        _ base: FocusAcceptRecord, _ who: FocusAcceptWho, _ place: FocusAcceptPlace
+    ) {
+        var record = base
+        record.objective = runStageInfo.objective
+        record.stageAngleX = stageAngles?.x
+        record.stageAngleY = stageAngles?.y
+        record.exposureMs = device.map { $0.exposureDuration.seconds * 1000 }
+        record.iso = device.map { Double($0.iso) }
+        let outcome = focusRecorder.accept(record, who: who, place: place, seconds: lastFrameSeconds)
+        let note: String
+        switch outcome {
+        case .off: return
+        case .limitReached: note = "Focus record limit reached"
+        case .recorded(let number):
+            note = "Focus recorded (\(number))"
+            let name = "focus_accept_\(who.rawValue)_\(place.rawValue)"
+            // In the setup CSV a person's accept is the focus_event; the app's is written by the
+            // session on its own row.
+            if who == .person { setup.noteFocusEvent(name) }
+            if logging { queuedEvents.append((name, record.whyNot.joined(separator: " "))) }
+        }
+        let count = focusRecorder.count
+        DispatchQueue.main.async {
+            self.focusRecordCount = count
+            self.focusRecordNote = note
         }
     }
 
@@ -1430,6 +1530,7 @@ class ScanEngine: NSObject {
         logged.stageAngleY = stageAngles?.y
         logged.focusTiles = monitor?.focusTiles
         logged.focusTilesMs = monitor?.focusTilesMilliseconds
+        logged.focusDetailBest = monitor?.focusDetailBest
         if let note = monitor?.resumedNote, !note.isEmpty, pendingEventName.isEmpty {
             pendingEventName = "focus_resumed"
             pendingEventDetail = note
@@ -1689,6 +1790,14 @@ extension ScanEngine: AVCaptureVideoDataOutputSampleBufferDelegate {
                 viewClass: guideEnabled ? dryRun.lastViewClass : .blank,
                 isStill: indicators.stillSeconds > 0, stillSeconds: indicators.stillSeconds)
         else { return }
+        if focusRecorder.isOn {
+            // The app's own acceptance first: it freezes the ring, which this frame then joins.
+            if let accepted = setup.takeAppAccept() {
+                recordFocusAccept(accepted.record, .app, accepted.place)
+            }
+            focusRecorder.offer(
+                buffer, seconds: time, wanted: setup.wantsFocusRing, row: setup.focusRow(at: time))
+        }
         let stepChanged = setup.step != lastPublishedStep
         if stepChanged {
             // Reaching field starts learning, which needs a clean display.

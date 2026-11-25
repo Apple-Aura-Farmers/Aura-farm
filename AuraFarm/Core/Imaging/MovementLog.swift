@@ -228,6 +228,8 @@ struct MovementLogRow: Equatable {
     var focusTilesMs: Double?
     var focusLabel = ""
     var focusSweep = false
+    /// The highest `focusTiles.detail` at this spot or pause (nil until one); logging only.
+    var focusDetailBest: Double?
     /// The detector's result arrives after its frame: when the frame it ran on was taken (run
     /// seconds), and where its time went: crop and render, the model alone, and decoding.
     var detFrameSeconds: Double?
@@ -306,6 +308,7 @@ enum MovementLog {
         "focus_peak", "focus_hint", "stage_angle_x", "stage_angle_y",
         "focus_top", "focus_top_ratio", "focus_noise", "focus_tiles_used", "focus_tiles_active",
         "focus_top_tiles", "focus_tiles_ms", "focus_label", "focus_sweep",
+        "focus_detail", "focus_detail_best", "focus_tile_fine", "focus_tile_coarse",
     ]
 
     static func csv(_ rows: [MovementLogRow]) -> String {
@@ -396,6 +399,9 @@ enum MovementLog {
             row.focusTiles.map { String($0.active) } ?? "",
             row.focusTiles?.topTiles.map(String.init).joined(separator: " ") ?? "",
             significant(row.focusTilesMs), row.focusLabel, row.focusSweep ? "1" : "0",
+            significant(row.focusTiles?.detail), significant(row.focusDetailBest),
+            row.focusTiles.map { FocusTilesReading.text($0.tileFine) } ?? "",
+            row.focusTiles.map { FocusTilesReading.text($0.tileCoarse) } ?? "",
         ]
     }
 

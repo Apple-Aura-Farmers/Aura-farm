@@ -210,7 +210,7 @@ struct FocusOverlay: View {
         case .passedPeak?: "Past the sharpest point. Turn back slowly"
         case .nearPeak?: "Almost there. Turn very slowly, then stop"
         case .focused?: "Best focus found ✓"
-        case .needsSample?: "Not enough detail. Move to an area with sample, then focus"
+        case .needsSample?: "Too little sample here. Move to a busier spot, then turn slowly."
         }
     }
 

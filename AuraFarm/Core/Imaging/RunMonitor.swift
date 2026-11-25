@@ -585,3 +585,35 @@ extension FrameAnalyzer {
         return fine / coarse
     }
 }
+
+extension RunMonitor {
+    /// Every condition for ending a pause for focus that is not met right now, as short names;
+    /// empty when the monitor is not paused for focus (nothing is held back). Pure: it only
+    /// restates the rules above and changes none of them. `index` is the latest focus index
+    /// (nil when too old), `isSharp` the monitor's own verdict on this frame.
+    static func whyNotResumed(
+        state: RunMonitorState, index: Double?, baseline: Double?, sharpnessShare: Double?,
+        isSharp: Bool, viewClass: ViewClass, tracking: TrackingState, isStill: Bool,
+        thresholds t: RunMonitorThresholds = RunMonitorThresholds()
+    ) -> [String] {
+        guard state == .pausedFocus else { return [] }
+        var reasons: [String] = []
+        let viewFine = viewClass == .sample || viewClass == .thin
+        let trackingFine = tracking == .tracking
+        if !viewFine { reasons.append("view_class") }
+        if !trackingFine { reasons.append("not_tracking") }
+        let base = baseline ?? 0
+        let indexBack =
+            base <= 0 || (index.map { $0 / base >= t.resumeAtShareOfBaseline } ?? false)
+        let sharpBack = sharpnessShare.map { $0 >= t.sharpnessResumeShare } ?? false
+        if !(indexBack || sharpBack) {
+            reasons.append(index == nil ? "no_index" : "index_below_resume")
+            reasons.append("sharpness_below_share")
+        } else if viewFine, trackingFine, !isSharp {
+            reasons.append("not_near_peak")
+        }
+        if !isStill { reasons.append("moving") }
+        if reasons.isEmpty { reasons.append("not_long_enough") }
+        return reasons
+    }
+}

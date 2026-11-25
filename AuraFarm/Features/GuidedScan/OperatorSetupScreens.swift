@@ -32,7 +32,8 @@ struct OperatorFocusGauge: Equatable {
     var label: String {
         switch tone {
         case .searching: "Turn slowly."
-        case .needsSample: "Move to an area with sample."
+        // The full words are "Too little sample here. Move to a busier spot, then turn slowly."
+        case .needsSample: "Too little sample. Try a busier spot."
         case .almost: "Almost there."
         case .turnBack: "Turn back slowly."
         case .hold: "Hold Steady."

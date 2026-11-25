@@ -160,6 +160,10 @@
                 setAutomatedStage(false)
             }
             .onChange(of: scenePhase) { _, phase in
+                // Records in progress are written with the frames they have.
+                if phase != .active { model.flushFocusRecords() }
+            }
+            .onChange(of: scenePhase) { _, phase in
                 // Nothing keeps moving behind the person's back.
                 guard phase == .background, let autoStage else { return }
                 if autoStage.phase == .byHand {
@@ -290,6 +294,7 @@
                     if focusTest, model.setupInfo.step == .done {
                         FocusTestSection(model: model)
                     }
+                    if model.isAnalyzing { FocusRecordsRow(model: model) }
 
                     if model.isAnalyzing, isSettingUp {
                         alignFocusControls
@@ -370,7 +375,12 @@
                 )
                 .font(.callout)
                 if model.setupInfo.step == .focus {
-                    Button("It's sharp, continue") { model.acceptFocus() }.buttonStyle(.bordered)
+                    HStack {
+                        Button("It's sharp, continue") { model.acceptFocus() }
+                        // The mechanical stage cannot say it moved; the Terraloka stage does.
+                        Button("I'm at a new spot") { model.focusSpotChanged() }
+                    }
+                    .buttonStyle(.bordered)
                 }
                 setupButtons
                 footer
@@ -787,6 +797,35 @@
             .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 14))
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
+        }
+    }
+
+    /// After a focus accept: the short line, and the records to share or clear.
+    private struct FocusRecordsRow: View {
+        var model: ScanEngine
+        @State private var confirmsClear = false
+
+        var body: some View {
+            if model.focusRecordCount > 0 || !model.focusRecordNote.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    if !model.focusRecordNote.isEmpty {
+                        Text(model.focusRecordNote).font(.footnote.bold())
+                    }
+                    HStack {
+                        ShareLink("Share focus records (\(model.focusRecordCount))", items: model.focusRecordFiles)
+                            .disabled(model.focusRecordFiles.isEmpty)
+                        Button("Clear focus records", role: .destructive) { confirmsClear = true }
+                    }
+                    .buttonStyle(.bordered)
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .confirmationDialog(
+                    "Clear all focus records?", isPresented: $confirmsClear, titleVisibility: .visible
+                ) {
+                    Button("Clear", role: .destructive) { model.clearFocusRecords() }
+                }
+            }
         }
     }
 

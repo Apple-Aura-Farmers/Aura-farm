@@ -485,6 +485,7 @@ final class AutoStageDriver {
         if needsSharpTap, engine.setupInfo.step != .stage { return }
         needsSharpTap = false
         focusAccepted = true
+        engine.recordCalibrateAccept()
         engine.logEvent("stage_focus_accepted")
         phase = .waitingForStageStep
     }
@@ -533,7 +534,7 @@ final class AutoStageDriver {
             lastMove = "No direction to cross in"
             return
         }
-        engine.resumeFocusAnyway()
+        engine.resumeFocusAnyway(emptyArea: true)
         engine.logEvent("empty_confirmed")
         crossing = StageBlindCrossing(
             direction: lastSteer, startAngles: (angleX, angleY))
@@ -658,6 +659,8 @@ final class AutoStageDriver {
         case .position, .done:
             inFlight = false
             lastSettledAt = Date()
+            // The view is somewhere new: setup's focus step starts its guide afresh.
+            engine.focusSpotChanged()
             // Every step starts from zero offset: a step can move the picture further than the
             // tracker trusts between two frames.
             engine.requestTrackerReanchor()
