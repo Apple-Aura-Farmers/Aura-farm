@@ -118,10 +118,12 @@ struct SoilMeasurementsView: View {
             }
             .listSectionSpacing(12)
             // The button rides above the keyboard and covers the field being typed in.
-            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) {
+                _ in
                 keyboardShown = true
             }
-            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) {
+                _ in
                 keyboardShown = false
             }
             .safeAreaInset(edge: .bottom) {

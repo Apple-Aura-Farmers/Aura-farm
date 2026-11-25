@@ -67,7 +67,7 @@ extension ScanEngine {
     /// to a later run (a manual look saves nothing). Safe to call twice.
     func discardLensVideo() {
         analysisQueue.async { [self] in
-            lensFinishing.forEach { $0.discard() }
+            for finishing in lensFinishing { finishing.discard() }
             let kept = lensResult?.url
             lensResult = nil
             lensScanStartOffset = nil

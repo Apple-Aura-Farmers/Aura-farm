@@ -66,7 +66,7 @@ struct RoleSelectionView: View {
                     .scaledToFit()
                     .frame(width: 119, height: 79)
                     .frame(maxWidth: .infinity, alignment: .trailing)
-                    .padding(.bottom, -22) // lets the icon sit beside the title, as in the design
+                    .padding(.bottom, -22)  // lets the icon sit beside the title, as in the design
                     .accessibilityHidden(true)
                 Text(role.title)
                     .font(.body.weight(.medium))
@@ -74,7 +74,7 @@ struct RoleSelectionView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.leading)
-                    .fixedSize(horizontal: false, vertical: true) // show the full summary, never truncate
+                    .fixedSize(horizontal: false, vertical: true)  // show the full summary, never truncate
             }
             .padding(14)
             .frame(maxWidth: .infinity, minHeight: 162, alignment: .leading)

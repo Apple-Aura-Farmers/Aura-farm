@@ -53,15 +53,15 @@
                 .pickerStyle(.segmented)
                 .disabled(isByHand && !isManual)
                 if !isManual {
-                Picker(
-                    "Path",
-                    selection: Binding(
-                        get: { driver.pathMode }, set: { driver.setPathMode($0) })
-                ) {
-                    ForEach(StagePathMode.allCases, id: \.self) { Text($0.title).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .disabled(!canChangePathMode || isByHand)
+                    Picker(
+                        "Path",
+                        selection: Binding(
+                            get: { driver.pathMode }, set: { driver.setPathMode($0) })
+                    ) {
+                        ForEach(StagePathMode.allCases, id: \.self) { Text($0.title).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    .disabled(!canChangePathMode || isByHand)
                 }
                 if !isManual, driver.pathMode == .presetPath {
                     Stepper(value: $driver.dwellSeconds, in: 0.6...3.0, step: 0.2) {

@@ -427,11 +427,17 @@ struct GuidedScanPage: View {
                 }
             }
             .frame(width: proxy.size.width, height: proxy.size.height)
-            .scaleEffect(zooms ? zoom ?? 1 : 1, anchor: zooms ? round.map {
-                UnitPoint(x: $0.midX / proxy.size.width, y: $0.midY / proxy.size.height)
-            } ?? .center : .center)
-            .offset(x: zooms ? round.map { proxy.size.width / 2 - $0.midX } ?? 0 : 0,
-                    y: zooms ? round.map { proxy.size.height / 2 - $0.midY } ?? 0 : 0)
+            .scaleEffect(
+                zooms ? zoom ?? 1 : 1,
+                anchor: zooms
+                    ? round.map {
+                        UnitPoint(x: $0.midX / proxy.size.width, y: $0.midY / proxy.size.height)
+                    } ?? .center : .center
+            )
+            .offset(
+                x: zooms ? round.map { proxy.size.width / 2 - $0.midX } ?? 0 : 0,
+                y: zooms ? round.map { proxy.size.height / 2 - $0.midY } ?? 0 : 0
+            )
             // Clip after the zoom, so the ring round the view is not cut off.
             .clipShape(Rectangle())
             .contentShape(Rectangle())
@@ -440,7 +446,8 @@ struct GuidedScanPage: View {
         // A nil ratio makes a GeometryReader square, so the full screen asks for the screen's ratio.
         .aspectRatio(
             isFullScreenCamera ? UIScreen.main.bounds.width / UIScreen.main.bounds.height : 1,
-            contentMode: .fit)
+            contentMode: .fit
+        )
         .ignoresSafeArea(isFullScreenCamera ? .all : [])
         .clipped()
         // The same preview layer, filled instead of fitted: no second camera view is made.
@@ -800,25 +807,25 @@ struct GuidedScanPage: View {
             if driver.controlMode == .manual, stage == .stage || stage == .ready {
                 manualCards(driver)
             } else {
-            switch stage {
-            case .stage, .ready:
-                pathCards(driver)
-            default:
-                if status.needsPerson == .disconnected {
-                    StageRunStatusCard(
-                        status: status, isPaused: false,
-                        actions: alertActions(.disconnected, driver), onPause: {}, onResume: {})
+                switch stage {
+                case .stage, .ready:
+                    pathCards(driver)
+                default:
+                    if status.needsPerson == .disconnected {
+                        StageRunStatusCard(
+                            status: status, isPaused: false,
+                            actions: alertActions(.disconnected, driver), onPause: {}, onResume: {})
+                    }
+                    SetupCardView(
+                        sentence: stage.sentence,
+                        notice: stage == .align && model.setupInfo.resumeStep != nil
+                            ? AlignOverlay.lostText : nil,
+                        ticks: stage == .align
+                            ? AlignmentTicks(
+                                reading: model.setupInfo.alignment,
+                                passed: model.setupInfo.isAlignmentPassed) : nil)
+                    acceptFocusButton
                 }
-                SetupCardView(
-                    sentence: stage.sentence,
-                    notice: stage == .align && model.setupInfo.resumeStep != nil
-                        ? AlignOverlay.lostText : nil,
-                    ticks: stage == .align
-                        ? AlignmentTicks(
-                            reading: model.setupInfo.alignment,
-                            passed: model.setupInfo.isAlignmentPassed) : nil)
-                acceptFocusButton
-            }
             }
         }
     }
@@ -1097,7 +1104,9 @@ struct GuidedScanPage: View {
             // While steering by hand the pad needs the room: the X asks the same as Stop, and Go
             // back and resume takes the place of Resume.
             if !isByHand {
-                Button { isConfirmingLeave = true } label: {
+                Button {
+                    isConfirmingLeave = true
+                } label: {
                     Image(systemName: "stop.fill").font(.title3)
                         .frame(width: 44, height: 44)
                         .overlay(Circle().stroke(.white, lineWidth: 3).frame(width: 52, height: 52))
@@ -1109,7 +1118,8 @@ struct GuidedScanPage: View {
                 // The alert card has its own Pause and Resume.
                 if !isByHand, !showsStageAlert {
                     Button(action: togglePause) {
-                        Label(isPaused ? (goesBackFirst ? "Go back and resume" : "Resume") : "Pause",
+                        Label(
+                            isPaused ? (goesBackFirst ? "Go back and resume" : "Resume") : "Pause",
                             systemImage: isPaused ? "play.fill" : "pause.fill")
                     }
                     .tint(.auraGreen)
@@ -1128,11 +1138,13 @@ struct GuidedScanPage: View {
                         }
                     }
                 } label: {
-                    Label(EndRunMenu.label(endingAfterColumn: endsAfterColumn),
-                        systemImage: "flag.checkered")
-                        .padding(.horizontal, 14).padding(.vertical, 8)
-                        .background(Color.auraGreen, in: Capsule())
-                        .foregroundStyle(.black)
+                    Label(
+                        EndRunMenu.label(endingAfterColumn: endsAfterColumn),
+                        systemImage: "flag.checkered"
+                    )
+                    .padding(.horizontal, 14).padding(.vertical, 8)
+                    .background(Color.auraGreen, in: Capsule())
+                    .foregroundStyle(.black)
                 }
                 .disabled(model.runControl.isFinished)
             }
