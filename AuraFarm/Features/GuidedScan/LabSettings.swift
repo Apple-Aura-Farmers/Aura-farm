@@ -164,7 +164,7 @@ struct LabSettingsSync: ViewModifier {
         @AppStorage("slideLab.countOrganisms") private var countsOrganisms = true
         @AppStorage("slideLab.showDetections") private var showsDetections = false
         @AppStorage("slideLab.cropEyepiece") private var cropsToEyepiece = true
-        @AppStorage("slideLab.confidence07") private var confidence = OrganismDetector.defaultConfidence
+        @AppStorage("slideLab.confidence05") private var confidence = OrganismDetector.defaultConfidence
         @AppStorage("slideLab.detectorModel") private var detectorModelName = DetectorModel.v3.rawValue
         @AppStorage("slideLab.detectorUnits") private var detectorUnitsName = DetectorUnits
             .neuralEngine.rawValue

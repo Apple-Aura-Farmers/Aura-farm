@@ -9,7 +9,7 @@
         /// V2 calls the bright eyepiece disc an organism without a crop. Not remembered.
         @State private var detectorModel = ModelTestLabDefaults.model
         @State private var cropsToCentre = ModelTestLabDefaults.cropsToCentre
-        @AppStorage("modelTest.confidence07") private var confidence = OrganismDetector.defaultConfidence
+        @AppStorage("modelTest.confidence05") private var confidence = OrganismDetector.defaultConfidence
 
         var body: some View {
             ScrollView {

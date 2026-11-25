@@ -243,21 +243,27 @@ struct StageRunStatusCard: View {
     var onGoBack: () -> Void = {}
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            if let alert = status.needsPerson {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(alert.message).font(.headline).foregroundStyle(.black)
-                    HStack {
-                        ForEach(actions, id: \.title) { action in
-                            Button(action.title, action: action.run)
-                                .buttonStyle(.borderedProminent).tint(.black)
-                        }
-                    }
+        if let alert = status.needsPerson {
+            // One message: the alert's own words (the status title says the same). The alert's
+            // buttons and Pause or Resume sit together under it, inside the orange area.
+            VStack(alignment: .leading, spacing: 8) {
+                Text(alert.message).font(.headline).foregroundStyle(.black)
+                if let detail = status.detail, !detail.isEmpty {
+                    Text(detail).font(.subheadline).foregroundStyle(.black.opacity(0.7))
                 }
-                .padding(12)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(.orange, in: RoundedRectangle(cornerRadius: 14))
+                WrappingRow(spacing: 8) {
+                    ForEach(actions, id: \.title) { action in
+                        Button(action.title, action: action.run)
+                            .buttonStyle(.borderedProminent).tint(.black)
+                    }
+                    pauseButtons(tint: .black)
+                }
             }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.orange, in: RoundedRectangle(cornerRadius: 14))
+            .stageCard()
+        } else {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(status.title).font(.title3.weight(.bold))
@@ -268,23 +274,70 @@ struct StageRunStatusCard: View {
                 }
                 Spacer()
                 if isPaused {
-                    VStack(alignment: .trailing, spacing: 6) {
-                        if hasSavedPosition {
-                            Button("Go back and resume", action: onGoBack)
-                                .buttonStyle(.borderedProminent)
-                        } else {
-                            Button("Resume", action: onResume).buttonStyle(.borderedProminent)
-                        }
-                        if canMoveManually {
-                            Button("Move manually", action: onMoveManually)
-                                .buttonStyle(.bordered).tint(.white)
-                        }
-                    }
+                    VStack(alignment: .trailing, spacing: 6) { pauseButtons(tint: .white) }
                 } else {
-                    Button("Pause", action: onPause).buttonStyle(.bordered).tint(.white)
+                    pauseButtons(tint: .white)
                 }
             }
+            .stageCard()
         }
-        .stageCard()
+    }
+
+    /// Pause, or while paused Resume (Go back and resume with a saved position) and Move manually.
+    @ViewBuilder
+    private func pauseButtons(tint: Color) -> some View {
+        if isPaused {
+            if hasSavedPosition {
+                Button("Go back and resume", action: onGoBack).buttonStyle(.borderedProminent)
+            } else {
+                Button("Resume", action: onResume).buttonStyle(.borderedProminent)
+            }
+            if canMoveManually {
+                Button("Move manually", action: onMoveManually).buttonStyle(.bordered).tint(tint)
+            }
+        } else {
+            Button("Pause", action: onPause).buttonStyle(.bordered).tint(tint)
+        }
     }
 }
+
+/// Lays its children out left to right and wraps to the next line when they do not fit.
+private struct WrappingRow: Layout {
+    var spacing: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        arrange(subviews, width: proposal.width ?? .infinity).size
+    }
+
+    func placeSubviews(
+        in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()
+    ) {
+        let placed = arrange(subviews, width: bounds.width)
+        for (subview, origin) in zip(subviews, placed.origins) {
+            subview.place(
+                at: CGPoint(x: bounds.minX + origin.x, y: bounds.minY + origin.y), proposal: .unspecified)
+        }
+    }
+
+    private func arrange(_ subviews: Subviews, width: CGFloat) -> (size: CGSize, origins: [CGPoint]) {
+        var origins: [CGPoint] = []
+        var x: CGFloat = 0
+        var y: CGFloat = 0
+        var rowHeight: CGFloat = 0
+        var widest: CGFloat = 0
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x > 0, x + size.width > width {
+                x = 0
+                y += rowHeight + spacing
+                rowHeight = 0
+            }
+            origins.append(CGPoint(x: x, y: y))
+            x += size.width + spacing
+            rowHeight = max(rowHeight, size.height)
+            widest = max(widest, x - spacing)
+        }
+        return (CGSize(width: widest, height: y + rowHeight), origins)
+    }
+}
+

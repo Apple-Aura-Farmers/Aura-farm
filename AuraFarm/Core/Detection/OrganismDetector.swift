@@ -82,13 +82,14 @@ struct OrganismDetector {
     /// How sure the model has to be before a query counts as a find, as a Double for the lab's
     /// slider and its settings; `leastConfidence` is the Float made from it.
     ///
-    /// NOT CALIBRATED. 0.7 was chosen by the operator on 25 Nov 2026. A DETR scores each class on
+    /// NOT CALIBRATED. 0.5 was chosen by the operator on 25 Nov 2026, after 0.7 showed no
+    /// detections. A DETR scores each class on
     /// its own with a sigmoid rather than sharing one softmax, so its numbers sit lower than the
     /// YOLO weights' did. Earlier measurement, on 600 frames of microscope footage: at 0.5 it
     /// found nothing, at 0.3 nine nematodes, at 0.1 thirty-eight nematodes and seven euglenoids,
-    /// with no box covering the frame at any of them. WARNING: 0.7 may be too strict for that
-    /// model and find little or nothing; check the counts before trusting it.
-    static let defaultConfidence = 0.7
+    /// with no box covering the frame at any of them. WARNING: 0.5 may still be too strict for that
+    /// model and find little; check the counts before trusting it.
+    static let defaultConfidence = 0.5
     static let leastConfidence = Float(defaultConfidence)
 
     /// The confidence a query needs to count as a find. Defaults to `leastConfidence`, so only a

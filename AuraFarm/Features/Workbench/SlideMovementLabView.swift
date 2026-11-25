@@ -48,7 +48,7 @@
         @AppStorage("slideLab.detectorUnits") private var detectorUnitsName = DetectorUnits.neuralEngine
             .rawValue
         @AppStorage("slideLab.cameraRate") private var cameraRateName = CameraRate.fps20.rawValue
-        @AppStorage("slideLab.confidence07") private var confidence = OrganismDetector.defaultConfidence
+        @AppStorage("slideLab.confidence05") private var confidence = OrganismDetector.defaultConfidence
         @AppStorage("slideLab.heatAdaptive") private var heatAdaptive = true
         @AppStorage("slideLab.modelRateCap") private var modelRateCap = true
         @AppStorage("slideLab.recordLensVideo") private var recordsLensVideo = false

@@ -394,9 +394,11 @@ struct PausedOverlay: View {
                         .foregroundStyle(.black)
                     if reason == .focus, let dial = monitor.dial {
                         FocusDialView(reading: dial)
-                        SetupLine(text: dial.message, tone: dial.isGreen ? .green : .orange)
+                        // One line: the hint when there is one, otherwise the dial's words.
                         if let hint = monitor.focusHint {
-                            SetupLine(text: hint, tone: .white)
+                            SetupLine(text: hint, tone: dial.isGreen ? .green : .orange)
+                        } else {
+                            SetupLine(text: dial.message, tone: dial.isGreen ? .green : .orange)
                         }
                     } else if !GuideInstruction.paused(reason).helperText.isEmpty {
                         SetupLine(text: GuideInstruction.paused(reason).helperText, tone: .orange)
