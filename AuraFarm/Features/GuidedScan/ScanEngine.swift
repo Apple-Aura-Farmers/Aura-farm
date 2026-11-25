@@ -2227,7 +2227,8 @@ extension ScanEngine: AVCaptureVideoDataOutputSampleBufferDelegate {
             self.logEvent(
                 "preset_stop_done",
                 detail: String(
-                    format: "stop=%d column=%d looks=%d found=%d counted=%d outside_cell=%d dirt=%d waited=%.1f",
+                    format:
+                        "stop=%d column=%d looks=%d found=%d counted=%d outside_cell=%d dirt=%d waited=%.1f",
                     stop.id, stop.column, stop.looks, totals.found, totals.counted,
                     totals.outsideCell, totals.dirt, stop.waited))
         }

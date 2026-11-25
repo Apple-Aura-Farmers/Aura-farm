@@ -128,11 +128,19 @@ final class PresetStopTests: XCTestCase {
             PresetStopGeometry(fieldsPerDegreeX: 0.1, fieldsPerDegreeY: 0.2, flipX: flipX, flipY: flipY)
                 .guideFields(dx: 2, dy: 3)
         }
+        // Compared to a tolerance, not exactly: 0.2 * 3 is 0.6000000000000001 in binary.
+        func assertFields(
+            _ flipX: Bool, _ flipY: Bool, _ x: CGFloat, _ y: CGFloat, line: UInt = #line
+        ) {
+            let point = fields(flipX, flipY)
+            XCTAssertEqual(point.x, x, accuracy: 1e-9, line: line)
+            XCTAssertEqual(point.y, y, accuracy: 1e-9, line: line)
+        }
         // Up is more Y degrees (the view goes up: smaller y), Left fewer X degrees.
-        XCTAssertEqual(fields(false, false), CGPoint(x: 0.2, y: -0.6))
-        XCTAssertEqual(fields(true, false), CGPoint(x: -0.2, y: -0.6))
-        XCTAssertEqual(fields(false, true), CGPoint(x: 0.2, y: 0.6))
-        XCTAssertEqual(fields(true, true), CGPoint(x: -0.2, y: 0.6))
+        assertFields(false, false, 0.2, -0.6)
+        assertFields(true, false, -0.2, -0.6)
+        assertFields(false, true, 0.2, 0.6)
+        assertFields(true, true, -0.2, 0.6)
     }
 
     func testTheCellIsASquareOfPointEightBoxesAtTheCentreOfTheCircle() {

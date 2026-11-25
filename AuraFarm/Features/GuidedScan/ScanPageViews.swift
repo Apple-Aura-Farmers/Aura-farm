@@ -242,7 +242,9 @@ struct ScanCardView: View {
     }
 
     private func cardButton(_ title: String, isProminent: Bool) -> some View {
-        Button { actions.alertAction(title) } label: {
+        Button {
+            actions.alertAction(title)
+        } label: {
             Text(title).font(.body.weight(.medium)).frame(maxWidth: .infinity, minHeight: 36)
         }
         .buttonStyle(.borderedProminent)
