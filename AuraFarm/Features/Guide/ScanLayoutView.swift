@@ -4,6 +4,9 @@ import SwiftUI
 /// (square; it shrinks before anything else does), and the bottom area, whose space is reserved
 /// first so the instruction card is never covered or squeezed.
 struct ScanLayoutView<Top: View, Picture: View, Bottom: View>: View {
+    /// Everything sits against the top and the spare space falls at the bottom, instead of the
+    /// picture growing and pushing the rest down (the Terraloka stage's scan).
+    var pinsToTop = false
     @ViewBuilder var top: Top
     @ViewBuilder var picture: Picture
     @ViewBuilder var bottom: Bottom
@@ -11,10 +14,18 @@ struct ScanLayoutView<Top: View, Picture: View, Bottom: View>: View {
     var body: some View {
         VStack(spacing: 0) {
             top
-            picture
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .frame(minHeight: 120)
+            if pinsToTop {
+                // The round view leaves about a twelfth of the width above and below its ring;
+                // that margin is taken back, so the status sits close under the lens.
+                picture.frame(maxWidth: .infinity).frame(minHeight: 120)
+                    .padding(.vertical, -(UIScreen.main.bounds.width * 0.085 - 12))
+            } else {
+                picture
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .frame(minHeight: 120)
+            }
             bottom.layoutPriority(1)
+            if pinsToTop { Spacer(minLength: 0) }
         }
     }
 }

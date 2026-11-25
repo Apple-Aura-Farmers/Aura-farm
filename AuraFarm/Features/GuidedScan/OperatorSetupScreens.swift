@@ -358,6 +358,8 @@ struct OperatorScanRing: View {
     var fraction: Double
     /// Where the guide says to move, in screen axes; nil keeps the arrow pointing up.
     var direction: CGPoint?
+    /// Manual: an empty grey track, not the green ring's minimum.
+    var isEmpty = false
 
     private var badge: String? {
         switch phase {
@@ -379,7 +381,7 @@ struct OperatorScanRing: View {
                 ?? CGPoint(x: proxy.size.width / 2, y: proxy.size.height / 2)
             ZStack {
                 Circle().stroke(.white.opacity(0.15), lineWidth: 12)
-                Circle().trim(from: 0, to: phase == .moving ? max(fraction, 0.03) : 1)
+                Circle().trim(from: 0, to: phase == .moving ? (isEmpty ? 0 : max(fraction, 0.03)) : 1)
                     .stroke(Color.auraGreen, style: StrokeStyle(lineWidth: 12, lineCap: .round))
                     .rotationEffect(.degrees(-90))
                 if let badge {

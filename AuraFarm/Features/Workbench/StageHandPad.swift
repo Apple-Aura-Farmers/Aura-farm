@@ -13,8 +13,6 @@ struct StageHandPad: View {
     /// The lab's "Switch to autonomous" button; nil leaves it out.
     var onSwitchToAutonomous: (() -> Void)?
     @State private var showsDirections = false
-    @State private var showsNote = false
-    @AppStorage("stage.seen100xNote") private var seen100xNote = false
     @AppStorage("stageLab.flipX") private var flipX = false
     @AppStorage("stageLab.flipY") private var flipY = false
 
@@ -44,18 +42,7 @@ struct StageHandPad: View {
         .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 14))
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
-        .onChange(of: flipX, initial: true) { _, value in driver.handFlipX = value }
-        .onChange(of: flipY, initial: true) { _, value in driver.handFlipY = value }
-        .onAppear {
-            if driver.objective == .x100, !seen100xNote { showsNote = true }
-        }
-        .onDisappear { driver.handReleaseAll() }
-        .alert(
-            "Move a little at a time and watch the lens gap. Refocus as you go.",
-            isPresented: $showsNote
-        ) {
-            Button("OK") { seen100xNote = true }
-        }
+        .handPadSupport(driver)
         .sheet(isPresented: $showsDirections) { ArrowDirectionSheet(driver: driver) }
     }
 
@@ -154,20 +141,23 @@ struct StageHandPad: View {
 
 /// One arrow. Press and release both matter, and a touch that is cancelled counts as a
 /// release (the gesture state resets by itself).
-private struct HandArrowButton: View {
+struct HandArrowButton: View {
     let arrow: StageArrow
     let isEnabled: Bool
     let onPress: () -> Void
     let onRelease: () -> Void
+    /// The Scan page's arrows: smaller, green, with a dark arrow.
+    var diameter: CGFloat = 56
+    var isGreen = false
     @GestureState private var isDown = false
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         Image(systemName: symbol)
             .font(.title2.bold())
-            .frame(width: 56, height: 56)
-            .background(isDown ? Color.accentColor : Color.accentColor.opacity(0.6), in: Circle())
-            .foregroundStyle(.white)
+            .frame(width: diameter, height: diameter)
+            .background(fill, in: Circle())
+            .foregroundStyle(isGreen ? Color.black : Color.white)
             // Dimmed, not switched off: a press at a limit still says so, and a touch that
             // is already down is never cancelled by the others being dimmed.
             .opacity(isEnabled ? 1 : 0.35)
@@ -187,6 +177,12 @@ private struct HandArrowButton: View {
             }
     }
 
+    private var fill: Color {
+        isGreen
+            ? Color.auraGreen.opacity(isDown ? 0.7 : 1)
+            : (isDown ? Color.accentColor : Color.accentColor.opacity(0.6))
+    }
+
     private var symbol: String {
         switch arrow {
         case .up: "arrow.up"
@@ -201,6 +197,8 @@ private struct HandArrowButton: View {
 /// lab's.
 struct ArrowDirectionSheet: View {
     let driver: AutoStageDriver
+    /// The Scan page's pad has no step picker of its own: it is here.
+    var showsStep = false
     @Environment(\.dismiss) private var dismiss
     @AppStorage("stageLab.flipX") private var flipX = false
     @AppStorage("stageLab.flipY") private var flipY = false
@@ -208,6 +206,13 @@ struct ArrowDirectionSheet: View {
     var body: some View {
         NavigationStack {
             Form {
+                if showsStep, driver.canFineStep {
+                    Picker("Step size", selection: Bindable(driver).handFine) {
+                        Text("Normal").tag(false)
+                        Text("Fine").tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                }
                 Text("Tap an arrow. If the view moves the wrong way, flip it.")
                 Toggle("Flip left/right", isOn: $flipX)
                 Toggle("Flip up/down", isOn: $flipY)
@@ -222,5 +227,38 @@ struct ArrowDirectionSheet: View {
         .presentationDetents([.medium])
         .onChange(of: flipX) { _, value in driver.handFlipX = value }
         .onChange(of: flipY) { _, value in driver.handFlipY = value }
+    }
+}
+
+/// What every hand pad needs while it is on screen: the saved flips go to the driver, the one-time
+/// 100x note, and every arrow is let go when the pad goes. Shared by the lab's and the Scan page's
+/// pads.
+private struct HandPadSupport: ViewModifier {
+    let driver: AutoStageDriver
+    @State private var showsNote = false
+    @AppStorage("stage.seen100xNote") private var seen100xNote = false
+    @AppStorage("stageLab.flipX") private var flipX = false
+    @AppStorage("stageLab.flipY") private var flipY = false
+
+    func body(content: Content) -> some View {
+        content
+            .onChange(of: flipX, initial: true) { _, value in driver.handFlipX = value }
+            .onChange(of: flipY, initial: true) { _, value in driver.handFlipY = value }
+            .onAppear {
+                if driver.objective == .x100, !seen100xNote { showsNote = true }
+            }
+            .onDisappear { driver.handReleaseAll() }
+            .alert(
+                "Move a little at a time and watch the lens gap. Refocus as you go.",
+                isPresented: $showsNote
+            ) {
+                Button("OK") { seen100xNote = true }
+            }
+    }
+}
+
+extension View {
+    func handPadSupport(_ driver: AutoStageDriver) -> some View {
+        modifier(HandPadSupport(driver: driver))
     }
 }
