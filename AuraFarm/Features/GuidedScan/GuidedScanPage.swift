@@ -492,11 +492,17 @@ struct GuidedScanPage: View {
                 }
             }
             .frame(width: proxy.size.width, height: proxy.size.height)
-            .scaleEffect(zooms ? zoom ?? 1 : 1, anchor: zooms ? round.map {
-                UnitPoint(x: $0.midX / proxy.size.width, y: $0.midY / proxy.size.height)
-            } ?? .center : .center)
-            .offset(x: zooms ? round.map { proxy.size.width / 2 - $0.midX } ?? 0 : 0,
-                    y: zooms ? round.map { proxy.size.height / 2 - $0.midY } ?? 0 : 0)
+            .scaleEffect(
+                zooms ? zoom ?? 1 : 1,
+                anchor: zooms
+                    ? round.map {
+                        UnitPoint(x: $0.midX / proxy.size.width, y: $0.midY / proxy.size.height)
+                    } ?? .center : .center
+            )
+            .offset(
+                x: zooms ? round.map { proxy.size.width / 2 - $0.midX } ?? 0 : 0,
+                y: zooms ? round.map { proxy.size.height / 2 - $0.midY } ?? 0 : 0
+            )
             // Clip after the zoom, so the ring round the view is not cut off.
             .clipShape(Rectangle())
             .contentShape(Rectangle())
@@ -505,7 +511,8 @@ struct GuidedScanPage: View {
         // A nil ratio makes a GeometryReader square, so the full screen asks for the screen's ratio.
         .aspectRatio(
             isFullScreenCamera ? UIScreen.main.bounds.width / UIScreen.main.bounds.height : 1,
-            contentMode: .fit)
+            contentMode: .fit
+        )
         .ignoresSafeArea(isFullScreenCamera ? .all : [])
         .clipped()
         // The same preview layer, filled instead of fitted: no second camera view is made.
@@ -882,25 +889,25 @@ struct GuidedScanPage: View {
             if driver.controlMode == .manual, stage == .stage || stage == .ready {
                 manualCards(driver)
             } else {
-            switch stage {
-            case .stage, .ready:
-                pathCards(driver)
-            default:
-                if status.needsPerson == .disconnected {
-                    StageRunStatusCard(
-                        status: status, isPaused: false,
-                        actions: alertActions(.disconnected, driver), onPause: {}, onResume: {})
+                switch stage {
+                case .stage, .ready:
+                    pathCards(driver)
+                default:
+                    if status.needsPerson == .disconnected {
+                        StageRunStatusCard(
+                            status: status, isPaused: false,
+                            actions: alertActions(.disconnected, driver), onPause: {}, onResume: {})
+                    }
+                    SetupCardView(
+                        sentence: stage.sentence,
+                        notice: stage == .align && model.setupInfo.resumeStep != nil
+                            ? AlignOverlay.lostText : nil,
+                        ticks: stage == .align
+                            ? AlignmentTicks(
+                                reading: model.setupInfo.alignment,
+                                passed: model.setupInfo.isAlignmentPassed) : nil)
+                    acceptFocusButton
                 }
-                SetupCardView(
-                    sentence: stage.sentence,
-                    notice: stage == .align && model.setupInfo.resumeStep != nil
-                        ? AlignOverlay.lostText : nil,
-                    ticks: stage == .align
-                        ? AlignmentTicks(
-                            reading: model.setupInfo.alignment,
-                            passed: model.setupInfo.isAlignmentPassed) : nil)
-                acceptFocusButton
-            }
             }
         }
     }

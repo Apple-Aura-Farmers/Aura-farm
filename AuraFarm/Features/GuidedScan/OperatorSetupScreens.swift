@@ -334,8 +334,14 @@ struct OperatorFocusScreen: View {
 
 #Preview("Gauge pills") {
     VStack(spacing: 16) {
-        FocusPill(gauge: .init(reading: nil, dial: .init(offset: -0.4, side: .approaching, greenHalfWidth: 0.1, isGreen: false, isWrongWay: false, message: "")))
-        FocusPill(gauge: .init(reading: .init(state: .passedPeak, current: 1, peak: 1, level: 0.8), dial: nil))
+        FocusPill(
+            gauge: .init(
+                reading: nil,
+                dial: .init(
+                    offset: -0.4, side: .approaching, greenHalfWidth: 0.1, isGreen: false, isWrongWay: false,
+                    message: "")))
+        FocusPill(
+            gauge: .init(reading: .init(state: .passedPeak, current: 1, peak: 1, level: 0.8), dial: nil))
         FocusPill(gauge: .init(reading: .init(state: .focused, current: 1, peak: 1, level: 1), dial: nil))
         FocusTickBar(offset: -0.4).padding(.horizontal, 36)
         FocusKnobIntro()
@@ -377,7 +383,8 @@ struct OperatorScanRing: View {
     var body: some View {
         GeometryReader { proxy in
             let side = circle.map { $0.width + 6 } ?? min(proxy.size.width, proxy.size.height) * 0.83
-            let middle = circle.map { CGPoint(x: $0.midX, y: $0.midY) }
+            let middle =
+                circle.map { CGPoint(x: $0.midX, y: $0.midY) }
                 ?? CGPoint(x: proxy.size.width / 2, y: proxy.size.height / 2)
             ZStack {
                 Circle().stroke(.white.opacity(0.15), lineWidth: 12)
@@ -442,7 +449,9 @@ struct OperatorLoadingScreen: View {
                 Text("Loading..").font(.callout).foregroundStyle(Color.auraGreen)
             }
         }
-        .onAppear { withAnimation(.linear(duration: 0.6).repeatForever(autoreverses: false)) { spins = true } }
+        .onAppear {
+            withAnimation(.linear(duration: 0.6).repeatForever(autoreverses: false)) { spins = true }
+        }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Loading results")
     }

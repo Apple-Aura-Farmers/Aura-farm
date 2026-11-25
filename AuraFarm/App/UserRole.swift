@@ -30,7 +30,7 @@ enum UserRole: String, CaseIterable, Identifiable {
         switch self {
         case .fieldHelper:
             return
-                "collect farm data, receive scientific test results and generate actionable recommendations through AI analysis."
+                "collect farm data, receive scientific test results and generate actionable recommendations through AI."
         case .microscopeOperator:
             return
                 "observe soil biodiversity through your microscope, with AI-powered identification and analysis."
