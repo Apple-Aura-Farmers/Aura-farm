@@ -20,6 +20,7 @@ final class AutoStageStatusTests: XCTestCase {
             .warmingUp(index: 2, count: 3, title: "3×3 grid"),
             .calibrating(axis: .x, travel: 0.4), .calibrated(summary: "ok"), .readyToStart,
             .following, .waitingForEdgeAnswer, .atLimit(.y), .walkingBack(x: 40, y: 50),
+            .choosingPath, .preparingManual,
             .crossingEmpty(fields: 1.2), .emptyCapReached(fields: 2), .presetPath(column: 0, spot: 0),
             .presetPath(column: 3, spot: 2), .paused, .failed("Servo X barely moved"),
         ]
@@ -119,5 +120,23 @@ final class AutoStageStatusTests: XCTestCase {
         XCTAssertEqual(
             GuidedScanSetupStage.stage.indicator(automatedStage: false),
             GuidedScanSetupStage.stage.indicator)
+    }
+
+    func testTheHandPhasesHaveTitlesAndNoAlert() {
+        let phases: [AutoStageDriver.Phase] = [
+            .byHand, .returningFromHand(x: 90, y: 100), .checkingFocus,
+        ]
+        for phase in phases {
+            let result = status(phase, focusPaused: true)
+            XCTAssertFalse(result.title.isEmpty, "\(phase)")
+            XCTAssertNil(result.needsPerson, "\(phase)")
+        }
+        XCTAssertEqual(status(.checkingFocus).title, "Back in place, checking focus")
+    }
+
+    func testTheNewPhasesHaveTitles() {
+        XCTAssertEqual(status(.choosingPath).title, "Choose the path")
+        XCTAssertEqual(status(.preparingManual).title, "Getting the stage ready")
+        XCTAssertNil(status(.choosingPath).needsPerson)
     }
 }

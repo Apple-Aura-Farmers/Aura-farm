@@ -336,4 +336,165 @@ final class StageZigzagTests: XCTestCase {
         _ = simulate(&zigzag, angles: &angles, edge: { column, dwell, _ in column == 3 && dwell == 1 })
         XCTAssertEqual(zigzag.progress.fraction, 1)
     }
+
+    // MARK: Limits
+
+    private func moveAngles(_ actions: [StageZigzagAction]) -> [(servo: StageAxis, angle: Int)] {
+        actions.compactMap {
+            if case .moveTo(let servo, let angle) = $0 { return (servo, angle) }
+            return nil
+        }
+    }
+
+    func testAFullPathInsideNarrowerLimitsFinishesAndNeverAsksBeyondThem() throws {
+        var zigzag = try makeZigzag(mapping(), chunk: 3)
+        zigzag.limits = StageLimits(xMin: 40, xMax: 140, yMin: 30, yMax: 150)
+        var angles = (x: 90, y: 90)
+        let actions = simulate(&zigzag, angles: &angles)
+        guard case .finished? = actions.last else { return XCTFail("did not finish") }
+        let moves = moveAngles(actions)
+        XCTAssertFalse(moves.isEmpty)
+        for move in moves {
+            let range = zigzag.limits.range(of: move.servo)
+            XCTAssertTrue(range.contains(move.angle), "\(move.servo) \(move.angle)")
+        }
+    }
+
+    func testLimitsNarrowedInTheMiddleOfALegEndTheLegInsteadOfHanging() throws {
+        var zigzag = try makeZigzag(mapping(), chunk: 3)
+        var angles = (x: 90, y: 90)
+        var event: StageZigzagEvent?
+        var legMoves = 0
+        var narrowedAt: Int?
+        var afterNarrowing: [StageZigzagAction] = []
+        for _ in 0..<5_000 {
+            guard let action = zigzag.next(angles: angles, event: event, tracked: nil) else {
+                return XCTFail("stuck")
+            }
+            event = nil
+            if narrowedAt != nil { afterNarrowing.append(action) }
+            switch action {
+            case .moveTo(let servo, let angle):
+                let current = servo == .x ? angles.x : angles.y
+                if servo == zigzag.plan.legServo, zigzag.column == 1 {
+                    legMoves += 1
+                }
+                if legMoves == 4, narrowedAt == nil {
+                    // The board refuses this move: the range ends where the servo is.
+                    narrowedAt = legMoves
+                    let rising = angle > current
+                    if servo == .x {
+                        zigzag.limits = rising ? StageLimits(xMin: 0, xMax: current) : StageLimits(xMin: current, xMax: 180)
+                    } else {
+                        zigzag.limits = rising ? StageLimits(yMin: 0, yMax: current) : StageLimits(yMin: current, yMax: 180)
+                    }
+                } else if servo == .x {
+                    angles.x = angle
+                } else {
+                    angles.y = angle
+                }
+                event = .settled
+            case .dwell: event = .dwellDone
+            case .finished: return XCTFail("finished before the narrowing took effect")
+            default: break
+            }
+            if afterNarrowing.contains(where: { if case .columnEnded(1) = $0 { true } else { false } }) {
+                break
+            }
+        }
+        XCTAssertNotNil(narrowedAt)
+        let leg = zigzag.plan.legServo
+        XCTAssertTrue(
+            afterNarrowing.contains { if case .columnEnded(1) = $0 { true } else { false } },
+            "the leg ended instead of hanging")
+        XCTAssertFalse(
+            moveAngles(afterNarrowing).contains {
+                $0.servo == leg && !zigzag.limits.range(of: leg).contains($0.angle)
+            })
+    }
+
+    func testDefaultLimitsRunTheWholeTurn() throws {
+        var zigzag = try makeZigzag(mapping(), chunk: 3)
+        var angles = (x: 90, y: 90)
+        let moves = moveAngles(simulate(&zigzag, angles: &angles))
+        XCTAssertTrue(moves.contains { $0.angle == 0 })
+        XCTAssertTrue(moves.contains { $0.angle == 180 })
+    }
+
+    // MARK: Without calibration
+
+    func testThePlanWithoutCalibrationHasFixedRolesAndTheArrowsDirections() {
+        for (flipX, flipY) in [(false, false), (true, false), (false, true), (true, true)] {
+            let plan = StageZigzagPlan(objective: .x100, flipX: flipX, flipY: flipY)
+            XCTAssertEqual(plan.legServo, .y)
+            XCTAssertEqual(plan.stepServo, .x)
+            XCTAssertFalse(plan.rolesSwapped)
+            // Up is more Y degrees unless flipped: the top is the high end.
+            XCTAssertEqual(plan.legStartsHigh, !flipY, "flipY \(flipY)")
+            // Left is fewer X degrees unless flipped: the left is the low end.
+            XCTAssertEqual(plan.stepStartsHigh, flipX, "flipX \(flipX)")
+        }
+        XCTAssertEqual(StageObjective.x100.nominalFieldsPerDegree, 0.075)
+        XCTAssertEqual(StageObjective.x40.nominalFieldsPerDegree, 0.03)
+        let plan = StageZigzagPlan(objective: .x40, flipX: false, flipY: false)
+        XCTAssertEqual(plan.legFieldsPerDegree, 0.03)
+        XCTAssertEqual(plan.stepFieldsPerDegree, 0.03)
+    }
+
+    private func uncalibrated(chunk: Int = 3) -> StageZigzag {
+        StageZigzag(
+            plan: StageZigzagPlan(objective: .x100, flipX: false, flipY: false),
+            chunkDegrees: chunk, dwellSeconds: 1)
+    }
+
+    func testAnUncalibratedPathFinishesInsideTheRangeAndNeverSwaps() {
+        for limits in [StageLimits(), StageLimits(xMin: 40, xMax: 140, yMin: 30, yMax: 150)] {
+            var zigzag = uncalibrated()
+            zigzag.limits = limits
+            var angles = (x: 90, y: 90)
+            let actions = simulate(&zigzag, angles: &angles)
+            guard case .finished? = actions.last else { return XCTFail("did not finish") }
+            XCTAssertFalse(actions.contains { if case .swapped = $0 { true } else { false } })
+            XCTAssertEqual(zigzag.plan.legServo, .y, "the roles stay")
+            for move in moveAngles(actions) {
+                XCTAssertTrue(limits.range(of: move.servo).contains(move.angle), "\(move)")
+            }
+            XCTAssertTrue(
+                moveAngles(actions).filter { $0.servo == .y }.count
+                    > moveAngles(actions).filter { $0.servo == .x }.count,
+                "Y walks the columns")
+        }
+    }
+
+    func testTheStartCornerAgreesWithTheArrows() {
+        // Not flipped: the top left is high Y, low X.
+        var zigzag = uncalibrated()
+        var angles = (x: 90, y: 90)
+        // Stops where column 1 is about to start: the start corner.
+        _ = simulate(&zigzag, angles: &angles, stopAfterColumn: 0)
+        XCTAssertEqual(angles.y, 180)
+        XCTAssertEqual(angles.x, 0)
+    }
+
+    func testStopSpacingFromAFallbackAndFromATrackedPosition() {
+        func firstStops(picture: @escaping ((x: Int, y: Int)) -> CGPoint?) -> [Int] {
+            var zigzag = uncalibrated()
+            var angles = (x: 90, y: 90)
+            var stops: [Int] = []
+            _ = simulate(
+                &zigzag, angles: &angles,
+                edge: { column, _, leg in
+                    if column == 1 { stops.append(leg) }
+                    return false
+                }, picture: picture, stopAfterColumn: 1)
+            return stops
+        }
+        // Without tracking: every 11 degrees (0.8 field at 0.075 per degree), in steps of 3.
+        let fallback = firstStops { _ in nil }
+        XCTAssertGreaterThan(fallback.count, 3)
+        for (a, b) in zip(fallback, fallback.dropFirst()).prefix(5) { XCTAssertEqual(abs(a - b), 12) }
+        // With tracking: every 0.8 field of picture travel.
+        let tracked = firstStops { CGPoint(x: 0, y: Double($0.y) * 0.075) }
+        for (a, b) in zip(tracked, tracked.dropFirst()).prefix(5) { XCTAssertEqual(abs(a - b), 12) }
+    }
 }

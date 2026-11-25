@@ -11,6 +11,8 @@ import SwiftUI
 /// fills in the sample's name, location and plot, so none of them are typed.
 struct FarmChoiceList: View {
     @Binding var details: SampleDetails
+    /// Offers "No farm" first, for the operator's own sample.
+    var allowsNoFarm = false
 
     @Environment(FarmStore.self) private var store
     @Environment(\.dismiss) private var dismiss
@@ -20,8 +22,47 @@ struct FarmChoiceList: View {
     @State private var chosen = false
 
     var body: some View {
-        Group {
-            if store.farms.isEmpty {
+        List {
+            if allowsNoFarm {
+                Button {
+                    details.useNoFarm()
+                    dismiss()
+                } label: {
+                    HStack {
+                        Text("No farm").font(.headline)
+                        Spacer()
+                        if details.farmID == nil {
+                            Image(systemName: "checkmark")
+                                .font(.body.weight(.semibold))
+                                .foregroundStyle(.tint)
+                                .accessibilityLabel("Chosen")
+                        }
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+            ForEach(matching) { farm in
+                // A farm with several plots asks which one the soil came from.
+                if farm.plots.count > 1 {
+                    NavigationLink {
+                        PlotChoiceList(farm: farm, details: $details) { chosen = true }
+                    } label: {
+                        row(for: farm)
+                    }
+                } else {
+                    Button {
+                        choose(farm.plots.first, of: farm)
+                    } label: {
+                        row(for: farm)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .searchable(text: $search, prompt: "Search farms")
+        .overlay {
+            if store.farms.isEmpty && !allowsNoFarm {
                 ContentUnavailableView(
                     "No farms yet",
                     systemImage: "leaf",
@@ -29,28 +70,8 @@ struct FarmChoiceList: View {
                         "Farms are added on the Field Helper side. Once one has been added, it shows up here."
                     )
                 )
-            } else {
-                List(matching) { farm in
-                    // A farm with several plots asks which one the soil came from.
-                    if farm.plots.count > 1 {
-                        NavigationLink {
-                            PlotChoiceList(farm: farm, details: $details) { chosen = true }
-                        } label: {
-                            row(for: farm)
-                        }
-                    } else {
-                        Button {
-                            choose(farm.plots.first, of: farm)
-                        } label: {
-                            row(for: farm)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .searchable(text: $search, prompt: "Search farms")
-                .overlay {
-                    if matching.isEmpty { ContentUnavailableView.search(text: search) }
-                }
+            } else if !search.isEmpty && matching.isEmpty {
+                ContentUnavailableView.search(text: search)
             }
         }
         .navigationTitle("Choose a farm")

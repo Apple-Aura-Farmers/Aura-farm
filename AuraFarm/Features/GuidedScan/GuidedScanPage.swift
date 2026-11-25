@@ -34,7 +34,14 @@ struct GuidedScanPage: View {
     @State private var objective = StageObjective.x40
     @State private var driver: AutoStageDriver?
     @State private var stageConnected = false
-    @State private var pathChoice = StagePathMode.followGuide
+    @State private var pathChoice = StagePathMode.presetPath
+    /// A calibration failure being told to the person (shown once per failure).
+    @State private var failureKind: AutoStageDriver.CalibrationFailureKind?
+    @State private var alertedFailures = 0
+    /// Autonomous or manual with the Terraloka Stage; Autonomous every time the page opens.
+    @State private var controlChoice = StageControlMode.autonomous
+    @State private var isConfirmingSwitch = false
+    @State private var isConfirmingLook = false
     /// The operator pressed Start Aligning on the first screen after choosing the stage.
     @State private var startedAligning = false
     /// Continue was pressed on the alignment instructions; the live alignment screen follows.
@@ -48,26 +55,29 @@ struct GuidedScanPage: View {
     @AppStorage("guidedScan.recordLensVideo") private var recordsVideo = true
 
     var body: some View {
-        scanBody
-            .overlay { operatorScreen.ignoresSafeArea() }
-            // The run is done: a moment of loading, then the page saves and the results open.
-            .overlay {
-                if hasStarted, model.runControl.isFinished {
-                    OperatorLoadingScreen().ignoresSafeArea().transition(.opacity)
-                }
-            }
-            .animation(.easeOut(duration: 0.3), value: model.runControl.isFinished)
-            #if DEBUG
-                .overlay(alignment: .topTrailing) {
-                    if showsOperatorScreen { debugMenu }
-                }
-            #endif
-            .navigationTitle(showsOperatorScreen ? "" : "Guided scan")
-            .navigationBarTitleDisplayMode(.inline)
-            .navigationBarBackButtonHidden(true)
-            .toolbarBackground(showsOperatorScreen ? .hidden : .automatic, for: .navigationBar)
+        dressedBody
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { closeButton }
+            }
+            .confirmationDialog(
+                "Leave this look?", isPresented: $isConfirmingLook, titleVisibility: .visible
+            ) {
+                Button("Leave", role: .destructive) { closeStage { dismiss() } }
+                Button("Stay", role: .cancel) {}
+            } message: {
+                Text("Nothing is saved.")
+            }
+            .confirmationDialog(
+                "Switch to autonomous?", isPresented: $isConfirmingSwitch, titleVisibility: .visible
+            ) {
+                Button("Switch") { driver?.switchToAutonomous(nil) }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text(
+                    driver?.isCalibrated == true
+                        ? "You then choose the path and start."
+                        : "The stage goes to its centre, warms up and calibrates. You then choose the path and start."
+                )
             }
             .confirmationDialog(
                 "Stop this scan?", isPresented: $isConfirmingLeave, titleVisibility: .visible
@@ -85,7 +95,9 @@ struct GuidedScanPage: View {
                 LabSettingsSync(
                     model: model,
                     transform: {
-                        $0.forGuidedScan(coverage: coverage.rawValue, recordsVideo: recordsVideo)
+                        $0.forGuidedScan(
+                            coverage: coverage.rawValue,
+                            recordsVideo: recordsVideo && !isManualSession)
                     },
                     onReady: {
                         // Align and focus wait for a Confirm tap, like the field review.
@@ -104,6 +116,43 @@ struct GuidedScanPage: View {
                 model.setFinishesOnlyOnRequest(false)
                 driver?.deactivate()
             }
+            .onChange(of: isConfirmingSwitch || isConfirmingLook || isConfirmingLeave) { _, open in
+                if open { driver?.handReleaseAll() }
+            }
+            .onChange(of: isManualSession) { _, manual in
+                // A manual look saves nothing: the recording so far goes, and a later
+                // autonomous run records afresh (the settings sync starts it).
+                if manual, !hasStarted { model.discardLensVideo() }
+            }
+            .onChange(of: driver?.calibrationFailureCount) { _, count in
+                guard let driver, let count, count > alertedFailures, case .failed = driver.phase
+                else { return }
+                alertedFailures = count
+                failureKind = driver.lastCalibrationFailure
+                model.logEvent(
+                    "calibration_failed_popup",
+                    detail: failureKind == .board ? "board" : "tracking")
+            }
+            .alert(
+                "Calibration didn't work",
+                isPresented: Binding(
+                    get: { failureKind != nil }, set: { if !$0 { failureKind = nil } }),
+                presenting: failureKind
+            ) { kind in
+                if kind == .tracking {
+                    Button("Use preset moves") {
+                        logPopup(kind, "use_preset_moves")
+                        usePresetMoves()
+                    }
+                }
+                Button("Try again") {
+                    logPopup(kind, "try_again")
+                    driver?.retryCalibration()
+                }
+                Button("Cancel", role: .cancel) { logPopup(kind, "cancel") }
+            } message: { kind in
+                Text(failureMessage(kind))
+            }
             .onChange(of: driver?.client.status) { _, status in
                 guard status == .connected, !stageConnected else { return }
                 stageConnected = true
@@ -116,6 +165,29 @@ struct GuidedScanPage: View {
                 guard phase == .background, let driver else { return }
                 if hasStarted || driver.client.status == .connected { driver.pause() }
             }
+    }
+
+    /// The scan with the operator's screens over it. Apart from `body`, whose chain is long
+    /// enough for the compiler already.
+    private var dressedBody: some View {
+        scanBody
+            .overlay { operatorScreen.ignoresSafeArea() }
+            // The run is done: a moment of loading, then the page saves and the results open.
+            .overlay {
+                if hasStarted, model.runControl.isFinished {
+                    OperatorLoadingScreen().ignoresSafeArea().transition(.opacity)
+                }
+            }
+            .animation(.easeOut(duration: 0.3), value: model.runControl.isFinished)
+            #if DEBUG
+                .overlay(alignment: .topTrailing) {
+                    if showsOperatorScreen { debugMenu }
+                }
+            #endif
+            .navigationTitle(showsOperatorScreen ? "" : "Guided scan")
+            .navigationBarTitleDisplayMode(.inline)
+            .navigationBarBackButtonHidden(true)
+            .toolbarBackground(showsOperatorScreen ? .hidden : .automatic, for: .navigationBar)
     }
 
     #if DEBUG
@@ -148,6 +220,8 @@ struct GuidedScanPage: View {
         Button("Close", systemImage: "xmark") {
             if hasStarted {
                 isConfirmingLeave = true
+            } else if isManualSession {
+                isConfirmingLook = true
             } else {
                 // Before Start scan too: END clears a warm-up path the stage
                 // still holds and sends it home.
@@ -178,13 +252,21 @@ struct GuidedScanPage: View {
                         .task(id: model.setupInfo.isAlignmentPassed) {
                             guard model.setupInfo.isAlignmentPassed else { return }
                             try? await Task.sleep(for: .seconds(1))
+                            // Lost again before the moment was up: nothing to confirm.
+                            guard !Task.isCancelled else { return }
                             model.confirmSetupStep()
                         }
                 } else {
                     OperatorFocusScreen(model: model)
+                        // The person can always say it is sharp; hidden once the checks agree.
+                        .overlay(alignment: .bottom) {
+                            acceptFocusButton.padding(.horizontal).padding(.bottom, 40)
+                        }
                         .task(id: model.setupInfo.focus?.state == .focused) {
                             guard model.setupInfo.focus?.state == .focused else { return }
                             try? await Task.sleep(for: .seconds(1.5))
+                            // Lost again before the moment was up: nothing to confirm.
+                            guard !Task.isCancelled else { return }
                             model.confirmSetupStep()
                         }
                 }
@@ -199,14 +281,20 @@ struct GuidedScanPage: View {
     /// Top to bottom, nothing overlapping: the top bar, the picture (it shrinks first), the speed
     /// bar, and the instruction card in space of its own that nothing is drawn over.
     private var scanBody: some View {
-        ScanLayoutView {
-            // Above the picture for touches too, whatever the picture does. The operator
-            // screens draw their own chrome over the picture.
-            if !showsOperatorScreen { topLine.zIndex(1) }
-        } picture: {
-            picture
-        } bottom: {
-            if !showsOperatorScreen { bottom }
+        Group {
+            if stageMode == .undecided {
+                choicePage
+            } else {
+                ScanLayoutView {
+                    // Above the picture for touches too, whatever the picture does. The operator
+                    // screens draw their own chrome over the picture.
+                    if !showsOperatorScreen { topLine.zIndex(1) }
+                } picture: {
+                    picture
+                } bottom: {
+                    if !showsOperatorScreen { bottom }
+                }
+            }
         }
         // The Field Helper's warm glow while scanning, kept dark like the rest of the page.
         .background {
@@ -227,6 +315,23 @@ struct GuidedScanPage: View {
             guard let record else { return }
             save(record)
         }
+    }
+
+    /// "How will the slide move?": a page of its own, without the camera picture.
+    private var choicePage: some View {
+        ScrollView {
+            VStack(spacing: 10) {
+                if let problem = cameraProblem {
+                    Text(problem).font(.subheadline).foregroundStyle(.red)
+                }
+                StageModeChoiceView(
+                    selection: $modeChoice, objective: $objective, control: $controlChoice,
+                    onContinue: continueFromChoice)
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 8)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     /// Setup: "Step 2 of 4: Find the eyepiece" and More. The scan: the organism total, "Column 3 of
@@ -399,16 +504,15 @@ struct GuidedScanPage: View {
             case .ready:
                 if !hasStarted { darkOutside(info, converter, isCentred) }
                 GuideGeometryHost(model: model, previewLayer: previewLayer, display: display)
+                // The eye button, or the organisms seen while steering by hand (not counted).
+                if showsDetections || model.handHold == .on {
+                    LiveDetectionBoxes(model: model, converter: converter)
+                }
                 if hasStarted {
-                    if showsDetections {
-                        LiveDetectionBoxes(model: model, converter: converter)
-                    }
-                    // The ring and its arrow (below) are the guide here, so the lab's cross, rings
-                    // and edge line only show with the eye on.
-                    if showsDetections {
-                        LiveGuideOverlay(
-                            state: model.overlayState, plain: true,
-                            hidesMark: session.display?.questionID != nil)
+                    // The ring and its arrow (below) are the guide here, not the lab's cross and
+                    // rings. The edge line shows only while the card asks about it; the eye is
+                    // for the organisms alone.
+                    if !isTerraloka, session.display?.questionID != nil {
                         EdgeLineOverlay(state: model.edgeLineState, mapper: converter)
                     }
                     PausedOverlay(
@@ -416,7 +520,8 @@ struct GuidedScanPage: View {
                         onResumeAnyway: nil)
                     OperatorScanRing(
                         circle: learnedRect(info, converter), phase: scanPhase, showsArrow: !isTerraloka,
-                        fraction: columnProgress.map { Double($0.done) / Double($0.total) } ?? 0,
+                        fraction: stageProgress?.fraction
+                            ?? columnProgress.map { Double($0.done) / Double($0.total) } ?? 0,
                         direction: model.overlayState.model?.arrowDirection)
                 }
             }
@@ -487,8 +592,7 @@ struct GuidedScanPage: View {
             }
             switch stageMode {
             case .undecided:
-                StageModeChoiceView(
-                    selection: $modeChoice, objective: $objective, onContinue: continueFromChoice)
+                EmptyView()  // a page of its own: `choicePage`
             case .terraloka where !stageConnected:
                 StageConnectingCard(
                     client: driver?.client.status ?? .idle,
@@ -513,11 +617,21 @@ struct GuidedScanPage: View {
                     ? AlignmentTicks(
                         reading: model.setupInfo.alignment,
                         passed: model.setupInfo.isAlignmentPassed) : nil)
+            acceptFocusButton
             if stage == .ready {
                 CoverageChoiceView(coverage: $coverage)
                 recordVideoToggle
                 bigButton("Start scan", action: startScan)
             }
+        }
+    }
+
+    /// The person can always say it is sharp: the checks cannot judge every sample. Hidden once
+    /// the checks agree and ask by themselves.
+    @ViewBuilder
+    private var acceptFocusButton: some View {
+        if stage == .focus, model.setupInfo.focus?.state != .focused {
+            bigButton("It's sharp, continue", isProminent: false) { model.acceptFocus() }
         }
     }
 
@@ -533,29 +647,162 @@ struct GuidedScanPage: View {
     private func calibrationCard(_ driver: AutoStageDriver) -> some View {
         StageCalibrationCard(
             status: driver.status, isPaused: driver.phase == .paused,
-            onRetry: { driver.recalibrate() }, onResume: { driver.resume() },
-            onFocused: { driver.focusIsSharp() })
+            onRetry: { driver.retryCalibration() }, onResume: { driver.resume() },
+            onFocused: { driver.focusIsSharp() },
+            onBackToManual: driver.canBackToManual ? { driver.backToManual() } : nil,
+            onUsePreset: driver.lastCalibrationFailure == .tracking
+                ? { usePresetMoves() } : nil)
+    }
+
+    private func logPopup(_ kind: AutoStageDriver.CalibrationFailureKind, _ button: String) {
+        model.logEvent(
+            "calibration_failed_popup",
+            detail: "\(kind == .board ? "board" : "tracking"): \(button)")
+    }
+
+    private func failureMessage(_ kind: AutoStageDriver.CalibrationFailureKind) -> String {
+        switch kind {
+        case .tracking:
+            "There is too little sample in view for the camera to track the movement reliably. Preset moves don't need calibration, so you can use them instead."
+        case .board:
+            if case .failed(let reason)? = driver?.phase { reason } else { "The stage did not answer." }
+        }
+    }
+
+    /// Calibration did not work: preset moves instead. The board is made ready; nothing moves.
+    private func usePresetMoves() {
+        pathChoice = .presetPath
+        driver?.choosePath(.presetPath)
+    }
+
+    /// The path card follows what is chosen: preset moves prepare the board at once; Follow the
+    /// guide waits for its button, unless it is measured already.
+    private func syncPathChoice(_ driver: AutoStageDriver) {
+        guard driver.canChoosePath else { return }
+        switch pathChoice {
+        case .presetPath:
+            if driver.pathMode != .presetPath || driver.phase == .choosingPath {
+                driver.choosePath(.presetPath)
+            }
+        case .followGuide:
+            if driver.isCalibrated, driver.pathMode != .followGuide || driver.phase == .choosingPath {
+                driver.choosePath(.followGuide)
+            }
+        }
+    }
+
+    /// Step 4 in an autonomous test: the path first; calibration only if Follow the guide asks.
+    @ViewBuilder
+    private func pathCards(_ driver: AutoStageDriver) -> some View {
+        switch driver.phase {
+        case .choosingPath, .readyToStart, .calibrated, .preparingManual, .waitingForStageStep:
+            pathCard(driver)
+        case .paused where driver.manualProblem != nil:
+            pathCard(driver)
+        default:
+            calibrationCard(driver)
+        }
+    }
+
+    private func pathCard(_ driver: AutoStageDriver) -> some View {
+        let isConnected = driver.client.status == .connected
+        return VStack(spacing: 10) {
+            StagePathChoiceView(pathMode: $pathChoice, coverage: $coverage, objective: objective)
+            if driver.phase == .preparingManual {
+                Text("Getting the stage ready…").font(.subheadline).foregroundStyle(.secondary)
+            }
+            switch driver.manualProblem {
+            case .oldPath?:
+                Text("The stage still holds an old path. Go to centre clears it.")
+                    .font(.subheadline)
+                bigButton("Go to centre") { driver.goToCentre() }
+            case .noAnswer?:
+                Text("The stage did not answer").font(.subheadline)
+                bigButton("Retry") { driver.resume() }
+            case nil:
+                EmptyView()
+            }
+            recordVideoToggle
+            if pathChoice == .followGuide, !driver.isCalibrated {
+                bigButton(
+                    "Calibrate and continue",
+                    isEnabled: isConnected && driver.phase != .preparingManual
+                ) { driver.choosePath(.followGuide) }
+            } else {
+                bigButton(
+                    "Start scan", isEnabled: isConnected && driver.phase == .readyToStart,
+                    action: startScan)
+            }
+            if !isConnected {
+                Text("Waiting for the stage to reconnect…")
+                    .font(.subheadline).foregroundStyle(.secondary)
+            }
+            if driver.canBackToManual {
+                bigButton("Back to manual", isProminent: false) { driver.backToManual() }
+            }
+        }
+        .onChange(of: pathChoice) { syncPathChoice(driver) }
+        .onChange(of: driver.phase, initial: true) { syncPathChoice(driver) }
+    }
+
+    /// A manual session: look only. The pad, and the ways to carry on or switch.
+    @ViewBuilder
+    private func manualCards(_ driver: AutoStageDriver) -> some View {
+        switch driver.phase {
+        case .byHand:
+            StageHandPad(driver: driver, isCompact: true)
+            manualFooter(driver)
+        case .paused:
+            VStack(alignment: .leading, spacing: 10) {
+                if let notice = driver.restartNotice {
+                    Text(notice).font(.subheadline)
+                }
+                switch driver.manualProblem {
+                case .oldPath?:
+                    Text("The stage still holds an old path. Go to centre clears it.")
+                        .font(.subheadline)
+                    bigButton("Go to centre") { driver.goToCentre() }
+                case .noAnswer?:
+                    Text("The stage did not answer").font(.subheadline)
+                    bigButton("Retry") { driver.continueManually() }
+                case nil:
+                    bigButton("Continue") { driver.continueManually() }
+                }
+                bigButton("Switch to autonomous", isProminent: false) { isConfirmingSwitch = true }
+                    .disabled(!driver.canSwitchToAutonomous)
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.black.opacity(0.78), in: RoundedRectangle(cornerRadius: 20))
+        case .disconnected:
+            StageRunStatusCard(
+                status: driver.status, isPaused: false,
+                actions: alertActions(.disconnected, driver), onPause: {}, onResume: {})
+        default:
+            StageCalibrationCard(
+                status: AutoStageStatus(title: "Getting the stage ready…"), onRetry: {})
+        }
+    }
+
+    private func manualFooter(_ driver: AutoStageDriver) -> some View {
+        VStack(spacing: 8) {
+            Text("Look only. Nothing is saved.").font(.subheadline).foregroundStyle(.secondary)
+            bigButton("Switch to autonomous", isProminent: false, isEnabled: driver.canSwitchToAutonomous) {
+                isConfirmingSwitch = true
+            }
+        }
     }
 
     @ViewBuilder
     private var terralokaSetupCards: some View {
         if let driver {
             let status = driver.status
+            if driver.controlMode == .manual, stage == .stage || stage == .ready {
+                manualCards(driver)
+            } else {
             switch stage {
-            case .stage:
-                calibrationCard(driver)
-            case .ready where !driver.isCalibrated:
-                // "Skip setup" jumps over the stage step: the stage measures itself here.
-                calibrationCard(driver)
-            case .ready:
-                StagePathChoiceView(pathMode: $pathChoice, coverage: $coverage, objective: objective)
-                recordVideoToggle
-                let isConnected = driver.client.status == .connected
-                bigButton("Start scan", isEnabled: isConnected, action: startScan)
-                if !isConnected {
-                    Text("Waiting for the stage to reconnect…")
-                        .font(.subheadline).foregroundStyle(.secondary)
-                }
+            case .stage, .ready:
+                pathCards(driver)
             default:
                 if status.needsPerson == .disconnected {
                     StageRunStatusCard(
@@ -570,6 +817,8 @@ struct GuidedScanPage: View {
                         ? AlignmentTicks(
                             reading: model.setupInfo.alignment,
                             passed: model.setupInfo.isAlignmentPassed) : nil)
+                acceptFocusButton
+            }
             }
         }
     }
@@ -581,7 +830,29 @@ struct GuidedScanPage: View {
         return false
     }
 
-    /// The Fixed sweep: the stage's own columns, not the guide's.
+    /// Step 4 of an autonomous test before any calibration really runs.
+    private var isChoosingPath: Bool {
+        guard let driver, driver.controlMode == .autonomous, stage == .stage || stage == .ready
+        else { return false }
+        switch driver.phase {
+        case .warmingUp, .calibrating, .failed, .waitingForFocus: return false
+        default: return true
+        }
+    }
+
+    /// A look with the Terraloka Stage's arrows: nothing is counted and nothing is saved.
+    private var isManualSession: Bool { isTerraloka && driver?.controlMode == .manual }
+
+    /// The stage is steered by hand, coming back, or a saved position waits.
+    private var isAwayFromPath: Bool {
+        guard let driver else { return false }
+        switch driver.phase {
+        case .byHand, .returningFromHand, .checkingFocus: return true
+        default: return driver.handSaved != nil
+        }
+    }
+
+    /// The preset moves: the stage's own columns, not the guide's.
     private var isFixedSweep: Bool { isTerraloka && driver?.pathMode == .presetPath }
 
     /// No setup step advances until a mode is chosen and, for the stage, it is connected.
@@ -597,6 +868,8 @@ struct GuidedScanPage: View {
         switch stageMode {
         case .undecided: "Start"
         case .terraloka where !stageConnected: "Connecting"
+        case .terraloka where isManualSession && (stage == .stage || stage == .ready): "Manual"
+        case .terraloka where isChoosingPath: "Step 4 of \(GuidedScanSetupStage.stepCount): Choose the path"
         default: stage.indicator(automatedStage: isTerraloka)
         }
     }
@@ -619,6 +892,7 @@ struct GuidedScanPage: View {
             lastObjectiveName = objective.rawValue
             coverage = GuidedScanCoverage.recommended(for: objective)
             let stageDriver = AutoStageDriver(engine: model)
+            stageDriver.controlMode = controlChoice
             stageDriver.objective = objective
             stageDriver.chunkDegrees = objective.defaultChunk
             stageDriver.requiresRunStart = true
@@ -631,7 +905,8 @@ struct GuidedScanPage: View {
             driver = stageDriver
             stageConnected = false
             stageMode = .terraloka(objective)
-            model.logEvent("stage_choice", detail: "terraloka")
+            model.logEvent(
+                "stage_choice", detail: controlChoice == .manual ? "terraloka_manual" : "terraloka")
         case nil: break
         }
     }
@@ -682,12 +957,14 @@ struct GuidedScanPage: View {
     }
 
     private func bigButton(
-        _ title: String, isEnabled: Bool = true, action: @escaping () -> Void
+        _ title: String, isProminent: Bool = true, isEnabled: Bool = true,
+        action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
             Text(title).font(.title2.bold()).frame(maxWidth: .infinity, minHeight: 56)
         }
         .buttonStyle(.borderedProminent)
+        .tint(isProminent ? nil : .gray)
         .disabled(!isEnabled)
     }
 
@@ -704,10 +981,11 @@ struct GuidedScanPage: View {
     /// Begins the scan: logging is on for every guided scan (the movement CSV and the run
     /// record), then Mark start, as the lab's buttons do.
     private func startScan() {
+        if driver?.controlMode == .manual { return }  // a look never becomes a run
         details.recordedAt = .now
         if let driver, case .terraloka = stageMode {
             driver.setPathMode(pathChoice)
-            // The Fixed sweep covers the stage's own range: the run ends when the stage's path
+            // The preset moves covers the stage's own range: the run ends when the stage's path
             // does, not when the guide's plan does.
             model.setFinishesOnlyOnRequest(pathChoice == .presetPath)
             session.reportsWords = false
@@ -735,7 +1013,8 @@ struct GuidedScanPage: View {
 
     private var scanPhase: OperatorScanPhase {
         if model.runControl.isFinished { return .complete }
-        return model.speedState.status == .tooFast ? .slowDown : .moving
+        // The person cannot slow the Terraloka Stage down: its own status shows instead.
+        return !isTerraloka && model.speedState.status == .tooFast ? .slowDown : .moving
     }
 
     /// Finished columns of all columns, for the blocks: from the stage's own progress on the
@@ -757,9 +1036,30 @@ struct GuidedScanPage: View {
         isTerraloka ? driver?.phase == .paused : manualPaused
     }
 
+    /// The stage is steered with the arrows.
+    private var isByHand: Bool { isTerraloka && driver?.phase == .byHand }
+
+    /// Paused with a saved position: the stage goes back there before it carries on.
+    private var goesBackFirst: Bool {
+        guard let driver, isTerraloka else { return false }
+        return driver.handSaved != nil && driver.canGoBack
+    }
+
+    private var showsStageAlert: Bool { isTerraloka && driver?.status.needsPerson != nil }
+
+    /// The preset moves' progress; nil in every other run.
+    private var stageProgress: StageZigzagProgress? {
+        guard isFixedSweep, let driver else { return nil }
+        return driver.presetProgress ?? StageZigzagProgress()
+    }
+
     private func togglePause() {
         if let driver, isTerraloka {
-            isPaused ? driver.resume() : driver.pause()
+            if isPaused {
+                goesBackFirst ? driver.goBackAndResume() : driver.resume()
+            } else {
+                driver.pause()
+            }
         } else {
             // shortcut: the engine has no plain pause for the manual stage, so this uses its
             // focus pause (the guide waits); upgrade when the engine gets a real one.
@@ -771,36 +1071,57 @@ struct GuidedScanPage: View {
     /// The words under the picture, or the card when the stage or the edge question needs the
     /// person; then Stop, Pause and End run, always there.
     private var scanBottom: some View {
-        VStack(spacing: 18) {
-            if let driver, isTerraloka, let alert = driver.status.needsPerson {
+        VStack(spacing: isByHand ? 10 : 18) {
+            if let driver, isTerraloka, driver.phase == .byHand {
+                // The pad takes the words' place; the organisms show as not counted.
+                StageHandPad(driver: driver, isCompact: true)
+                Button("Go back and resume") { driver.goBackAndResume() }
+                    .buttonStyle(.borderedProminent).controlSize(.large)
+            } else if let driver, isTerraloka, let alert = driver.status.needsPerson {
                 StageRunStatusCard(
-                    status: driver.status, isPaused: driver.phase == .paused, progress: nil,
-                    actions: alertActions(alert, driver),
-                    onPause: { driver.pause() }, onResume: { driver.resume() })
-            } else if !isTerraloka, session.display?.questionID != nil {
+                    status: driver.status, isPaused: driver.phase == .paused,
+                    progress: stageProgress, actions: alertActions(alert, driver),
+                    onPause: { driver.pause() }, onResume: { driver.resume() },
+                    canMoveManually: driver.canMoveByHand,
+                    onMoveManually: { driver.beginHandControl() },
+                    hasSavedPosition: driver.handSaved != nil && driver.canGoBack,
+                    onGoBack: { driver.goBackAndResume() })
+            } else if let driver, isTerraloka {
+                stageWords(driver)
+            } else if session.display?.questionID != nil {
                 manualScanCard
             } else {
                 Text(scanMessage).font(.callout).multilineTextAlignment(.center)
                     .frame(maxWidth: 260)
             }
-            Button { isConfirmingLeave = true } label: {
-                Image(systemName: "stop.fill").font(.title3)
-                    .frame(width: 44, height: 44)
-                    .overlay(Circle().stroke(.white, lineWidth: 3).frame(width: 52, height: 52))
-            }
-            .padding(.vertical, 6)
-            .accessibilityLabel("Stop")
-            HStack(spacing: 28) {
-                Button(action: togglePause) {
-                    Label(isPaused ? "Resume" : "Pause",
-                        systemImage: isPaused ? "play.fill" : "pause.fill")
+            // While steering by hand the pad needs the room: the X asks the same as Stop, and Go
+            // back and resume takes the place of Resume.
+            if !isByHand {
+                Button { isConfirmingLeave = true } label: {
+                    Image(systemName: "stop.fill").font(.title3)
+                        .frame(width: 44, height: 44)
+                        .overlay(Circle().stroke(.white, lineWidth: 3).frame(width: 52, height: 52))
                 }
-                .tint(.auraGreen)
+                .padding(.vertical, 6)
+                .accessibilityLabel("Stop")
+            }
+            HStack(spacing: 28) {
+                // The alert card has its own Pause and Resume.
+                if !isByHand, !showsStageAlert {
+                    Button(action: togglePause) {
+                        Label(isPaused ? (goesBackFirst ? "Go back and resume" : "Resume") : "Pause",
+                            systemImage: isPaused ? "play.fill" : "pause.fill")
+                    }
+                    .tint(.auraGreen)
+                }
                 Menu {
                     ForEach(
-                        EndRunMenu.items(
-                            columnInProgress: model.runControl.columnInProgress && !isFixedSweep,
-                            endingAfterColumn: endsAfterColumn), id: \.title
+                        isAwayFromPath
+                            ? EndRunMenu.awayItems
+                            : EndRunMenu.items(
+                                columnInProgress: model.runControl.columnInProgress
+                                    && !isFixedSweep,
+                                endingAfterColumn: endsAfterColumn), id: \.title
                     ) { item in
                         Button(item.title, role: item == .endNow ? .destructive : nil) {
                             chooseEnd(item)
@@ -821,14 +1142,35 @@ struct GuidedScanPage: View {
         .padding(.bottom, 8)
     }
 
+    /// What the stage is doing, the preset moves' progress and, while paused, Move manually.
+    private func stageWords(_ driver: AutoStageDriver) -> some View {
+        VStack(spacing: 10) {
+            if scanPhase == .complete {
+                Text(scanMessage).font(.callout)
+            } else {
+                VStack(spacing: 2) {
+                    Text(driver.status.title).font(.callout)
+                    if let detail = driver.status.detail {
+                        Text(detail).font(.subheadline).foregroundStyle(.secondary)
+                    }
+                }
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 300)
+                if let stageProgress { StageProgressBar(progress: stageProgress) }
+                if driver.canMoveByHand {
+                    Button("Move manually") { driver.beginHandControl() }
+                        .buttonStyle(.bordered).tint(.white)
+                }
+            }
+        }
+    }
+
     private var scanMessage: String {
         switch scanPhase {
         case .complete: "Detection complete"
         case .slowDown: "Slow down"
         case .moving:
-            isTerraloka
-                ? "The stage is moving the slide for you"
-                : session.display?.card?.text ?? "Keep moving the microscope slide to the forward"
+            session.display?.card?.text ?? "Keep moving the microscope slide to the forward"
         }
     }
 

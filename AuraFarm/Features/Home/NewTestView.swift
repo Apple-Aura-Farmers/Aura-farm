@@ -4,15 +4,31 @@ import SwiftUI
 /// rather than asked, because a test is filled in as it is taken.
 struct NewTestView: View {
     @Binding var details: SampleDetails
+    /// "No farm" can be chosen, and is until a farm is: the operator's own sample, which is named.
+    var allowsNoFarm = false
     /// Called when the helper taps Start. The caller closes this and opens the guided scan.
     var start: () -> Void
 
+    @Environment(FarmStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     @FocusState private var focus: Field?
     @State private var isShowingPreparation = false
 
     private enum Field {
-        case note
+        case name, note
+    }
+
+    private var farmText: String {
+        if let id = details.farmID { return store.farms.first { $0.id == id }?.name ?? details.sampleID }
+        return allowsNoFarm ? "No farm" : "Choose a farm"
+    }
+
+    private var isOwnSample: Bool { allowsNoFarm && details.farmID == nil }
+
+    /// An own sample needs only its name; any other test must lead back to a place.
+    private var canStart: Bool {
+        isOwnSample
+            ? !details.sampleID.trimmingCharacters(in: .whitespaces).isEmpty : details.isComplete
     }
 
     var body: some View {
@@ -25,10 +41,11 @@ struct NewTestView: View {
 
                 Section("Farm") {
                     NavigationLink {
-                        FarmChoiceList(details: $details)
+                        FarmChoiceList(details: $details, allowsNoFarm: allowsNoFarm)
                     } label: {
-                        Text(details.sampleID.isEmpty ? "Choose a farm" : details.sampleID)
-                            .foregroundStyle(details.sampleID.isEmpty ? .secondary : .primary)
+                        Text(farmText)
+                            .foregroundStyle(
+                                allowsNoFarm || details.farmID != nil ? .primary : .secondary)
                     }
                     // Taken from the farm, so it is shown and not typed.
                     if details.farmID != nil, let location = details.location {
@@ -36,6 +53,15 @@ struct NewTestView: View {
                     }
                     if details.plotID != nil, let plot = details.plotName {
                         LabeledContent("Plot", value: plot)
+                    }
+                }
+
+                if isOwnSample {
+                    Section {
+                        TextField("Sample name", text: $details.sampleID)
+                            .focused($focus, equals: .name)
+                    } footer: {
+                        Text("Kept on this phone. Only tests of a farm can be uploaded.")
                     }
                 }
 
@@ -76,7 +102,7 @@ struct NewTestView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
-                .disabled(!details.isComplete)
+                .disabled(!canStart)
                 .padding()
                 .background(.bar)
             }

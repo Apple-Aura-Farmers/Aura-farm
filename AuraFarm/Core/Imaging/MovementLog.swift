@@ -222,6 +222,12 @@ struct MovementLogRow: Equatable {
     /// The automated stage's servo angles (degrees); nil without it.
     var stageAngleX: Int?
     var stageAngleY: Int?
+    /// The focus tiles' reading on this row (empty without one), the label the tester gave, and
+    /// whether a focus sweep is running. For logging only.
+    var focusTiles: FocusTilesReading?
+    var focusTilesMs: Double?
+    var focusLabel = ""
+    var focusSweep = false
     /// The detector's result arrives after its frame: when the frame it ran on was taken (run
     /// seconds), and where its time went: crop and render, the model alone, and decoding.
     var detFrameSeconds: Double?
@@ -298,6 +304,8 @@ enum MovementLog {
         "video_drops", "line_crossings", "line_along", "spot_limit_reason",
         "slip_tilt_deg",
         "focus_peak", "focus_hint", "stage_angle_x", "stage_angle_y",
+        "focus_top", "focus_top_ratio", "focus_noise", "focus_tiles_used", "focus_tiles_active",
+        "focus_top_tiles", "focus_tiles_ms", "focus_label", "focus_sweep",
     ]
 
     static func csv(_ rows: [MovementLogRow]) -> String {
@@ -383,7 +391,17 @@ enum MovementLog {
             row.spotLimitReason, number(row.slipTiltDegrees, 2),
             number(row.focusPeak, 3), row.focusHint,
             row.stageAngleX.map(String.init) ?? "", row.stageAngleY.map(String.init) ?? "",
+            significant(row.focusTiles?.top), significant(row.focusTiles?.topRatio),
+            significant(row.focusTiles?.noise), row.focusTiles.map { String($0.used) } ?? "",
+            row.focusTiles.map { String($0.active) } ?? "",
+            row.focusTiles?.topTiles.map(String.init).joined(separator: " ") ?? "",
+            significant(row.focusTilesMs), row.focusLabel, row.focusSweep ? "1" : "0",
         ]
+    }
+
+    /// Four significant digits, always with a dot; empty for nil.
+    private static func significant(_ value: Double?) -> String {
+        value.map { String(format: "%.4g", $0) } ?? ""
     }
 
     /// Fixed decimals, always with a dot; empty for nil.

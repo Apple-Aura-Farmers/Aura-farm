@@ -29,6 +29,8 @@ class ScanEngine: NSObject {
     /// Live organism counting: the count, the boxes and the settings that shape them.
     private(set) var countInfo = LiveCountInfo()
     private(set) var showsDetections = false
+    /// The stage is moved by hand (see `setHandHold`); main queue, for the lab's overlay.
+    private(set) var handHold = StageHandHold.off
     /// The hardware the counting model runs on, and the camera's rate.
     private(set) var detectorUnits = DetectorUnits.neuralEngine
     private(set) var cameraRate = CameraRate.fps20
@@ -151,6 +153,14 @@ class ScanEngine: NSObject {
     }
     @ObservationIgnored private var snapshotTrigger = SnapshotTrigger()
     @ObservationIgnored var snapshotRequested = false
+    // The lab's focus test (labels and sweeps): logging only, nothing here decides anything.
+    /// A label tap: its name, when it was given, and how many of its three frames are saved.
+    @ObservationIgnored var focusBurst: (label: String, start: Double, shots: Int)?
+    @ObservationIgnored var focusSweepOn = false
+    @ObservationIgnored private var focusSweepShots = 0
+    @ObservationIgnored private var lastSweepShotAt = -Double.infinity
+    /// A focus sweep is running (main queue, for the lab's button).
+    private(set) var focusSweeping = false
     /// A tap on an edge button waiting for the next logged row: it names the row, saves a
     /// frame, and is answered to the guide.
     @ObservationIgnored private var pendingEdgeFeedback: EdgeFeedback?
@@ -159,6 +169,9 @@ class ScanEngine: NSObject {
     @ObservationIgnored var setup = LabSetupSession()
     @ObservationIgnored private var lastPublishedStep = LabSetupStep.align
     @ObservationIgnored private var pausesOnMonitorFlag = true
+    /// The stage is moved by hand: the guide is held and nothing is counted. Analysis queue.
+    @ObservationIgnored private var handHoldFlag = StageHandHold.off
+    @ObservationIgnored private var previewShown = false
     @ObservationIgnored var pendingEventName = ""
     @ObservationIgnored private var pendingEventDetail = ""
     @ObservationIgnored private var queuedEvents: [(name: String, detail: String)] = []
@@ -251,6 +264,8 @@ class ScanEngine: NSObject {
     @ObservationIgnored var recordsLensVideo = false
     @ObservationIgnored var cameraRunning = false
     @ObservationIgnored var lensScanStartOffset: Double?
+    /// Recordings that were ended and whose files are still being closed.
+    @ObservationIgnored var lensFinishing: [LensRecorder] = []
     @ObservationIgnored var lensEvents: [(name: String, detail: String)] = []
     @ObservationIgnored var lastCapturedSeconds = 0.0
 
@@ -368,6 +383,11 @@ class ScanEngine: NSObject {
         analysisQueue.async { [weak self] in self?.setup.confirmStep() }
     }
 
+    /// "It's sharp, continue" on the focus step.
+    func acceptFocus() {
+        analysisQueue.async { [weak self] in self?.setup.acceptFocus() }
+    }
+
     /// Whether the guide pauses on the run monitor's say.
     func setPausesOnMonitor(_ pauses: Bool) {
         pausesOnMonitor = pauses
@@ -412,6 +432,22 @@ class ScanEngine: NSObject {
             } else if self.queuedEvents.count < 50 {
                 self.queuedEvents.append((name, detail))
             }
+        }
+    }
+
+    /// The stage is moved by hand (or has just come back): `.on` holds the guide (no spot, no edge,
+    /// no column change, no finish), counts nothing, judges no focus and shows what the detector
+    /// sees without counting it; `.checkingFocus` holds the guide and judges focus, counting
+    /// nothing; `.off` is as usual, and the guide's timers start afresh.
+    func setHandHold(_ hold: StageHandHold) {
+        handHold = hold
+        analysisQueue.async { [weak self] in
+            guard let self, self.handHoldFlag != hold else { return }
+            self.handHoldFlag = hold
+            self.setup.setHandHold(hold)
+            self.live.setPreviewing(hold == .on)
+            let info = self.setup.info
+            DispatchQueue.main.async { self.setupInfo = info }
         }
     }
 
@@ -532,6 +568,29 @@ class ScanEngine: NSObject {
         }
     }
 
+    /// The guide starts afresh at the done step, as `skipStage` does: the stage moved by hand and
+    /// the route's positions are stale.
+    func restartGuide() {
+        analysisQueue.async { [weak self] in
+            guard let self, self.setup.step == .done else { return }
+            self.clearTrackingDisplay()
+            self.resetGuide()
+        }
+    }
+
+    /// The stage is to be measured after all (manual to autonomous): back to the stage step.
+    func reopenStage() {
+        analysisQueue.async { [weak self] in
+            guard let self, self.setup.step == .done else { return }
+            self.setup.reopenStage()
+            self.lastPublishedStep = self.setup.step
+            self.clearTrackingDisplay()
+            self.resetGuide()
+            let info = self.setup.info
+            DispatchQueue.main.async { self.setupInfo = info }
+        }
+    }
+
     /// The automated stage measured the axes: the stage step is done with them.
     func completeStage(with axes: StageAxes) {
         analysisQueue.async { [weak self] in
@@ -620,6 +679,7 @@ class ScanEngine: NSObject {
         // Strong self: the file is finished even if the page lets go of the engine first.
         analysisQueue.async { [self] in
             cameraRunning = false
+            endFocusTest()
             finishLensVideo()
         }
         sessionQueue.async { [weak self] in
@@ -703,6 +763,8 @@ class ScanEngine: NSObject {
             self.snapshots.begin()
             self.snapshotTrigger.reset()
             self.snapshotRequested = false
+            self.focusBurst = nil
+            self.setFocusSweep(false)
             DispatchQueue.main.async {
                 self.exportItems = []
                 self.isLogging = true
@@ -712,10 +774,84 @@ class ScanEngine: NSObject {
         }
     }
 
+    // MARK: Focus test (the lab's labels and sweeps)
+
+    /// A label for the view as it is now: the next logged row carries it (and the event
+    /// `focus_label_<name>`), and three raw frames are saved, at once, 0.5 s and 1.0 s later, the
+    /// rows that carry them with the label. Only while a log is recording; a second tap during
+    /// that second is ignored. Nothing is paused, counted, moved or held by it.
+    func labelFocus(_ label: String) {
+        analysisQueue.async { [weak self] in
+            guard let self, self.logging, self.focusBurst == nil else { return }
+            self.focusBurst = (label, self.lastFrameSeconds, 0)
+            self.queuedEvents.append(("focus_label_\(label)", ""))
+        }
+    }
+
+    /// A raw frame every 0.5 s (at most 40) with `focus_sweep` 1 on every row, for turning the
+    /// focus knob through the peak.
+    func startFocusSweep() {
+        analysisQueue.async { [weak self] in
+            guard let self, self.logging, !self.focusSweepOn else { return }
+            self.setFocusSweep(true)
+            self.queuedEvents.append(("focus_sweep_start", ""))
+        }
+    }
+
+    func endFocusSweep() {
+        analysisQueue.async { [weak self] in self?.endFocusTest() }
+    }
+
+    /// Ends a sweep and a label in progress (leaving the lab, the background). Analysis queue.
+    func endFocusTest() {
+        if focusSweepOn {
+            if logging { queuedEvents.append(("focus_sweep_end", "")) }
+            setFocusSweep(false)
+        }
+        focusBurst = nil
+    }
+
+    private func setFocusSweep(_ on: Bool) {
+        focusSweepOn = on
+        focusSweepShots = 0
+        lastSweepShotAt = -.infinity
+        DispatchQueue.main.async { [weak self] in self?.focusSweeping = on }
+    }
+
+    /// This row's share of the focus test: the label of a frame being saved, the sweep flag, and
+    /// whether a frame is to be saved on it.
+    private func focusTestRow(at time: Double, _ logged: inout MovementLogRow) -> Bool {
+        var saves = false
+        if var burst = focusBurst {
+            if burst.shots < 3, time - burst.start >= Double(burst.shots) * 0.5 - 1e-9 {
+                saves = true
+                burst.shots += 1
+                logged.focusLabel = burst.label
+            }
+            focusBurst = burst.shots >= 3 ? nil : burst
+        }
+        if focusSweepOn {
+            logged.focusSweep = true
+            if time - lastSweepShotAt >= 0.5 - 1e-9 {
+                saves = true
+                lastSweepShotAt = time
+                focusSweepShots += 1
+                if focusSweepShots >= 40 {
+                    queuedEvents.append(("focus_sweep_end", "40 frames"))
+                    setFocusSweep(false)
+                    logged.focusSweep = true
+                }
+            }
+        }
+        return saves
+    }
+
     /// Ends the log and writes its CSV to a temporary file for sharing.
     func stopLog() {
         analysisQueue.async { [weak self] in
             guard let self, self.logging else { return }
+            self.setFocusSweep(false)
+            self.focusBurst = nil
             self.logging = false
             self.queuedEvents = []
             let url = Self.write(self.rows, test: self.currentTest)
@@ -1292,6 +1428,8 @@ class ScanEngine: NSObject {
         logged.focusHint = monitor?.focusHint ?? ""
         logged.stageAngleX = stageAngles?.x
         logged.stageAngleY = stageAngles?.y
+        logged.focusTiles = monitor?.focusTiles
+        logged.focusTilesMs = monitor?.focusTilesMilliseconds
         if let note = monitor?.resumedNote, !note.isEmpty, pendingEventName.isEmpty {
             pendingEventName = "focus_resumed"
             pendingEventDetail = note
@@ -1604,9 +1742,10 @@ extension ScanEngine: AVCaptureVideoDataOutputSampleBufferDelegate {
         var edgeLine: EdgeLine?
         var countLog = LiveCountFrameLog()
         if guideEnabled, setup.step == .done {
+            let held = handHoldFlag != .off
             dryRun.pauseReason =
-                pausesOnMonitorFlag ? setup.monitorState.pauseReason : nil
-            dryRun.focusLow = pausesOnMonitorFlag && setup.isFocusLow
+                held ? .byHand : (pausesOnMonitorFlag ? setup.monitorState.pauseReason : nil)
+            dryRun.focusLow = pausesOnMonitorFlag && !held && setup.isFocusLow
             // The line is measured first so the guide can use it on this very reading.
             edgeLine = edgeProbe.update(buffer, step: step, direction: dryRun.frameHeading)
             let result = dryRun.update(
@@ -1618,7 +1757,7 @@ extension ScanEngine: AVCaptureVideoDataOutputSampleBufferDelegate {
                 heat.resetTimes()
                 live.prepare()
             }
-            let countingOn = externalColumn != nil || dryRun.countingActive
+            let countingOn = !held && (externalColumn != nil || dryRun.countingActive)
             if countingOn != lastCountingActive {
                 lastCountingActive = countingOn
                 live.setCounting(lastCountingActive)
@@ -1644,6 +1783,23 @@ extension ScanEngine: AVCaptureVideoDataOutputSampleBufferDelegate {
                     seconds: time - runStartSeconds, column: externalColumn ?? dryRun.column,
                     fieldSide: step.boxSide)
             }
+            if handHoldFlag == .on {
+                // The same rules as counting, but nothing here reaches the count.
+                let reason = LiveOrganismCounter.skipReason(
+                    tracking: step.tracking.trackingState,
+                    isGhostOrSparseSkip: step.reading == "ghost" || step.reading == "sparse_skip",
+                    monitorPaused: false, viewClass: dryRun.lastViewClass,
+                    speedFraction: indicators.speedFraction,
+                    stillSeconds: indicators.stillSeconds,
+                    secondsSinceLastDetection: live.secondsSincePreview(at: time - runStartSeconds),
+                    maxModelRunsPerSecond: modelRateCap ? countThresholds.maxModelRunsPerSecond : nil,
+                    heat: lastHeatMode, heatThresholds: heatThresholds)
+                live.processPreview(
+                    buffer: buffer, skipReason: reason, moved: indicators.stillSeconds <= 0,
+                    frameSize: step.frameSize,
+                    fieldCircle: step.fieldState?.mask.flatMap { FieldCircle(fitting: $0) },
+                    seconds: time - runStartSeconds)
+            }
             publishCount(isActive: countingOn, frameSize: step.frameSize)
             let path = edgeLine.map { $0.isCandidate ? $0.path : [] }
             let lineState = dryRun.lineState
@@ -1658,7 +1814,7 @@ extension ScanEngine: AVCaptureVideoDataOutputSampleBufferDelegate {
             guideEdgePoints = result.edgeTrailPoints
             let control = SlideMovementInfo.RunControl(
                 pendingEnd: dryRun.pendingEnd, columnInProgress: dryRun.columnInProgress,
-                isFinished: dryRun.isFinished)
+                isFinished: !runIsOpen)
             if control != lastRunControl {
                 lastRunControl = control
                 DispatchQueue.main.async { [weak self] in self?.runControl = control }
@@ -1697,7 +1853,7 @@ extension ScanEngine: AVCaptureVideoDataOutputSampleBufferDelegate {
         if step.event != .none { lastEventName = step.eventName }
 
         trail.append(step.positionFields)
-        if guideEnabled, runIsOpen {
+        if guideEnabled, runIsOpen, handHoldFlag == .off {
             runPath.append(step.positionFields)
             // Keeps every other point when it gets long: the path stays whole and small.
             if runPath.count > 4 * RunMapContent.maxPathPoints {
@@ -1728,11 +1884,13 @@ extension ScanEngine: AVCaptureVideoDataOutputSampleBufferDelegate {
                     instruction: logged.guideInstruction, lineCandidate: edgeLine?.isCandidate)
             }
             let tapped = pendingEdgeFeedback
-            if tapped != nil || automatic || snapshotRequested {
+            let focusFrame = focusTestRow(at: time, &logged)
+            if tapped != nil || automatic || snapshotRequested || focusFrame {
                 logged.snapshot =
                     snapshots.save(
                         buffer, csvSeconds: time - origin,
-                        automatic: tapped == nil && !snapshotRequested, tap: tapped != nil)
+                        automatic: tapped == nil && !snapshotRequested && !focusFrame,
+                        tap: tapped != nil)
                     ?? ""
             }
             snapshotRequested = false
@@ -1860,8 +2018,11 @@ extension ScanEngine: AVCaptureVideoDataOutputSampleBufferDelegate {
         guard info != lastCountInfo else { return }
         lastCountInfo = info
         countThrottle.offer(info)
-        if showsDetectionsFlag {
-            DispatchQueue.main.async { [weak self] in self?.liveBoxes = info }
+        // While the stage is moved by hand the detector's boxes show whatever the switch says.
+        if showsDetectionsFlag || info.isPreviewing || previewShown {
+            previewShown = info.isPreviewing
+            let shown = showsDetectionsFlag || info.isPreviewing
+            DispatchQueue.main.async { [weak self] in self?.liveBoxes = shown ? info : LiveCountInfo() }
         }
     }
 

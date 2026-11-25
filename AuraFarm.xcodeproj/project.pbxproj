@@ -311,7 +311,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 7;
-				DEVELOPMENT_TEAM = 3RUWTXHBX9;
+				DEVELOPMENT_TEAM = 38YF89G59F;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Config/AuraFarm-Info.plist";
@@ -369,7 +369,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 7;
-				DEVELOPMENT_TEAM = 3RUWTXHBX9;
+				DEVELOPMENT_TEAM = 38YF89G59F;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Config/AuraFarm-Info.plist";
@@ -449,8 +449,6 @@
 				kind = upToNextMajorVersion;
 				minimumVersion = 2.0.0;
 			};
-			traits = (
-			);
 		};
 		5B1E0A9C7D4F42A8B3C6D1F0 /* XCRemoteSwiftPackageReference "lottie-ios" */ = {
 			isa = XCRemoteSwiftPackageReference;
@@ -459,8 +457,6 @@
 				kind = upToNextMajorVersion;
 				minimumVersion = 4.5.0;
 			};
-			traits = (
-			);
 		};
 /* End XCRemoteSwiftPackageReference section */
 

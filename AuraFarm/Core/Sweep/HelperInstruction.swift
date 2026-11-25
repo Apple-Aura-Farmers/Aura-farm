@@ -143,7 +143,11 @@ enum HelperInstruction: Equatable {
         case .nothingToFollow:
             return words.map { .backALittle($0) } ?? .refocus
         case .paused(let reason):
-            return reason == .alignment ? .phoneMoved : .refocus
+            switch reason {
+            case .alignment: return .phoneMoved
+            case .focus: return .refocus
+            case .byHand: return .waiting("Moving by hand")
+            }
         case .captured:
             return nil
         case .expectedEdge:

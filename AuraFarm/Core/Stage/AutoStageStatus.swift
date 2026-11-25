@@ -129,6 +129,16 @@ struct AutoStageStatus: Equatable {
             }
         case .paused:
             status.title = "Paused"
+        case .choosingPath:
+            status.title = "Choose the path"
+        case .preparingManual:
+            status.title = "Getting the stage ready"
+        case .byHand:
+            status.title = "Manual"
+        case .returningFromHand:
+            status.title = "Going back to the saved position"
+        case .checkingFocus:
+            status.title = "Back in place, checking focus"
         case .failed(let reason):
             status.title = "Calibration didn't work"
             status.detail = reason

@@ -52,12 +52,16 @@
         @AppStorage("slideLab.heatAdaptive") private var heatAdaptive = true
         @AppStorage("slideLab.modelRateCap") private var modelRateCap = true
         @AppStorage("slideLab.recordLensVideo") private var recordsLensVideo = false
+        /// Labels and sweeps for the focus data (measured and logged only).
+        @AppStorage("slideLab.focusTest") private var focusTest = false
         @State private var noteText = ""
         // Automated stage (Terraloka BLE stage in place of the knobs).
         @State private var autoStage: AutoStageDriver?
         /// "How will the slide move?" card, shown until a choice is made.
         @State private var needsMovementChoice = true
         @State private var isShowingStageSheet = false
+        @State private var isChoosingAutonomousPath = false
+        @Environment(\.scenePhase) private var scenePhase
         /// Waiting for the stage's Bluetooth connection; setup is held while it does, if it
         /// has not got past Align.
         @State private var isWaitingForStage = false
@@ -91,9 +95,12 @@
             }
         }
 
-        private func startAutomatedStage(_ objective: StageObjective, _ pathMode: StagePathMode) {
+        private func startAutomatedStage(
+            _ objective: StageObjective, _ pathMode: StagePathMode, _ control: StageControlMode
+        ) {
             guard autoStage == nil else { return }
             let driver = AutoStageDriver(engine: model)
+            driver.controlMode = control
             driver.objective = objective
             driver.chunkDegrees = objective.defaultChunk
             driver.pathMode = pathMode
@@ -132,7 +139,9 @@
                     .padding(.horizontal)
                 }
                 if let autoStage, mode == .live {
-                    AutoStagePanel(driver: autoStage, setupStep: model.setupInfo.step)
+                    AutoStagePanel(
+                        driver: autoStage, setupStep: model.setupInfo.step,
+                        onSwitchToAutonomous: { isChoosingAutonomousPath = true })
                 }
 
                 switch mode {
@@ -150,13 +159,32 @@
                 model.stop()
                 setAutomatedStage(false)
             }
+            .onChange(of: scenePhase) { _, phase in
+                // Nothing keeps moving behind the person's back.
+                guard phase == .background, let autoStage else { return }
+                if autoStage.phase == .byHand {
+                    autoStage.handStop()
+                } else if case .returningFromHand = autoStage.phase {
+                    autoStage.pause()
+                }
+            }
+            .confirmationDialog(
+                "Switch to autonomous?", isPresented: $isChoosingAutonomousPath,
+                titleVisibility: .visible
+            ) {
+                Button("Follow guide") { autoStage?.switchToAutonomous(.followGuide) }
+                Button("Preset path") { autoStage?.switchToAutonomous(.presetPath) }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("The stage goes to its centre, warms up and calibrates, then starts moving by itself.")
+            }
             .sheet(isPresented: $isShowingStageSheet) {
                 AutomatedStageSheet(onStart: startAutomatedStage)
             }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Toggle(
-                        "Automated stage",
+                        "Terraloka",
                         isOn: Binding(get: { autoStage != nil }, set: { setAutomatedStage($0) })
                     )
                     .toggleStyle(.button)
@@ -188,7 +216,21 @@
 
         // MARK: Live camera
 
+        private static let lensID = "lens"
+        private var isManual: Bool { autoStage?.phase == .byHand }
+
         private var liveBody: some View {
+            ScrollViewReader { scroller in
+                liveScroll
+                    // The picture and the arrows are on screen together.
+                    .onChange(of: isManual) { _, manual in
+                        if manual { withAnimation { scroller.scrollTo(Self.lensID, anchor: .top) } }
+                    }
+            }
+            .toolbarVisibility(isManual ? .hidden : .automatic, for: .tabBar)
+        }
+
+        private var liveScroll: some View {
             ScrollView {
                 VStack(spacing: 0) {
                     testPicker
@@ -236,6 +278,18 @@
                     .frame(maxWidth: .infinity)
                     .aspectRatio(1, contentMode: .fit)
                     .clipped()
+                    .id(Self.lensID)
+
+                    // Under the picture, never over it: the person steers by what they see.
+                    if let autoStage, isManual {
+                        StageHandPad(
+                            driver: autoStage, needsGuideDryRun: !model.guideDryRun,
+                            onSwitchToAutonomous: { isChoosingAutonomousPath = true })
+                    }
+
+                    if focusTest, model.setupInfo.step == .done {
+                        FocusTestSection(model: model)
+                    }
 
                     if model.isAnalyzing, isSettingUp {
                         alignFocusControls
@@ -315,6 +369,9 @@
                         : "3. Focus with the microscope's focus knob (the stage's Z), not the phone's."
                 )
                 .font(.callout)
+                if model.setupInfo.step == .focus {
+                    Button("It's sharp, continue") { model.acceptFocus() }.buttonStyle(.bordered)
+                }
                 setupButtons
                 footer
             }
@@ -470,6 +527,7 @@
                 Toggle("Columns follow the slip's tilt", isOn: $followsSlipTilt)
                 Toggle("Show life on map", isOn: $showsLifeOnMap)
                 Toggle("Record lens video", isOn: $recordsLensVideo)
+                Toggle("Focus test (labels and sweeps)", isOn: $focusTest)
                 Toggle("Swap knobs", isOn: $swapsKnobs)
                 Toggle("Reverse X", isOn: $reversesKnobX)
                 Toggle("Reverse Y", isOn: $reversesKnobY)
@@ -684,6 +742,54 @@
 
     #Preview("Cover slip setting") { CoverSlipPreview() }
 
+    /// Labels and sweeps for the focus data: with the log recording, a tap says what the view is
+    /// (three raw frames are saved), a sweep saves a frame every half second. Logging only: it
+    /// pauses, counts, moves and holds nothing.
+    private struct FocusTestSection: View {
+        var model: ScanEngine
+
+        var body: some View {
+            let tiles = model.setupInfo.monitor.recentFocusTiles
+            VStack(alignment: .leading, spacing: 8) {
+                if !model.isLogging {
+                    Text("Start the log first").font(.footnote).foregroundStyle(.orange)
+                }
+                HStack(spacing: 8) {
+                    ForEach(["sharp", "blurry", "empty"], id: \.self) { name in
+                        Button {
+                            model.labelFocus(name)
+                        } label: {
+                            Text(name.capitalized).font(.title3.bold())
+                                .frame(maxWidth: .infinity, minHeight: 48)
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                }
+                .disabled(!model.isLogging)
+                Button {
+                    if model.focusSweeping { model.endFocusSweep() } else { model.startFocusSweep() }
+                } label: {
+                    Text(model.focusSweeping ? "End sweep" : "Start sweep")
+                        .frame(maxWidth: .infinity, minHeight: 36)
+                }
+                .buttonStyle(.bordered)
+                .disabled(!model.isLogging)
+                Text(
+                    tiles.map {
+                        String(
+                            format: "top %.4g · active %d of %d · noise %.4g", $0.top, $0.active,
+                            $0.used, $0.noise)
+                    } ?? "no reading yet"
+                )
+                .font(.footnote.monospacedDigit()).foregroundStyle(.secondary)
+            }
+            .padding(10)
+            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 14))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+        }
+    }
+
     /// The top-of-screen question that replaces the old dialog: not modal, so nothing can drop it.
     private struct MovementChoiceCard: View {
         var onManual: () -> Void
@@ -693,8 +799,8 @@
             VStack(spacing: 8) {
                 Text("How will the slide move?").font(.subheadline.bold())
                 HStack {
-                    Button("Manual knobs", action: onManual).buttonStyle(.bordered)
-                    Button("Automated stage", action: onAutomated).buttonStyle(.borderedProminent)
+                    Button("Mechanical stage", action: onManual).buttonStyle(.bordered)
+                    Button("Terraloka stage", action: onAutomated).buttonStyle(.borderedProminent)
                 }
             }
             .frame(maxWidth: .infinity)
@@ -705,14 +811,24 @@
 
     /// The one place the objective and the path mode are chosen; both start from the last choice.
     private struct AutomatedStageSheet: View {
-        var onStart: (StageObjective, StagePathMode) -> Void
+        var onStart: (StageObjective, StagePathMode, StageControlMode) -> Void
         @Environment(\.dismiss) private var dismiss
         @AppStorage("slideLab.stageObjective") private var objectiveName = StageObjective.x40.rawValue
-        @AppStorage("slideLab.stagePathMode") private var pathModeName = StagePathMode.followGuide.rawValue
+        @AppStorage("slideLab.stagePathMode") private var pathModeName = StagePathMode.presetPath.rawValue
+        @AppStorage("slideLab.stageControl") private var controlName = StageControlMode.autonomous.rawValue
+        private var control: StageControlMode { StageControlMode(rawValue: controlName) ?? .autonomous }
 
         var body: some View {
             NavigationStack {
                 Form {
+                    Picker(
+                        "Control",
+                        selection: Binding(get: { control }, set: { controlName = $0.rawValue })
+                    ) {
+                        Text("Manual").tag(StageControlMode.manual)
+                        Text("Autonomous").tag(StageControlMode.autonomous)
+                    }
+                    .pickerStyle(.segmented)
                     Picker(
                         "Objective",
                         selection: Binding(
@@ -722,17 +838,22 @@
                         ForEach(StageObjective.allCases, id: \.self) { Text($0.title).tag($0) }
                     }
                     .pickerStyle(.segmented)
-                    Picker(
-                        "Path",
-                        selection: Binding(
-                            get: { StagePathMode(rawValue: pathModeName) ?? .followGuide },
-                            set: { pathModeName = $0.rawValue })
-                    ) {
-                        ForEach(StagePathMode.allCases, id: \.self) { Text($0.title).tag($0) }
+                    if control == .autonomous {
+                        Picker(
+                            "Path",
+                            selection: Binding(
+                                get: { StagePathMode(rawValue: pathModeName) ?? .presetPath },
+                                set: { pathModeName = $0.rawValue })
+                        ) {
+                            ForEach(StagePathMode.allCases, id: \.self) { Text($0.title).tag($0) }
+                        }
+                        .pickerStyle(.segmented)
+                    } else {
+                        Text("No calibration: you steer with the arrows. You can switch to autonomous later.")
+                            .font(.footnote).foregroundStyle(.secondary)
                     }
-                    .pickerStyle(.segmented)
                 }
-                .navigationTitle("Automated stage")
+                .navigationTitle("Terraloka stage")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
@@ -742,7 +863,7 @@
                         Button("Start") {
                             onStart(
                                 StageObjective(rawValue: objectiveName) ?? .x40,
-                                StagePathMode(rawValue: pathModeName) ?? .followGuide)
+                                StagePathMode(rawValue: pathModeName) ?? .presetPath, control)
                             dismiss()
                         }
                     }

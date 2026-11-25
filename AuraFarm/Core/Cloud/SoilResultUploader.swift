@@ -15,6 +15,8 @@ struct SoilResultUploader {
         /// No row in `soil_samples` has this `sample_code`, and the sweep names no plot to
         /// register one against: it was recorded before plots could be chosen.
         case noSuchSample(code: String)
+        /// The operator's own sample: it has no farm to be filed under.
+        case ownSample
         /// The result is in the records, but some of its pictures are not.
         case picturesNotSent(missing: Int, of: Int, reason: String)
 
@@ -22,6 +24,8 @@ struct SoilResultUploader {
             switch self {
             case .notConfigured:
                 return "This build is not set up to send tests."
+            case .ownSample:
+                return "This is your own sample. Only tests of a farm can be uploaded."
             case .noSuchSample(let code):
                 return """
                     No sample is registered as \(code), and this test names no plot, \
@@ -51,6 +55,8 @@ struct SoilResultUploader {
     /// sending the same sweep twice updates its row instead of making a second one, which is
     /// what a helper retrying on a bad connection needs.
     func upload(_ report: SoilReport, from details: SampleDetails? = nil) async throws {
+        // Never matched by its name alone: that could be a farm's sample with the same name.
+        if details?.isOwnSample == true { throw Failure.ownSample }
         let code = report.sample.sampleID.trimmingCharacters(in: .whitespacesAndNewlines)
         let sampleID = try await sampleID(forCode: code, from: details, at: report.sample.recordedAt)
         try await client
@@ -133,81 +139,20 @@ struct SoilResultUploader {
         try await client.from("microorganisms").insert(rows).execute()
     }
 
-    /// The primary key of the sample bearing this code, registering the sample if the records
-    /// do not have it yet.
+    /// The primary key of the sample bearing this code.
     ///
-    /// Nothing else in the app writes `soil_samples`, so without this a test could only ever
-    /// be sent for a sample somebody had registered by hand in the dashboard.
-    ///
-    /// Selected before inserting rather than upserted, because the code is the helper's own
-    /// label and nothing in the records makes it unique: an upsert would need a conflict
-    /// target this table may not have.
+    /// `SampleRegistrar` makes the row where the records have none, so a test can be sent for
+    /// soil nobody registered by hand. A sweep that names no plot has nothing to register
+    /// against, and that is what this refuses.
     private func sampleID(
         forCode code: String,
         from details: SampleDetails?,
         at recordedAt: Date
     ) async throws -> UUID {
-        struct Row: Decodable { var id: UUID }
-        let rows: [Row] =
-            try await client
-            .from("soil_samples")
-            .select("id")
-            .eq("sample_code", value: code)
-            .limit(1)
-            .execute()
-            .value
-        if let first = rows.first { return first.id }
-
-        guard let plotID = details?.plotID else { throw Failure.noSuchSample(code: code) }
-        let registered: [Row] =
-            try await client
-            .from("soil_samples")
-            .insert(
-                SampleRow(
-                    code: code, plotID: plotID, place: details?.location,
-                    collectedAt: recordedAt)
-            )
-            .select("id")
-            .execute()
-            .value
-        guard let first = registered.first else { throw Failure.noSuchSample(code: code) }
-        return first.id
-    }
-}
-
-/// One row of `soil_samples`: the soil the microscope tests are of.
-///
-/// `collected_by` is not sent. The column defaults to whoever is signed in, which is the
-/// helper registering the sample.
-struct SampleRow: Encodable {
-    var id = UUID()
-    var code: String
-    var plotID: UUID
-    /// The plot's middle as well-known text. `location` is a PostGIS column, so the line of
-    /// text a sample shows the helper is not something it accepts: it parses geometry, and
-    /// anything else comes back as "parse error, invalid geometry".
-    var location: String?
-    var collectedAt: Date
-
-    enum CodingKeys: String, CodingKey {
-        case id
-        case code = "sample_code"
-        case plotID = "plot_id"
-        case location
-        case collectedAt = "collected_at"
-    }
-
-    /// `place` is what `Plot.locationDescription` wrote. A plot whose middle cannot be read
-    /// back out of it sends no location: the plot it is filed under carries the land anyway.
-    init(id: UUID = UUID(), code: String, plotID: UUID, place: String?, collectedAt: Date) {
-        self.id = id
-        self.code = code
-        self.plotID = plotID
-        self.location =
-            place
-            .flatMap(GeoPoint.init(locationDescription:))
-            .map(PlotBoundary.wellKnownText(for:))
-        self.collectedAt = collectedAt
+        let found = try await SampleRegistrar(client: client).sampleID(
+            forCode: code, plotID: details?.plotID, place: details?.location, at: recordedAt)
+        guard let found else { throw Failure.noSuchSample(code: code) }
+        return found
     }
 }
 

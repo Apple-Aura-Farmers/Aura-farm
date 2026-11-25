@@ -70,13 +70,13 @@ struct GuideRunRecord: Codable, Equatable {
     var lensVideoScanStartSeconds: Double?
 
     /// One plain line for the results: "Terraloka Stage · 100x · Follow the guide", or
-    /// "Manual Stage".
+    /// "Mechanical Stage".
     var stageLine: String {
-        guard stage == "terraloka" else { return "Manual Stage" }
+        guard stage == "terraloka" else { return "Mechanical Stage" }
         let path =
             switch pathMode {
             case "followGuide": "Follow the guide"
-            case "presetPath": "Fixed sweep"
+            case "presetPath": "Preset moves"
             default: nil as String?
             }
         return (["Terraloka Stage"] + [objective, path].compactMap { $0 }).joined(separator: " · ")

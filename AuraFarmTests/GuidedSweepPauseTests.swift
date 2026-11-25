@@ -53,4 +53,35 @@ final class GuidedSweepPauseTests: XCTestCase {
         route.feed()
         XCTAssertEqual(route.last.instruction, .finished)
     }
+
+    func testByHandPlacesNoSpotTakesNoEdgeAndResumesCleanly() {
+        route.startColumnOne()
+        let captures = route.guide.placements.count
+        let edges = route.guide.edgesReached
+        route.guide.pause(.byHand)
+        route.feed(move: ScriptedRoute.up, times: 8)
+        route.feed(ScriptedRoute.Frame(still: true), times: 20)
+        route.feed(.edgeAhead, times: 30)
+        route.feed(.blank, times: 30)
+        XCTAssertEqual(route.guide.placements.count, captures)
+        XCTAssertEqual(route.guide.edgesReached, edges)
+        XCTAssertEqual(route.guide.edgesGoneBack, 0)
+        XCTAssertTrue(route.steps.suffix(60).allSatisfy { $0.instruction == .paused(.byHand) })
+        XCTAssertTrue(route.steps.suffix(60).allSatisfy { $0.capture == nil })
+        XCTAssertFalse(route.last.isFinished)
+        route.guide.resume(seconds: route.seconds)
+        XCTAssertNil(route.guide.pauseReason)
+        // The time spent by hand does not count: a short blank stretch is not an edge.
+        route.feed(.blank, times: 6)
+        XCTAssertEqual(route.guide.edgesGoneBack, 0)
+        XCTAssertFalse(route.last.isFinished)
+    }
+
+    func testByHandWordsAndCsvName() {
+        XCTAssertEqual(GuideInstruction.paused(.byHand).debugText, "Paused: moved by hand")
+        XCTAssertEqual(GuideInstruction.paused(.byHand).helperText, "")
+        XCTAssertEqual(GuideInstruction.paused(.byHand).csvName, "paused_by_hand")
+        XCTAssertEqual(GuideInstruction.paused(.alignment).csvName, "paused_alignment")
+        XCTAssertEqual(GuideInstruction.paused(.focus).csvName, "paused_focus")
+    }
 }

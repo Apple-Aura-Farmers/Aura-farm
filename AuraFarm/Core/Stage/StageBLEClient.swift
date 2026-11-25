@@ -192,7 +192,7 @@ final class StageBLEClient: NSObject {
         case .focusPosition(let nz):
             z = nz
             targetZ = nz
-        case .unknown:
+        case .limits, .limitReached, .unknown:
             break
         }
     }
