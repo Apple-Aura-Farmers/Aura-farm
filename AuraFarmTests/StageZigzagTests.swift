@@ -384,9 +384,13 @@ final class StageZigzagTests: XCTestCase {
                     narrowedAt = legMoves
                     let rising = angle > current
                     if servo == .x {
-                        zigzag.limits = rising ? StageLimits(xMin: 0, xMax: current) : StageLimits(xMin: current, xMax: 180)
+                        zigzag.limits =
+                            rising
+                            ? StageLimits(xMin: 0, xMax: current) : StageLimits(xMin: current, xMax: 180)
                     } else {
-                        zigzag.limits = rising ? StageLimits(yMin: 0, yMax: current) : StageLimits(yMin: current, yMax: 180)
+                        zigzag.limits =
+                            rising
+                            ? StageLimits(yMin: 0, yMax: current) : StageLimits(yMin: current, yMax: 180)
                     }
                 } else if servo == .x {
                     angles.x = angle

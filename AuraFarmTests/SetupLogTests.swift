@@ -75,7 +75,8 @@ final class SetupLogTests: XCTestCase {
         XCTAssertEqual(empty[index("focus_state")], "")
         XCTAssertEqual(empty[index("tracking")], "", "the tracker is not running at align")
         XCTAssertEqual(empty[index("still_seconds")], "")
-        for name in ["focus_top", "focus_top_ratio", "focus_noise", "focus_tiles_used", "focus_tiles_active"] {
+        for name in ["focus_top", "focus_top_ratio", "focus_noise", "focus_tiles_used", "focus_tiles_active"]
+        {
             XCTAssertEqual(empty[index(name)], "", name)
         }
     }
