@@ -142,4 +142,15 @@ final class GuideRunRecordTests: XCTestCase {
         XCTAssertNil(decoded.pathMode)
         XCTAssertEqual(decoded.stageLine, "Mechanical Stage")
     }
+
+    func testAnOrganismWithoutAConfidenceStillDecodesAndANewOneKeepsIt() throws {
+        let old = #"{"label":"Volvox","x":1.5,"y":-2,"column":3,"seconds":12}"#
+        let decoded = try JSONDecoder().decode(RunMapOrganism.self, from: Data(old.utf8))
+        XCTAssertNil(decoded.confidence)
+        var fresh = decoded
+        fresh.confidence = 0.83
+        let again = try JSONDecoder().decode(
+            RunMapOrganism.self, from: JSONEncoder().encode(fresh))
+        XCTAssertEqual(again.confidence, 0.83)
+    }
 }

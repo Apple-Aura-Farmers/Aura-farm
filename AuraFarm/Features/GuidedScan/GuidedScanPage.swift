@@ -986,6 +986,7 @@ struct GuidedScanPage: View {
         switch item {
         case .endAfterColumn: endsAfterColumn = true
         case .undo: endsAfterColumn = false
+        case .discard: isConfirmingLeave = true  // the same question as the X; nothing is lost before it
         case .endNow, .keepScanning: break
         }
         if let action = item.action { model.endRun(action) }
@@ -1082,7 +1083,7 @@ struct GuidedScanPage: View {
     }
 
     /// The words under the picture, or the card when the stage or the edge question needs the
-    /// person; then Stop, Pause and End run, always there.
+    /// person; then Pause and End run, always there.
     private var scanBottom: some View {
         VStack(spacing: isByHand ? 10 : 18) {
             if let driver, isTerraloka, driver.phase == .byHand {
@@ -1093,7 +1094,7 @@ struct GuidedScanPage: View {
             } else if let driver, isTerraloka, let alert = driver.status.needsPerson {
                 StageRunStatusCard(
                     status: driver.status, isPaused: driver.phase == .paused,
-                    progress: stageProgress, actions: alertActions(alert, driver),
+                    actions: alertActions(alert, driver),
                     onPause: { driver.pause() }, onResume: { driver.resume() },
                     canMoveManually: driver.canMoveByHand,
                     onMoveManually: { driver.beginHandControl() },
@@ -1106,17 +1107,6 @@ struct GuidedScanPage: View {
             } else {
                 Text(scanMessage).font(.callout).multilineTextAlignment(.center)
                     .frame(maxWidth: 260)
-            }
-            // While steering by hand the pad needs the room: the X asks the same as Stop, and Go
-            // back and resume takes the place of Resume.
-            if !isByHand {
-                Button { isConfirmingLeave = true } label: {
-                    Image(systemName: "stop.fill").font(.title3)
-                        .frame(width: 44, height: 44)
-                        .overlay(Circle().stroke(.white, lineWidth: 3).frame(width: 52, height: 52))
-                }
-                .padding(.vertical, 6)
-                .accessibilityLabel("Stop")
             }
             HStack(spacing: 28) {
                 // The alert card has its own Pause and Resume.
@@ -1136,7 +1126,7 @@ struct GuidedScanPage: View {
                                     && !isFixedSweep,
                                 endingAfterColumn: endsAfterColumn), id: \.title
                     ) { item in
-                        Button(item.title, role: item == .endNow ? .destructive : nil) {
+                        Button(item.title, role: item == .discard ? .destructive : nil) {
                             chooseEnd(item)
                         }
                     }
@@ -1155,7 +1145,7 @@ struct GuidedScanPage: View {
         .padding(.bottom, 8)
     }
 
-    /// What the stage is doing, the preset moves' progress and, while paused, Move manually.
+    /// What the stage is doing and, while paused, Move manually. The progress is the ring's.
     private func stageWords(_ driver: AutoStageDriver) -> some View {
         VStack(spacing: 10) {
             if scanPhase == .complete {
@@ -1169,7 +1159,6 @@ struct GuidedScanPage: View {
                 }
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 300)
-                if let stageProgress { StageProgressBar(progress: stageProgress) }
                 if driver.canMoveByHand {
                     Button("Move manually") { driver.beginHandControl() }
                         .buttonStyle(.bordered).tint(.white)

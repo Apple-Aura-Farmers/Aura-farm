@@ -139,7 +139,7 @@ struct LiveOrganismCounter {
                 isRepeat[track.id] = false
                 let entry = map.add(
                     label: track.label, at: position, seconds: seconds, column: column,
-                    fieldSide: fieldSide)
+                    fieldSide: fieldSide, confidence: Double(track.confidence))
                 result.newEntries.append(entry)
                 result.newBoxes[entry.id] = track.box
                 result.newOnMap += 1
@@ -190,6 +190,15 @@ struct LiveCountThresholds {
     /// a second on 94 to 97% of moving frames, and the 2-sighting rule: at 0.5 fields a second an
     /// organism is in view about 2 s, so about 8 to 9 looks.
     var maxModelRunsPerSecond = 5.0
+    /// Drawn boxes only (never the count): hidden this long after the last frame the tracker gave
+    /// a shift for. PLACEHOLDER; source: operator, 25 Nov 2026, boxes staying behind.
+    var boxUntrackedSeconds = 0.4
+    /// Drawn boxes are hidden when the detector's latest result is older than this. A still view
+    /// is looked at again about every `refreshSeconds`, so its boxes stay. PLACEHOLDER; same source.
+    var boxResultMaxSeconds = 1.5
+    /// A stage move that never reports it settled holds the boxes back this long, then they may
+    /// come back (results from before the move still do not). PLACEHOLDER.
+    var boxMoveHoldSeconds = 10.0
 }
 
 extension LiveOrganismCounter {

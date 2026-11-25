@@ -245,6 +245,7 @@ final class AutoStageDriver {
     }
 
     func deactivate() {
+        engine.stageMoveSettled()
         clearHandState()
         loop?.cancel()
         loop = nil
@@ -370,6 +371,7 @@ final class AutoStageDriver {
             lastSettledAt = Date()
             client.send(.status)
             lastMove = "No reply, resynced"
+            engine.stageMoveSettled()
         }
         guard !inFlight, Date().timeIntervalSince(lastSettledAt) >= 0.3 else { return }
         guard
@@ -386,7 +388,7 @@ final class AutoStageDriver {
             return
         }
         moveCheck = nil  // these moves say nothing about the mapping
-        guard client.send(.goTo(next.servo, next.angle)) else { return }
+        guard sendGoTo(next.servo, next.angle) else { return }
         inFlight = true
         moveSentAt = Date()
         lastServo = next.servo
@@ -661,6 +663,7 @@ final class AutoStageDriver {
             lastSettledAt = Date()
             // The view is somewhere new: setup's focus step starts its guide afresh.
             engine.focusSpotChanged()
+            engine.stageMoveSettled()
             // Every step starts from zero offset: a step can move the picture further than the
             // tracker trusts between two frames.
             engine.requestTrackerReanchor()
@@ -673,11 +676,14 @@ final class AutoStageDriver {
         case .ok(let text) where text.hasPrefix("STOP"):
             inFlight = false
             lastSettledAt = Date()
+            // It may have stopped part way: frames from before now stay hidden.
+            engine.stageMoveSettled()
         case .limits(let new):
             limits = new
         case .limitReached(let axis, let end):
             noteLimitReported(axis, end)
         case .error(let text):
+            if inFlight { engine.stageMoveSettled() }
             inFlight = false
             lastErrorText = text
             if text.hasPrefix("LIMIT") { refused(text) }
@@ -719,6 +725,13 @@ final class AutoStageDriver {
         return v.applying(s.inverted().withoutTranslation)
     }
 
+    /// Sends a GOTO; from the moment it is out the detector's boxes are hidden (drawing only).
+    private func sendGoTo(_ servo: StageAxis, _ angle: Int) -> Bool {
+        guard client.send(.goTo(servo, angle)) else { return false }
+        engine.stageMoveStarted()
+        return true
+    }
+
     /// Sends `command` and waits for a reply `accept` decides on (true: good, false: bad).
     private func request(
         _ command: StageCommand, timeout: Double = 10, accept: @escaping (StageReply) -> Bool?
@@ -731,6 +744,7 @@ final class AutoStageDriver {
                 finishWaiter(false)
                 return
             }
+            if case .goTo = command { engine.stageMoveStarted() }
             Task { [weak self] in
                 try? await Task.sleep(for: .seconds(timeout))
                 if self?.waiter?.id == id { self?.finishWaiter(false) }
@@ -1019,6 +1033,7 @@ final class AutoStageDriver {
                 }
                 phase = .disconnected
                 inFlight = false
+                engine.stageMoveSettled()
                 releaseHandArrow()  // nothing moves again by itself
                 userPaused = userPaused || canRunPath  // stay paused until Resume
             }
@@ -1245,6 +1260,7 @@ final class AutoStageDriver {
             lastSettledAt = Date()
             client.send(.status)
             lastMove = "No reply, resynced"
+            engine.stageMoveSettled()
             if presetAwaitingSettle {
                 presetAwaitingSettle = false
                 presetEvent = .settled
@@ -1363,7 +1379,7 @@ final class AutoStageDriver {
     /// shows after the move settled says whether the mapping's direction and size are right.
     private func sendMove(_ servo: StageAxis, _ angle: Int, checked: Bool = true) -> Bool {
         evaluateMoveCheck(force: true)
-        guard client.send(.goTo(servo, angle)) else { return false }
+        guard sendGoTo(servo, angle) else { return false }
         moveCheck = nil
         if checked, trackingNow == .tracking, let seen = lastTracked,
             Date().timeIntervalSince(seen.at) < 0.5
@@ -1505,6 +1521,7 @@ final class AutoStageDriver {
             lastSettledAt = Date()
             client.send(.status)
             lastMove = "No reply, resynced"
+            engine.stageMoveSettled()
         }
         if crossing != nil {
             crossStep()
@@ -1722,6 +1739,7 @@ extension AutoStageDriver {
             lastSettledAt = Date()
             client.send(.status)
             lastMove = "No reply, resynced"
+            engine.stageMoveSettled()
             releaseHandArrow()
             return
         }
@@ -1745,7 +1763,7 @@ extension AutoStageDriver {
         }
         guard !inFlight, atOnce || Date().timeIntervalSince(lastSettledAt) >= 0.3 else { return }
         moveCheck = nil  // a hand move says nothing about the mapping or the gear
-        guard client.send(.goTo(servo, target)) else { return }
+        guard sendGoTo(servo, target) else { return }
         hand.sent()
         inFlight = true
         moveSentAt = Date()
@@ -1840,11 +1858,12 @@ extension AutoStageDriver {
             lastSettledAt = Date()
             client.send(.status)
             lastMove = "No reply, resynced"
+            engine.stageMoveSettled()
         }
         guard !inFlight, Date().timeIntervalSince(lastSettledAt) >= 0.3 else { return }
         if let next = handReturn?.nextStep(angles: (angleX, angleY)) {
             moveCheck = nil  // these moves say nothing about the mapping
-            guard client.send(.goTo(next.servo, next.angle)) else { return }
+            guard sendGoTo(next.servo, next.angle) else { return }
             inFlight = true
             moveSentAt = Date()
             lastServo = next.servo

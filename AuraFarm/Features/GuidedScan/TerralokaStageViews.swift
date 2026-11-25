@@ -232,8 +232,6 @@ struct StageProgressBar: View {
 struct StageRunStatusCard: View {
     var status: AutoStageStatus
     var isPaused: Bool
-    /// The preset moves' progress; nil hides the bar.
-    var progress: StageZigzagProgress?
     var actions: [(title: String, run: () -> Void)]
     var onPause: () -> Void
     var onResume: () -> Void
@@ -285,9 +283,6 @@ struct StageRunStatusCard: View {
                 } else {
                     Button("Pause", action: onPause).buttonStyle(.bordered).tint(.white)
                 }
-            }
-            if let progress {
-                StageProgressBar(progress: progress)
             }
         }
         .stageCard()

@@ -20,6 +20,8 @@ struct SlideOrganismMap {
         /// Pixels per field when it was added (the tracker's box side), for `fields`. 1 means
         /// `fields` is in pixels (tests only).
         var fieldSide = 1.0
+        /// The track's score when it was counted, for the run record only.
+        var confidence: Double?
 
         /// Where the organism goes on the trail map, in fields, in the SAME space and sign as the
         /// trail points (the tracker's `positionFields`): the point the trail would pass through
@@ -68,11 +70,12 @@ struct SlideOrganismMap {
 
     /// Adds a new organism.
     mutating func add(
-        label: String, at position: CGPoint, seconds: Double, column: Int, fieldSide: Double = 1
+        label: String, at position: CGPoint, seconds: Double, column: Int, fieldSide: Double = 1,
+        confidence: Double? = nil
     ) -> Entry {
         let entry = Entry(
             id: entries.count + 1, label: label, position: position, firstSeenSeconds: seconds,
-            column: column, fieldSide: fieldSide)
+            column: column, fieldSide: fieldSide, confidence: confidence)
         entries.append(entry)
         countByLabel[label, default: 0] += 1
         return entry

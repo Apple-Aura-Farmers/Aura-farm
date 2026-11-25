@@ -17,11 +17,12 @@ final class LivePreviewDetectionTests: XCTestCase {
     }
 
     private func preview(
-        _ session: LiveCountSession, skip: String? = nil, moved: Bool = false, at seconds: Double = 1
+        _ session: LiveCountSession, skip: String? = nil, shift: CGPoint = .zero,
+        at seconds: Double = 1
     ) {
+        session.noteFrameShift(shift)
         session.processPreview(
-            buffer: frame(), skipReason: skip, moved: moved, frameSize: size, fieldCircle: nil,
-            seconds: seconds)
+            buffer: frame(), skipReason: skip, frameSize: size, fieldCircle: nil, seconds: seconds)
         session.drain()
     }
 
@@ -70,8 +71,7 @@ final class LivePreviewDetectionTests: XCTestCase {
         })
         session.setPreviewing(true)
         session.processPreview(
-            buffer: frame(), skipReason: nil, moved: false, frameSize: size, fieldCircle: nil,
-            seconds: 1)
+            buffer: frame(), skipReason: nil, frameSize: size, fieldCircle: nil, seconds: 1)
         session.setPreviewing(false)
         gate.signal()
         session.drain()
@@ -81,18 +81,23 @@ final class LivePreviewDetectionTests: XCTestCase {
         XCTAssertEqual(info.tallyTotal, 0)
     }
 
-    func testBoxesStayWhileTheViewIsStillAndClearOnceThePictureMovedWithNoNewResult() {
+    func testPreviewBoxesMoveWithThePictureUntilTheNextResultAndAreNotClearedBySkips() {
         let session = LiveCountSession(detect: { _, _ in (self.found, OrganismDetector.Timing()) })
         session.setPreviewing(true)
         preview(session, at: 1)
-        preview(session, skip: "unchanged", moved: false, at: 5)
-        XCTAssertEqual(session.info(isActive: false, frameSize: size).previewBoxes.count, 1)
-        preview(session, skip: "too_fast", moved: true, at: 1.5)
-        XCTAssertEqual(
-            session.info(isActive: false, frameSize: size).previewBoxes.count, 1,
-            "moved, but a result came within a second")
-        preview(session, skip: "too_fast", moved: true, at: 2.6)
-        XCTAssertTrue(session.info(isActive: false, frameSize: size).previewBoxes.isEmpty)
+        let gate = LiveBoxGate(now: 1.2, trackedAt: 1.2)
+        let first = session.info(isActive: false, frameSize: size, gate: gate).previewBoxes
+        XCTAssertEqual(first.count, 1)
+        preview(session, skip: "too_fast", shift: CGPoint(x: 4, y: -2), at: 1.1)
+        preview(session, skip: "too_fast", shift: CGPoint(x: 1, y: 1), at: 1.2)
+        let moved = session.info(isActive: false, frameSize: size, gate: gate).previewBoxes
+        XCTAssertEqual(moved.first?.rect, first[0].rect.offsetBy(dx: 5, dy: -1))
+        // Without a gate the boxes are as the detector left them.
+        XCTAssertEqual(session.info(isActive: false, frameSize: size).previewBoxes.first?.rect, first[0].rect)
+        // A new result starts from its own frame: only shifts after it count.
+        preview(session, shift: CGPoint(x: 9, y: 9), at: 1.3)
+        let fresh = session.info(isActive: false, frameSize: size, gate: gate).previewBoxes
+        XCTAssertEqual(fresh.first?.rect, first[0].rect)
     }
 
     func testEndingThePreviewClearsTheBoxes() {

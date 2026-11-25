@@ -11,6 +11,8 @@ struct RunMapOrganism: Codable, Equatable {
     /// The clean crop of this organism, as a file name inside the run's organisms folder
     /// (`run-<stamp>-organisms/`); nil for runs saved before the crops existed.
     var image: String?
+    /// The track's score when it was counted; nil for runs saved before it was kept. Nothing reads it.
+    var confidence: Double?
 
     var point: CGPoint { CGPoint(x: x, y: y) }
 }

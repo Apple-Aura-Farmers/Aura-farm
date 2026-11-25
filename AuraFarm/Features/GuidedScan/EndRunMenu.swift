@@ -7,6 +7,8 @@ enum EndRunMenu {
         case endNow, endAfterColumn
         /// Take back "End after this column".
         case undo
+        /// Stop without saving: asks "Stop this scan?" first, like the X. The only red item.
+        case discard
         case keepScanning
 
         var title: String {
@@ -14,17 +16,19 @@ enum EndRunMenu {
             case .endNow: "End now"
             case .endAfterColumn: "End after this column"
             case .undo: "Keep going (cancel ending)"
+            case .discard: "Stop and discard"
             case .keepScanning: "Keep scanning"
             }
         }
 
-        /// What the engine is told; nil for "Keep scanning", which does nothing.
+        /// What the engine is told; nil for "Stop and discard" (the page asks first) and "Keep
+        /// scanning", which does nothing.
         var action: EndRunAction? {
             switch self {
             case .endNow: .now
             case .endAfterColumn: .afterColumn
             case .undo: .cancel
-            case .keepScanning: nil
+            case .discard, .keepScanning: nil
             }
         }
     }
@@ -32,13 +36,13 @@ enum EndRunMenu {
     /// While ending after the column, the way to undo; otherwise End now, and End after this
     /// column only while a column is being swept.
     static func items(columnInProgress: Bool, endingAfterColumn: Bool) -> [Item] {
-        if endingAfterColumn { return [.undo, .endNow, .keepScanning] }
-        return (columnInProgress ? [.endNow, .endAfterColumn] : [.endNow]) + [.keepScanning]
+        if endingAfterColumn { return [.undo, .endNow, .discard, .keepScanning] }
+        return (columnInProgress ? [.endNow, .endAfterColumn] : [.endNow]) + [.discard, .keepScanning]
     }
 
     /// While the stage is away from the path (steered by hand, returning, or a saved position
     /// waits): the column cannot be ended after, only the run now.
-    static let awayItems: [Item] = [.endNow, .keepScanning]
+    static let awayItems: [Item] = [.endNow, .discard, .keepScanning]
 
     /// The button's words: it says at once what was chosen.
     static func label(endingAfterColumn: Bool) -> String {

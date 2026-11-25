@@ -395,7 +395,9 @@ struct OperatorScanRing: View {
         }
         .animation(.easeOut(duration: 0.2), value: phase)
         .allowsHitTesting(false)
-        .accessibilityHidden(true)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Scan progress")
+        .accessibilityValue("\(Int(((phase == .complete ? 1 : min(max(fraction, 0), 1)) * 100).rounded())) percent")
     }
 }
 

@@ -184,13 +184,16 @@ final class EdgeQuestionTests: XCTestCase {
     func testTheMenuOffersWhatIsValid() {
         XCTAssertEqual(
             EndRunMenu.items(columnInProgress: true, endingAfterColumn: false),
-            [.endNow, .endAfterColumn, .keepScanning])
+            [.endNow, .endAfterColumn, .discard, .keepScanning])
         XCTAssertEqual(
             EndRunMenu.items(columnInProgress: false, endingAfterColumn: false),
-            [.endNow, .keepScanning])
+            [.endNow, .discard, .keepScanning])
         XCTAssertEqual(
             EndRunMenu.items(columnInProgress: true, endingAfterColumn: true),
-            [.undo, .endNow, .keepScanning])
+            [.undo, .endNow, .discard, .keepScanning])
+        XCTAssertEqual(EndRunMenu.awayItems, [.endNow, .discard, .keepScanning])
+        XCTAssertEqual(EndRunMenu.Item.discard.title, "Stop and discard")
+        XCTAssertNil(EndRunMenu.Item.discard.action, "the page asks first; nothing ends here")
         XCTAssertEqual(EndRunMenu.Item.endNow.action, .now)
         XCTAssertEqual(EndRunMenu.Item.endAfterColumn.action, .afterColumn)
         XCTAssertEqual(EndRunMenu.Item.undo.action, .cancel)

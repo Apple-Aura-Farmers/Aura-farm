@@ -136,6 +136,11 @@ class ScanEngine: NSObject {
     @ObservationIgnored private var lastCountInfo = LiveCountInfo()
     @ObservationIgnored private var lastCountingActive = false
     @ObservationIgnored private var lastCountFrameSize = CGSize.zero
+    /// For drawing the detector's boxes only (analysis queue): the capture time of the last frame
+    /// the tracker gave a shift for, and the Terraloka stage's latest move (the capture time of the
+    /// last frame when it started and, once known, when it settled).
+    @ObservationIgnored private var lastShiftSeconds: Double?
+    @ObservationIgnored private var stageMove = StageMoveWatch()
     @ObservationIgnored private var runStartedAt: Date?
     /// The automated stage's servo angles, for the CSV (analysis queue; nil without the stage).
     @ObservationIgnored private var stageAngles: (x: Int, y: Int)?
@@ -1603,7 +1608,7 @@ class ScanEngine: NSObject {
                 RunMapOrganism(
                     label: $0.label, x: Double($0.fields.x), y: Double($0.fields.y),
                     column: $0.column, seconds: $0.firstSeenSeconds,
-                    image: live.cropFile(forEntry: $0.id))
+                    image: live.cropFile(forEntry: $0.id), confidence: $0.confidence)
             },
             path: RunMapContent.thinned(runPath), edges: runMapEdges(),
             mapMapping: dryRun.mapping.rawValue, mapMirrored: dryRun.mirrored,
@@ -1848,6 +1853,11 @@ extension ScanEngine: AVCaptureVideoDataOutputSampleBufferDelegate {
                 speedState.status = status
             }
         }
+        // Followed for real: tracking, a shift, and not a frame the tracker only carried over.
+        let isFollowed = LiveOrganismCounter.isFollowed(
+            tracking: step.tracking.trackingState, frameShift: step.tracking.frameShift,
+            reading: step.reading)
+        if isFollowed { lastShiftSeconds = time }
         var edgeLine: EdgeLine?
         var countLog = LiveCountFrameLog()
         if guideEnabled, setup.step == .done {
@@ -1872,6 +1882,10 @@ extension ScanEngine: AVCaptureVideoDataOutputSampleBufferDelegate {
                 live.setCounting(lastCountingActive)
             }
             lastCountFrameSize = step.frameSize
+            // The boxes drawn follow the picture whether counting is on or not; once per frame.
+            live.noteFrameShift(
+                isFollowed
+                    ? LiveOrganismCounter.pictureMoved(frameShift: step.tracking.frameShift) : .zero)
             if countingOn {
                 let reason = LiveOrganismCounter.skipReason(
                     tracking: step.tracking.trackingState,
@@ -1904,7 +1918,7 @@ extension ScanEngine: AVCaptureVideoDataOutputSampleBufferDelegate {
                     maxModelRunsPerSecond: modelRateCap ? countThresholds.maxModelRunsPerSecond : nil,
                     heat: lastHeatMode, heatThresholds: heatThresholds)
                 live.processPreview(
-                    buffer: buffer, skipReason: reason, moved: indicators.stillSeconds <= 0,
+                    buffer: buffer, skipReason: reason,
                     frameSize: step.frameSize,
                     fieldCircle: step.fieldState?.mask.flatMap { FieldCircle(fitting: $0) },
                     seconds: time - runStartSeconds)
@@ -2104,6 +2118,37 @@ extension ScanEngine: AVCaptureVideoDataOutputSampleBufferDelegate {
         publish(step, time: time)
     }
 
+    /// The Terraloka stage starts a move (any GOTO): the detector's boxes are hidden at once, and a
+    /// result from a frame taken before it is not drawn when it arrives late. Drawing only.
+    func stageMoveStarted() {
+        analysisQueue.async { [weak self] in
+            guard let self else { return }
+            self.stageMove.start(at: self.lastCapturedSeconds)
+            if self.guideEnabled {
+                self.publishCount(isActive: self.lastCountingActive, frameSize: self.lastCountFrameSize)
+            }
+        }
+    }
+
+    /// The move settled: results from frames taken before now stay hidden, the next one is drawn.
+    func stageMoveSettled() {
+        analysisQueue.async { [weak self] in
+            guard let self else { return }
+            self.stageMove.settle(at: self.lastCapturedSeconds)
+        }
+    }
+
+    /// Which boxes may be drawn at `time` (see `LiveBoxGate`).
+    private func boxGate(at time: Double) -> LiveBoxGate {
+        let origin = runStartSeconds
+        var gate = LiveBoxGate(
+            now: time - origin, trackedAt: lastShiftSeconds.map { $0 - origin },
+            thresholds: countThresholds)
+        gate.notBefore = stageMove.notBefore(
+            now: lastCapturedSeconds, origin: origin, holdSeconds: countThresholds.boxMoveHoldSeconds)
+        return gate
+    }
+
     /// Publishes the count when it changed, through the throttle. Analysis queue. Called for
     /// every analysed frame, and when the detector queue finishes a result.
     /// Feeds the heat policy this frame's thermal state; on a change, sheds or restores the work
@@ -2123,7 +2168,8 @@ extension ScanEngine: AVCaptureVideoDataOutputSampleBufferDelegate {
     }
 
     private func publishCount(isActive: Bool, frameSize: CGSize) {
-        let info = live.info(isActive: isActive, frameSize: frameSize)
+        let info = live.info(
+            isActive: isActive, frameSize: frameSize, gate: boxGate(at: lastFrameSeconds))
         guard info != lastCountInfo else { return }
         lastCountInfo = info
         countThrottle.offer(info)

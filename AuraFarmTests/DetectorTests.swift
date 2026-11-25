@@ -22,7 +22,7 @@ final class DetectorTests: XCTestCase {
             (slot: 5, logit: 2.0, box: (0.25, 0.25, 0.1, 0.1)),
         ])
 
-        let found = OrganismDetector.decode(logits: logits, boxes: boxes, classNames: Self.logitClassNames)
+        let found = OrganismDetector.decode(logits: logits, boxes: boxes, classNames: Self.logitClassNames, minimumConfidence: 0.3)
 
         XCTAssertEqual(found.map(\.label), ["Nematode", "Volvox"])
         // Boxes come in as the middle and the size counted from the top left; everything
@@ -34,23 +34,23 @@ final class DetectorTests: XCTestCase {
     }
 
     func testAQuietQueryIsNotAFind() throws {
-        // Well under leastConfidence once it has been through a sigmoid.
+        // Well under 0.3 once it has been through a sigmoid.
         let (logits, boxes) = try queries([(slot: 4, logit: -3.0, box: (0.5, 0.5, 0.1, 0.1))])
         XCTAssertTrue(
-            OrganismDetector.decode(logits: logits, boxes: boxes, classNames: Self.logitClassNames).isEmpty)
+            OrganismDetector.decode(logits: logits, boxes: boxes, classNames: Self.logitClassNames, minimumConfidence: 0.3).isEmpty)
     }
 
     func testAQueryBoxingTheWholeFrameIsStillThrownAway() throws {
         let (logits, boxes) = try queries([(slot: 4, logit: 5.0, box: (0.5, 0.5, 1.0, 1.0))])
         XCTAssertTrue(
-            OrganismDetector.decode(logits: logits, boxes: boxes, classNames: Self.logitClassNames).isEmpty)
+            OrganismDetector.decode(logits: logits, boxes: boxes, classNames: Self.logitClassNames, minimumConfidence: 0.3).isEmpty)
     }
 
     func testALowerMinimumConfidenceKeepsAQuietQueryAndTheDefaultStillDropsIt() throws {
         // sigmoid(-1) is about 0.27: under 0.3, over 0.2.
         let (logits, boxes) = try queries([(slot: 4, logit: -1.0, box: (0.5, 0.5, 0.1, 0.1))])
         XCTAssertTrue(
-            OrganismDetector.decode(logits: logits, boxes: boxes, classNames: Self.logitClassNames).isEmpty)
+            OrganismDetector.decode(logits: logits, boxes: boxes, classNames: Self.logitClassNames, minimumConfidence: 0.3).isEmpty)
         XCTAssertEqual(
             OrganismDetector.decode(
                 logits: logits, boxes: boxes, classNames: Self.logitClassNames,

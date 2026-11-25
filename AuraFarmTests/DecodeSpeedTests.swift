@@ -247,12 +247,12 @@ final class DecodeSpeedTests: XCTestCase {
         let general = time {
             _ = OrganismDetector.decodeGeneral(
                 scores: paddedScores, boxes: paddedBoxes, classNames: names,
-                scoresAreProbabilities: true)
+                scoresAreProbabilities: true, minimumConfidence: 0.3)
         }
         let rows = time {
             _ = OrganismDetector.decode(
                 scores: paddedScores, boxes: paddedBoxes, classNames: names,
-                scoresAreProbabilities: true)
+                scoresAreProbabilities: true, minimumConfidence: 0.3)
         }
         print("DECODETIME padded Float16: general \(general) ms, rows \(rows) ms")
         XCTAssertLessThan(rows, general / 2)

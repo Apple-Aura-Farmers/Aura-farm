@@ -67,3 +67,73 @@ struct LiveCountInfo: Equatable {
         total == 1 ? "1 organism" : "\(total) organisms"
     }
 }
+
+/// Which of the detector's boxes are drawn now, and where. Drawing only: the tracks, the tally and
+/// the map never see it. All times are on the run's clock.
+struct LiveBoxGate {
+    var now: Double
+    /// The last frame the tracker gave a shift for; nil if none yet.
+    var trackedAt: Double?
+    /// A result taken from a frame before this is not drawn: the stage started a move (infinity
+    /// while it has not settled) or settled since the frame was taken.
+    var notBefore = -Double.infinity
+    var thresholds = LiveCountThresholds()
+
+    /// `boxes` of the result taken at `resultAt`, moved by `shift` (how far the picture moved
+    /// since), without those whose moved centre is outside `circle`. Nothing when the result is too
+    /// old, was taken before the gate, or the tracker has not given a shift for too long.
+    func shown(
+        _ boxes: [LiveCountInfo.Box], shift: CGPoint, resultAt: Double?, circle: FieldCircle?
+    ) -> [LiveCountInfo.Box] {
+        guard !boxes.isEmpty, let resultAt, resultAt >= notBefore,
+            now - resultAt <= thresholds.boxResultMaxSeconds,
+            let trackedAt, now - trackedAt <= thresholds.boxUntrackedSeconds
+        else { return [] }
+        return boxes.compactMap { box in
+            var moved = box
+            moved.rect = box.rect.offsetBy(dx: shift.x, dy: shift.y)
+            if let circle,
+                hypot(Double(moved.rect.midX - circle.centre.x), Double(moved.rect.midY - circle.centre.y))
+                    > circle.radius
+            {
+                return nil
+            }
+            return moved
+        }
+    }
+}
+
+/// The Terraloka stage's latest move, as far as drawing the boxes needs it. Times are capture
+/// times. Settling twice, or with no move in progress, does nothing.
+struct StageMoveWatch {
+    private var move: (startedAt: Double, settledAt: Double?)?
+
+    mutating func start(at time: Double) { move = (time, nil) }
+
+    /// The move ended (position, done, stop, an error, a resync, a disconnect). False when there
+    /// was no move in progress.
+    @discardableResult
+    mutating func settle(at time: Double) -> Bool {
+        guard var current = move, current.settledAt == nil else { return false }
+        current.settledAt = time
+        move = current
+        return true
+    }
+
+    /// Results from frames taken before this (run clock) are not drawn: infinity while the move is
+    /// on, the settle time after it; a move that never settled releases after `holdSeconds`.
+    func notBefore(now: Double, origin: Double, holdSeconds: Double) -> Double {
+        guard let move else { return -.infinity }
+        if let settled = move.settledAt { return settled - origin }
+        return now - move.startedAt < holdSeconds ? .infinity : move.startedAt - origin
+    }
+}
+
+extension LiveOrganismCounter {
+    /// The tracker really followed the picture on this frame: tracking, with a shift, and not a
+    /// frame it only carried over (ghost, sparse_skip). Only then does the picture's shift move
+    /// the boxes drawn, and the frame count as tracked for hiding them.
+    static func isFollowed(tracking: TrackingState, frameShift: CGPoint?, reading: String) -> Bool {
+        tracking == .tracking && frameShift != nil && reading != "ghost" && reading != "sparse_skip"
+    }
+}
