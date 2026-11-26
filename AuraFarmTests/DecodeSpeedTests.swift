@@ -106,7 +106,8 @@ final class DecodeSpeedTests: XCTestCase {
                 let (scores, boxes) = try answer(classes: classes, type: type, probabilities: probabilities)
                 let old = referenceDecode(
                     scores: scores, boxes: boxes, classNames: classNames,
-                    scoresAreProbabilities: probabilities, minimumConfidence: 0.3)
+                    scoresAreProbabilities: probabilities, minimumConfidence: OrganismDetector.leastConfidence
+                )
                 let new = OrganismDetector.decode(
                     scores: scores, boxes: boxes, classNames: classNames,
                     scoresAreProbabilities: probabilities)
@@ -130,7 +131,7 @@ final class DecodeSpeedTests: XCTestCase {
         assertSame(
             referenceDecode(
                 scores: scores, boxes: boxes, classNames: detector.classNames,
-                scoresAreProbabilities: true, minimumConfidence: 0.3),
+                scoresAreProbabilities: true, minimumConfidence: OrganismDetector.leastConfidence),
             OrganismDetector.decode(
                 scores: scores, boxes: boxes, classNames: detector.classNames,
                 scoresAreProbabilities: true), "V2 names")
@@ -169,7 +170,7 @@ final class DecodeSpeedTests: XCTestCase {
         let before = time {
             _ = referenceDecode(
                 scores: scores, boxes: boxes, classNames: names, scoresAreProbabilities: true,
-                minimumConfidence: 0.3)
+                minimumConfidence: OrganismDetector.leastConfidence)
         }
         let after = time {
             _ = OrganismDetector.decode(
@@ -222,7 +223,8 @@ final class DecodeSpeedTests: XCTestCase {
                 {
                     let old = referenceDecode(
                         scores: s, boxes: b, classNames: classNames,
-                        scoresAreProbabilities: probabilities, minimumConfidence: 0.3)
+                        scoresAreProbabilities: probabilities,
+                        minimumConfidence: OrganismDetector.leastConfidence)
                     let new = OrganismDetector.decode(
                         scores: s, boxes: b, classNames: classNames,
                         scoresAreProbabilities: probabilities)

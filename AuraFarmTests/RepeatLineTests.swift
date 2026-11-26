@@ -253,8 +253,10 @@ final class RepeatLineTests: XCTestCase {
     }
 
     func testTheCsvColumnsAreAppendedAndTheBackWordsSayTheLine() {
+        // By name, not counted from the end: columns keep being appended after these.
+        let start = MovementLog.header.firstIndex(of: "line_crossings")
         XCTAssertEqual(
-            Array(MovementLog.header.suffix(17).prefix(4)),
+            Array(MovementLog.header[(start ?? 0)...].prefix(4)),
             ["line_crossings", "line_along", "spot_limit_reason", "slip_tilt_deg"])
         XCTAssertEqual(
             HelperInstruction.make(

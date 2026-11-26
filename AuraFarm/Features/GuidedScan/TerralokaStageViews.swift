@@ -334,4 +334,3 @@ private struct WrappingRow: Layout {
         return (CGSize(width: widest, height: y + rowHeight), origins)
     }
 }
-

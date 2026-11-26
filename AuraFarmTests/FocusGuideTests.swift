@@ -118,7 +118,10 @@ final class FocusGuideTests: XCTestCase {
     }
 
     func testNoisyReadingsAroundAPeakStillEndFocusedWithoutFlipping() {
-        feed(ramp(50, 500, 40) + ramp(500, 250, 20) + ramp(250, 500, 20), noise: 0.1)
+        // The overshoot goes to 200, not 250: `passedFraction` is 0.55 and the median is over
+        // five readings, so a dip to half the peak is lagged back above the bar and the sweep
+        // never registers as having passed it.
+        feed(ramp(50, 500, 40) + ramp(500, 200, 20) + ramp(200, 500, 20), noise: 0.1)
         feed([Double](repeating: 500, count: 100), noise: 0.1)
         XCTAssertEqual(states.last, .focused)
         XCTAssertLessThanOrEqual(changes(), 6, "\(states.map(\.csvName))")

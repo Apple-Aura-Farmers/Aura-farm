@@ -371,7 +371,8 @@ final class LabSetupSession {
 
     private static var appBuild: String {
         let info = Bundle.main.infoDictionary
-        return "\(info?["CFBundleShortVersionString"] as? String ?? "?") (\(info?["CFBundleVersion"] as? String ?? "?"))"
+        return
+            "\(info?["CFBundleShortVersionString"] as? String ?? "?") (\(info?["CFBundleVersion"] as? String ?? "?"))"
     }
 
     /// Back to align: the checks start afresh and the stage is forgotten.

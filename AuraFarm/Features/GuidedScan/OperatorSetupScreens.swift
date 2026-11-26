@@ -406,7 +406,8 @@ struct OperatorScanRing: View {
         .allowsHitTesting(false)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Scan progress")
-        .accessibilityValue("\(Int(((phase == .complete ? 1 : min(max(fraction, 0), 1)) * 100).rounded())) percent")
+        .accessibilityValue(
+            "\(Int(((phase == .complete ? 1 : min(max(fraction, 0), 1)) * 100).rounded())) percent")
     }
 }
 

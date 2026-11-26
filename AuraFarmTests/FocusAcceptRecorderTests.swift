@@ -50,7 +50,8 @@ final class FocusAcceptRecorderTests: XCTestCase {
         let done = expectation(description: "written")
         recorder.onChange = { done.fulfill() }
         feed(recorder, from: 0, to: 30, wanted: true)
-        XCTAssertEqual(recorder.accept(FocusAcceptRecord(), who: .person, place: .setup, seconds: 30), .recorded(1))
+        XCTAssertEqual(
+            recorder.accept(FocusAcceptRecord(), who: .person, place: .setup, seconds: 30), .recorded(1))
         // The step has moved on: nothing is wanted any more, the three frames are still saved.
         feed(recorder, from: 30, to: 31.2, wanted: false)
         wait(for: [done], timeout: 5)
@@ -61,7 +62,9 @@ final class FocusAcceptRecorderTests: XCTestCase {
             try XCTUnwrap(record.frames.last).hasPrefix("focus-accept-01-person-setup-t+01."))
         XCTAssertEqual(record.where, "setup")
         XCTAssertEqual(record.who, "person")
-        XCTAssertTrue(record.readings.allSatisfy { $0.t >= -20 && $0.t <= 0 })
+        // Within a tolerance: `feed` reaches 30 by adding 0.1 three hundred times, so the last
+        // frame's clock lands a few ulps either side of the moment the focus was accepted.
+        XCTAssertTrue(record.readings.allSatisfy { $0.t >= -20 - 1e-6 && $0.t <= 1e-6 })
         XCTAssertFalse(record.readings.isEmpty)
     }
 

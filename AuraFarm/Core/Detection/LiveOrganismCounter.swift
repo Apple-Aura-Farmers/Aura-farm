@@ -166,11 +166,17 @@ struct LiveOrganismCounter {
             }
             if let stop {
                 // Drawn grey, never counted: outside the stop's own cell, or lens dirt.
-                let isDirt = !isLate && StopDirt.isDirt(
-                    label: box.label, centre: centre, side: side, previous: previousSeen,
-                    share: thresholds.stopDirtShare)
+                let isDirt =
+                    !isLate
+                    && StopDirt.isDirt(
+                        label: box.label, centre: centre, side: side, previous: previousSeen,
+                        share: thresholds.stopDirtShare)
                 if !stop.cell.contains(centre) || isDirt {
-                    if isDirt, stop.cell.contains(centre) { result.dirt += 1 } else { result.outsideCell += 1 }
+                    if isDirt, stop.cell.contains(centre) {
+                        result.dirt += 1
+                    } else {
+                        result.outsideCell += 1
+                    }
                     ignored.append(
                         VisibleBox(
                             id: 1_000_000 + ignored.count, label: box.label,

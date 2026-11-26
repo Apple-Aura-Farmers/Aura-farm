@@ -85,7 +85,7 @@ struct FocusAcceptRecord: Codable {
     /// The numeric properties of a thresholds struct, by name.
     static func numbers(of value: Any) -> [String: Double] {
         var result: [String: Double] = [:]
-        for case let (name?, child) in Mirror(reflecting: value).children {
+        for case (let name?, let child) in Mirror(reflecting: value).children {
             if let number = child as? Double {
                 result[name] = number
             } else if let number = child as? Int {
@@ -245,7 +245,7 @@ final class FocusAcceptRecorder {
             let urls = written
             written = []
             lock.unlock()
-            urls.forEach { try? FileManager.default.removeItem(at: $0) }
+            for url in urls { try? FileManager.default.removeItem(at: url) }
         }
     }
 
@@ -297,8 +297,9 @@ final class FocusAcceptRecorder {
         if let directory { return directory }
         let stamp = ISO8601DateFormatter().string(from: .now).replacingOccurrences(of: ":", with: "")
         let folder = FileManager.default.temporaryDirectory.appending(path: "focus-records-\(stamp)")
-        guard (try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true))
-            != nil
+        guard
+            (try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true))
+                != nil
         else { return nil }
         directory = folder
         return folder

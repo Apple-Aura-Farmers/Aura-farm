@@ -190,6 +190,10 @@ final class HeatModeBehaviourTests: XCTestCase {
     }
 
     func testTheCSVHasHeatModeAndScreenBrightnessAfterTheKnobWords() {
-        XCTAssertEqual(Array(MovementLog.header.suffix(21).prefix(2)), ["heat_mode", "screen_brightness"])
+        // By name, not counted from the end: columns keep being appended after these.
+        let knob = MovementLog.header.firstIndex(of: "knob_words")
+        XCTAssertEqual(
+            Array(MovementLog.header[((knob ?? -1) + 1)...].prefix(2)),
+            ["heat_mode", "screen_brightness"])
     }
 }

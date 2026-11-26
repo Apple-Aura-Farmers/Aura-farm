@@ -812,8 +812,10 @@
                         Text(model.focusRecordNote).font(.footnote.bold())
                     }
                     HStack {
-                        ShareLink("Share focus records (\(model.focusRecordCount))", items: model.focusRecordFiles)
-                            .disabled(model.focusRecordFiles.isEmpty)
+                        ShareLink(
+                            "Share focus records (\(model.focusRecordCount))", items: model.focusRecordFiles
+                        )
+                        .disabled(model.focusRecordFiles.isEmpty)
                         Button("Clear focus records", role: .destructive) { confirmsClear = true }
                     }
                     .buttonStyle(.bordered)

@@ -68,8 +68,11 @@ final class LiveBoxGateTests: XCTestCase {
     private func countingSession() -> LiveCountSession {
         LiveCountSession(detect: { _, _ in
             (
-                [OrganismDetector.Detection(
-                    label: "Volvox", confidence: 0.9, box: CGRect(x: 0.4, y: 0.4, width: 0.1, height: 0.1))],
+                [
+                    OrganismDetector.Detection(
+                        label: "Volvox", confidence: 0.9, box: CGRect(x: 0.4, y: 0.4, width: 0.1, height: 0.1)
+                    )
+                ],
                 OrganismDetector.Timing()
             )
         })
@@ -103,7 +106,9 @@ final class LiveBoxGateTests: XCTestCase {
     func testCountsAreTheSameWithAndWithoutHidingTheBoxes() {
         let session = countingSession()
         for index in 0..<4 {
-            process(session, skip: index == 2 ? "too_fast" : nil, shift: CGPoint(x: 1, y: 0), at: 1 + Double(index) * 0.3)
+            process(
+                session, skip: index == 2 ? "too_fast" : nil, shift: CGPoint(x: 1, y: 0),
+                at: 1 + Double(index) * 0.3)
         }
         let plain = session.info(isActive: true, frameSize: size)
         let hidden = session.info(
@@ -125,9 +130,11 @@ final class LiveBoxGateTests: XCTestCase {
             (
                 empty
                     ? []
-                    : [OrganismDetector.Detection(
-                        label: "Volvox", confidence: 0.9,
-                        box: CGRect(x: 0.4, y: 0.4, width: 0.1, height: 0.1))],
+                    : [
+                        OrganismDetector.Detection(
+                            label: "Volvox", confidence: 0.9,
+                            box: CGRect(x: 0.4, y: 0.4, width: 0.1, height: 0.1))
+                    ],
                 OrganismDetector.Timing()
             )
         })
@@ -149,7 +156,8 @@ final class LiveBoxGateTests: XCTestCase {
         XCTAssertTrue(LiveOrganismCounter.isFollowed(tracking: .tracking, frameShift: shift, reading: "ok"))
         XCTAssertTrue(LiveOrganismCounter.isFollowed(tracking: .tracking, frameShift: .zero, reading: "ok"))
         XCTAssertFalse(LiveOrganismCounter.isFollowed(tracking: .tracking, frameShift: nil, reading: "ok"))
-        XCTAssertFalse(LiveOrganismCounter.isFollowed(tracking: .tracking, frameShift: shift, reading: "ghost"))
+        XCTAssertFalse(
+            LiveOrganismCounter.isFollowed(tracking: .tracking, frameShift: shift, reading: "ghost"))
         XCTAssertFalse(
             LiveOrganismCounter.isFollowed(tracking: .tracking, frameShift: shift, reading: "sparse_skip"))
         XCTAssertFalse(LiveOrganismCounter.isFollowed(tracking: .paused, frameShift: shift, reading: "ok"))
@@ -195,6 +203,8 @@ final class LiveBoxGateTests: XCTestCase {
         var watch = StageMoveWatch()
         watch.start(at: 100)
         XCTAssertEqual(watch.notBefore(now: 105, origin: 90, holdSeconds: 10), .infinity)
-        XCTAssertEqual(watch.notBefore(now: 111, origin: 90, holdSeconds: 10), 10, "results from before the start stay hidden")
+        XCTAssertEqual(
+            watch.notBefore(now: 111, origin: 90, holdSeconds: 10), 10,
+            "results from before the start stay hidden")
     }
 }
