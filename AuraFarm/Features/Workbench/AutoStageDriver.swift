@@ -225,6 +225,13 @@ final class AutoStageDriver {
     private var focusReminderBaseY = 90
     /// After "Switch to autonomous": the person says the picture is sharp before it calibrates.
     private var needsSharpTap = false
+    // The first connection's centring (see `StageCentring`).
+    private var centring = StageCentring()
+    private var centringTask: Task<Void, Never>?
+    /// A HELLO or STATUS has said where the servos are, since `activate`.
+    private var positionKnown = false
+    /// The stage is on its way to 90, 90.
+    var isCentring: Bool { centring.isCentring }
     private var loop: Task<Void, Never>?
     private var waiter: (id: Int, accept: (StageReply) -> Bool?, done: (Bool) -> Void)?
     private var nextWaiterID = 0
@@ -246,6 +253,8 @@ final class AutoStageDriver {
         engine.setAsksEdges(asksEdgeQuestions)
         sessionEnded = false
         limits = StageLimits()
+        centring = StageCentring()
+        positionKnown = false
         engine.logEvent("objective_\(objective.title)")
         client.onReply = { [weak self] reply in
             MainActor.assumeIsolated { self?.handle(reply) }
@@ -263,6 +272,8 @@ final class AutoStageDriver {
     }
 
     func deactivate() {
+        centringTask?.cancel()  // before its wait ends below: no further move
+        centringTask = nil
         endPresetStop()
         engine.setPresetStops(false)
         cancelSwitchToManual()
@@ -668,6 +679,10 @@ final class AutoStageDriver {
             if case .hello = reply { checkForRestart(reported: (x, y)) }
             if case .status = reply { checkForRestart(reported: (x, y)) }
             switch reply {
+            case .hello, .status: positionKnown = true
+            default: break
+            }
+            switch reply {
             case .hello, .resumed:
                 limits = StageLimits()  // a board is connected: its own limits follow
                 // A path it was running would carry on by itself: no.
@@ -1057,6 +1072,10 @@ final class AutoStageDriver {
         if client.status == .connected { hasConnected = true }
         updateAlert()
         guard client.status == .connected else {
+            if centring.isPending {
+                centring.dropped()
+                if isCentring { finishWaiter(false) }  // not at its timeout
+            }
             if phase != .disconnected, !isCalibrating {
                 // The last position before the drop, to tell a restart from a plain drop.
                 if controlMode == .manual {
@@ -1084,6 +1103,8 @@ final class AutoStageDriver {
             lastStillSent = still
             engine.setStageStandsStill(still)
         }
+        // Checked first: a mutating call every tick would redraw the views.
+        if centring.isPending, holdsForCentring() { return }
         let step = engine.setupInfo.step
         if controlMode == .manual {
             manualTick(step)
@@ -1184,9 +1205,68 @@ final class AutoStageDriver {
         if pathMode == .presetPath { presetStep() } else { follow() }
     }
 
+    // MARK: Centring
+
+    /// True while nothing else may move the stage: until the first connection's centring is over.
+    private func holdsForCentring() -> Bool {
+        let step = centring.connectedTick(positionKnown: positionKnown, now: Date())
+        if step == .noPosition {
+            engine.logEvent("stage_centre_failed", detail: "no position from the board")
+        }
+        guard centring.isPending else { return false }
+        // Connected: the screens must not go on saying it is not.
+        if phase == .disconnected { phase = .waitingForStageStep }
+        if step == .centre { startCentring() }
+        return true
+    }
+
+    private func startCentring() {
+        // Paused or ended before it could begin: the stage never starts by itself.
+        guard !userPaused, !sessionEnded else {
+            centring.finish()
+            engine.logEvent("stage_centre_failed", detail: "paused or ended before it began")
+            return
+        }
+        engine.logEvent("stage_centre_start", detail: "\(angleX),\(angleY)")
+        centringTask = Task {
+            let problem = await centreStage()
+            guard !Task.isCancelled else { return }  // this test is over
+            centring.finish()
+            if let problem {
+                engine.logEvent("stage_centre_failed", detail: problem)
+            } else {
+                engine.logEvent("stage_centre_done", detail: "\(angleX),\(angleY)")
+            }
+        }
+    }
+
+    /// GOTO 90 (not HOME: the board's saved home may be elsewhere), one servo at a time. Nil when
+    /// it worked, otherwise why not.
+    private func centreStage() async -> String? {
+        lastErrorText = ""
+        switch await makeBoardReady() {
+        case .ready: break
+        case .oldPath: return "the board holds an old path"
+        case .noAnswer, .interrupted: return "the board did not get ready"
+        }
+        for servo in StageCentring.moves(x: angleX, y: angleY) {
+            guard !Task.isCancelled, !userPaused, !sessionEnded, client.status == .connected
+            else { return "interrupted" }
+            guard await goTo(servo, StageCentring.angle) else {
+                engine.stageMoveSettled()
+                let why = lastErrorText.isEmpty ? "no answer" : lastErrorText
+                return "GOTO \(servo.letter): \(why)"
+            }
+        }
+        return nil
+    }
+
     /// The plain-words status, for the guided scan's screens.
     var status: AutoStageStatus {
         if isSwitchingToManual { return AutoStageStatus(title: "Switching to manual") }
+        if isCentring, client.status == .connected {
+            return AutoStageStatus(title: "Centring the stage")
+        }
         return AutoStageStatus.make(
             phase: phase, restartNotice: restartNotice, presetEdgePrompt: presetEdgePrompt,
             pathMode: pathMode, client: client.status, focusPaused: isFocusPaused,
@@ -2155,6 +2235,14 @@ extension AutoStageDriver {
             }
             guard homed else { return .noAnswer }
         }
+        let board = await makeBoardReady()
+        guard board == .ready else { return board }
+        guard phase == .preparingManual, client.status == .connected else { return .interrupted }
+        return .ready
+    }
+
+    /// The STOP, STATUS and MODE MANUAL part of `prepareBoard`, shared with the centring.
+    private func makeBoardReady() async -> BoardPreparation {
         client.send(.stop)
         var report: (mode: StageMode, state: StageRunState, queued: Int)?
         func askStatus() async -> Bool {
@@ -2179,12 +2267,11 @@ extension AutoStageDriver {
             seen = again
         }
         guard seen.mode == .manual, seen.state == .idle else { return .noAnswer }
-        guard phase == .preparingManual, client.status == .connected else { return .interrupted }
         return .ready
     }
 
     private func prepareManual(centreFirst: Bool = false) {
-        guard !manualPreparing else { return }
+        guard !manualPreparing, !centring.isPending else { return }
         manualPreparing = true
         manualProblem = nil
         userPaused = false
@@ -2213,7 +2300,7 @@ extension AutoStageDriver {
     /// Preset moves: the board made ready as for a manual session, and nothing else. No HOME, no
     /// warm-up, no calibration, no move: the path starts with the run.
     private func preparePreset(centreFirst: Bool = false) {
-        guard !manualPreparing else { return }
+        guard !manualPreparing, !centring.isPending else { return }
         presetPrepared = false
         manualPreparing = true
         manualProblem = nil

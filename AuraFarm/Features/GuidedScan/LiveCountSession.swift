@@ -78,13 +78,9 @@ final class LiveCountSession {
     private(set) var model = DetectorModel.v3
     /// The hardware it runs on (`defaultUnits` until changed). Change it with `setUnits` only.
     private(set) var units = LiveCountSession.defaultUnits
-    /// The Neural Engine in Release, for power per inference. Debug builds use the graphics chip,
-    /// which skips the Neural Engine's long first-load preparation after every reinstall.
-    #if DEBUG
-        static let defaultUnits = DetectorUnits.graphics
-    #else
-        static let defaultUnits = DetectorUnits.neuralEngine
-    #endif
+    /// The graphics chip in every build: the Neural Engine's long first-load preparation after
+    /// each install froze Start scan for seconds in Release and could crash it.
+    static let defaultUnits = DetectorUnits.graphics
     /// Called on the detector queue after a result is in the count, so the screen need not
     /// wait for the next analysed frame.
     var onResult: (() -> Void)?

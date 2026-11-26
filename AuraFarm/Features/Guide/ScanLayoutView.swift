@@ -14,16 +14,15 @@ struct ScanLayoutView<Top: View, Picture: View, Bottom: View>: View {
     var body: some View {
         VStack(spacing: 0) {
             top
-            if pinsToTop {
-                // The round view leaves about a twelfth of the width above and below its ring;
-                // that margin is taken back, so the status sits close under the lens.
-                picture.frame(maxWidth: .infinity).frame(minHeight: 120)
-                    .padding(.vertical, -(UIScreen.main.bounds.width * 0.085 - 12))
-            } else {
-                picture
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .frame(minHeight: 120)
-            }
+            // One branch, so the picture keeps its identity when `pinsToTop` flips at Start scan:
+            // a rebuilt camera preview re-attaches to the running session on the main thread and
+            // freezes the page for seconds.
+            // Pinned: the round view leaves about a twelfth of the width above and below its
+            // ring; that margin is taken back, so the status sits close under the lens.
+            picture
+                .frame(maxWidth: .infinity, maxHeight: pinsToTop ? nil : .infinity)
+                .frame(minHeight: 120)
+                .padding(.vertical, pinsToTop ? -(UIScreen.main.bounds.width * 0.085 - 12) : 0)
             bottom.layoutPriority(1)
             if pinsToTop { Spacer(minLength: 0) }
         }

@@ -195,7 +195,8 @@
         }
 
         private var phaseText: String {
-            switch driver.phase {
+            if driver.isCentring { return "Centring the stage" }
+            return switch driver.phase {
             case .disconnected: "Stage not connected"
             case .waitingForStageStep: "Connected. Waiting for the stage step"
             case .warmingUp(let index, let count, let title):

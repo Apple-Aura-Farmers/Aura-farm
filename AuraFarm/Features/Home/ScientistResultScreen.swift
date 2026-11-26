@@ -23,6 +23,7 @@ struct ScientistResultScreen: View {
     /// The organism pictures Upload sends, and how many it has sent so far.
     @State private var pictures: [OrganismPicture] = []
     @State private var picturesSent = 0
+    @State private var showsOrganisms = false
 
     private enum Upload: Equatable {
         case ready, sending, sent
@@ -81,6 +82,9 @@ struct ScientistResultScreen: View {
             .buttonBorderShape(.circle)
             .padding(.leading, 22)
             .accessibilityLabel("Back")
+        }
+        .navigationDestination(isPresented: $showsOrganisms) {
+            OrganismGalleryScreen(pictures: pictures)
         }
         .task {
             let sweep = sweep
@@ -176,6 +180,12 @@ struct ScientistResultScreen: View {
                 ForEach(groups) { group in groupCard(group) }
             }
             detail(of: selected)
+            if OrganismGalleryScreen.isOffered(for: pictures) {
+                Button("View organisms", systemImage: "photo.on.rectangle") { showsOrganisms = true }
+                    .foregroundStyle(Color.aura)
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 8)
+            }
         }
         .padding(.horizontal, 24).padding(.top, 44)
     }

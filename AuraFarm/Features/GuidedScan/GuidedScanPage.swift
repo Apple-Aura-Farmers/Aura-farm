@@ -321,13 +321,9 @@ struct GuidedScanPage: View {
                         }
                 } else {
                     OperatorFocusScreen(model: model)
-                        // The person can always say it is sharp; hidden once the checks agree.
                         .overlay(alignment: .bottom) {
-                            VStack(spacing: 8) {
-                                newSpotButton
-                                acceptFocusButton
-                            }
-                            .padding(.horizontal).padding(.bottom, 40)
+                            newSpotButton
+                                .padding(.horizontal).padding(.bottom, 40)
                         }
                         .task(id: model.setupInfo.focus?.state == .focused) {
                             guard model.setupInfo.focus?.state == .focused else { return }
@@ -869,7 +865,9 @@ struct GuidedScanPage: View {
                 actions: alertActions(.disconnected, driver), onPause: {}, onResume: {})
         default:
             StageCalibrationCard(
-                status: AutoStageStatus(title: "Getting the stage ready…"), onRetry: {})
+                status: driver.isCentring
+                    ? driver.status : AutoStageStatus(title: "Getting the stage ready…"),
+                onRetry: {})
         }
     }
 

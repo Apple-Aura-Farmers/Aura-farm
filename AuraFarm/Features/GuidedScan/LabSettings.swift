@@ -44,6 +44,8 @@ struct LabSettings: Equatable {
         settings.mappingName = ScreenMapping.rotateLeft.rawValue
         settings.coverageStep = GuidedScanCoverage.everySecondColumn.rawValue
         settings.guideDryRun = true
+        // The graphics chip, as in Debug: the Neural Engine's first load froze and crashed Start scan.
+        settings.detectorUnitsName = DetectorUnits.graphics.rawValue
         return settings
     }()
 
